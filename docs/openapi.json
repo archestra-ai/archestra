@@ -14639,6 +14639,15 @@
             "in": "header",
             "name": "x-api-key",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Authorization header (Bearer token for OAuth)"
           }
         ],
         "responses": {
@@ -14925,6 +14934,15 @@
             "in": "header",
             "name": "x-api-key",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Authorization header (Bearer token for OAuth)"
           }
         ],
         "responses": {
@@ -29055,6 +29073,13 @@
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
                               }
                             },
                             "required": [
@@ -29171,6 +29196,13 @@
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
                               }
                             },
                             "required": [
@@ -29287,6 +29319,13 @@
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
                               }
                             },
                             "required": [
@@ -30596,6 +30635,13 @@
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
                         }
                       },
                       "required": [
@@ -30712,6 +30758,13 @@
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
                         }
                       },
                       "required": [
@@ -30828,6 +30881,13 @@
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
                         }
                       },
                       "required": [

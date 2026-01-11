@@ -28,6 +28,75 @@ import type {
 import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
 
+/**
+ * Extracts text content from a message content field.
+ * Handles both string content and array of content blocks.
+ */
+function getMessageText(
+  content: string | Array<{ text?: string; type?: string }> | undefined,
+): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((block) => (typeof block === "string" ? block : (block.text ?? "")))
+      .join(" ");
+  }
+  return "";
+}
+
+/**
+ * Detects if a request is a "main" request or "subagent" request.
+ *
+ * Claude Code specific heuristic:
+ * - Main requests have the "Task" tool available (can spawn subagents)
+ * - Subagent requests don't have the "Task" tool
+ * - Utility requests (single message like "count", "quota") are subagents
+ * - Prompt suggestion requests (last message contains "prompt suggestion generator") are subagents
+ *
+ * For other session sources, all requests are considered "main" by default.
+ */
+function computeRequestType(
+  request: unknown,
+  sessionSource: string | null,
+): "main" | "subagent" {
+  // Only apply detection heuristics for Claude Code sessions
+  if (sessionSource !== "claude_code") {
+    return "main";
+  }
+
+  const req = request as {
+    tools?: Array<{ name: string }>;
+    messages?: Array<{
+      content: string | Array<{ text?: string; type?: string }>;
+      role: string;
+    }>;
+  };
+
+  const messages = req?.messages ?? [];
+
+  // Utility requests with single short message are subagents
+  if (messages.length === 1) {
+    const content = getMessageText(messages[0]?.content);
+    // Single word utility messages like "count", "quota"
+    if (content.length < 20 && !content.includes(" ")) {
+      return "subagent";
+    }
+  }
+
+  // Prompt suggestion generator requests are subagents (check last message)
+  if (messages.length > 0) {
+    const lastMessage = messages[messages.length - 1];
+    const lastContent = getMessageText(lastMessage?.content);
+    if (lastContent.includes("prompt suggestion generator")) {
+      return "subagent";
+    }
+  }
+
+  const tools = req?.tools ?? [];
+  const hasTaskTool = tools.some((tool) => tool.name === "Task");
+  return hasTaskTool ? "main" : "subagent";
+}
+
 class InteractionModel {
   static async create(data: InsertInteraction) {
     const [interaction] = await db
@@ -128,8 +197,19 @@ class InteractionModel {
         .where(whereClause),
     ]);
 
+    // Add computed requestType field to each interaction
+    const dataWithRequestType = data.map((interaction) => ({
+      ...interaction,
+      requestType: computeRequestType(
+        interaction.request,
+        interaction.sessionSource,
+      ),
+    }));
+
     return createPaginatedResult(
-      data as Interaction[],
+      dataWithRequestType as (Interaction & {
+        requestType: "main" | "subagent";
+      })[],
       Number(total),
       pagination,
     );
@@ -544,9 +624,24 @@ class InteractionModel {
           profileName: schema.agentsTable.name,
           externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
           userNames: sql<string>`STRING_AGG(DISTINCT ${schema.usersTable.name}, ',')`,
-          // Get the request from the most recent interaction in this session
-          lastInteractionRequest: sql<unknown>`(ARRAY_AGG(${schema.interactionsTable.request} ORDER BY ${schema.interactionsTable.createdAt} DESC))[1]`,
-          lastInteractionType: sql<string>`(ARRAY_AGG(${schema.interactionsTable.type} ORDER BY ${schema.interactionsTable.createdAt} DESC))[1]`,
+          // Get the request from the most recent "main" interaction in this session
+          // Excludes: prompt suggestion generator, title generation, and utility requests
+          lastInteractionRequest: sql<unknown>`(ARRAY_AGG(
+            ${schema.interactionsTable.request}
+            ORDER BY ${schema.interactionsTable.createdAt} DESC
+          ) FILTER (WHERE
+            ${schema.interactionsTable.request}::text NOT LIKE '%prompt suggestion generator%'
+            AND ${schema.interactionsTable.request}::text NOT LIKE '%Please write a 5-10 word title%'
+            AND LENGTH(${schema.interactionsTable.request}->'messages'->0->>'content') > 20
+          ))[1]`,
+          lastInteractionType: sql<string>`(ARRAY_AGG(
+            ${schema.interactionsTable.type}
+            ORDER BY ${schema.interactionsTable.createdAt} DESC
+          ) FILTER (WHERE
+            ${schema.interactionsTable.request}::text NOT LIKE '%prompt suggestion generator%'
+            AND ${schema.interactionsTable.request}::text NOT LIKE '%Please write a 5-10 word title%'
+            AND LENGTH(${schema.interactionsTable.request}->'messages'->0->>'content') > 20
+          ))[1]`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
           // For Claude Code sessions, extract title from the response to the title generation request

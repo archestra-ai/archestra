@@ -147,6 +147,7 @@ export default function SessionDetailPage({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[160px]">Time</TableHead>
+              <TableHead className="w-[80px]">Type</TableHead>
               <TableHead className="w-[180px]">Model</TableHead>
               <TableHead className="w-[120px]">Tokens (In/Out)</TableHead>
               <TableHead className="w-[80px]">Savings</TableHead>
@@ -158,7 +159,7 @@ export default function SessionDetailPage({
             {interactions.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="text-center text-muted-foreground"
                 >
                   No interactions found for this session
@@ -170,6 +171,7 @@ export default function SessionDetailPage({
                 const userMessage = dynamicInteraction.getLastUserMessage();
                 const assistantResponse =
                   dynamicInteraction.getLastAssistantResponse();
+                const requestType = interaction.requestType ?? "main";
 
                 return (
                   <TableRow
@@ -179,6 +181,16 @@ export default function SessionDetailPage({
                   >
                     <TableCell className="font-mono text-xs">
                       {formatDate({ date: dynamicInteraction.createdAt })}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          requestType === "main" ? "default" : "secondary"
+                        }
+                        className="text-xs"
+                      >
+                        {requestType === "main" ? "Main" : "Subagent"}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">

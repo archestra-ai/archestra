@@ -6,6 +6,7 @@ import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
+import perplexityProxyRoutesV2 from "./proxy/routesv2/perplexity";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
 
 export { default as a2aRoutes } from "./a2a";
@@ -54,6 +55,10 @@ export const vllmProxyRoutes = config.llm.vllm.useV2Routes
 export const ollamaProxyRoutes = config.llm.ollama.useV2Routes
   ? ollamaProxyRoutesV2
   : ollamaProxyRoutesV2; // Ollama only has V2 since it was added after the unified handler
+// Perplexity proxy routes - V2 only (unified handler, OpenAI-compatible)
+export const perplexityProxyRoutes = config.llm.perplexity.useV2Routes
+  ? perplexityProxyRoutesV2
+  : perplexityProxyRoutesV2; // Perplexity only has V2 since it was added after the unified handler
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

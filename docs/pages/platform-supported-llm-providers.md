@@ -178,3 +178,47 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
 - **No API key required**: Ollama typically doesn't require authentication for local deployments.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+
+## Perplexity
+
+[Perplexity AI](https://www.perplexity.ai/) is an AI-powered search and answer engine that combines real-time web search with advanced language models to provide accurate, up-to-date responses with citations.
+
+### Supported Perplexity APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Perplexity Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/perplexity/{profile-id}`
+- **Authentication**: Pass your Perplexity API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                             | Required | Description                                                                |
+| ------------------------------------ | -------- | -------------------------------------------------------------------------- |
+| `ARCHESTRA_PERPLEXITY_BASE_URL`      | No       | Perplexity API base URL (defaults to `https://api.perplexity.ai`)          |
+| `ARCHESTRA_CHAT_PERPLEXITY_API_KEY`  | Yes      | Your Perplexity API key                                                    |
+
+### Available Models
+
+Perplexity offers the following models:
+
+| Model                  | Description                                        |
+| ---------------------- | -------------------------------------------------- |
+| `sonar`                | Standard search model                              |
+| `sonar-pro`            | Advanced search model with more capabilities       |
+| `sonar-reasoning`      | Search model with reasoning capabilities           |
+| `sonar-reasoning-pro`  | Advanced reasoning model with search               |
+
+### Getting an API Key
+
+1. Sign up at [Perplexity AI](https://www.perplexity.ai/)
+2. Navigate to API settings in your account
+3. Generate an API key
+4. Set the key as `ARCHESTRA_CHAT_PERPLEXITY_API_KEY` environment variable
+
+### Important Notes
+
+- **Real-time search**: Perplexity models are designed for search-augmented responses with citations. They automatically include web search results in their context.
+- **No streaming usage data**: Perplexity supports streaming but may not return usage data in all streaming scenarios.
+- **Search-specific parameters**: Perplexity supports additional parameters like `search_domain_filter`, `return_images`, `return_related_questions`, and `search_recency_filter` for fine-tuning search behavior.

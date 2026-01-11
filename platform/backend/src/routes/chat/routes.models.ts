@@ -286,6 +286,75 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Perplexity API
+ * Perplexity uses OpenAI-compatible format, but has a limited set of models
+ * See: https://docs.perplexity.ai/api-reference/chat-completions-post
+ */
+async function fetchPerplexityModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.perplexity.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    // Perplexity may not have a /models endpoint - return known models
+    logger.debug(
+      { status: response.status },
+      "Perplexity /models endpoint not available, returning known models",
+    );
+
+    // Return the known Perplexity models
+    return [
+      {
+        id: "sonar",
+        displayName: "Sonar",
+        provider: "perplexity" as const,
+      },
+      {
+        id: "sonar-pro",
+        displayName: "Sonar Pro",
+        provider: "perplexity" as const,
+      },
+      {
+        id: "sonar-reasoning",
+        displayName: "Sonar Reasoning",
+        provider: "perplexity" as const,
+      },
+      {
+        id: "sonar-reasoning-pro",
+        displayName: "Sonar Reasoning Pro",
+        provider: "perplexity" as const,
+      },
+    ];
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      object: string;
+      created?: number;
+      owned_by?: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id
+      .split("-")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" "),
+    provider: "perplexity" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }));
+}
+
+/**
  * Fetch models from Gemini API via Vertex AI SDK
  * Uses Application Default Credentials (ADC) for authentication
  *
@@ -400,6 +469,8 @@ async function getProviderApiKey({
     case "ollama":
       // Ollama typically doesn't require API keys, return empty or configured key
       return config.chat.ollama.apiKey || "";
+    case "perplexity":
+      return config.chat.perplexity.apiKey || null;
     default:
       return null;
   }
@@ -415,6 +486,7 @@ const modelFetchers: Record<
   gemini: fetchGeminiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
+  perplexity: fetchPerplexityModels,
 };
 
 /**
@@ -473,7 +545,7 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "perplexity"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

@@ -398,8 +398,7 @@ class StatisticsModel {
     const teamMap = new Map<string, TeamStatistics>();
 
     for (const row of timeSeriesData) {
-      // Use the stored cost from interactions (already correctly calculated per-model)
-      const cost = Number(row.cost) || 0;
+      const { cost } = row;
 
       if (!teamMap.has(row.teamId)) {
         const memberCount =
@@ -543,8 +542,7 @@ class StatisticsModel {
     const agentMap = new Map<string, AgentStatistics>();
 
     for (const row of timeSeriesData) {
-      // Use the stored cost from interactions (already correctly calculated per-model)
-      const cost = Number(row.cost) || 0;
+      const { cost } = row;
 
       if (!agentMap.has(row.agentId)) {
         agentMap.set(row.agentId, {
@@ -665,8 +663,7 @@ class StatisticsModel {
     for (const row of timeSeriesData) {
       if (!row.model) continue;
 
-      // Use the stored cost from interactions (already correctly calculated per-model)
-      const cost = Number(row.cost) || 0;
+      const { cost } = row;
 
       totalCost += cost;
 

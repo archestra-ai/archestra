@@ -100,7 +100,7 @@ describe("McpClient", () => {
       expect(result).toMatchObject({
         id: "call_123",
         isError: true,
-        error: expect.stringContaining("Tool not found"),
+        error: expect.stringContaining("not found or not assigned to agent"),
       });
     });
 

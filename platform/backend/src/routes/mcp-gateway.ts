@@ -18,6 +18,7 @@ import {
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
 } from "./mcp-gateway.utils";
+import { ErrorMessageFactory } from "@/utils/error-messages";
 
 // =============================================================================
 // SHARED: Core MCP Gateway request handling logic
@@ -162,16 +163,40 @@ async function handleMcpPostRequest(
     // Hijack reply to let SDK handle raw response
     reply.hijack();
 
-    await transport.handleRequest(
-      request.raw as IncomingMessage,
-      reply.raw as ServerResponse,
-      body,
-    );
+    try {
+      await transport.handleRequest(
+        request.raw as IncomingMessage,
+        reply.raw as ServerResponse,
+        body,
+      );
 
-    fastify.log.info(
-      { profileId, sessionId },
-      "Transport.handleRequest completed",
-    );
+      fastify.log.info(
+        { profileId, sessionId },
+        "Transport.handleRequest completed",
+      );
+    } catch (error) {
+      fastify.log.error(
+        {
+          error,
+          errorMessage: ErrorMessageFactory.fromError(error),
+          profileId,
+        },
+        "Error handling MCP request",
+      );
+
+      if (!reply.sent) {
+        reply.status(500);
+        return {
+          jsonrpc: "2.0",
+          error: {
+            code: -32603,
+            message: ErrorMessageFactory.internalServerError({}, error),
+            data: ErrorMessageFactory.fromError(error),
+          },
+          id: null,
+        };
+      }
+    }
 
     // Log initialize request
     if (isInitialize) {

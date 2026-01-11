@@ -28,6 +28,7 @@ import {
 } from "@google/genai";
 import { encode as toonEncode } from "@toon-format/toon";
 import logger from "@/logging";
+import { ErrorMessageFactory } from "@/utils/error-messages";
 import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -516,7 +517,7 @@ export function toolResultsToMessages(
   return results.map((result) => ({
     name: commonToolCalls.find((tc) => tc.id === result.id)?.name || "unknown",
     response: result.isError
-      ? { error: result.error || "Tool execution failed" }
+      ? { error: result.error || ErrorMessageFactory.create("TOOL_EXECUTION_FAILED") }
       : typeof result.content === "string"
         ? { result: result.content }
         : (result.content as Record<string, unknown>),

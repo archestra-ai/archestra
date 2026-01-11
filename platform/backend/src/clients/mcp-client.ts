@@ -21,6 +21,7 @@ import type {
   InternalMcpCatalog,
 } from "@/types";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
+import { ErrorMessageFactory } from "@/utils/error-messages";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 
 /**
@@ -194,7 +195,7 @@ class McpClient {
         return await this.createErrorResult(
           toolCall,
           agentId,
-          error instanceof Error ? error.message : "Unknown error",
+          ErrorMessageFactory.fromError(error),
           tool.mcpServerName || "unknown",
         );
       }
@@ -297,38 +298,38 @@ class McpClient {
     const tool = mcpTools[0];
 
     if (!tool) {
-      return {
-        error: await this.createErrorResult(
-          toolCall,
-          agentId,
-          "Tool not found or not assigned to agent",
-        ),
-      };
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            ErrorMessageFactory.toolNotFound(toolCall.name, { agentId }),
+          ),
+        };
     }
 
     // Validate catalogId
     if (!tool.catalogId) {
-      return {
-        error: await this.createErrorResult(
-          toolCall,
-          agentId,
-          "Tool is missing catalogId",
-          tool.mcpServerName || "unknown",
-        ),
-      };
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            ErrorMessageFactory.validationError("catalogId", "Tool is missing catalogId", { agentId }),
+            tool.mcpServerName || "unknown",
+          ),
+        };
     }
 
     // Get catalog item
     const catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
     if (!catalogItem) {
-      return {
-        error: await this.createErrorResult(
-          toolCall,
-          agentId,
-          `No catalog item found for tool catalog ID ${tool.catalogId}`,
-          tool.mcpServerName || "unknown",
-        ),
-      };
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            ErrorMessageFactory.notFound("Catalog item", tool.catalogId, { agentId }),
+            tool.mcpServerName || "unknown",
+          ),
+        };
     }
 
     return { tool, catalogItem };
@@ -400,55 +401,47 @@ class McpClient {
     );
     // Static credential case: use pre-configured execution source
     if (!tool.useDynamicTeamCredential) {
-      if (
-        catalogItem.serverType === "local" &&
-        !tool.executionSourceMcpServerId
-      ) {
+      const targetMcpServerId = tool.executionSourceMcpServerId || tool.mcpServerId;
+
+      if (!targetMcpServerId) {
+        const name = toolCall.name;
+
+        const errorMessage = ErrorMessageFactory.toolExecutionError(name, {
+          agentId,
+          mcpServerName: tool.mcpServerName || undefined,
+          profileId: agentId,
+        });
+
+        logger.warn(
+          {
+            agentId,
+            toolName: name,
+            mcpServerName: tool.mcpServerName,
+            hasExecutionSource: !!tool.executionSourceMcpServerId,
+            hasMcpServerId: !!tool.mcpServerId,
+          },
+          "Tool call failed: No execution source specified"
+        );
+
         return {
           error: await this.createErrorResult(
             toolCall,
             agentId,
-            "Execution source is required for local MCP server tools when dynamic team credential is disabled.",
+            errorMessage,
             tool.mcpServerName || "unknown",
           ),
         };
       }
-      if (
-        catalogItem.serverType === "remote" &&
-        !tool.credentialSourceMcpServerId
-      ) {
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            "Credential source is required for remote MCP server tools when dynamic team credential is disabled.",
-            tool.mcpServerName || "unknown",
-          ),
-        };
-      }
-      const result =
-        catalogItem.serverType === "local"
-          ? tool.executionSourceMcpServerId
-          : tool.credentialSourceMcpServerId;
-      if (!result) {
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            "Couldn't find execution or credential source for MCP server when dynamic team credential is disabled.",
-            tool.mcpServerName || "unknown",
-          ),
-        };
-      }
+
       logger.info(
         {
           toolName: toolCall.name,
           catalogItem: catalogItem,
-          targetLocalMcpServerId: result,
+          targetLocalMcpServerId: targetMcpServerId,
         },
         "Determined target MCP server ID for catalog item",
       );
-      return { targetLocalMcpServerId: result };
+      return { targetLocalMcpServerId: targetMcpServerId };
     }
 
     // Dynamic credential (resolved on tool call time) case: resolve target MCP server ID based on tokenAuth

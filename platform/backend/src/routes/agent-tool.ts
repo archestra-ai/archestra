@@ -380,6 +380,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+
+
   fastify.get(
     "/api/agents/:agentId/tools",
     {

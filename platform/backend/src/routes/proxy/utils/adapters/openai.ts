@@ -16,6 +16,7 @@
 import { encode as toonEncode } from "@toon-format/toon";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
+import { ErrorMessageFactory } from "@/utils/error-messages";
 import { getTokenizer } from "@/tokenizers";
 import type {
   CommonMessage,
@@ -232,7 +233,7 @@ export function toolResultsToMessages(
   return results.map((result) => {
     let content: string;
     if (result.isError) {
-      content = `Error: ${result.error || "Tool execution failed"}`;
+      content = `Error: ${result.error || ErrorMessageFactory.create("TOOL_EXECUTION_FAILED")}`;
     } else if (convertToToon) {
       const beforeJson = JSON.stringify(result.content);
       const afterToon = toonEncode(result.content);

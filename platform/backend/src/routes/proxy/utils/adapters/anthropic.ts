@@ -22,6 +22,7 @@ import type {
   CommonToolResult,
   ToolResultUpdates,
 } from "@/types";
+import { ErrorMessageFactory } from "@/utils/error-messages";
 
 type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];
 
@@ -226,7 +227,7 @@ export function toolResultsToMessages(
       content: results.map((result) => {
         let content: string;
         if (result.isError) {
-          content = `Error: ${result.error || "Tool execution failed"}`;
+          content = `Error: ${result.error || ErrorMessageFactory.create("TOOL_EXECUTION_FAILED")}`;
         } else if (convertToToon) {
           const beforeJson = JSON.stringify(result.content);
           const afterToon = toonEncode(result.content);

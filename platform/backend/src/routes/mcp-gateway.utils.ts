@@ -31,6 +31,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
+import { ErrorMessageFactory } from "@/utils/error-messages";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
 /**
@@ -143,7 +144,13 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
+    // Filter out tools without execution source
+    const validTools = mcpTools.filter((tool) => {
+      const hasExecutionSource = !!tool.mcpServerId;
+      return hasExecutionSource;
+    });
+
+    const toolsList = validTools.map(({ name, description, parameters }) => ({
       name,
       title: archestraToolTitles.get(name) || name,
       description,
@@ -151,6 +158,8 @@ export async function createAgentServer(
       annotations: {},
       _meta: {},
     }));
+
+
 
     // Log tools/list request
     try {
@@ -243,7 +252,7 @@ export async function createAgentServer(
 
           throw {
             code: -32603, // Internal error
-            message: result.error || "Tool execution failed",
+            message: result.error || ErrorMessageFactory.create("TOOL_EXECUTION_FAILED"),
           };
         }
 
@@ -266,17 +275,22 @@ export async function createAgentServer(
           isError: false,
         };
       } catch (error) {
-        if (typeof error === "object" && error !== null && "code" in error) {
-          throw error; // Re-throw JSON-RPC errors
-        }
+        logger.info(
+          {
+            error,
+            agentId,
+            toolName: name,
+          },
+          "Error executing MCP tool call"
+        );
 
         throw {
           code: -32603, // Internal error
-          message: "Tool execution failed",
-          data: error instanceof Error ? error.message : "Unknown error",
+          message: ErrorMessageFactory.toolExecutionFailed({ agentId, toolName: name }, error),
+          data: ErrorMessageFactory.fromError(error),
         };
       }
-    },
+    }
   );
 
   logger.info({ agentId }, "MCP server instance created");
@@ -512,6 +526,12 @@ export async function validateMCPGatewayToken(
   );
   return null;
 }
+
+/**
+ * Check for tools in inconsistent state (missing execution source)
+ * This can happen due to database migrations or manual data changes
+ */
+
 
 /**
  * Clear all active sessions for a specific agent

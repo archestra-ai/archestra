@@ -10,6 +10,7 @@ import {
 } from "@/archestra-mcp-server";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import mcpClient from "@/clients/mcp-client";
+import { ErrorMessageFactory } from "@/utils/error-messages";
 import logger from "@/logging";
 import {
   AgentTeamModel,
@@ -667,7 +668,7 @@ export async function getChatMcpTools({
               // When isError is true, throw to signal AI SDK that tool execution failed
               // This allows AI SDK to create a tool-error part and continue the conversation
               if (result.isError) {
-                throw new Error(result.error || "Tool execution failed");
+                throw new Error(result.error || ErrorMessageFactory.create("TOOL_EXECUTION_FAILED"));
               }
 
               // Convert MCP content to string for AI SDK

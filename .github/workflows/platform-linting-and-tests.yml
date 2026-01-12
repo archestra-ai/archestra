@@ -326,7 +326,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # On merge queues we need to build the Docker image, run Docker Scout and upload the real SARIF result
       - name: Build Docker image
         if: ${{ github.event_name == 'merge_group' }}
         uses: ./.github/actions/build-platform-docker-image

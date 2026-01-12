@@ -16,7 +16,6 @@ type EvaluationResult = {
 };
 
 export type PolicyEvaluationContext = {
-  profileId: string;
   teamIds: string[];
   externalAgentId?: string;
 };
@@ -29,7 +28,7 @@ function matchContextCondition(
 ): boolean {
 
   // Team matching - check if value is in teamIds array
-  if (path === "team") {
+  if (path === "teams") {
     switch (operator) {
       case "contains":
         return context.teamIds.includes(value);
@@ -42,10 +41,8 @@ function matchContextCondition(
 
   // Single value matching for other context fields
   let contextValue: string | undefined;
-  if (path === "profile") {
-    contextValue = context.profileId;
-  } else if (path === "externalAgentId") {
-    contextValue = context.externalAgentId;
+  if (path === "externalAgentId") {
+    contextValue = context.externalAgent;
   } else {
     return false;
   }

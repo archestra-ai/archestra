@@ -117,7 +117,7 @@ function LogDetail({
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-2">
-                  External Agent ID
+                  External Agent
                 </div>
                 <div className="font-medium font-mono">
                   {dynamicInteraction.externalAgentId || (

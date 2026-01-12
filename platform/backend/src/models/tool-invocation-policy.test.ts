@@ -901,7 +901,7 @@ describe("ToolInvocationPolicyModel", () => {
     });
 
     describe("context-based conditions", () => {
-      test("blocks when context.externalAgentId matches with equal operator", async ({
+      test("blocks when context.externalAgent matches with equal operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -914,7 +914,7 @@ describe("ToolInvocationPolicyModel", () => {
         await makeToolPolicy(tool.id, {
           conditions: [
             {
-              key: "context.externalAgentId",
+              key: "context.externalAgent",
               operator: "equal",
               value: "blocked-external-agent",
             },
@@ -939,7 +939,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toContain("External agent blocked");
       });
 
-      test("allows when context.externalAgentId does not match with equal operator", async ({
+      test("allows when context.externalAgent does not match with equal operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -952,7 +952,7 @@ describe("ToolInvocationPolicyModel", () => {
         await makeToolPolicy(tool.id, {
           conditions: [
             {
-              key: "context.externalAgentId",
+              key: "context.externalAgent",
               operator: "equal",
               value: "blocked-external-agent",
             },
@@ -976,7 +976,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.isAllowed).toBe(true);
       });
 
-      test("blocks when context.externalAgentId matches with notEqual operator", async ({
+      test("blocks when context.externalAgent matches with notEqual operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -989,7 +989,7 @@ describe("ToolInvocationPolicyModel", () => {
         await makeToolPolicy(tool.id, {
           conditions: [
             {
-              key: "context.externalAgentId",
+              key: "context.externalAgent",
               operator: "notEqual",
               value: "trusted-agent",
             },

@@ -183,6 +183,8 @@ jobs:
       # This handles the case where release-please bumps the version in package.json,
       # causing generated files (like docs/openapi.json) to be out of date
       is-release-please-pr: ${{ startsWith(github.head_ref, 'release-please--') }}
+      # On pull requests we don't skip running but in GH settings those are not required to succeed to hit Merge
+      should-skip-running-and-always-succeed: false
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
@@ -202,6 +204,9 @@ jobs:
       pull-requests: write # Required for Docker Scout to write a comment to a PR
     uses: ./.github/workflows/platform-linting-and-tests.yml
     with:
+      # On pull requests those Required Checks must still run because they are required in GH settings
+      # They should always succeed quickly in pull requests
+      # while on merge queues they should run normally and fail if needed
       should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}

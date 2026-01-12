@@ -559,6 +559,10 @@ const testConfigs: ToolInvocationTestConfig[] = [
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolInvocation-${config.providerName}`, () => {
+    // Run tests serially because they share mutable state (agentId, toolId, policyIds)
+    // Parallel execution causes these variables to be overwritten, breaking afterEach cleanup
+    test.describe.configure({ mode: "serial" });
+
     let agentId: string;
     let trustedDataPolicyId: string;
     let toolInvocationPolicyId: string;

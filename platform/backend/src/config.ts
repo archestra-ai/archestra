@@ -201,6 +201,18 @@ export const getAdditionalTrustedSsoProviderIds = (): string[] => {
     .filter((id) => id.length > 0);
 };
 
+/**
+ * Parse incoming email provider from environment variable
+ */
+const parseIncomingEmailProvider = (): "outlook" | undefined => {
+  const provider =
+    process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER?.toLowerCase();
+  if (provider === "outlook") {
+    return "outlook";
+  }
+  return undefined;
+};
+
 export default {
   frontendBaseUrl,
   api: {
@@ -219,6 +231,20 @@ export default {
   },
   a2aGateway: {
     endpoint: "/v1/a2a",
+  },
+  agents: {
+    incomingEmail: {
+      provider: parseIncomingEmailProvider(),
+      outlook: {
+        tenantId: process.env.ARCHESTRA_AGENTS_OUTLOOK_TENANT_ID || "",
+        clientId: process.env.ARCHESTRA_AGENTS_OUTLOOK_CLIENT_ID || "",
+        clientSecret: process.env.ARCHESTRA_AGENTS_OUTLOOK_CLIENT_SECRET || "",
+        mailboxAddress:
+          process.env.ARCHESTRA_AGENTS_OUTLOOK_MAILBOX_ADDRESS || "",
+        emailDomain:
+          process.env.ARCHESTRA_AGENTS_OUTLOOK_EMAIL_DOMAIN || undefined,
+      },
+    },
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,

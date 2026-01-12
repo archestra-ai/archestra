@@ -31,7 +31,7 @@ export default function ConnectionPage() {
       <div className="space-y-8">
         {/* Architecture & Connection */}
         <div>
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
             <div>
               <ArchestraArchitectureDiagram
                 activeTab={activeTab}

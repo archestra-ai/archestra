@@ -50,6 +50,8 @@ import {
   useTeamStatistics,
 } from "@/lib/statistics.query";
 
+const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
+
 export default function StatisticsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -76,11 +78,15 @@ export default function StatisticsPage() {
   });
 
   /**
-   * Initialize from URL parameters
+   * Initialize from URL parameters or localStorage
    */
   useEffect(() => {
+    const urlTimeframe = searchParams.get("timeframe");
+    const storedTimeframe = localStorage.getItem(TIMEFRAME_STORAGE_KEY);
+
+    // URL params take precedence, then localStorage, then default
     const { success, data } = StatisticsTimeFrameSchema.safeParse(
-      searchParams.get("timeframe"),
+      urlTimeframe ?? storedTimeframe,
     );
     if (success) {
       setTimeframe(data);
@@ -106,6 +112,7 @@ export default function StatisticsPage() {
   const handleTimeframeChange = useCallback(
     (tf: StatisticsTimeFrame) => {
       setTimeframe(tf);
+      localStorage.setItem(TIMEFRAME_STORAGE_KEY, tf);
       updateURL(tf);
     },
     [updateURL],

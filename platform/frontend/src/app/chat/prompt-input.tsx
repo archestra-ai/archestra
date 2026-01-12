@@ -50,8 +50,6 @@ interface ArchestraPromptInputProps {
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Callback for profile change in initial chat mode (no conversation) */
   onProfileChange?: (agentId: string) => void;
-  /** Initial text to pre-fill in the input */
-  initialInput?: string;
 }
 
 // Inner component that has access to the controller context
@@ -162,11 +160,10 @@ const ArchestraPromptInput = ({
   onProviderChange,
   textareaRef,
   onProfileChange,
-  initialInput,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
-      <PromptInputProvider initialInput={initialInput}>
+      <PromptInputProvider>
         <PromptInputContent
           onSubmit={onSubmit}
           status={status}

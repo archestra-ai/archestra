@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.17](https://github.com/archestra-ai/archestra/compare/platform-v1.0.16...platform-v1.0.17) (2026-01-12)
+
+
+### Features
+
+* add chat deeplink ([#2063](https://github.com/archestra-ai/archestra/issues/2063)) ([f7cad18](https://github.com/archestra-ai/archestra/commit/f7cad1868fc68faf2eb03e7d9db3a02b4ffe6f07))
+
 ## [1.0.16](https://github.com/archestra-ai/archestra/compare/platform-v1.0.15...platform-v1.0.16) (2026-01-12)
 
 

@@ -41,7 +41,6 @@ export function A2AConnectionInstructions({
 
   const tokens = tokensData?.tokens;
   const [copiedUrl, setCopiedUrl] = useState(false);
-  const [copiedChatLink, setCopiedChatLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [showExposedToken, setShowExposedToken] = useState(false);
@@ -152,16 +151,6 @@ export function A2AConnectionInstructions({
     setTimeout(() => setCopiedUrl(false), 2000);
   }, [a2aEndpoint]);
 
-  const handleCopyChatLink = useCallback(async () => {
-    const exampleMessage =
-      "Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements";
-    const chatLink = `${window.location.origin}/chat/new?agent_id=${prompt.id}&user_prompt=${encodeURIComponent(exampleMessage)}`;
-    await navigator.clipboard.writeText(chatLink);
-    setCopiedChatLink(true);
-    toast.success("Chat deep link copied");
-    setTimeout(() => setCopiedChatLink(false), 2000);
-  }, [prompt.id]);
-
   // Agent Card URL for discovery
   const agentCardUrl = `${baseUrl}/a2a/${prompt.id}/.well-known/agent.json`;
 
@@ -256,42 +245,6 @@ curl -X GET "${agentCardUrl}" \\
                 <Check className="h-3 w-3 text-green-500" />
               ) : (
                 <Copy className="h-3 w-3" />
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Chat Deep Link */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Chat Deep Link</Label>
-        <p className="text-xs text-muted-foreground">
-          Use this URL to open chat with the agent and send a message
-          automatically.
-        </p>
-        <div className="bg-muted rounded-md p-3 pt-10 relative">
-          <pre className="text-xs whitespace-pre-wrap break-all overflow-x-auto">
-            <code>
-              {`${window.location.origin}/chat/new?agent_id=${prompt.id}&user_prompt=${encodeURIComponent("Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements")}`}
-            </code>
-          </pre>
-          <div className="absolute top-2 right-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2"
-              onClick={handleCopyChatLink}
-            >
-              {copiedChatLink ? (
-                <>
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy</span>
-                </>
               )}
             </Button>
           </div>

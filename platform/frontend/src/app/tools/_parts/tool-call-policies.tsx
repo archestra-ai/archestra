@@ -117,7 +117,10 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                       externalAgentIds.length === 1
                     ) {
                       autoValue = externalAgentIds[0];
-                    } else if (value === CONTEXT_TEAM_IDS && teams?.length === 1) {
+                    } else if (
+                      value === CONTEXT_TEAM_IDS &&
+                      teams?.length === 1
+                    ) {
                       autoValue = teams[0].id;
                     }
                     // Set default operator based on key type
@@ -170,7 +173,9 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                           </SelectItem>
                         )}
                         {(teams?.length ?? 0) > 0 && (
-                          <SelectItem value={CONTEXT_TEAM_IDS}>Teams</SelectItem>
+                          <SelectItem value={CONTEXT_TEAM_IDS}>
+                            Teams
+                          </SelectItem>
                         )}
                       </>
                     )}

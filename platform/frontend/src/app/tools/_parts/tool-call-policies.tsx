@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useUniqueExternalAgentIds } from "@/lib/interaction.query";
 import {
   useCallPolicyMutation,
   useOperators,
@@ -22,6 +23,8 @@ import {
 } from "@/lib/policy.query";
 import { getAllowUsageFromPolicies } from "@/lib/policy.utils";
 import { PolicyCard } from "./policy-card";
+
+const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
 
 type ToolForPolicies = {
   id: string;
@@ -41,12 +44,18 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
     useToolInvocationPolicyUpdateMutation();
   const callPolicyMutation = useCallPolicyMutation();
   const { data: operators } = useOperators();
+  const { data: externalAgentIds } = useUniqueExternalAgentIds();
 
   const allPolicies = byProfileToolId[tool.id] || [];
   // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
   const policies = allPolicies.filter((policy) => policy.conditions.length > 0);
 
   const argumentNames = Object.keys(tool.parameters?.properties || []);
+  // Combine argument names with context condition options
+  const conditionKeyOptions = [
+    ...argumentNames,
+    ...(externalAgentIds.length > 0 ? [CONTEXT_EXTERNAL_AGENT_ID] : []),
+  ];
 
   // Derive allow usage from policies (default policy with empty conditions)
   const allowUsageWhenUntrustedDataIsPresent = getAllowUsageFromPolicies(
@@ -94,18 +103,45 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                     toolInvocationPolicyUpdateMutation.mutate({
                       ...policy,
                       argumentName: value,
+                      // Clear value when switching between context and argument keys
+                      value: "",
                     });
                   }}
                 >
-                  <SelectTrigger className="w-[140px]">
+                  <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="parameter" />
                   </SelectTrigger>
                   <SelectContent>
-                    {argumentNames.map((argumentName) => (
-                      <SelectItem key={argumentName} value={argumentName}>
-                        {argumentName}
-                      </SelectItem>
-                    ))}
+                    {argumentNames.length > 0 && (
+                      <>
+                        <SelectItem
+                          disabled
+                          value="__param_header__"
+                          className="text-xs text-muted-foreground font-medium"
+                        >
+                          Parameters
+                        </SelectItem>
+                        {argumentNames.map((argumentName) => (
+                          <SelectItem key={argumentName} value={argumentName}>
+                            {argumentName}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    {externalAgentIds.length > 0 && (
+                      <>
+                        <SelectItem
+                          disabled
+                          value="__context_header__"
+                          className="text-xs text-muted-foreground font-medium"
+                        >
+                          Context
+                        </SelectItem>
+                        <SelectItem value={CONTEXT_EXTERNAL_AGENT_ID}>
+                          External Agent ID
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 <Select
@@ -128,18 +164,48 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                     ))}
                   </SelectContent>
                 </Select>
-                <DebouncedInput
-                  placeholder="Value"
-                  className="w-[120px]"
-                  initialValue={policy.value}
-                  onChange={(value) =>
-                    toolInvocationPolicyUpdateMutation.mutate({
-                      ...policy,
-                      value,
-                    })
-                  }
-                />
-                <CaseSensitiveTooltip />
+                {policy.argumentName === CONTEXT_EXTERNAL_AGENT_ID ? (
+                  <Select
+                    value={policy.value || "__none__"}
+                    onValueChange={(value) =>
+                      toolInvocationPolicyUpdateMutation.mutate({
+                        ...policy,
+                        value: value === "__none__" ? "" : value,
+                      })
+                    }
+                  >
+                    <SelectTrigger
+                      className={`w-[180px] ${!policy.value ? "text-muted-foreground" : ""}`}
+                    >
+                      <SelectValue placeholder="Select agent ID" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="text-muted-foreground">
+                        (none)
+                      </SelectItem>
+                      {externalAgentIds.map((agentId) => (
+                        <SelectItem key={agentId} value={agentId}>
+                          {agentId}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <DebouncedInput
+                    placeholder="Value"
+                    className="w-[120px]"
+                    initialValue={policy.value}
+                    onChange={(value) =>
+                      toolInvocationPolicyUpdateMutation.mutate({
+                        ...policy,
+                        value,
+                      })
+                    }
+                  />
+                )}
+                {policy.argumentName !== CONTEXT_EXTERNAL_AGENT_ID && (
+                  <CaseSensitiveTooltip />
+                )}
               </div>
               <Button
                 variant="ghost"
@@ -203,13 +269,13 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
         onClick={() =>
           toolInvocationPolicyCreateMutation.mutate({
             toolId: tool.id,
-            argumentName: argumentNames[0],
+            argumentName: argumentNames[0] ?? CONTEXT_EXTERNAL_AGENT_ID,
           })
         }
-        disabled={argumentNames.length === 0}
-        disabledText="This tool has no parameters"
+        disabled={conditionKeyOptions.length === 0}
+        disabledText="No parameters or context conditions available"
       >
-        <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy For Tool Parameters
+        <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy
       </ButtonWithTooltip>
     </div>
   );

@@ -3,31 +3,17 @@ import {
   API_BASE_URL,
   MCP_GATEWAY_URL_SUFFIX,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TEST_CATALOG_ITEM_NAME,
+  TEST_TOOL_NAME,
   UI_BASE_URL,
 } from "../../consts";
+import { findCatalogItem } from "../../utils";
 import { expect, test } from "./fixtures";
 import { getOrgTokenForProfile, makeApiRequest } from "./mcp-gateway-utils";
 
 // =============================================================================
 // Helper functions for MCP server installation
 // =============================================================================
-
-/**
- * Find a catalog item by name
- */
-async function findCatalogItem(
-  request: APIRequestContext,
-  name: string,
-): Promise<{ id: string; name: string } | undefined> {
-  const response = await request.get(
-    `${API_BASE_URL}/api/internal_mcp_catalog`,
-    {
-      headers: { Origin: UI_BASE_URL },
-    },
-  );
-  const catalog = await response.json();
-  return catalog.find((item: { name: string }) => item.name === name);
-}
 
 /**
  * Wait for MCP server installation to complete
@@ -451,9 +437,6 @@ test.describe("MCP Gateway - New Auth (archestra token)", () => {
     expect(initResponse.status()).toBe(401);
   });
 });
-
-const TEST_CATALOG_ITEM_NAME = "internal-dev-test-server";
-const TEST_TOOL_NAME = `${TEST_CATALOG_ITEM_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}print_archestra_test`;
 
 test.describe("MCP Gateway - External MCP Server Tool Invocation (Legacy Auth)", () => {
   let profileId: string;

@@ -3,6 +3,7 @@ import { type APIRequestContext, expect, type Page } from "@playwright/test";
 import { archestraApiSdk } from "@shared";
 import { testMcpServerCommand } from "@shared/test-mcp-server";
 import {
+  API_BASE_URL,
   DEFAULT_PROFILE_NAME,
   DEFAULT_TEAM_NAME,
   E2eTestId,
@@ -393,4 +394,51 @@ export async function loginViaApi(
   }
 
   return false;
+}
+
+/**
+ * Find a catalog item by name
+ */
+export async function findCatalogItem(
+  request: APIRequestContext,
+  name: string,
+): Promise<{ id: string; name: string } | undefined> {
+  const response = await request.get(
+    `${API_BASE_URL}/api/internal_mcp_catalog`,
+    {
+      headers: { Origin: UI_BASE_URL },
+    },
+  );
+
+  if (!response.ok()) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to fetch internal MCP catalog: ${response.status()} ${errorText}`,
+    );
+  }
+
+  const catalog = await response.json();
+
+  if (!Array.isArray(catalog)) {
+    throw new Error(
+      `Expected catalog to be an array, got: ${JSON.stringify(catalog)}`,
+    );
+  }
+
+  return catalog.find((item: { name: string }) => item.name === name);
+}
+
+/**
+ * Find an installed MCP server by catalog ID
+ */
+export async function findInstalledServer(
+  request: APIRequestContext,
+  catalogId: string,
+): Promise<{ id: string; catalogId: string } | undefined> {
+  const response = await request.get(`${API_BASE_URL}/api/mcp_server`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+  const serversData = await response.json();
+  const servers = serversData.data || serversData;
+  return servers.find((s: { catalogId: string }) => s.catalogId === catalogId);
 }

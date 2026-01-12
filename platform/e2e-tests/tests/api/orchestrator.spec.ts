@@ -1,3 +1,5 @@
+import { TEST_CATALOG_ITEM_NAME } from "../../consts";
+import { findCatalogItem, findInstalledServer } from "../../utils";
 import {
   type APIRequestContext,
   expect,
@@ -152,11 +154,11 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
     });
   });
 
-  test.describe("Local MCP Server - NPX Command", () => {
-    // Extend timeout for this describe block since MCP server installation can take a while
-    test.describe.configure({ timeout: 60_000 });
+  test.describe("Local MCP Server - internal-dev-test-server", () => {
+    // Run tests serially on the same worker to share beforeAll setup (MCP server installation)
+    // Also extend timeout since MCP server installation can take a while
+    test.describe.configure({ mode: "serial", timeout: 60_000 });
 
-    let catalogId: string;
     let serverId: string;
 
     test.beforeAll(
@@ -164,12 +166,12 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         request,
         makeApiRequest,
         createAgent,
-        createMcpCatalogItem,
         installMcpServer,
+        uninstallMcpServer,
         getTeamByName,
       }) => {
         // Create agent for testing (needed for cleanup)
-        await createAgent(request, "Orchestrator Test Agent - NPX");
+        await createAgent(request, "Orchestrator Test Agent");
 
         // Get the Default Team (required for MCP server installation when Vault is enabled)
         const defaultTeam = await getTeamByName(request, "Default Team");
@@ -177,52 +179,81 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           throw new Error("Default Team not found");
         }
 
-        // Create a catalog item for context7 MCP server using npx
-        const catalogResponse = await createMcpCatalogItem(request, {
-          name: "Context7 - Local",
-          description: "Context7 MCP Server for testing local NPX installation",
-          serverType: "local",
-          localConfig: {
-            command: "npx",
-            arguments: ["-y", "@upstash/context7-mcp"],
-            transportType: "stdio",
-            environment: [],
-          },
-        });
-        const catalogItem = await catalogResponse.json();
-        catalogId = catalogItem.id;
+        // Find the internal-dev-test-server catalog item
+        const catalogItem = await findCatalogItem(
+          request,
+          TEST_CATALOG_ITEM_NAME,
+        );
+        if (!catalogItem) {
+          throw new Error(
+            `Catalog item '${TEST_CATALOG_ITEM_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
+          );
+        }
 
-        // Install the MCP server with team assignment
-        const installResponse = await installMcpServer(request, {
-          name: "Test Context7 NPX Server",
-          catalogId: catalogId,
-          teamId: defaultTeam.id,
-        });
-        const server = await installResponse.json();
-        serverId = server.id;
+        // Check if already installed
+        let testServer = await findInstalledServer(request, catalogItem.id);
+
+        // If server exists but is not in success status, uninstall it to start fresh
+        if (testServer) {
+          const statusResponse = await makeApiRequest({
+            request,
+            method: "get",
+            urlSuffix: `/api/mcp_server/${testServer.id}/installation-status`,
+          });
+          const status = await statusResponse.json();
+
+          if (status.localInstallationStatus !== "success") {
+            await uninstallMcpServer(request, testServer.id);
+            // Wait for K8s to clean up the deployment before reinstalling
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+            testServer = undefined;
+          }
+        }
+
+        if (!testServer) {
+          // Install the MCP server with team assignment
+          const installResponse = await installMcpServer(request, {
+            name: catalogItem.name,
+            catalogId: catalogItem.id,
+            teamId: defaultTeam.id,
+            environmentValues: {
+              ARCHESTRA_TEST: "e2e-test-value",
+            },
+          });
+          testServer = await installResponse.json();
+        }
+
+        if (!testServer) {
+          throw new Error("MCP server should be installed at this point");
+        }
+
+        serverId = testServer.id;
 
         // Wait for MCP server to be ready
         await waitForMcpServerReady(request, makeApiRequest, serverId);
       },
     );
 
-    test.afterAll(
-      async ({ request, deleteMcpCatalogItem, uninstallMcpServer }) => {
-        // Clean up in reverse order
-        if (serverId) await uninstallMcpServer(request, serverId);
-        if (catalogId) await deleteMcpCatalogItem(request, catalogId);
-      },
-    );
+    test.afterAll(async ({ request, uninstallMcpServer }) => {
+      // Only uninstall the server, don't delete the catalog item (it's from internal catalog)
+      if (serverId) await uninstallMcpServer(request, serverId);
+    });
 
-    test("should install local MCP server via npx and discover its tools", async ({
+    test("should install local MCP server and discover its tools", async ({
       request,
       makeApiRequest,
     }) => {
       // Get tools directly from MCP server
       const tools = await getMcpServerTools(request, makeApiRequest, serverId);
 
-      // Should have discovered tools from the NPX server
+      // Should have discovered tools from the server
       expect(tools.length).toBeGreaterThan(0);
+
+      // Verify the test tool is present (tool name from MCP server, without server prefix)
+      const testTool = tools.find((t: { name: string }) =>
+        t.name.includes("print_archestra_test"),
+      );
+      expect(testTool).toBeDefined();
     });
 
     test("should restart local MCP server successfully", async ({
@@ -254,86 +285,6 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         serverId,
       );
       expect(toolsAfter.length).toBe(toolsCountBefore);
-    });
-  });
-
-  test.describe("Local MCP Server - Docker Image", () => {
-    // Extend timeout for this describe block since Docker image pull and MCP server installation can take a while
-    test.describe.configure({ timeout: 60_000 });
-
-    let catalogId: string;
-    let serverId: string;
-
-    test.beforeAll(
-      async ({
-        request,
-        makeApiRequest,
-        createAgent,
-        createMcpCatalogItem,
-        installMcpServer,
-        getTeamByName,
-      }) => {
-        // Create agent for testing (needed for cleanup)
-        await createAgent(request, "Orchestrator Test Agent - Docker");
-
-        // Get the Default Team (required for MCP server installation when Vault is enabled)
-        const defaultTeam = await getTeamByName(request, "Default Team");
-        if (!defaultTeam) {
-          throw new Error("Default Team not found");
-        }
-
-        // Create a catalog item for context7 MCP server using Docker image
-        const catalogResponse = await createMcpCatalogItem(request, {
-          name: "Context7 - Docker Based",
-          description:
-            "Context7 MCP Server for testing Docker image installation",
-          serverType: "local",
-          localConfig: {
-            /**
-             * NOTE: we use this image instead of the mcp/context7 one as this one exposes stdio..
-             * the other one exposes SSE (which we don't support yet as a transport type)..
-             *
-             * https://github.com/dolasoft/stdio_context7_mcp
-             */
-            dockerImage: "dolasoft/stdio-context7-mcp",
-            transportType: "stdio",
-            environment: [],
-          },
-        });
-        const catalogItem = await catalogResponse.json();
-        catalogId = catalogItem.id;
-
-        // Install the MCP server with team assignment
-        const installResponse = await installMcpServer(request, {
-          name: "Test Context7 Docker Server",
-          catalogId: catalogId,
-          teamId: defaultTeam.id,
-        });
-        const server = await installResponse.json();
-        serverId = server.id;
-
-        // Wait for MCP server to be ready
-        await waitForMcpServerReady(request, makeApiRequest, serverId);
-      },
-    );
-
-    test.afterAll(
-      async ({ request, deleteMcpCatalogItem, uninstallMcpServer }) => {
-        // Clean up in reverse order
-        if (serverId) await uninstallMcpServer(request, serverId);
-        if (catalogId) await deleteMcpCatalogItem(request, catalogId);
-      },
-    );
-
-    test("should install local MCP server via Docker and discover its tools", async ({
-      request,
-      makeApiRequest,
-    }) => {
-      // Get tools directly from MCP server
-      const tools = await getMcpServerTools(request, makeApiRequest, serverId);
-
-      // Should have discovered tools from the Docker server
-      expect(tools.length).toBeGreaterThan(0);
     });
   });
 });

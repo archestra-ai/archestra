@@ -113,6 +113,14 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     sessionId?: string | null,
     sessionSource?: SessionSource,
   ) => {
+    // Convert headers to Record<string, string> for policy evaluation context
+    const headersRecord: Record<string, string> = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (typeof value === "string") {
+        headersRecord[key] = value;
+      }
+    }
+
     logger.debug(
       {
         agentId,
@@ -557,6 +565,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 await utils.toolInvocation.evaluatePolicies(
                   validToolCalls,
                   resolvedAgentId,
+                  { profileId: resolvedAgentId, headers: headersRecord },
                   contextIsTrusted,
                   enabledToolNames,
                   globalToolPolicy,
@@ -841,6 +850,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
               validToolCalls,
               resolvedAgentId,
+              { profileId: resolvedAgentId, headers: headersRecord },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,

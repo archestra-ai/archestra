@@ -359,6 +359,15 @@ export async function handleLLMProxy<
     // Extract enabled tool names for filtering in evaluatePolicies
     const enabledToolNames = new Set(tools.map((t) => t.name).filter(Boolean));
 
+    // Convert headers to Record<string, string> for policy evaluation context
+    const headersRecord: Record<string, string> = {};
+    const rawHeaders = headers as Record<string, unknown>;
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (typeof value === "string") {
+        headersRecord[key] = value;
+      }
+    }
+
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
@@ -378,6 +387,7 @@ export async function handleLLMProxy<
         context.userId,
         sessionId,
         sessionSource,
+        headersRecord,
       );
     } else {
       return handleNonStreaming(
@@ -397,6 +407,7 @@ export async function handleLLMProxy<
         context.userId,
         sessionId,
         sessionSource,
+        headersRecord,
       );
     }
   } catch (error) {
@@ -437,6 +448,7 @@ async function handleStreaming<
   userId?: string,
   sessionId?: string | null,
   sessionSource?: SessionSource,
+  headers?: Record<string, string>,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -524,6 +536,7 @@ async function handleStreaming<
       toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
         toolCallsForPolicy,
         agent.id,
+        { profileId: agent.id, headers: headers ?? {} },
         contextIsTrusted,
         enabledToolNames,
         globalToolPolicy,
@@ -673,6 +686,7 @@ async function handleNonStreaming<
   userId?: string,
   sessionId?: string | null,
   sessionSource?: SessionSource,
+  headers?: Record<string, string>,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -715,6 +729,7 @@ async function handleNonStreaming<
             : JSON.stringify(tc.arguments),
       })),
       agent.id,
+      { profileId: agent.id, headers: headers ?? {} },
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,

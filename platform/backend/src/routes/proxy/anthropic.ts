@@ -127,6 +127,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) => {
     const { tools, stream } = body;
 
+    // Convert headers to Record<string, string> for policy evaluation context
+    const headersRecord: Record<string, string> = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (typeof value === "string") {
+        headersRecord[key] = value;
+      }
+    }
+
     logger.debug(
       {
         agentId,
@@ -638,6 +646,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
               resolvedAgentId,
+              { profileId: resolvedAgentId, headers: headersRecord },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,
@@ -984,6 +993,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
               resolvedAgentId,
+              { profileId: resolvedAgentId, headers: headersRecord },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,

@@ -5,7 +5,6 @@ import type { PolicyEvaluationContext } from "./tool-invocation-policy";
 
 const mockContext: PolicyEvaluationContext = {
   profileId: "test-profile-id",
-  teamId: null,
   headers: {},
 };
 

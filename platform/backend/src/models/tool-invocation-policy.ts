@@ -17,7 +17,6 @@ type EvaluationResult = {
 
 export type PolicyEvaluationContext = {
   profileId: string;
-  teamId: string | null;
   headers: Record<string, string>;
 };
 
@@ -27,17 +26,15 @@ function matchContextCondition(
   operator: AutonomyPolicyOperator.SupportedOperator,
   context: PolicyEvaluationContext,
 ): boolean {
-  let contextValue: string | null;
+  let contextValue: string | undefined;
+  const [key1, key2] = path.split('.');
   if (path === "profile") {
     contextValue = context.profileId;
-  } else if (path === "team") {
-    contextValue = context.teamId;
-  } else if (/^headers\./.test(path)) {
-    const [, name] = path.split(".");
-    if (!Object.prototype.hasOwnProperty.call(context.headers, name)) {
+  } else if (key1 === 'headers') {
+    if (!Object.prototype.hasOwnProperty.call(context.headers, key2)) {
       return false;
     }
-    contextValue = context.headers[name];
+    contextValue = context.headers[key2];
   } else {
     return false;
   }

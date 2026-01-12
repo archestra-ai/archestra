@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.16](https://github.com/archestra-ai/archestra/compare/platform-v1.0.15...platform-v1.0.16) (2026-01-12)
+
+
+### Miscellaneous Chores
+
+* dev to main ([#2055](https://github.com/archestra-ai/archestra/issues/2055)) ([7a7a3ee](https://github.com/archestra-ai/archestra/commit/7a7a3ee130c78384e473b5a15423e4d5c8dcc62f))
+
 ## [1.0.15](https://github.com/archestra-ai/archestra/compare/platform-v1.0.14...platform-v1.0.15) (2026-01-12)
 
 

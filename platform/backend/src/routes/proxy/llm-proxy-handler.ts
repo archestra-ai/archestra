@@ -252,6 +252,9 @@ export async function handleLLMProxy<
     const globalToolPolicy =
       await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
+    // Fetch team IDs for policy evaluation context (needed for trusted data evaluation)
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
+
     // Evaluate trusted data policies
     logger.debug(
       {
@@ -271,6 +274,7 @@ export async function handleLLMProxy<
         providerName,
         resolvedAgent.considerContextUntrusted,
         globalToolPolicy,
+        { teamIds, externalAgentId },
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {
@@ -368,9 +372,6 @@ export async function handleLLMProxy<
         headersRecord[key] = value;
       }
     }
-
-    // Fetch team IDs for policy evaluation context
-    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
 
     if (requestAdapter.isStreaming()) {
       return handleStreaming(

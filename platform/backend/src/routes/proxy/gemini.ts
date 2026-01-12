@@ -327,6 +327,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "gemini",
           resolvedAgent.considerContextUntrusted,
           globalToolPolicy,
+          { teamIds, externalAgentId },
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)

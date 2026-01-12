@@ -14,6 +14,7 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
   switch (provider) {
     case "anthropic":
       return new AnthropicTokenizer();
+    case "cerebras":
     case "openai":
     case "vllm":
     case "ollama":

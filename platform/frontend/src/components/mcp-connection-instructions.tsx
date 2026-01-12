@@ -6,10 +6,10 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Layers,
   Loader2,
   Package,
   Server,
-  User,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -308,7 +308,7 @@ export function McpConnectionInstructions({
             <SelectValue placeholder="Select a profile">
               {selectedProfile && (
                 <div className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
+                  <Layers className="h-4 w-4" />
                   <span>{selectedProfile.name}</span>
                   <span className="text-muted-foreground ml-auto">
                     {getToolsCountForProfile(selectedProfile)} tools
@@ -322,7 +322,7 @@ export function McpConnectionInstructions({
               <SelectItem key={profile.id} value={profile.id}>
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
+                    <Layers className="h-4 w-4" />
                     <span>{profile.name}</span>
                   </div>
                   <span className="text-sm text-muted-foreground ml-4">

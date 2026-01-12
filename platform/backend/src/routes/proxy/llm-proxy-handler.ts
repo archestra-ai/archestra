@@ -851,10 +851,20 @@ function handleError(
 ): FastifyReply | never {
   logger.error(error);
 
-  const statusCode =
-    error instanceof Error && "status" in error
-      ? (error.status as 400 | 403 | 404 | 429 | 500)
-      : 500;
+  // Extract status code from error, checking multiple common property names
+  // and ensuring the value is a valid number (not undefined/null)
+  let statusCode: number = 500;
+  if (error instanceof Error) {
+    const errorObj = error as Error & {
+      status?: number;
+      statusCode?: number;
+    };
+    if (typeof errorObj.status === "number") {
+      statusCode = errorObj.status;
+    } else if (typeof errorObj.statusCode === "number") {
+      statusCode = errorObj.statusCode;
+    }
+  }
 
   const errorMessage = extractErrorMessage(error);
 

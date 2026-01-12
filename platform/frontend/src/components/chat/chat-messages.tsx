@@ -23,6 +23,7 @@ import {
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -281,6 +282,56 @@ export function ChatMessages({
                           isLastAssistantInSequence &&
                           isLastTextPart &&
                           status !== "streaming";
+
+                        // Check for <think> tags (used by Qwen and similar models)
+                        if (hasThinkingTags(part.text)) {
+                          const parsedParts = parseThinkingTags(part.text);
+                          return (
+                            <Fragment key={partKey}>
+                              {parsedParts.map((parsedPart, parsedIdx) => {
+                                const parsedKey = `${partKey}-parsed-${parsedIdx}`;
+                                if (parsedPart.type === "reasoning") {
+                                  return (
+                                    <Reasoning
+                                      key={parsedKey}
+                                      className="w-full"
+                                    >
+                                      <ReasoningTrigger />
+                                      <ReasoningContent>
+                                        {parsedPart.text}
+                                      </ReasoningContent>
+                                    </Reasoning>
+                                  );
+                                }
+                                // Render text parts - show actions only on the last text part
+                                const isLastParsedTextPart =
+                                  parsedIdx ===
+                                  parsedParts.length -
+                                    1 -
+                                    [...parsedParts]
+                                      .reverse()
+                                      .findIndex((p) => p.type === "text");
+                                return (
+                                  <EditableAssistantMessage
+                                    key={parsedKey}
+                                    messageId={message.id}
+                                    partIndex={i}
+                                    partKey={partKey}
+                                    text={parsedPart.text}
+                                    isEditing={editingPartKey === partKey}
+                                    showActions={
+                                      showActions && isLastParsedTextPart
+                                    }
+                                    editDisabled={isResponseInProgress}
+                                    onStartEdit={handleStartEdit}
+                                    onCancelEdit={handleCancelEdit}
+                                    onSave={handleSaveAssistantMessage}
+                                  />
+                                );
+                              })}
+                            </Fragment>
+                          );
+                        }
 
                         return (
                           <Fragment key={partKey}>

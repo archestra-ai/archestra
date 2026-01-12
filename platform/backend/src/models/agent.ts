@@ -206,7 +206,10 @@ class AgentModel {
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
         )
-        .where(sql`NOT ${schema.toolsTable.name} LIKE 'archestra__%'`)
+        // Double backslash needed: JS consumes one level, SQL gets the other
+        .where(
+          sql`NOT ${schema.toolsTable.name} LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
+        )
         .groupBy(schema.agentToolsTable.agentId)
         .as("toolsCounts");
 

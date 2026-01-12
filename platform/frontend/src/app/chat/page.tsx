@@ -732,6 +732,32 @@ export default function ChatPage() {
     );
   }
 
+  // If conversation ID is provided but conversation is not found (404)
+  if (conversationId && !isLoadingConversation && !conversation) {
+    return (
+      <div className="flex h-full w-full items-center justify-center p-8">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Conversation not found</CardTitle>
+            <CardDescription>
+              This conversation doesn&apos;t exist or you don&apos;t have access
+              to it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              The conversation may have been deleted, or you may not have
+              permission to view it.
+            </p>
+            <Button asChild>
+              <Link href="/chat">Start a new chat</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col min-w-0">

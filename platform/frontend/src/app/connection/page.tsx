@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
+import type { ArchitectureTabType } from "@/components/architecture-diagram/architecture-diagram";
 import { ConnectionOptions } from "@/components/connection-options";
 import { PageLayout } from "@/components/page-layout";
 import { useDefaultProfile } from "@/lib/agent.query";
@@ -12,12 +13,12 @@ export default function ConnectionPage() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
 
-  const [activeTab, setActiveTab] = useState<"proxy" | "mcp">(
-    tabParam === "mcp" ? "mcp" : "proxy",
+  const [activeTab, setActiveTab] = useState<ArchitectureTabType>(
+    tabParam === "mcp" ? "mcp" : tabParam === "a2a" ? "a2a" : "proxy",
   );
 
   useEffect(() => {
-    if (tabParam === "mcp" || tabParam === "proxy") {
+    if (tabParam === "mcp" || tabParam === "proxy" || tabParam === "a2a") {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -30,9 +31,12 @@ export default function ConnectionPage() {
       <div className="space-y-8">
         {/* Architecture & Connection */}
         <div>
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
             <div>
-              <ArchestraArchitectureDiagram activeTab={activeTab} />
+              <ArchestraArchitectureDiagram
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+              />
             </div>
             <div>
               <ConnectionOptions

@@ -448,6 +448,8 @@ export async function getChatMcpTools({
   conversationId,
   promptId,
   organizationId,
+  sessionId,
+  delegationChain,
 }: {
   agentName: string;
   agentId: string;
@@ -457,6 +459,10 @@ export async function getChatMcpTools({
   conversationId?: string;
   promptId?: string;
   organizationId?: string;
+  /** Session ID for grouping related LLM requests in logs */
+  sessionId?: string;
+  /** Delegation chain of prompt IDs for tracking delegated agent calls */
+  delegationChain?: string;
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(
     agentId,
@@ -602,6 +608,7 @@ export async function getChatMcpTools({
                     userId,
                     promptId,
                     organizationId,
+                    sessionId,
                   },
                 );
 
@@ -716,6 +723,10 @@ export async function getChatMcpTools({
           profile: { id: agentId, name: agentName },
           promptId,
           organizationId,
+          conversationId,
+          sessionId,
+          // Pass delegation chain for tracking delegated agent calls
+          delegationChain,
           tokenAuth: mcpGwToken
             ? {
                 tokenId: mcpGwToken.tokenId,

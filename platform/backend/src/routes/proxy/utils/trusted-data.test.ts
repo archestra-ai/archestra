@@ -464,6 +464,104 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({});
     });
+
+    test("YOLO mode: trusts all data when globalToolPolicy is permissive", async () => {
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_yolo",
+              name: "get_emails",
+              content: { from: "untrusted@example.com", data: "anything" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        "test-api-key",
+        "openai",
+        false,
+        "permissive", // YOLO mode
+      );
+
+      // In permissive mode, all data is trusted regardless of policies
+      expect(result.contextIsTrusted).toBe(true);
+      expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("YOLO mode: ignores block policies in permissive mode", async () => {
+      // Create a block policy - should be ignored in YOLO mode
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "from", operator: "contains", value: "hacker" }],
+        action: "block_always",
+        description: "Block hacker emails",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_allowed",
+              name: "get_emails",
+              content: { from: "hacker@evil.com" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        "test-api-key",
+        "openai",
+        false,
+        "permissive", // YOLO mode
+      );
+
+      // YOLO mode trusts everything, ignores block policies
+      expect(result.contextIsTrusted).toBe(true);
+      expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("restrictive mode: marks data as untrusted when no policies exist", async () => {
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_untrusted",
+              name: "get_emails",
+              content: { from: "user@example.com" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        "test-api-key",
+        "openai",
+        false,
+        "restrictive", // Default restrictive mode
+      );
+
+      // In restrictive mode with no policies, data should be untrusted
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+    });
   });
 
   describe("adapter integration tests", () => {

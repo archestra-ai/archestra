@@ -1,6 +1,7 @@
 import type { archestraApiTypes } from "@shared";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { CaseSensitiveTooltip } from "@/components/case-sensitive-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Button } from "@/components/ui/button";
 import {
@@ -138,6 +139,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                     })
                   }
                 />
+                <CaseSensitiveTooltip />
               </div>
               <Button
                 variant="ghost"

@@ -27,6 +27,7 @@ import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -731,11 +732,38 @@ export default function ChatPage() {
     );
   }
 
+  // If conversation ID is provided but conversation is not found (404)
+  if (conversationId && !isLoadingConversation && !conversation) {
+    return (
+      <div className="flex h-full w-full items-center justify-center p-8">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Conversation not found</CardTitle>
+            <CardDescription>
+              This conversation doesn&apos;t exist or you don&apos;t have access
+              to it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              The conversation may have been deleted, or you may not have
+              permission to view it.
+            </p>
+            <Button asChild>
+              <Link href="/chat">Start a new chat</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />
+          <PermissivePolicyBar />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
             <div className="flex items-center gap-2">

@@ -38,6 +38,7 @@ class CacheManager {
 export const CacheKey = {
   GetChatModels: "get-chat-models",
   ChatMcpTools: "chat-mcp-tools",
+  OpenRouterModels: "openrouter-models",
 } as const;
 export type CacheKey = (typeof CacheKey)[keyof typeof CacheKey];
 

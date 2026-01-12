@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.15](https://github.com/archestra-ai/archestra/compare/platform-v1.0.14...platform-v1.0.15) (2026-01-12)
+
+
+### Bug Fixes
+
+* costs stats ([#2048](https://github.com/archestra-ai/archestra/issues/2048)) ([4f3b2ca](https://github.com/archestra-ai/archestra/commit/4f3b2ca6a8f05655fcc2ff3db1a8a21fe581f7e1))
+
 ## [1.0.14](https://github.com/archestra-ai/archestra/compare/platform-v1.0.13...platform-v1.0.14) (2026-01-10)
 
 

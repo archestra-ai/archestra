@@ -13,9 +13,7 @@ const projectNames = {
   firefox: "firefox",
   webkit: "webkit",
   sso: "sso",
-  // Split API tests into two projects for parallel execution
-  apiNonMcp: "api-non-mcp", // Runs in parallel with UI tests
-  apiMcpServer: "api-mcp-server", // Runs serially after all other tests
+  api: "api",
 };
 
 /**
@@ -30,8 +28,6 @@ const testPatterns = {
   credentialsWithVault: /credentials-with-vault\.ee\.spec\.ts/,
   // NOTE: File was renamed to .ee.spec.ts in commit f10027e (move SSO logic to .ee files)
   ssoProviders: /sso-providers\.ee\.spec\.ts/,
-  // MCP server tests that must run serially (they share internal-dev-test-server)
-  mcpServerApiTests: /mcp-gateway\.spec\.ts|orchestrator\.spec\.ts/,
 };
 
 /**
@@ -49,16 +45,14 @@ const browserTestIgnore = [
 const dependencies = {
   // Browser projects depend on credentials-with-vault completing first
   browserProjects: [projectNames.credentialsWithVault],
-  // SSO tests run after all browser UI tests AND non-MCP API tests to avoid parallel execution issues
+  // SSO tests run after all browser UI tests to avoid parallel execution issues
   ssoProject: [
     projectNames.chromium,
     projectNames.firefox,
     projectNames.webkit,
-    projectNames.apiNonMcp,
   ],
-  // MCP server API tests run after SSO (completely serial, last to run)
-  // These tests use the shared internal-dev-test-server and must not run in parallel
-  apiMcpServerProject: [projectNames.sso],
+  // API tests should run after all UI tests to avoid DB state conflicts
+  apiProject: [projectNames.sso],
 };
 
 /**
@@ -189,33 +183,18 @@ export default defineConfig({
       // Run after all browser UI tests complete - ensures exclusive access to SSO resources
       dependencies: dependencies.ssoProject,
     },
-    // Non-MCP API tests run in parallel with UI tests
-    // These tests don't use shared MCP server resources
+    // API tests only run on chromium (browser doesn't matter for API integration tests)
+    // API tests only need authentication setup, not the full UI test suite
     {
-      name: projectNames.apiNonMcp,
+      name: projectNames.api,
       testDir: "./tests/api",
-      testIgnore: [testPatterns.mcpServerApiTests, testPatterns.ssoProviders],
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run after setup completes (can run in parallel with UI tests)
-      dependencies: [projectNames.setupTeams],
-    },
-    // MCP server API tests run serially after all other tests
-    // These tests use the shared internal-dev-test-server and must not conflict
-    {
-      name: projectNames.apiMcpServer,
-      testDir: "./tests/api",
-      testMatch: testPatterns.mcpServerApiTests,
-      use: {
-        ...devices["Desktop Chrome"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run after SSO tests (last in the pipeline)
-      dependencies: dependencies.apiMcpServerProject,
+      // Only depend on auth setup, not UI tests
+      dependencies: dependencies.apiProject,
     },
   ],
 });

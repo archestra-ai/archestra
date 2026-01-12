@@ -26,7 +26,6 @@ function matchContextCondition(
   operator: AutonomyPolicyOperator.SupportedOperator,
   context: PolicyEvaluationContext,
 ): boolean {
-
   // Team matching - check if value is in teamIds array
   if (path === "teamIds") {
     switch (operator) {
@@ -69,17 +68,13 @@ function matchInputCondition(
 
   switch (operator) {
     case "endsWith":
-      return (
-        typeof argumentValue === "string" && argumentValue.endsWith(value)
-      );
+      return typeof argumentValue === "string" && argumentValue.endsWith(value);
     case "startsWith":
       return (
         typeof argumentValue === "string" && argumentValue.startsWith(value)
       );
     case "contains":
-      return (
-        typeof argumentValue === "string" && argumentValue.includes(value)
-      );
+      return typeof argumentValue === "string" && argumentValue.includes(value);
     case "notContains":
       return (
         typeof argumentValue === "string" && !argumentValue.includes(value)
@@ -90,7 +85,8 @@ function matchInputCondition(
       return argumentValue !== value;
     case "regex":
       return (
-        typeof argumentValue === "string" && new RegExp(value).test(argumentValue)
+        typeof argumentValue === "string" &&
+        new RegExp(value).test(argumentValue)
       );
     default:
       return false;
@@ -371,7 +367,9 @@ class ToolInvocationPolicyModel {
 
       for (const policy of specificPolicies) {
         // Check if all conditions match (AND logic)
-        const conditionsMatch = policy.conditions.every(condition => matchCondition(condition, toolInput, context));
+        const conditionsMatch = policy.conditions.every((condition) =>
+          matchCondition(condition, toolInput, context),
+        );
 
         if (!conditionsMatch) continue;
 

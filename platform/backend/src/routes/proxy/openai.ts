@@ -596,7 +596,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               }),
               resolvedAgentId,
-              { profileId: resolvedAgentId, teamIds, externalAgentId },
+              { teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,
@@ -907,7 +907,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             }),
             resolvedAgentId,
-            { profileId: resolvedAgentId, teamIds, externalAgentId },
+            { teamIds, externalAgentId },
             contextIsTrusted,
             enabledToolNames,
             globalToolPolicy,

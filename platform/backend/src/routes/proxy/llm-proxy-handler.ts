@@ -391,7 +391,6 @@ export async function handleLLMProxy<
         context.userId,
         sessionId,
         sessionSource,
-        headersRecord,
         teamIds,
       );
     } else {
@@ -412,7 +411,6 @@ export async function handleLLMProxy<
         context.userId,
         sessionId,
         sessionSource,
-        headersRecord,
         teamIds,
       );
     }
@@ -454,7 +452,6 @@ async function handleStreaming<
   userId?: string,
   sessionId?: string | null,
   sessionSource?: SessionSource,
-  headers?: Record<string, string>,
   teamIds?: string[],
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
@@ -544,7 +541,6 @@ async function handleStreaming<
         toolCallsForPolicy,
         agent.id,
         {
-          profileId: agent.id,
           teamIds: teamIds ?? [],
           externalAgentId,
         },
@@ -697,7 +693,6 @@ async function handleNonStreaming<
   userId?: string,
   sessionId?: string | null,
   sessionSource?: SessionSource,
-  headers?: Record<string, string>,
   teamIds?: string[],
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
@@ -742,7 +737,6 @@ async function handleNonStreaming<
       })),
       agent.id,
       {
-        profileId: agent.id,
         teamIds: teamIds ?? [],
         externalAgentId,
       },

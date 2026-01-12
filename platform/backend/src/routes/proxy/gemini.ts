@@ -559,7 +559,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 await utils.toolInvocation.evaluatePolicies(
                   validToolCalls,
                   resolvedAgentId,
-                  { profileId: resolvedAgentId, teamIds, externalAgentId },
+                  { teamIds, externalAgentId },
                   contextIsTrusted,
                   enabledToolNames,
                   globalToolPolicy,
@@ -844,7 +844,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
               validToolCalls,
               resolvedAgentId,
-              { profileId: resolvedAgentId, teamIds, externalAgentId },
+              { teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,

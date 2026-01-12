@@ -1061,7 +1061,10 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         const agent = await makeAgent();
-        const tool = await makeTool({ agentId: agent.id, name: "context-tool" });
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "context-tool",
+        });
         await makeAgentTool(agent.id, tool.id);
         await TrustedDataPolicyModel.deleteByToolId(tool.id);
 
@@ -1096,7 +1099,10 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         const agent = await makeAgent();
-        const tool = await makeTool({ agentId: agent.id, name: "context-tool-2" });
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "context-tool-2",
+        });
         await makeAgentTool(agent.id, tool.id);
         await TrustedDataPolicyModel.deleteByToolId(tool.id);
 
@@ -1130,7 +1136,10 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         const agent = await makeAgent();
-        const tool = await makeTool({ agentId: agent.id, name: "context-tool-3" });
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "context-tool-3",
+        });
         await makeAgentTool(agent.id, tool.id);
         await TrustedDataPolicyModel.deleteByToolId(tool.id);
 
@@ -1165,7 +1174,10 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         const agent = await makeAgent();
-        const tool = await makeTool({ agentId: agent.id, name: "context-tool-4" });
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "context-tool-4",
+        });
         await makeAgentTool(agent.id, tool.id);
         await TrustedDataPolicyModel.deleteByToolId(tool.id);
 
@@ -1223,7 +1235,10 @@ describe("TrustedDataPolicyModel", () => {
           "team-tool",
           { value: { data: "any" } },
           "restrictive",
-          { teamIds: ["other-team", "trusted-team-id"], externalAgentId: undefined },
+          {
+            teamIds: ["other-team", "trusted-team-id"],
+            externalAgentId: undefined,
+          },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -1258,7 +1273,10 @@ describe("TrustedDataPolicyModel", () => {
           "team-tool-2",
           { value: { data: "any" } },
           "restrictive",
-          { teamIds: ["other-team", "another-team"], externalAgentId: undefined },
+          {
+            teamIds: ["other-team", "another-team"],
+            externalAgentId: undefined,
+          },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -1292,7 +1310,10 @@ describe("TrustedDataPolicyModel", () => {
           "team-tool-3",
           { value: { data: "any" } },
           "restrictive",
-          { teamIds: ["allowed-team", "another-team"], externalAgentId: undefined },
+          {
+            teamIds: ["allowed-team", "another-team"],
+            externalAgentId: undefined,
+          },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -1327,7 +1348,10 @@ describe("TrustedDataPolicyModel", () => {
           "team-tool-4",
           { value: { data: "any" } },
           "restrictive",
-          { teamIds: ["allowed-team", "blocked-team-id"], externalAgentId: undefined },
+          {
+            teamIds: ["allowed-team", "blocked-team-id"],
+            externalAgentId: undefined,
+          },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -1361,7 +1385,10 @@ describe("TrustedDataPolicyModel", () => {
           "team-tool-5",
           { value: { data: "any" } },
           "restrictive",
-          { teamIds: ["other-team", "blocked-team-id"], externalAgentId: undefined },
+          {
+            teamIds: ["other-team", "blocked-team-id"],
+            externalAgentId: undefined,
+          },
         );
 
         expect(result.isBlocked).toBe(true);
@@ -1377,7 +1404,10 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         const agent = await makeAgent();
-        const tool = await makeTool({ agentId: agent.id, name: "no-context-tool" });
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "no-context-tool",
+        });
         await makeAgentTool(agent.id, tool.id);
         await TrustedDataPolicyModel.deleteByToolId(tool.id);
 

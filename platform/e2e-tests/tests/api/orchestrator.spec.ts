@@ -1,5 +1,9 @@
 import { TEST_CATALOG_ITEM_NAME } from "../../consts";
-import { findCatalogItem, findInstalledServer } from "../../utils";
+import {
+  findCatalogItem,
+  findInstalledServer,
+  waitForServerInstallation,
+} from "../../utils";
 import {
   type APIRequestContext,
   expect,
@@ -32,45 +36,6 @@ async function withRetry<T>(
 }
 
 test.describe("Orchestrator - MCP Server Installation and Execution", () => {
-  /**
-   * It can take some time to pull the Docker images and start the MCP server.. hence the polling
-   * In CI environments with parallel workers, this can take longer due to resource contention
-   */
-  const waitForMcpServerReady = async (
-    request: APIRequestContext,
-    makeApiRequest: TestFixtures["makeApiRequest"],
-    serverId: string,
-    maxRetries = 60,
-  ) => {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const statusResponse = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: `/api/mcp_server/${serverId}/installation-status`,
-      });
-
-      expect(statusResponse.status()).toBe(200);
-      const status = await statusResponse.json();
-
-      if (status.localInstallationStatus === "success") {
-        return;
-      }
-
-      if (status.localInstallationStatus === "error") {
-        throw new Error(
-          `MCP server installation failed: ${status.localInstallationError}`,
-        );
-      }
-
-      // Still pending/discovering-tools, wait and retry
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-
-    throw new Error(
-      `MCP server installation did not complete after ${maxRetries} attempts`,
-    );
-  };
-
   const getMcpServerTools = async (
     request: APIRequestContext,
     makeApiRequest: TestFixtures["makeApiRequest"],
@@ -210,7 +175,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
             testServer = undefined;
           } else if (status.localInstallationStatus !== "success") {
             // Server is still installing (pending/discovering-tools) - wait for it
-            await waitForMcpServerReady(request, makeApiRequest, testServer.id);
+            await waitForServerInstallation(request, testServer.id);
           }
           // If already success, we'll use it as-is
         }
@@ -235,7 +200,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         serverId = testServer.id;
 
         // Wait for MCP server to be ready
-        await waitForMcpServerReady(request, makeApiRequest, serverId);
+        await waitForServerInstallation(request, serverId);
       },
     );
 
@@ -281,7 +246,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
       expect(restartResult.success).toBe(true);
 
       // Wait for the server to be ready after restart
-      await waitForMcpServerReady(request, makeApiRequest, serverId);
+      await waitForServerInstallation(request, serverId);
 
       // Verify tools are still available after restart
       const toolsAfter = await getMcpServerTools(

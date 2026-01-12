@@ -442,3 +442,46 @@ export async function findInstalledServer(
   const servers = serversData.data || serversData;
   return servers.find((s: { catalogId: string }) => s.catalogId === catalogId);
 }
+
+/**
+ * Wait for MCP server installation to complete.
+ * Polls the server status until it becomes "success" or "error".
+ * Note: Even after status becomes "success", the K8s deployment may need
+ * additional time to be fully ready to handle requests, so we add a delay.
+ */
+export async function waitForServerInstallation(
+  request: APIRequestContext,
+  serverId: string,
+  maxAttempts = 60,
+): Promise<{
+  localInstallationStatus: string;
+  localInstallationError?: string;
+}> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await request.get(
+      `${API_BASE_URL}/api/mcp_server/${serverId}`,
+      {
+        headers: { Origin: UI_BASE_URL },
+      },
+    );
+    const server = await response.json();
+
+    if (server.localInstallationStatus === "success") {
+      // Add delay to ensure K8s deployment is fully ready
+      // The DB status may update before the deployment is accessible
+      await new Promise((r) => setTimeout(r, 3000));
+      return server;
+    }
+    if (server.localInstallationStatus === "error") {
+      throw new Error(
+        `MCP server installation failed: ${server.localInstallationError}`,
+      );
+    }
+
+    // Wait 2 seconds between checks
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(
+    `MCP server installation timed out after ${maxAttempts * 2} seconds`,
+  );
+}

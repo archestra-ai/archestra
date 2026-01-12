@@ -229,6 +229,44 @@ class ConversationModel {
         ),
       );
   }
+
+  /**
+   * Get the agentId for a conversation (without user context checks)
+   * Used by internal services that need to look up conversation -> agent mapping
+   */
+  static async getAgentId(conversationId: string): Promise<string | null> {
+    const result = await db
+      .select({ agentId: schema.conversationsTable.agentId })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversationId))
+      .limit(1);
+
+    return result[0]?.agentId ?? null;
+  }
+
+  /**
+   * Get the agentId for a conversation scoped to a specific user and organization.
+   * Returns null when the conversation does not belong to the provided user/org.
+   */
+  static async getAgentIdForUser(
+    conversationId: string,
+    userId: string,
+    organizationId: string,
+  ): Promise<string | null> {
+    const result = await db
+      .select({ agentId: schema.conversationsTable.agentId })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.id, conversationId),
+          eq(schema.conversationsTable.userId, userId),
+          eq(schema.conversationsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    return result[0]?.agentId ?? null;
+  }
 }
 
 export default ConversationModel;

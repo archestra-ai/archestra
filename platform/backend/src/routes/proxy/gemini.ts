@@ -45,6 +45,7 @@ import {
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import * as utils from "./utils";
 import { createGoogleGenAIClient } from "./utils/gemini-client";
+import type { SessionSource } from "./utils/session-id";
 
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
@@ -109,6 +110,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     stream = false,
     externalAgentId?: string,
     userId?: string,
+    sessionId?: string | null,
+    sessionSource?: SessionSource,
   ) => {
     logger.debug(
       {
@@ -221,6 +224,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       logger.debug({ resolvedAgentId }, "[GeminiProxy] Limit check passed");
 
+      // Get global tool policy from organization (with fallback)
+      const globalToolPolicy =
+        await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+
       // Persist tools if present (for tracking - clients handle tool execution via MCP Gateway)
       await utils.tools.persistTools(
         (tools || [])
@@ -306,6 +313,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           resolvedAgentId,
           considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
         },
         "[GeminiProxy] Evaluating trusted data policies",
       );
@@ -316,6 +324,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           geminiApiKey,
           "gemini",
           resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -336,10 +345,14 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             : undefined,
           stream
-            ? (progress) => {
+            ? (progress: {
+                question: string;
+                options: string[];
+                answer: string;
+              }) => {
                 // Stream Q&A progress with options
                 const optionsText = progress.options
-                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                   .join("\n");
                 const progressChunk: Gemini.Types.GenerateContentResponse = {
                   candidates: [
@@ -546,6 +559,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   resolvedAgentId,
                   contextIsTrusted,
                   enabledToolNames,
+                  globalToolPolicy,
                 );
             }
 
@@ -737,6 +751,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             profileId: resolvedAgentId,
             externalAgentId,
             userId,
+            sessionId,
+            sessionSource,
             type: "gemini:generateContent",
             request: body,
             processedRequest: {
@@ -827,6 +843,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
           }
         }
@@ -912,6 +929,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             profileId: resolvedAgentId,
             externalAgentId,
             userId,
+            sessionId,
+            sessionSource,
             type: "gemini:generateContent",
             request: body,
             processedRequest: {
@@ -953,6 +972,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId: resolvedAgentId,
           externalAgentId,
           userId,
+          sessionId,
+          sessionSource,
           type: "gemini:generateContent",
           request: body,
           processedRequest: {
@@ -1032,6 +1053,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // Gemini doesn't have metadata.user_id or user field, so only header will work
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -1041,6 +1067,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         false,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );
@@ -1070,6 +1098,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // Gemini doesn't have metadata.user_id or user field, so only header will work
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -1079,6 +1112,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         true,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );
@@ -1110,6 +1145,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // Gemini doesn't have metadata.user_id or user field, so only header will work
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -1119,6 +1159,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         false,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );
@@ -1150,6 +1192,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // Gemini doesn't have metadata.user_id or user field, so only header will work
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -1159,6 +1206,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         true,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );

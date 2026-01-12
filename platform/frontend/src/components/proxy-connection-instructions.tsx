@@ -1,21 +1,22 @@
 "use client";
 
 import type { SupportedProvider } from "@shared";
-import { Check, Copy } from "lucide-react";
+import { Check, ChevronDown, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import config from "@/lib/config";
 
 const { displayProxyUrl: apiProxyUrl } = config.api;
+
+type ProviderOption = SupportedProvider | "claude-code";
 
 interface ProxyConnectionInstructionsProps {
   agentId?: string;
@@ -26,54 +27,98 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [copied, setCopied] = useState(false);
   const [selectedProvider, setSelectedProvider] =
-    useState<SupportedProvider>("openai");
+    useState<ProviderOption>("openai");
 
   const proxyUrl = agentId
-    ? `${apiProxyUrl}/${selectedProvider}/${agentId}`
-    : `${apiProxyUrl}/${selectedProvider}`;
+    ? `${apiProxyUrl}/${selectedProvider === "claude-code" ? "anthropic" : selectedProvider}/${agentId}`
+    : `${apiProxyUrl}/${selectedProvider === "claude-code" ? "anthropic" : selectedProvider}`;
+
+  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${apiProxyUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(proxyUrl);
+    const textToCopy =
+      selectedProvider === "claude-code" ? claudeCodeCommand : proxyUrl;
+    await navigator.clipboard.writeText(textToCopy);
     setCopied(true);
-    toast.success("Proxy URL copied to clipboard");
+    toast.success(
+      selectedProvider === "claude-code"
+        ? "Command copied to clipboard"
+        : "Proxy URL copied to clipboard",
+    );
     setTimeout(() => setCopied(false), 2000);
-  }, [proxyUrl]);
+  }, [proxyUrl, claudeCodeCommand, selectedProvider]);
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Provider:</span>
-        <Select
-          value={selectedProvider}
-          onValueChange={(value) =>
-            setSelectedProvider(value as SupportedProvider)
-          }
+      <ButtonGroup>
+        <Button
+          variant={selectedProvider === "openai" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedProvider("openai")}
         >
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="openai">OpenAI</SelectItem>
-            {/* TODO: uncomment out once we officially have 100% support for Gemini */}
-            {/* <SelectItem value="gemini">Gemini</SelectItem> */}
-            <SelectItem value="anthropic">Anthropic</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+          OpenAI
+        </Button>
+        <Button
+          variant={selectedProvider === "gemini" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedProvider("gemini")}
+        >
+          Gemini
+        </Button>
+        <Button
+          variant={selectedProvider === "anthropic" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedProvider("anthropic")}
+        >
+          Anthropic
+        </Button>
+        <Button
+          variant={selectedProvider === "cerebras" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedProvider("cerebras")}
+        >
+          Cerebras
+        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant={
+                selectedProvider === "claude-code" ? "default" : "outline"
+              }
+              size="sm"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start"
+              onClick={() => setSelectedProvider("claude-code")}
+            >
+              Claude Code
+            </Button>
+            <p className="text-xs text-muted-foreground px-2 py-1">
+              More providers coming soon
+            </p>
+          </PopoverContent>
+        </Popover>
+      </ButtonGroup>
       {selectedProvider === "openai" && (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
             Replace your OpenAI base URL:
           </p>
-          <div className="flex items-center gap-2">
-            <div className="min-w-0 bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
               <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
                 https://api.openai.com/v1/
               </CodeText>
             </div>
             <span className="text-muted-foreground flex-shrink-0">→</span>
-            <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-              <CodeText className="text-xs text-primary break-all flex-1">
+            <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+              <CodeText className="text-xs text-primary whitespace-nowrap">
                 {proxyUrl}
               </CodeText>
               <Button
@@ -97,15 +142,15 @@ export function ProxyConnectionInstructions({
           <p className="text-sm text-muted-foreground">
             Replace your Gemini base URL:
           </p>
-          <div className="flex items-center gap-2">
-            <div className="min-w-0 bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
               <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
                 https://generativelanguage.googleapis.com/v1/
               </CodeText>
             </div>
             <span className="text-muted-foreground flex-shrink-0">→</span>
-            <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-              <CodeText className="text-xs text-primary break-all flex-1">
+            <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+              <CodeText className="text-xs text-primary whitespace-nowrap">
                 {proxyUrl}
               </CodeText>
               <Button
@@ -129,15 +174,15 @@ export function ProxyConnectionInstructions({
           <p className="text-sm text-muted-foreground">
             Replace your Anthropic base URL:
           </p>
-          <div className="flex items-center gap-2">
-            <div className="min-w-0 bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
               <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
                 https://api.anthropic.com/v1/
               </CodeText>
             </div>
             <span className="text-muted-foreground flex-shrink-0">→</span>
-            <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-              <CodeText className="text-xs text-primary break-all flex-1">
+            <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+              <CodeText className="text-xs text-primary whitespace-nowrap">
                 {proxyUrl}
               </CodeText>
               <Button
@@ -153,6 +198,62 @@ export function ProxyConnectionInstructions({
                 )}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+      {selectedProvider === "cerebras" && (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Replace your Cerebras base URL:
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
+              <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
+                https://api.cerebras.ai/v1/
+              </CodeText>
+            </div>
+            <span className="text-muted-foreground flex-shrink-0">→</span>
+            <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+              <CodeText className="text-xs text-primary whitespace-nowrap">
+                {proxyUrl}
+              </CodeText>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 flex-shrink-0"
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {selectedProvider === "claude-code" && (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Run Claude Code with the Archestra proxy:
+          </p>
+          <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+            <CodeText className="text-xs text-primary flex-1">
+              {claudeCodeCommand}
+            </CodeText>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 flex-shrink-0"
+              onClick={handleCopy}
+            >
+              {copied ? (
+                <Check className="h-3 w-3 text-green-500" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+            </Button>
           </div>
         </div>
       )}

@@ -8,6 +8,7 @@
 import type { z } from "zod";
 import * as GeminiAPI from "./api";
 import * as GeminiMessages from "./messages";
+import type { ModelSchema } from "./models";
 import * as GeminiTools from "./tools";
 
 namespace Gemini {
@@ -38,6 +39,7 @@ namespace Gemini {
     export type MessagePart = z.infer<typeof GeminiMessages.PartSchema>;
 
     export type Tool = z.infer<typeof GeminiTools.ToolSchema>;
+    export type Model = z.infer<typeof ModelSchema>;
   }
 }
 

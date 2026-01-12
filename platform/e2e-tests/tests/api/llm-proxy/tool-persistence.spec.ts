@@ -130,10 +130,10 @@ const geminiConfig: ToolPersistenceTestConfig = {
   }),
 };
 
-const minimaxConfig: ToolPersistenceTestConfig = {
-  providerName: "MiniMax",
+const cerebrasConfig: ToolPersistenceTestConfig = {
+  providerName: "Cerebras",
 
-  endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+  endpoint: (agentId) => `/v1/cerebras/${agentId}/chat/completions`,
 
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -141,7 +141,55 @@ const minimaxConfig: ToolPersistenceTestConfig = {
   }),
 
   buildRequest: (content, tools) => ({
-    model: "abab6-chat",
+    model: "llama-4-scout-17b-16e-instruct",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
+const vllmConfig: ToolPersistenceTestConfig = {
+  providerName: "vLLM",
+
+  endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "meta-llama/Llama-3.1-8B-Instruct",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
+const ollamaConfig: ToolPersistenceTestConfig = {
+  providerName: "Ollama",
+
+  endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "qwen2:0.5b",
     messages: [{ role: "user", content }],
     tools: tools.map((t) => ({
       type: "function",
@@ -162,7 +210,9 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
-  minimaxConfig,
+  cerebrasConfig,
+  vllmConfig,
+  ollamaConfig,
 ];
 
 for (const config of testConfigs) {

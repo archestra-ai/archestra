@@ -8,6 +8,9 @@ export const SupportedProvidersSchema = z.enum([
   "gemini",
   "anthropic",
   "minimax",
+  "cerebras",
+  "vllm",
+  "ollama",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -15,6 +18,9 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "gemini:generateContent",
   "anthropic:messages",
   "minimax:chatCompletions",
+  "cerebras:chatCompletions",
+  "vllm:chatCompletions",
+  "ollama:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -28,6 +34,9 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   anthropic: "Anthropic",
   gemini: "Gemini",
   minimax: "MiniMax",
+  cerebras: "Cerebras",
+  vllm: "vLLM",
+  ollama: "Ollama",
 };
 
 /** Supported MiniMax model prefixes for filtering from API response */

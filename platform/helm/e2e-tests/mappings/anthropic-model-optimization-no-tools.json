@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPath": "/v1/messages",
+    "urlPath": "/anthropic/v1/messages",
     "headers": {
       "x-api-key": {
         "contains": "anthropic-model-optimization-no-tools"

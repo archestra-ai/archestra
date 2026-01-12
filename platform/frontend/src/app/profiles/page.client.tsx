@@ -467,10 +467,9 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
       title="Profiles"
       description={
         <p className="text-sm text-muted-foreground">
-          Profiles are a way to organize access, available MCP tools, cost
-          limits, logging/o11y, etc. <br />
-          <br />A profile can be: an N8N workflow, a custom application, or a
-          team sharing an MCP gateway.{" "}
+          Profiles organize access, MCP tools, cost limits, and observability
+          for N8N workflows, custom applications, or teams sharing an MCP
+          gateway.{" "}
           <a
             href="https://archestra.ai/docs/platform-agents"
             target="_blank"

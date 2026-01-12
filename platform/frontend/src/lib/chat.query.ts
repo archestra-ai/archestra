@@ -1,4 +1,8 @@
-import { archestraApiSdk } from "@shared";
+import {
+  archestraApiSdk,
+  isBrowserMcpTool,
+  type SupportedProvider,
+} from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -22,11 +26,18 @@ export function useConversation(conversationId?: string) {
     queryKey: ["conversation", conversationId],
     queryFn: async () => {
       if (!conversationId) return null;
-      const { data, error } = await getChatConversation({
+      const response = await getChatConversation({
         path: { id: conversationId },
       });
-      if (error) throw new Error("Failed to fetch conversation");
-      return data;
+      // Return null for 400 (invalid UUID) or 404 (not found) - handled gracefully by UI
+      if (response.error) {
+        const status = response.response.status;
+        if (status === 400 || status === 404) {
+          return null;
+        }
+        throw new Error("Failed to fetch conversation");
+      }
+      return response.data;
     },
     enabled: !!conversationId,
     staleTime: 0, // Always refetch to ensure we have the latest messages
@@ -58,19 +69,36 @@ export function useCreateConversation() {
       agentId,
       promptId,
       selectedModel,
+      selectedProvider,
+      chatApiKeyId,
     }: {
       agentId: string;
       promptId?: string;
       selectedModel?: string;
+      selectedProvider?: SupportedProvider;
+      chatApiKeyId?: string | null;
     }) => {
       const { data, error } = await createChatConversation({
-        body: { agentId, promptId, selectedModel },
+        body: {
+          agentId,
+          promptId,
+          selectedModel,
+          selectedProvider,
+          chatApiKeyId: chatApiKeyId ?? undefined,
+        },
       });
       if (error) throw new Error("Failed to create conversation");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (newConversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // Immediately populate the individual conversation cache to avoid loading state
+      if (newConversation) {
+        queryClient.setQueryData(
+          ["conversation", newConversation.id],
+          newConversation,
+        );
+      }
     },
   });
 }
@@ -83,18 +111,20 @@ export function useUpdateConversation() {
       id,
       title,
       selectedModel,
+      selectedProvider,
       chatApiKeyId,
       agentId,
     }: {
       id: string;
       title?: string | null;
       selectedModel?: string;
+      selectedProvider?: SupportedProvider;
       chatApiKeyId?: string | null;
       agentId?: string;
     }) => {
       const { data, error } = await updateChatConversation({
         path: { id },
-        body: { title, selectedModel, chatApiKeyId, agentId },
+        body: { title, selectedModel, selectedProvider, chatApiKeyId, agentId },
       });
       if (error) throw new Error("Failed to update conversation");
       return data;
@@ -130,6 +160,7 @@ export function useDeleteConversation() {
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+      toast.success("Conversation deleted");
     },
   });
 }
@@ -260,11 +291,12 @@ export function useClearConversationEnabledTools() {
  */
 export function useProfileToolsWithIds(agentId: string | undefined) {
   return useQuery({
-    queryKey: ["agents", agentId, "tools"],
+    queryKey: ["agents", agentId, "tools", "mcp-only"],
     queryFn: async () => {
       if (!agentId) return [];
       const { data, error } = await getAgentTools({
         path: { agentId },
+        query: { excludeLlmProxyOrigin: true },
       });
       if (error) throw new Error("Failed to fetch profile tools");
       return data;
@@ -294,4 +326,15 @@ export function usePromptTools(promptId: string | undefined) {
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
   });
+}
+
+export function useHasPlaywrightMcpTools(agentId: string | undefined) {
+  const toolsQuery = useChatProfileMcpTools(agentId);
+
+  return (
+    toolsQuery.data?.some((tool) => {
+      const toolName = tool.name;
+      return typeof toolName === "string" && isBrowserMcpTool(toolName);
+    }) ?? false
+  );
 }

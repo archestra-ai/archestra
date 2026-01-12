@@ -11,15 +11,11 @@ export const ChatCompletionUsageSchema = z
     completion_tokens_details: z
       .any()
       .optional()
-      .describe(
-        `MiniMax token usage details for completion tokens`,
-      ),
+      .describe(`MiniMax token usage details for completion tokens`),
     prompt_tokens_details: z
       .any()
       .optional()
-      .describe(
-        `MiniMax token usage details for prompt tokens`,
-      ),
+      .describe(`MiniMax token usage details for prompt tokens`),
   })
   .describe(`MiniMax token usage schema`);
 

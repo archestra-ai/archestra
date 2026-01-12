@@ -120,15 +120,19 @@ archestra:
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
 ```
 
-With this configuration, Application Default Credentials (ADC) will automatically use the bound GCP service account—no credentials file needed.
 
-#### Other Environments
+For non-GKE environments, Vertex AI supports several authentication methods through [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials):
 
-For non-GKE environments or when Workload Identity isn't available, set `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` to the path of a service account JSON key file.
+- **Service account key file**: Set `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` to the path of a service account JSON key file
+- **Local development**: Use `gcloud auth application-default login` to authenticate with your user account
+- **Cloud environments**: Attached service accounts on Compute Engine, Cloud Run, and Cloud Functions are automatically detected
+- **AWS/Azure**: Use workload identity federation to authenticate without service account keys
+
+See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs/authentication) for detailed setup instructions for each environment.
 
 ## MiniMax
 
-MiniMax is a Chinese LLM provider that offers OpenAI-compatible APIs, making it easy to integrate with Archestra Platform.
+[MiniMax](https://www.minimaxi.com/) is a Chinese LLM provider that offers OpenAI-compatible APIs, making it easy to integrate with Archestra Platform.
 
 ### Supported MiniMax APIs
 
@@ -165,3 +169,77 @@ MiniMax is a Chinese LLM provider that offers OpenAI-compatible APIs, making it 
 - **Tool Support**: Function calling (tool use) is fully supported, including tool invocation policies and trusted data policies
 - **Anthropic SDK**: MiniMax models can also be used with the Anthropic SDK using `MiniMax-M2` model name
 
+- **Local development**: Use `gcloud auth application-default login` to authenticate with your user account
+- **Cloud environments**: Attached service accounts on Compute Engine, Cloud Run, and Cloud Functions are automatically detected
+- **AWS/Azure**: Use workload identity federation to authenticate without service account keys
+
+See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs/authentication) for detailed setup instructions for each environment.
+
+## Cerebras
+
+[Cerebras](https://www.cerebras.ai/) provides fast inference for open-source AI models through an OpenAI-compatible API.
+
+### Supported Cerebras APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Cerebras Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/cerebras/{agent-id}`
+- **Authentication**: Pass your Cerebras API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Important Notes
+
+- Usage of the llama models in the chat ⚠️ Not yet supported ([GitHub Issue #2058](https://github.com/archestra-ai/archestra/issues/2058)) 
+
+## vLLM
+
+[vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.
+
+### Supported vLLM APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### vLLM Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/vllm/{profile-id}`
+- **Authentication**: Pass your vLLM API key (if configured) in the `Authorization` header as `Bearer <your-api-key>`. Many vLLM deployments don't require authentication.
+
+### Environment Variables
+
+| Variable                      | Required | Description                                                                    |
+| ----------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_VLLM_BASE_URL`     | Yes      | vLLM server base URL (e.g., `http://localhost:8000/v1` or your vLLM endpoint)  |
+| `ARCHESTRA_CHAT_VLLM_API_KEY` | No       | API key for vLLM server (optional, many deployments don't require auth) |
+
+### Important Notes
+
+- **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set. Without it, vLLM won't appear as an option in the platform.
+- **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. The `ARCHESTRA_CHAT_VLLM_API_KEY` is only needed if your vLLM deployment has authentication enabled.
+
+## Ollama
+
+[Ollama](https://ollama.ai/) is a local LLM runner that makes it easy to run open-source large language models on your machine. It's perfect for local development, testing, and privacy-conscious deployments.
+
+### Supported Ollama APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Ollama Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/ollama/{profile-id}`
+- **Authentication**: Pass your Ollama API key (if configured) in the `Authorization` header as `Bearer <your-api-key>`. Ollama typically doesn't require authentication.
+
+### Environment Variables
+
+| Variable                        | Required | Description                                                                      |
+| ------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `ARCHESTRA_OLLAMA_BASE_URL`     | Yes      | Ollama server base URL (e.g., `http://localhost:11434/v1` for default Ollama)    |
+| `ARCHESTRA_CHAT_OLLAMA_API_KEY` | No       | API key for Ollama server (optional, Ollama typically doesn't require auth)      |
+
+### Important Notes
+
+- **Configure base URL to enable Ollama**: The Ollama provider is only available when `ARCHESTRA_OLLAMA_BASE_URL` is set. Without it, Ollama won't appear as an option in the platform.
+- **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
+- **No API key required**: Ollama typically doesn't require authentication for local deployments.
+- **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.

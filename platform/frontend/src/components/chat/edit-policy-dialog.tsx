@@ -48,8 +48,8 @@ export function EditPolicyDialog({
         <div className="mt-2 space-y-4">
           {agentTool ? (
             <>
-              <ToolCallPolicies agentTool={agentTool} />
-              <ToolResultPolicies agentTool={agentTool} />
+              <ToolCallPolicies tool={agentTool.tool} />
+              <ToolResultPolicies tool={agentTool.tool} />
             </>
           ) : (
             <p className="text-muted-foreground text-sm">

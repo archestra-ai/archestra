@@ -1,6 +1,7 @@
 import type { archestraApiTypes } from "@shared";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { CaseSensitiveTooltip } from "@/components/case-sensitive-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,37 +12,46 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useProfileToolPatchMutation } from "@/lib/agent-tools.query";
 import {
+  useCallPolicyMutation,
   useOperators,
   useToolInvocationPolicies,
   useToolInvocationPolicyCreateMutation,
   useToolInvocationPolicyDeleteMutation,
   useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
+import { getAllowUsageFromPolicies } from "@/lib/policy.utils";
 import { PolicyCard } from "./policy-card";
 
-export function ToolCallPolicies({
-  agentTool,
-}: {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
-}) {
+type ToolForPolicies = {
+  id: string;
+  parameters?: archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number]["parameters"];
+};
+
+export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
   const {
     data: { byProfileToolId },
+    data: invocationPolicies,
   } = useToolInvocationPolicies();
-  const agentToolPatchMutation = useProfileToolPatchMutation();
   const toolInvocationPolicyCreateMutation =
     useToolInvocationPolicyCreateMutation();
   const toolInvocationPolicyDeleteMutation =
     useToolInvocationPolicyDeleteMutation();
   const toolInvocationPolicyUpdateMutation =
     useToolInvocationPolicyUpdateMutation();
+  const callPolicyMutation = useCallPolicyMutation();
   const { data: operators } = useOperators();
 
-  const policies = byProfileToolId[agentTool.id] || [];
+  const allPolicies = byProfileToolId[tool.id] || [];
+  // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
+  const policies = allPolicies.filter((policy) => policy.conditions.length > 0);
 
-  const argumentNames = Object.keys(
-    agentTool.tool.parameters?.properties || [],
+  const argumentNames = Object.keys(tool.parameters?.properties || []);
+
+  // Derive allow usage from policies (default policy with empty conditions)
+  const allowUsageWhenUntrustedDataIsPresent = getAllowUsageFromPolicies(
+    tool.id,
+    invocationPolicies,
   );
 
   return (
@@ -62,14 +72,14 @@ export function ToolCallPolicies({
           </span>
         </div>
         <Switch
-          checked={agentTool.allowUsageWhenUntrustedDataIsPresent}
-          onCheckedChange={() =>
-            agentToolPatchMutation.mutate({
-              id: agentTool.id,
-              allowUsageWhenUntrustedDataIsPresent:
-                !agentTool.allowUsageWhenUntrustedDataIsPresent,
-            })
-          }
+          checked={allowUsageWhenUntrustedDataIsPresent}
+          onCheckedChange={(checked) => {
+            if (checked === allowUsageWhenUntrustedDataIsPresent) return;
+            callPolicyMutation.mutate({
+              toolId: tool.id,
+              allowUsage: checked,
+            });
+          }}
         />
       </div>
       {policies.map((policy) => (
@@ -100,9 +110,7 @@ export function ToolCallPolicies({
                 </Select>
                 <Select
                   defaultValue={policy.operator}
-                  onValueChange={(
-                    value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["operator"],
-                  ) =>
+                  onValueChange={(value: string) =>
                     toolInvocationPolicyUpdateMutation.mutate({
                       ...policy,
                       operator: value,
@@ -131,6 +139,7 @@ export function ToolCallPolicies({
                     })
                   }
                 />
+                <CaseSensitiveTooltip />
               </div>
               <Button
                 variant="ghost"
@@ -193,12 +202,11 @@ export function ToolCallPolicies({
         className="w-full"
         onClick={() =>
           toolInvocationPolicyCreateMutation.mutate({
-            agentToolId: agentTool.id,
+            toolId: tool.id,
+            argumentName: argumentNames[0],
           })
         }
-        disabled={
-          Object.keys(agentTool.tool.parameters?.properties || {}).length === 0
-        }
+        disabled={argumentNames.length === 0}
         disabledText="This tool has no parameters"
       >
         <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy For Tool Parameters

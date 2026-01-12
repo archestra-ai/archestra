@@ -41,10 +41,13 @@ interface ModelSelectorProps {
 
 /** Map our provider names to logo provider names */
 const providerToLogoProvider: Record<SupportedProvider, string> = {
-  openai: "openai",
   anthropic: "anthropic",
+  cerebras: "cerebras",
   gemini: "google",
   minimax: "minimax",
+  ollama: "ollama",
+  openai: "openai",
+  vllm: "vllm",
 };
 
 /**

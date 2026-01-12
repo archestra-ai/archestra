@@ -598,21 +598,20 @@ describe("PromptAgentModel", () => {
       let agents = await PromptAgentModel.findByPromptId(parentPrompt.id);
       expect(agents).toHaveLength(1);
 
-      // Rename the PARENT prompt (creates new version)
+      // Rename the PARENT prompt (updates in place - same ID)
       const updatedParent = await PromptModel.update(parentPrompt.id, {
         name: "Renamed Parent",
       });
       expect(updatedParent).toBeDefined();
       if (!updatedParent) throw new Error("Updated parent should be defined");
 
-      // Verify delegation moved to new version
-      agents = await PromptAgentModel.findByPromptId(updatedParent?.id);
-      expect(agents).toHaveLength(1);
-      expect(agents[0].agentPromptId).toBeDefined();
+      // With JSONB history versioning, the ID stays the same
+      expect(updatedParent.id).toBe(parentPrompt.id);
 
-      // Verify old version has no delegations
+      // Verify delegation is preserved (ID didn't change, no migration needed)
       agents = await PromptAgentModel.findByPromptId(parentPrompt.id);
-      expect(agents).toHaveLength(0);
+      expect(agents).toHaveLength(1);
+      expect(agents[0].agentPromptId).toBe(childPrompt.id);
     });
 
     test("preserves delegation when child prompt is renamed", async ({

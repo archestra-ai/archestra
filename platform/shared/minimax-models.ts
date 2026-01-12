@@ -5,6 +5,6 @@
  */
 
 export {
-  MINIMAX_MODEL_PREFIXES,
   isMiniMaxModel,
+  MINIMAX_MODEL_PREFIXES,
 } from "./model-constants";

@@ -8,6 +8,7 @@ import {
   Cable,
   DollarSign,
   Github,
+  Layers,
   LogIn,
   type LucideIcon,
   MessageCircle,
@@ -68,9 +69,14 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
         pathname === "/chat" && !searchParams.get("conversation"),
     },
     {
+      title: "Agents",
+      url: "/agents",
+      icon: Bot,
+    },
+    {
       title: "Profiles",
       url: "/profiles",
-      icon: Bot,
+      icon: Layers,
     },
     {
       title: "Logs",

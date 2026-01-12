@@ -43,8 +43,10 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  --radius: 0.5rem;
   --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
   --tracking-tight: calc(var(--tracking-normal) - 0.025em);
   --tracking-wide: calc(var(--tracking-normal) + 0.025em);
@@ -70,7 +72,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
 }
 
-/* Base styles and defaults - theme-cosmic-night is the default theme */
+/* Base styles and defaults - theme classes override --radius */
 :root {
   --radius: 0.5rem;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
@@ -103,9 +105,37 @@
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+  /* Fix Shiki syntax highlighting in dark mode - apply dark theme colors from CSS variables */
+  .dark [data-streamdown="code-block-body"] span[style*="--shiki-dark"] {
+    color: var(--shiki-dark) !important;
+    background-color: transparent !important;
+  }
+  /* Code block styling - use accent color for background */
+  [data-streamdown="code-block"] {
+    background-color: var(--accent) !important;
+  }
+  [data-streamdown="code-block-header"] {
+    background-color: var(--accent) !important;
+  }
+  [data-streamdown="code-block-body"] {
+    background-color: var(--accent) !important;
+  }
+  /* Inline code styling - use accent color for background */
+  [data-streamdown="inline-code"] {
+    background-color: var(--accent) !important;
+  }
   /* Override Tailwind's font-sans to use our dynamic CSS variable */
   .font-sans {
     font-family: var(--font-sans) !important;
+  }
+  /* Fix autofill styles for dark theme - browsers apply light backgrounds on autofill */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px var(--background) inset !important;
+    -webkit-text-fill-color: var(--foreground) !important;
+    caret-color: var(--foreground) !important;
   }
 }
 

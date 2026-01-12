@@ -24,7 +24,7 @@ type ChangeHandler = (condition: Condition) => void;
 
 function ConditionBlock({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-row gap-2 whitespace-nowrap items-center rounded-md bg-secondary h-9 px-4">
+    <div className="flex flex-row gap-2 whitespace-nowrap items-center rounded-md bg-muted h-9 px-4">
       {children}
     </div>
   );
@@ -74,7 +74,7 @@ export function Condition({
       return (
         <ConditionBlock>
           content length <span>&lt;</span>
-          <Badge variant="outline" className="text-sm bg-background">
+          <Badge variant="outline" className="text-sm">
             {maxLength}
           </Badge>
           tokens
@@ -84,7 +84,7 @@ export function Condition({
       return (
         <ConditionBlock>
           tools{" "}
-          <Badge variant="outline" className="text-sm bg-background">
+          <Badge variant="outline" className="text-sm">
             {hasTools ? "present" : "absent"}
           </Badge>
         </ConditionBlock>

@@ -1,7 +1,11 @@
 import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
 import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
-import type { CommonMessage, ToolResultUpdates } from "@/types";
+import type {
+  CommonMessage,
+  GlobalToolPolicy,
+  ToolResultUpdates,
+} from "@/types";
 import { DualLlmSubagent } from "./dual-llm-subagent";
 
 /**
@@ -12,6 +16,7 @@ import { DualLlmSubagent } from "./dual-llm-subagent";
  * @param apiKey - API key for the LLM provider (optional for Gemini with Vertex AI)
  * @param provider - The LLM provider
  * @param considerContextUntrusted - If true, marks context as untrusted from the beginning
+ * @param globalToolPolicy - The organization's global tool policy ("permissive" or "restrictive")
  * @param onDualLlmStart - Optional callback when dual LLM processing starts
  * @param onDualLlmProgress - Optional callback for dual LLM Q&A progress
  * @returns Object with tool result updates and trust status
@@ -22,6 +27,7 @@ export async function evaluateIfContextIsTrusted(
   apiKey: string | undefined,
   provider: SupportedProvider,
   considerContextUntrusted: boolean = false,
+  globalToolPolicy: GlobalToolPolicy = "restrictive",
   onDualLlmStart?: () => void,
   onDualLlmProgress?: (progress: {
     question: string;
@@ -39,6 +45,7 @@ export async function evaluateIfContextIsTrusted(
       messageCount: messages.length,
       provider,
       considerContextUntrusted,
+      globalToolPolicy,
     },
     "[trustedData] evaluateIfContextIsTrusted: starting evaluation",
   );
@@ -100,7 +107,7 @@ export async function evaluateIfContextIsTrusted(
 
   // Bulk evaluate all tool calls for trusted data policies
   logger.debug(
-    { agentId, toolCallCount: allToolCalls.length },
+    { agentId, toolCallCount: allToolCalls.length, globalToolPolicy },
     "[trustedData] evaluateIfContextIsTrusted: bulk evaluating trusted data policies",
   );
   const evaluationResults = await TrustedDataPolicyModel.evaluateBulk(
@@ -109,6 +116,7 @@ export async function evaluateIfContextIsTrusted(
       toolName,
       toolOutput: toolResult,
     })),
+    globalToolPolicy,
   );
 
   logger.debug(

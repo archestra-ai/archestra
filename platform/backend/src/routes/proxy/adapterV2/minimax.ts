@@ -224,10 +224,7 @@ class MiniMaxRequestAdapter
         const toolCallId = message.tool_call_id;
         if (!toolCallId) continue;
 
-        const toolName = this.findToolNameInMessages(
-          messages,
-          toolCallId,
-        );
+        const toolName = this.findToolNameInMessages(messages, toolCallId);
 
         if (toolName) {
           logger.debug(
@@ -824,7 +821,9 @@ export const minimaxAdapterFactory: LLMProvider<
   ): Promise<MiniMaxResponse> {
     const openaiClient = client as OpenAIProvider;
     return openaiClient.chat.completions.create(
-      request as unknown as Parameters<typeof openaiClient.chat.completions.create>[0],
+      request as unknown as Parameters<
+        typeof openaiClient.chat.completions.create
+      >[0],
     ) as Promise<MiniMaxResponse>;
   },
 
@@ -833,11 +832,14 @@ export const minimaxAdapterFactory: LLMProvider<
     request: MiniMaxRequest,
   ): Promise<AsyncIterable<MiniMaxStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
-    const response = await openaiClient.chat.completions.create(
-      { ...request, stream: true, stream_options: { include_usage: true } } as unknown as Parameters<typeof openaiClient.chat.completions.create>[0],
-    );
+    const response = await openaiClient.chat.completions.create({
+      ...request,
+      stream: true,
+      stream_options: { include_usage: true },
+    } as unknown as Parameters<typeof openaiClient.chat.completions.create>[0]);
 
-    const stream = response as unknown as AsyncIterable<OpenAIProvider.Chat.ChatCompletionChunk>;
+    const stream =
+      response as unknown as AsyncIterable<OpenAIProvider.Chat.ChatCompletionChunk>;
 
     return {
       [Symbol.asyncIterator]: async function* () {

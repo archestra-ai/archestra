@@ -7,6 +7,8 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_VAULT_TOKEN,
+  type SupportedProvider,
+  SupportedProviders,
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
@@ -266,25 +268,43 @@ export default {
         process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
       useV2Routes: process.env.ARCHESTRA_MINIMAX_USE_V2_ROUTES !== "false",
     },
+    cerebras: {
+      baseUrl:
+        process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
+      useV2Routes: process.env.ARCHESTRA_CEREBRAS_USE_V2_ROUTES !== "false",
+    },
+    vllm: {
+      enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
+      useV2Routes: process.env.ARCHESTRA_VLLM_USE_V2_ROUTES !== "false",
+    },
+    ollama: {
+      enabled: Boolean(process.env.ARCHESTRA_OLLAMA_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
+      useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {
       apiKey: process.env.ARCHESTRA_CHAT_OPENAI_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_OPENAI_BASE_URL ||
-        "https://api.openai.com/v1",
     },
     anthropic: {
       apiKey: process.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_ANTHROPIC_BASE_URL ||
-        "https://api.anthropic.com",
     },
     gemini: {
       apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",
+    },
+    cerebras: {
+      apiKey: process.env.ARCHESTRA_CHAT_CEREBRAS_API_KEY || "",
       baseUrl:
-        process.env.ARCHESTRA_CHAT_GEMINI_BASE_URL ||
-        "https://generativelanguage.googleapis.com",
+        process.env.ARCHESTRA_CHAT_CEREBRAS_BASE_URL ||
+        "https://api.cerebras.ai/v1",
+    },
+    vllm: {
+      apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
+    },
+    ollama: {
+      apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
     },
     minimax: {
       apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
@@ -300,12 +320,24 @@ export default {
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
+    defaultProvider: ((): SupportedProvider => {
+      const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
+      if (
+        provider &&
+        SupportedProviders.includes(provider as SupportedProvider)
+      ) {
+        return provider as SupportedProvider;
+      }
+      return "anthropic";
+    })(),
   },
   features: {
     /**
      * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
      */
+    browserStreamingEnabled:
+      process.env.FEATURES_BROWSER_STREAMING_ENABLED === "true",
   },
   enterpriseLicenseActivated:
     process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",

@@ -126,11 +126,44 @@ tests:
   - it: should configure container with correct image
     documentIndex: 1
     set:
-      archestra.image: archestra/platform:test-version
+      archestra.image: archestra/platform
+      archestra.imageTag: test-version
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
           value: archestra/platform:test-version
+
+  # Image helper tests - ensures backward compatibility with existing deployments
+  # that set the full image:tag in archestra.image
+  - it: should use image as-is when image already contains a tag
+    documentIndex: 1
+    set:
+      archestra.image: archestra/platform:ci-test
+      archestra.imageTag: "1.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: archestra/platform:ci-test
+
+  - it: should append imageTag when registry has port but image has no tag
+    documentIndex: 1
+    set:
+      archestra.image: registry.io:5000/archestra/platform
+      archestra.imageTag: "1.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.io:5000/archestra/platform:1.0.0
+
+  - it: should use image as-is when registry has port and image has tag
+    documentIndex: 1
+    set:
+      archestra.image: registry.io:5000/archestra/platform:v2.0.0
+      archestra.imageTag: "1.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.io:5000/archestra/platform:v2.0.0
 
   - it: should allow configuring image pull policy
     documentIndex: 1

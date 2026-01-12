@@ -17,7 +17,8 @@ type EvaluationResult = {
 
 export type PolicyEvaluationContext = {
   profileId: string;
-  headers: Record<string, string>;
+  teamIds: string[];
+  externalAgentId?: string;
 };
 
 function matchContextCondition(
@@ -26,18 +27,29 @@ function matchContextCondition(
   operator: AutonomyPolicyOperator.SupportedOperator,
   context: PolicyEvaluationContext,
 ): boolean {
+
+  // Team matching - check if value is in teamIds array
+  if (path === "team") {
+    switch (operator) {
+      case "equal":
+        return context.teamIds.includes(value);
+      case "notEqual":
+        return !context.teamIds.includes(value);
+      default:
+        return false;
+    }
+  }
+
+  // Single value matching for other context fields
   let contextValue: string | undefined;
-  const [key1, key2] = path.split('.');
   if (path === "profile") {
     contextValue = context.profileId;
-  } else if (key1 === 'headers') {
-    if (!Object.prototype.hasOwnProperty.call(context.headers, key2)) {
-      return false;
-    }
-    contextValue = context.headers[key2];
+  } else if (path === "externalAgentId") {
+    contextValue = context.externalAgentId;
   } else {
     return false;
   }
+
   switch (operator) {
     case "equal":
       return contextValue === value;

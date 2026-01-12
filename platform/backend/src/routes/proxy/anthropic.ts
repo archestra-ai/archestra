@@ -28,6 +28,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -127,14 +128,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) => {
     const { tools, stream } = body;
 
-    // Convert headers to Record<string, string> for policy evaluation context
-    const headersRecord: Record<string, string> = {};
-    for (const [key, value] of Object.entries(headers)) {
-      if (typeof value === "string") {
-        headersRecord[key] = value;
-      }
-    }
-
     logger.debug(
       {
         agentId,
@@ -196,6 +189,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const resolvedAgentId = resolvedAgent.id;
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
 
     logger.debug(
       {
@@ -646,7 +640,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
               resolvedAgentId,
-              { profileId: resolvedAgentId, headers: headersRecord },
+              { profileId: resolvedAgentId, teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,
@@ -993,7 +987,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
               resolvedAgentId,
-              { profileId: resolvedAgentId, headers: headersRecord },
+              { profileId: resolvedAgentId, teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,

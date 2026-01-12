@@ -29,6 +29,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -113,14 +114,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     sessionId?: string | null,
     sessionSource?: SessionSource,
   ) => {
-    // Convert headers to Record<string, string> for policy evaluation context
-    const headersRecord: Record<string, string> = {};
-    for (const [key, value] of Object.entries(headers)) {
-      if (typeof value === "string") {
-        headersRecord[key] = value;
-      }
-    }
-
     logger.debug(
       {
         agentId,
@@ -163,6 +156,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const resolvedAgentId = resolvedAgent.id;
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
     logger.debug(
       {
         resolvedAgentId,
@@ -565,7 +559,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 await utils.toolInvocation.evaluatePolicies(
                   validToolCalls,
                   resolvedAgentId,
-                  { profileId: resolvedAgentId, headers: headersRecord },
+                  { profileId: resolvedAgentId, teamIds, externalAgentId },
                   contextIsTrusted,
                   enabledToolNames,
                   globalToolPolicy,
@@ -850,7 +844,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
               validToolCalls,
               resolvedAgentId,
-              { profileId: resolvedAgentId, headers: headersRecord },
+              { profileId: resolvedAgentId, teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,

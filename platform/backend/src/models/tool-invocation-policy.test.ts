@@ -5,7 +5,7 @@ import type { PolicyEvaluationContext } from "./tool-invocation-policy";
 
 const mockContext: PolicyEvaluationContext = {
   profileId: "test-profile-id",
-  headers: {},
+  teamIds: [],
 };
 
 describe("ToolInvocationPolicyModel", () => {
@@ -897,6 +897,268 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(true);
+      });
+    });
+
+    describe("context-based conditions", () => {
+      test("blocks when context.externalAgentId matches with equal operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "equal",
+              value: "blocked-external-agent",
+            },
+          ],
+          action: "block_always",
+          reason: "External agent blocked",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            profileId: agent.id,
+            teamIds: [],
+            externalAgentId: "blocked-external-agent",
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain("External agent blocked");
+      });
+
+      test("allows when context.externalAgentId does not match with equal operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "equal",
+              value: "blocked-external-agent",
+            },
+          ],
+          action: "block_always",
+          reason: "External agent blocked",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            profileId: agent.id,
+            teamIds: [],
+            externalAgentId: "allowed-external-agent",
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(true);
+      });
+
+      test("blocks when context.externalAgentId matches with notEqual operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "notEqual",
+              value: "trusted-agent",
+            },
+          ],
+          action: "block_always",
+          reason: "Only trusted agent allowed",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            profileId: agent.id,
+            teamIds: [],
+            externalAgentId: "untrusted-agent",
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain("Only trusted agent allowed");
+      });
+
+      test("blocks when context.team matches with equal operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.team",
+              operator: "equal",
+              value: "restricted-team-id",
+            },
+          ],
+          action: "block_always",
+          reason: "Team restricted",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            profileId: agent.id,
+            teamIds: ["other-team", "restricted-team-id"],
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain("Team restricted");
+      });
+
+      test("allows when context.team does not match any teamIds", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.team",
+              operator: "equal",
+              value: "restricted-team-id",
+            },
+          ],
+          action: "block_always",
+          reason: "Team restricted",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            profileId: agent.id,
+            teamIds: ["allowed-team-1", "allowed-team-2"],
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(true);
+      });
+
+      test("blocks when context.profile matches with equal operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.profile",
+              operator: "equal",
+              value: agent.id,
+            },
+          ],
+          action: "block_always",
+          reason: "Profile blocked",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            profileId: agent.id,
+            teamIds: [],
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain("Profile blocked");
+      });
+
+      test("allows when context.profile does not match with notEqual operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.profile",
+              operator: "notEqual",
+              value: "other-profile-id",
+            },
+          ],
+          action: "block_always",
+          reason: "Only other profile allowed",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            profileId: agent.id,
+            teamIds: [],
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain("Only other profile allowed");
       });
     });
   });

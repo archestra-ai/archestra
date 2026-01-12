@@ -18,6 +18,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -368,6 +369,9 @@ export async function handleLLMProxy<
       }
     }
 
+    // Fetch team IDs for policy evaluation context
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
+
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
@@ -388,6 +392,7 @@ export async function handleLLMProxy<
         sessionId,
         sessionSource,
         headersRecord,
+        teamIds,
       );
     } else {
       return handleNonStreaming(
@@ -408,6 +413,7 @@ export async function handleLLMProxy<
         sessionId,
         sessionSource,
         headersRecord,
+        teamIds,
       );
     }
   } catch (error) {
@@ -449,6 +455,7 @@ async function handleStreaming<
   sessionId?: string | null,
   sessionSource?: SessionSource,
   headers?: Record<string, string>,
+  teamIds?: string[],
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -536,7 +543,11 @@ async function handleStreaming<
       toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
         toolCallsForPolicy,
         agent.id,
-        { profileId: agent.id, headers: headers ?? {} },
+        {
+          profileId: agent.id,
+          teamIds: teamIds ?? [],
+          externalAgentId,
+        },
         contextIsTrusted,
         enabledToolNames,
         globalToolPolicy,
@@ -687,6 +698,7 @@ async function handleNonStreaming<
   sessionId?: string | null,
   sessionSource?: SessionSource,
   headers?: Record<string, string>,
+  teamIds?: string[],
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -729,7 +741,11 @@ async function handleNonStreaming<
             : JSON.stringify(tc.arguments),
       })),
       agent.id,
-      { profileId: agent.id, headers: headers ?? {} },
+      {
+        profileId: agent.id,
+        teamIds: teamIds ?? [],
+        externalAgentId,
+      },
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,

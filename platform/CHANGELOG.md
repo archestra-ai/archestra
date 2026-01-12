@@ -3,9 +3,22 @@
 ## [1.0.16](https://github.com/archestra-ai/archestra/compare/platform-v1.0.15...platform-v1.0.16) (2026-01-12)
 
 
-### Miscellaneous Chores
+### Features
 
-* dev to main ([#2055](https://github.com/archestra-ai/archestra/issues/2055)) ([7a7a3ee](https://github.com/archestra-ai/archestra/commit/7a7a3ee130c78384e473b5a15423e4d5c8dcc62f))
+* add boxy-minimalistic theme and migrate statistics charts to recharts ([#2011](https://github.com/archestra-ai/archestra/issues/2011)) ([bb29afe](https://github.com/archestra-ai/archestra/commit/bb29afe3935ad93f63bd662c3156c56abb917b0b))
+* add session-based grouping to LLM proxy logs ([#2013](https://github.com/archestra-ai/archestra/issues/2013)) ([0024c69](https://github.com/archestra-ai/archestra/commit/0024c69fc78e4754bc9d1d092d76c07dec9fa757))
+* enhance tool policy dialog with tooltips and responsive layout ([#2007](https://github.com/archestra-ai/archestra/issues/2007)) ([998e880](https://github.com/archestra-ai/archestra/commit/998e880fb5ac81aade6f875966d097888178a774))
+* React Flow architecture diagram with theme improvements ([#2040](https://github.com/archestra-ai/archestra/issues/2040)) ([ff4afc4](https://github.com/archestra-ai/archestra/commit/ff4afc4e17d9961f0130445fb68e8d8eb259a5f3))
+* tool policy yolo mode ([#1963](https://github.com/archestra-ai/archestra/issues/1963)) ([8ec164a](https://github.com/archestra-ai/archestra/commit/8ec164a7f7ab730e74107d5b2b9ba1262168f9ca))
+
+
+### Bug Fixes
+
+* charts ux ([#2049](https://github.com/archestra-ai/archestra/issues/2049)) ([6d14a9f](https://github.com/archestra-ai/archestra/commit/6d14a9fb77d883bf9320461197f5a3532ea53de4))
+* conversation not found lead to 500 ([#2052](https://github.com/archestra-ai/archestra/issues/2052)) ([1447b5c](https://github.com/archestra-ai/archestra/commit/1447b5c593d0d88e2581a0ebdeac68caf26d0e0f))
+* costs stats ([#2047](https://github.com/archestra-ai/archestra/issues/2047)) ([0dc8ac8](https://github.com/archestra-ai/archestra/commit/0dc8ac8634b78e7b4e35856d75899c1850ebec40))
+* improve layout and persist statistics timeframe if browser storage ([#2043](https://github.com/archestra-ai/archestra/issues/2043)) ([e65acb4](https://github.com/archestra-ai/archestra/commit/e65acb431d6ab35ae9e3ae7541cb48aab0697948))
+* login page email input dark-theme styling ([#2031](https://github.com/archestra-ai/archestra/issues/2031)) ([4a2187f](https://github.com/archestra-ai/archestra/commit/4a2187fcbcc33384b8cef444063cf02a4aa0e79e))
 
 ## [1.0.15](https://github.com/archestra-ai/archestra/compare/platform-v1.0.14...platform-v1.0.15) (2026-01-12)
 

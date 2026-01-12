@@ -29,7 +29,7 @@ export async function evaluateIfContextIsTrusted(
   provider: SupportedProvider,
   considerContextUntrusted: boolean = false,
   globalToolPolicy: GlobalToolPolicy = "restrictive",
-  policyContext?: PolicyEvaluationContext,
+  policyContext: PolicyEvaluationContext,
   onDualLlmStart?: () => void,
   onDualLlmProgress?: (progress: {
     question: string;

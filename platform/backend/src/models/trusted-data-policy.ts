@@ -280,7 +280,7 @@ class TrustedDataPolicyModel {
     conditions: ResultPolicyCondition[],
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
-    context?: PolicyEvaluationContext,
+    context: PolicyEvaluationContext,
   ): boolean {
     // Empty conditions = default policy, always matches
     if (conditions.length === 0) {
@@ -345,7 +345,7 @@ class TrustedDataPolicyModel {
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
     globalToolPolicy: GlobalToolPolicy = "restrictive",
-    context?: PolicyEvaluationContext,
+    context: PolicyEvaluationContext,
   ): Promise<{
     isTrusted: boolean;
     isBlocked: boolean;
@@ -381,7 +381,7 @@ class TrustedDataPolicyModel {
       toolOutput: any;
     }>,
     globalToolPolicy: GlobalToolPolicy = "restrictive",
-    context?: PolicyEvaluationContext,
+    context: PolicyEvaluationContext,
   ): Promise<
     Map<
       string,

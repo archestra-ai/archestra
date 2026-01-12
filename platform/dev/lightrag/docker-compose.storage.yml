@@ -5,7 +5,7 @@
 
 services:
   neo4j:
-    image: neo4j:5.15.0-community
+    image: neo4j:5-community
     container_name: archestra-neo4j
     ports:
       - "7474:7474"  # HTTP Browser

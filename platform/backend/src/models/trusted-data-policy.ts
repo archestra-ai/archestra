@@ -18,43 +18,6 @@ function isDefaultPolicy(conditions: ResultPolicyCondition[]): boolean {
   return conditions.length === 0;
 }
 
-/**
- * Match a context-based condition (e.g., context.teamIds, context.externalAgentId)
- */
-function matchContextCondition(
-  path: string,
-  value: string,
-  operator: AutonomyPolicyOperator.SupportedOperator,
-  context: PolicyEvaluationContext,
-): boolean {
-  // Team matching - check if value is in teamIds array
-  if (path === "teamIds") {
-    switch (operator) {
-      case "contains":
-        return context.teamIds.includes(value);
-      case "notContains":
-        return !context.teamIds.includes(value);
-      default:
-        return false;
-    }
-  }
-
-  // Single value matching for externalAgentId
-  if (path === "externalAgentId") {
-    const contextValue = context.externalAgentId;
-    switch (operator) {
-      case "equal":
-        return contextValue === value;
-      case "notEqual":
-        return contextValue !== value;
-      default:
-        return false;
-    }
-  }
-
-  return false;
-}
-
 class TrustedDataPolicyModel {
   static async create(
     policy: TrustedData.InsertTrustedDataPolicy,
@@ -245,9 +208,46 @@ class TrustedDataPolicyModel {
   }
 
   /**
+   * Match a context-based condition (e.g., context.teamIds, context.externalAgentId)
+   */
+  private static evaluateContextCondition(
+    path: string,
+    value: string,
+    operator: AutonomyPolicyOperator.SupportedOperator,
+    context: PolicyEvaluationContext,
+  ): boolean {
+    // Team matching - check if value is in teamIds array
+    if (path === "teamIds") {
+      switch (operator) {
+        case "contains":
+          return context.teamIds.includes(value);
+        case "notContains":
+          return !context.teamIds.includes(value);
+        default:
+          return false;
+      }
+    }
+
+    // Single value matching for externalAgentId
+    if (path === "externalAgentId") {
+      const contextValue = context.externalAgentId;
+      switch (operator) {
+        case "equal":
+          return contextValue === value;
+        case "notEqual":
+          return contextValue !== value;
+        default:
+          return false;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Evaluate if a value matches a condition
    */
-  private static evaluateCondition(
+  private static evaluateOutputCondition(
     // biome-ignore lint/suspicious/noExplicitAny: policy values can be any type
     value: any,
     operator: AutonomyPolicyOperator.SupportedOperator,
@@ -290,15 +290,18 @@ class TrustedDataPolicyModel {
     // All conditions must match (AND logic)
     for (const condition of conditions) {
       const { key, value, operator } = condition;
+      const [scope, ...pathParts] = key.split(".");
 
       // Check if this is a context condition
-      if (key.startsWith("context.")) {
-        const contextPath = key.slice("context.".length);
-        if (!context) {
-          // No context provided, condition doesn't match
-          return false;
-        }
-        if (!matchContextCondition(contextPath, value, operator, context)) {
+      if (scope === "context") {
+        if (
+          !TrustedDataPolicyModel.evaluateContextCondition(
+            pathParts.join("."),
+            value,
+            operator,
+            context,
+          )
+        ) {
           return false;
         }
         continue;
@@ -318,7 +321,7 @@ class TrustedDataPolicyModel {
 
       // All extracted values must match the condition
       const allMatch = values.every((v) =>
-        TrustedDataPolicyModel.evaluateCondition(v, operator, value),
+        TrustedDataPolicyModel.evaluateOutputCondition(v, operator, value),
       );
 
       if (!allMatch) {

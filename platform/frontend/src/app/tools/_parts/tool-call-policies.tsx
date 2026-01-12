@@ -368,7 +368,11 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
         onClick={() =>
           toolInvocationPolicyCreateMutation.mutate({
             toolId: tool.id,
-            argumentName: argumentNames[0] ?? CONTEXT_EXTERNAL_AGENT_ID,
+            argumentName:
+              argumentNames[0] ??
+              (externalAgentIds.length > 0
+                ? CONTEXT_EXTERNAL_AGENT_ID
+                : CONTEXT_TEAM_IDS),
           })
         }
         disabled={conditionKeyOptions.length === 0}

@@ -24,8 +24,6 @@ import {
   SupportedChatProviderSchema,
 } from "@/types";
 
-const a: number = 'a';
-
 /** TTL for caching chat models from provider APIs */
 const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
 const CHAT_MODELS_CACHE_TTL_HOURS = CHAT_MODELS_CACHE_TTL_MS / TimeInMs.Hour;

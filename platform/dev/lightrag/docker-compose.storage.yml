@@ -1,0 +1,53 @@
+# Neo4j and Qdrant for LightRAG (local development)
+# Start with: tilt trigger lightrag-storage
+# Neo4j: http://localhost:7474 (browser), bolt://localhost:7687
+# Qdrant: http://localhost:6333 (API)
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: archestra-neo4j
+    ports:
+      - "7474:7474"  # HTTP Browser
+      - "7687:7687"  # Bolt protocol
+    environment:
+      - NEO4J_AUTH=neo4j/password123
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    volumes:
+      - neo4j-data:/data
+    networks:
+      - archestra-lightrag
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.0
+    container_name: archestra-qdrant
+    ports:
+      - "6333:6333"  # HTTP API
+      - "6334:6334"  # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - archestra-lightrag
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  neo4j-data:
+  qdrant-data:
+
+networks:
+  archestra-lightrag:
+    external: false

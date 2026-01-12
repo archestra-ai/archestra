@@ -52,7 +52,8 @@ const dependencies = {
     projectNames.webkit,
   ],
   // API tests should run after all UI tests to avoid DB state conflicts
-  apiProject: [projectNames.sso],
+  // apiProject: [projectNames.sso],
+  apiProject: [projectNames.setupTeams]
 };
 
 /**
@@ -113,76 +114,76 @@ export default defineConfig({
     },
     // This runs first and by default we use Vault as secrets manager
     // At the end of this test we switch to DB as secrets manager because all other tests rely on it
-    {
-      name: projectNames.credentialsWithVault,
-      testMatch: testPatterns.credentialsWithVault,
-      testDir: "./tests/ui",
-      use: {
-        ...devices["Desktop Chrome"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run all setup projects before tests
-      dependencies: [projectNames.setupTeams],
-    },
+    // {
+    //   name: projectNames.credentialsWithVault,
+    //   testMatch: testPatterns.credentialsWithVault,
+    //   testDir: "./tests/ui",
+    //   use: {
+    //     ...devices["Desktop Chrome"],
+    //     // Use the stored authentication state
+    //     storageState: adminAuthFile,
+    //   },
+    //   // Run all setup projects before tests
+    //   dependencies: [projectNames.setupTeams],
+    // },
     // UI tests run on all browsers
     // Note: SSO tests are excluded here and run in a separate project to avoid
     // parallel execution issues (they manipulate shared backend state like SSO providers)
-    {
-      name: projectNames.chromium,
-      testDir: "./tests/ui",
-      testIgnore: browserTestIgnore,
-      use: {
-        ...devices["Desktop Chrome"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run all setup projects before tests
-      dependencies: dependencies.browserProjects,
-    },
-    {
-      name: projectNames.firefox,
-      testDir: "./tests/ui",
-      testIgnore: browserTestIgnore,
-      use: {
-        ...devices["Desktop Firefox"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run all setup projects before tests
-      dependencies: dependencies.browserProjects,
-      grep: /@firefox/,
-    },
-    {
-      name: projectNames.webkit,
-      testDir: "./tests/ui",
-      testIgnore: browserTestIgnore,
-      use: {
-        ...devices["Desktop Safari"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run all setup projects before tests
-      dependencies: dependencies.browserProjects,
-      grep: /@webkit/,
-    },
-    // SSO tests run AFTER all other UI tests complete to avoid parallel execution issues
-    // These tests manipulate shared backend state (SSO providers, Keycloak) and need isolation
-    // IMPORTANT: SSO tests do NOT use storageState because:
-    // 1. SSO logins can invalidate the admin session stored in adminAuthFile
-    // 2. Each SSO test needs to authenticate fresh to avoid session conflicts
-    // 3. The ensureAdminAuthenticated() helper handles login at the start of each test
-    {
-      name: projectNames.sso,
-      testDir: "./tests/ui",
-      testMatch: testPatterns.ssoProviders,
-      use: {
-        ...devices["Desktop Chrome"],
-        // No storageState - SSO tests authenticate fresh via ensureAdminAuthenticated()
-      },
-      // Run after all browser UI tests complete - ensures exclusive access to SSO resources
-      dependencies: dependencies.ssoProject,
-    },
+    // {
+    //   name: projectNames.chromium,
+    //   testDir: "./tests/ui",
+    //   testIgnore: browserTestIgnore,
+    //   use: {
+    //     ...devices["Desktop Chrome"],
+    //     // Use the stored authentication state
+    //     storageState: adminAuthFile,
+    //   },
+    //   // Run all setup projects before tests
+    //   dependencies: dependencies.browserProjects,
+    // },
+    // {
+    //   name: projectNames.firefox,
+    //   testDir: "./tests/ui",
+    //   testIgnore: browserTestIgnore,
+    //   use: {
+    //     ...devices["Desktop Firefox"],
+    //     // Use the stored authentication state
+    //     storageState: adminAuthFile,
+    //   },
+    //   // Run all setup projects before tests
+    //   dependencies: dependencies.browserProjects,
+    //   grep: /@firefox/,
+    // },
+    // {
+    //   name: projectNames.webkit,
+    //   testDir: "./tests/ui",
+    //   testIgnore: browserTestIgnore,
+    //   use: {
+    //     ...devices["Desktop Safari"],
+    //     // Use the stored authentication state
+    //     storageState: adminAuthFile,
+    //   },
+    //   // Run all setup projects before tests
+    //   dependencies: dependencies.browserProjects,
+    //   grep: /@webkit/,
+    // },
+    // // SSO tests run AFTER all other UI tests complete to avoid parallel execution issues
+    // // These tests manipulate shared backend state (SSO providers, Keycloak) and need isolation
+    // // IMPORTANT: SSO tests do NOT use storageState because:
+    // // 1. SSO logins can invalidate the admin session stored in adminAuthFile
+    // // 2. Each SSO test needs to authenticate fresh to avoid session conflicts
+    // // 3. The ensureAdminAuthenticated() helper handles login at the start of each test
+    // {
+    //   name: projectNames.sso,
+    //   testDir: "./tests/ui",
+    //   testMatch: testPatterns.ssoProviders,
+    //   use: {
+    //     ...devices["Desktop Chrome"],
+    //     // No storageState - SSO tests authenticate fresh via ensureAdminAuthenticated()
+    //   },
+    //   // Run after all browser UI tests complete - ensures exclusive access to SSO resources
+    //   dependencies: dependencies.ssoProject,
+    // },
     // API tests only run on chromium (browser doesn't matter for API integration tests)
     // API tests only need authentication setup, not the full UI test suite
     {

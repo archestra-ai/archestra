@@ -326,15 +326,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # On PRs we still need to upload an empty SARIF
-      # file so GitHub Code Scanning receives "no findings" instead of waiting forever for results.
-      # Without this, branch protection rules requiring code scanning results will block merging.
-      - name: Upload empty SARIF result (skipped checks)
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
-        with:
-          sarif_file: .github/empty-sarif.json
-
       # On merge queues we need to build the Docker image, run Docker Scout and upload the real SARIF result
       - name: Build Docker image
         if: ${{ github.event_name == 'merge_group' }}
@@ -355,7 +346,7 @@ jobs:
       # NOTE: Skipped for fork PRs because GitHub doesn't expose repository secrets
       # to workflows triggered by fork PRs. Docker Scout requires Docker Hub auth.
       - name: Docker Scout CVE Check
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
+        if: ${{ github.event_name == 'merge_group' && github.event.pull_request.head.repo.fork != true }}
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
         with:
           command: cves

@@ -291,7 +291,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                     toolResultPoliciesUpdateMutation.mutate({
                       ...policy,
                       attributePath,
-                      value: autoValue || policy.value,
+                      value: autoValue,
                       operator: defaultOperator,
                     });
                   }}

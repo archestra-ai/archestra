@@ -267,6 +267,8 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                   value={policy.attributePath}
                   items={keyItems}
                   allowCustom
+                  searchPlaceholder="Type attribute path..."
+                  showSearchIcon={false}
                   onValueChange={(attributePath) => {
                     // Auto-select value if only one option available
                     let autoValue = "";
@@ -342,7 +344,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                             <Info className="w-4 h-4 text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Selectable with multiple external agents</p>
+                            <p>Only one external agent available</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -379,7 +381,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                             <Info className="w-4 h-4 text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Selectable with multiple teams</p>
+                            <p>Only one team available</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -478,7 +480,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
         onClick={() =>
           toolResultPoliciesCreateMutation.mutate({
             toolId: tool.id,
-            attributePath: "result",
+            attributePath: "",
           })
         }
       >

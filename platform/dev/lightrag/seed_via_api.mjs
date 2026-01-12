@@ -185,7 +185,7 @@ We expect continued strong growth in 2025:
 - Revenue target: $250 million ARR
 - Plan to expand internationally to Europe and Asia
 - Opening new offices in London and Singapore
-- Planned IPO in late 2025
+- Planned IPO in the coming years
 `,
   },
 ];

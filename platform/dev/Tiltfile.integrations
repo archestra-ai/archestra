@@ -53,7 +53,8 @@ local_resource(
   serve_dir='.',
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
+  auto_init=False,
+  resource_deps=['lightrag-storage']
 )
 
 # LightRAG seed data (manual trigger, one-shot)
@@ -66,7 +67,7 @@ local_resource(
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
-  resource_deps=['lightrag-server']
+  resource_deps=['lightrag-server', 'lightrag-storage']
 )
 
 # HashiCorp Vault in Docker (manual trigger)

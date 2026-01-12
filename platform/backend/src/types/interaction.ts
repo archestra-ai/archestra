@@ -2,7 +2,7 @@ import { SupportedProvidersDiscriminatorSchema } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { Anthropic, Gemini, OpenAi } from "./llm-providers";
+import { Anthropic, Gemini, Ollama, OpenAi, Vllm } from "./llm-providers";
 
 export const UserInfoSchema = z.object({
   id: z.string(),
@@ -17,12 +17,16 @@ export const InteractionRequestSchema = z.union([
   OpenAi.API.ChatCompletionRequestSchema,
   Gemini.API.GenerateContentRequestSchema,
   Anthropic.API.MessagesRequestSchema,
+  Vllm.API.ChatCompletionRequestSchema,
+  Ollama.API.ChatCompletionRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
   Anthropic.API.MessagesResponseSchema,
+  Vllm.API.ChatCompletionResponseSchema,
+  Ollama.API.ChatCompletionResponseSchema,
 ]);
 
 /**
@@ -32,6 +36,13 @@ export const InteractionResponseSchema = z.union([
 const BaseSelectInteractionSchema = createSelectSchema(
   schema.interactionsTable,
 );
+
+/**
+ * Schema for computed request type field
+ * - "main": Primary conversation requests (have Task tool for Claude Code)
+ * - "subagent": Background/utility requests (no Task tool, prompt suggestions, etc.)
+ */
+export const RequestTypeSchema = z.enum(["main", "subagent"]);
 
 /**
  * Discriminated union schema for API responses
@@ -44,6 +55,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       OpenAi.API.ChatCompletionRequestSchema.nullable().optional(),
     response: OpenAi.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["gemini:generateContent"]),
@@ -51,12 +65,32 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Gemini.API.GenerateContentRequestSchema.nullable().optional(),
     response: Gemini.API.GenerateContentResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["anthropic:messages"]),
     request: Anthropic.API.MessagesRequestSchema,
     processedRequest: Anthropic.API.MessagesRequestSchema.nullable().optional(),
     response: Anthropic.API.MessagesResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["vllm:chatCompletions"]),
+    request: Vllm.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Vllm.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Vllm.API.ChatCompletionResponseSchema,
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["ollama:chatCompletions"]),
+    request: Ollama.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Ollama.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Ollama.API.ChatCompletionResponseSchema,
   }),
 ]);
 

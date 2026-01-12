@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.0.15](https://github.com/archestra-ai/archestra/compare/platform-v1.0.14...platform-v1.0.15) (2026-01-12)
+
+
+### Bug Fixes
+
+* costs stats ([#2048](https://github.com/archestra-ai/archestra/issues/2048)) ([4f3b2ca](https://github.com/archestra-ai/archestra/commit/4f3b2ca6a8f05655fcc2ff3db1a8a21fe581f7e1))
+
+## [1.0.14](https://github.com/archestra-ai/archestra/compare/platform-v1.0.13...platform-v1.0.14) (2026-01-10)
+
+
+### Features
+
+* add Boxy Minimalistic theme with JetBrains Mono font ([#1981](https://github.com/archestra-ai/archestra/issues/1981)) ([702f32d](https://github.com/archestra-ai/archestra/commit/702f32d528f7be59bff098b5cd2b8b6ea6cfb84a))
+* add vLLM and Ollama provider support ([#2001](https://github.com/archestra-ai/archestra/issues/2001)) ([c686603](https://github.com/archestra-ai/archestra/commit/c68660357ca183b1c622a67e653b921851482541))
+* unify themes with fonts, shadows, spacing, and tracking ([#1996](https://github.com/archestra-ai/archestra/issues/1996)) ([1181333](https://github.com/archestra-ai/archestra/commit/1181333d9a74cbbb91be882dd2f178be31d5c505))
+
+
+### Bug Fixes
+
+* do not show llm-proxy discovered tools in chat ([#1983](https://github.com/archestra-ai/archestra/issues/1983)) ([95296ac](https://github.com/archestra-ai/archestra/commit/95296ac03f72b1d9eb04e47b4a8d7c27a8ce2d49))
+* do not show llm-proxy discovered tools in chat ([#1988](https://github.com/archestra-ai/archestra/issues/1988)) ([1e45b66](https://github.com/archestra-ai/archestra/commit/1e45b6677b2e250dde24d4ff7fed3faed5d69a9c))
+* don't disable save button in assign tools dialog ([#2003](https://github.com/archestra-ai/archestra/issues/2003)) ([538bb0b](https://github.com/archestra-ai/archestra/commit/538bb0b3d32448ce0798cb7c303bc64eda4d7f10))
+* fix fetching chat models ([#1997](https://github.com/archestra-ai/archestra/issues/1997)) ([863ecbe](https://github.com/archestra-ai/archestra/commit/863ecbe44891d67db41b7dc0cc6ef64380286e06))
+* no hard-refresh on profile table action click ([#1972](https://github.com/archestra-ai/archestra/issues/1972)) ([9ec4c86](https://github.com/archestra-ai/archestra/commit/9ec4c8630ada872a1692e2eb373378e83372cf87))
+* refresh vault token when using k8s auth ([#1989](https://github.com/archestra-ai/archestra/issues/1989)) ([bd7fb09](https://github.com/archestra-ai/archestra/commit/bd7fb0996a452ce8c8311df6a6948a471ab070ff))
+
+
+### Dependencies
+
+* address alpine CVEs ([#1986](https://github.com/archestra-ai/archestra/issues/1986)) ([224b596](https://github.com/archestra-ai/archestra/commit/224b596aeb2b21a48f0375466d52dc66b906c3b0))
+* bump the platform-dependencies group across 1 directory with 3 updates ([#1979](https://github.com/archestra-ai/archestra/issues/1979)) ([211153a](https://github.com/archestra-ai/archestra/commit/211153af229dc19ae306413078f46e04c5ccb38d))
+
+
+### Code Refactoring
+
+* **tools:** show one row per tool instead of per assignment ([#1987](https://github.com/archestra-ai/archestra/issues/1987)) ([b69bfd9](https://github.com/archestra-ai/archestra/commit/b69bfd9c03a7fad54bfdd7c6d0684aa6735cedf6))
+
+
+### Miscellaneous Chores
+
+* back merge main into dev ([#1976](https://github.com/archestra-ai/archestra/issues/1976)) ([0e6fdf6](https://github.com/archestra-ai/archestra/commit/0e6fdf67891785ace5bc5e301890addfd1a18a19))
+* helm chart image tag update ([#1985](https://github.com/archestra-ai/archestra/issues/1985)) ([8b70fcd](https://github.com/archestra-ai/archestra/commit/8b70fcdde96258f0209e7e1bee0cdc6d9ec233f7))
+
 ## [1.0.13](https://github.com/archestra-ai/archestra/compare/platform-v1.0.12...platform-v1.0.13) (2026-01-09)
 
 

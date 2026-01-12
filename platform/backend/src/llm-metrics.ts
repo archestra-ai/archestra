@@ -429,7 +429,12 @@ export function getObservableFetch(
         if (!data.usage) {
           return response;
         }
-        if (provider === "openai") {
+        if (
+          provider === "openai" ||
+          provider === "vllm" ||
+          provider === "ollama"
+        ) {
+          // vLLM and Ollama use OpenAI-compatible API format
           const { input, output } = utils.adapters.openai.getUsageTokens(
             data.usage,
           );

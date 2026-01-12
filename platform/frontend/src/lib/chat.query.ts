@@ -26,11 +26,18 @@ export function useConversation(conversationId?: string) {
     queryKey: ["conversation", conversationId],
     queryFn: async () => {
       if (!conversationId) return null;
-      const { data, error } = await getChatConversation({
+      const response = await getChatConversation({
         path: { id: conversationId },
       });
-      if (error) throw new Error("Failed to fetch conversation");
-      return data;
+      // Return null for 400 (invalid UUID) or 404 (not found) - handled gracefully by UI
+      if (response.error) {
+        const status = response.response.status;
+        if (status === 400 || status === 404) {
+          return null;
+        }
+        throw new Error("Failed to fetch conversation");
+      }
+      return response.data;
     },
     enabled: !!conversationId,
     staleTime: 0, // Always refetch to ensure we have the latest messages
@@ -284,11 +291,12 @@ export function useClearConversationEnabledTools() {
  */
 export function useProfileToolsWithIds(agentId: string | undefined) {
   return useQuery({
-    queryKey: ["agents", agentId, "tools"],
+    queryKey: ["agents", agentId, "tools", "mcp-only"],
     queryFn: async () => {
       if (!agentId) return [];
       const { data, error } = await getAgentTools({
         path: { agentId },
+        query: { excludeLlmProxyOrigin: true },
       });
       if (error) throw new Error("Failed to fetch profile tools");
       return data;

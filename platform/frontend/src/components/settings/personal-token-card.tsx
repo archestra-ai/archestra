@@ -69,7 +69,7 @@ export function PersonalTokenCard() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>MCP Gateway Token</CardTitle>
+          <CardTitle>MCP Gateway/A2A Gateway Token</CardTitle>
           <CardDescription>
             Your personal token to authenticate with the MCP Gateway for
             profiles you have access to through your team memberships.
@@ -90,7 +90,7 @@ export function PersonalTokenCard() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>MCP Gateway Token</CardTitle>
+          <CardTitle>MCP Gateway/A2A Gateway Token</CardTitle>
           <CardDescription>
             Your personal token to authenticate with the MCP Gateway for
             profiles you have access to through your team memberships.
@@ -110,7 +110,7 @@ export function PersonalTokenCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>MCP Gateway Token</CardTitle>
+        <CardTitle>MCP Gateway/A2A Gateway Token</CardTitle>
         <CardDescription>
           Your personal token to authenticate with the MCP Gateway for profiles
           you have access to through your team memberships.

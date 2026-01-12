@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/node";
+import { SupportedProviders } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
@@ -82,11 +83,14 @@ describe("Authnz", () => {
     });
 
     test("should skip auth for existing whitelisted paths", async () => {
+      // Generate LLM proxy paths dynamically from SupportedProviders
+      const llmProxyPaths = SupportedProviders.map(
+        (provider) => `/v1/${provider}/completions`,
+      );
+
       const whitelistedPaths = [
         "/api/auth/session",
-        "/v1/openai/completions",
-        "/v1/anthropic/messages",
-        "/v1/gemini/generate",
+        ...llmProxyPaths,
         "/openapi.json",
         "/health",
         "/api/features",
@@ -108,6 +112,36 @@ describe("Authnz", () => {
 
         expect(mockReply.status).not.toHaveBeenCalled();
         expect(mockReply.send).not.toHaveBeenCalled();
+      }
+    });
+
+    test("should skip auth for all supported LLM provider routes", async () => {
+      // Test various path patterns for each provider
+      for (const provider of SupportedProviders) {
+        const providerPaths = [
+          `/v1/${provider}`,
+          `/v1/${provider}/`,
+          `/v1/${provider}/chat/completions`,
+          `/v1/${provider}/some-agent-id/chat/completions`,
+        ];
+
+        for (const url of providerPaths) {
+          const mockRequest = {
+            url,
+            method: "POST",
+            headers: {},
+          } as FastifyRequest;
+
+          const mockReply = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+          } as unknown as FastifyReply;
+
+          await authnz.handle(mockRequest, mockReply);
+
+          expect(mockReply.status).not.toHaveBeenCalled();
+          expect(mockReply.send).not.toHaveBeenCalled();
+        }
       }
     });
 

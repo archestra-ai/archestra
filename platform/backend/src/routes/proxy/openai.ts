@@ -123,6 +123,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     externalAgentId?: string,
     userId?: string,
+    sessionId?: string | null,
+    sessionSource?: string | null,
   ) => {
     const { messages, tools, stream } = body;
 
@@ -307,6 +309,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           resolvedAgentId,
           considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
         },
         "[OpenAIProxy] Evaluating trusted data policies",
       );
@@ -317,6 +320,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           openAiApiKey,
           "openai",
           resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -341,10 +345,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             : undefined,
           stream
-            ? (progress) => {
+            ? (progress: {
+                question: string;
+                options: string[];
+                answer: string;
+              }) => {
                 // Stream Q&A progress with options
                 const optionsText = progress.options
-                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                   .join("\n");
                 const progressChunk = {
                   id: "chatcmpl-sanitizing",
@@ -812,6 +820,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             profileId: resolvedAgentId,
             externalAgentId,
             userId,
+            sessionId,
+            sessionSource,
             type: "openai:chatCompletions",
             request: body,
             processedRequest: {
@@ -966,6 +976,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId: resolvedAgentId,
           externalAgentId,
           userId,
+          sessionId,
+          sessionSource,
           type: "openai:chatCompletions",
           request: body,
           processedRequest: {
@@ -1027,6 +1039,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // OpenAI requests use the header for session tracking
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleChatCompletion(
         request.body,
         request.headers,
@@ -1035,6 +1052,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         undefined,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );
@@ -1066,6 +1085,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // OpenAI requests use the header for session tracking
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleChatCompletion(
         request.body,
         request.headers,
@@ -1074,6 +1098,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.agentId,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );

@@ -3,13 +3,40 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   slugify,
 } from "@shared";
-import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  notIlike,
+  or,
+  sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
-import type { ExtendedTool, InsertTool, Tool } from "@/types";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
+import type {
+  ExtendedTool,
+  InsertTool,
+  Tool,
+  ToolFilters,
+  ToolSortBy,
+  ToolSortDirection,
+  ToolWithAssignments,
+} from "@/types";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import McpServerModel from "./mcp-server";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -1050,6 +1077,317 @@ class ToolModel {
       .update(schema.toolsTable)
       .set({ name: newToolName })
       .where(inArray(schema.toolsTable.promptAgentId, promptAgentIds));
+  }
+
+  /**
+   * Find all tools with their profile assignments.
+   * Returns one entry per tool (grouped by tool), with all assignments embedded.
+   * Only returns tools that have at least one assignment.
+   */
+  static async findAllWithAssignments(params: {
+    pagination?: { limit?: number; offset?: number };
+    sorting?: {
+      sortBy?: ToolSortBy;
+      sortDirection?: ToolSortDirection;
+    };
+    filters?: ToolFilters;
+    userId?: string;
+    isAgentAdmin?: boolean;
+  }): Promise<PaginatedResult<ToolWithAssignments>> {
+    const {
+      pagination = { limit: 20, offset: 0 },
+      sorting,
+      filters,
+      userId,
+      isAgentAdmin,
+    } = params;
+
+    // Build WHERE conditions for tools
+    const toolWhereConditions: ReturnType<typeof sql>[] = [];
+
+    // Filter by search query (tool name)
+    if (filters?.search) {
+      toolWhereConditions.push(
+        ilike(schema.toolsTable.name, `%${filters.search}%`),
+      );
+    }
+
+    // Filter by origin (either "llm-proxy" or a catalogId)
+    if (filters?.origin) {
+      if (filters.origin === "llm-proxy") {
+        // LLM Proxy tools have null catalogId but agentId is set
+        toolWhereConditions.push(isNull(schema.toolsTable.catalogId));
+        toolWhereConditions.push(isNotNull(schema.toolsTable.agentId));
+      } else {
+        // MCP tools have a catalogId
+        toolWhereConditions.push(
+          eq(schema.toolsTable.catalogId, filters.origin),
+        );
+      }
+    }
+
+    // Exclude Archestra built-in tools
+    if (filters?.excludeArchestraTools) {
+      toolWhereConditions.push(
+        notIlike(schema.toolsTable.name, "archestra__%"),
+      );
+    }
+
+    // Apply access control filtering for users that are not agent admins
+    // Get accessible agent IDs for filtering assignments
+    let accessibleAgentIds: string[] | undefined;
+    let accessibleMcpServerIds: Set<string> | undefined;
+    if (userId && !isAgentAdmin) {
+      const [agentIds, mcpServers] = await Promise.all([
+        AgentTeamModel.getUserAccessibleAgentIds(userId, false),
+        McpServerModel.findAll(userId, false),
+      ]);
+      accessibleAgentIds = agentIds;
+      accessibleMcpServerIds = new Set(mcpServers.map((s) => s.id));
+
+      if (accessibleAgentIds.length === 0) {
+        return createPaginatedResult([], 0, {
+          limit: pagination.limit ?? 20,
+          offset: pagination.offset ?? 0,
+        });
+      }
+    }
+
+    // Build the combined WHERE clause
+    const toolWhereClause =
+      toolWhereConditions.length > 0 ? and(...toolWhereConditions) : undefined;
+
+    // Subquery to get tools that have at least one assignment (with access control)
+    const assignmentConditions = accessibleAgentIds
+      ? and(
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+          inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
+        )
+      : eq(schema.agentToolsTable.toolId, schema.toolsTable.id);
+
+    // Count subquery for assignment count (with access control)
+    const assignmentCountSubquery = sql<number>`(
+      SELECT COUNT(*) FROM ${schema.agentToolsTable}
+      WHERE ${assignmentConditions}
+    )`;
+
+    // Determine the ORDER BY clause based on sorting params
+    const direction = sorting?.sortDirection === "asc" ? asc : desc;
+    let orderByClause: ReturnType<typeof asc>;
+
+    switch (sorting?.sortBy) {
+      case "name":
+        orderByClause = direction(schema.toolsTable.name);
+        break;
+      case "origin":
+        // Sort by catalogId (null values for LLM Proxy)
+        orderByClause = direction(
+          sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
+        );
+        break;
+      case "assignmentCount":
+        orderByClause = direction(assignmentCountSubquery);
+        break;
+      default:
+        orderByClause = direction(schema.toolsTable.createdAt);
+        break;
+    }
+
+    // Query for tools that have at least one assignment
+    const toolsWithCount = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+        catalogId: schema.toolsTable.catalogId,
+        mcpServerId: schema.toolsTable.mcpServerId,
+        mcpServerName: schema.mcpServersTable.name,
+        mcpServerCatalogId: schema.mcpServersTable.catalogId,
+        createdAt: schema.toolsTable.createdAt,
+        updatedAt: schema.toolsTable.updatedAt,
+        assignmentCount: assignmentCountSubquery,
+      })
+      .from(schema.toolsTable)
+      .leftJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(
+        and(
+          toolWhereClause,
+          // Only tools with at least one assignment
+          sql`EXISTS (
+            SELECT 1 FROM ${schema.agentToolsTable}
+            WHERE ${assignmentConditions}
+          )`,
+        ),
+      )
+      .orderBy(orderByClause)
+      .limit(pagination.limit ?? 20)
+      .offset(pagination.offset ?? 0);
+
+    // Get total count
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          toolWhereClause,
+          sql`EXISTS (
+            SELECT 1 FROM ${schema.agentToolsTable}
+            WHERE ${assignmentConditions}
+          )`,
+        ),
+      );
+
+    if (toolsWithCount.length === 0) {
+      return createPaginatedResult([], 0, {
+        limit: pagination.limit ?? 20,
+        offset: pagination.offset ?? 0,
+      });
+    }
+
+    // Get all assignments for these tools in one query
+    const toolIds = toolsWithCount.map((t) => t.id as string);
+    const assignmentWhereConditions = [
+      inArray(schema.agentToolsTable.toolId, toolIds),
+    ];
+
+    // Apply access control to assignments
+    if (accessibleAgentIds) {
+      assignmentWhereConditions.push(
+        inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
+      );
+    }
+
+    // Aliases for credential source and execution source MCP servers and their owners
+    const credentialMcpServerAlias = alias(
+      schema.mcpServersTable,
+      "credentialMcpServer",
+    );
+    const credentialOwnerAlias = alias(schema.usersTable, "credentialOwner");
+    const executionMcpServerAlias = alias(
+      schema.mcpServersTable,
+      "executionMcpServer",
+    );
+    const executionOwnerAlias = alias(schema.usersTable, "executionOwner");
+
+    const assignments = await db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        agentToolId: schema.agentToolsTable.id,
+        agentId: schema.agentsTable.id,
+        agentName: schema.agentsTable.name,
+        credentialSourceMcpServerId:
+          schema.agentToolsTable.credentialSourceMcpServerId,
+        credentialOwnerEmail: credentialOwnerAlias.email,
+        executionSourceMcpServerId:
+          schema.agentToolsTable.executionSourceMcpServerId,
+        executionOwnerEmail: executionOwnerAlias.email,
+        useDynamicTeamCredential:
+          schema.agentToolsTable.useDynamicTeamCredential,
+        responseModifierTemplate:
+          schema.agentToolsTable.responseModifierTemplate,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        credentialMcpServerAlias,
+        eq(
+          schema.agentToolsTable.credentialSourceMcpServerId,
+          credentialMcpServerAlias.id,
+        ),
+      )
+      .leftJoin(
+        credentialOwnerAlias,
+        eq(credentialMcpServerAlias.ownerId, credentialOwnerAlias.id),
+      )
+      .leftJoin(
+        executionMcpServerAlias,
+        eq(
+          schema.agentToolsTable.executionSourceMcpServerId,
+          executionMcpServerAlias.id,
+        ),
+      )
+      .leftJoin(
+        executionOwnerAlias,
+        eq(executionMcpServerAlias.ownerId, executionOwnerAlias.id),
+      )
+      .where(and(...assignmentWhereConditions));
+
+    // Group assignments by tool ID
+    const assignmentsByToolId = new Map<
+      string,
+      Array<{
+        agentToolId: string;
+        agent: { id: string; name: string };
+        credentialSourceMcpServerId: string | null;
+        credentialOwnerEmail: string | null;
+        executionSourceMcpServerId: string | null;
+        executionOwnerEmail: string | null;
+        useDynamicTeamCredential: boolean;
+        responseModifierTemplate: string | null;
+      }>
+    >();
+
+    for (const assignment of assignments) {
+      const existing = assignmentsByToolId.get(assignment.toolId) || [];
+
+      // Check if user has access to the credential MCP server
+      // If not accessible, don't include the owner email (frontend will show "Owner outside your team")
+      const credentialServerAccessible =
+        !accessibleMcpServerIds ||
+        !assignment.credentialSourceMcpServerId ||
+        accessibleMcpServerIds.has(assignment.credentialSourceMcpServerId);
+      const executionServerAccessible =
+        !accessibleMcpServerIds ||
+        !assignment.executionSourceMcpServerId ||
+        accessibleMcpServerIds.has(assignment.executionSourceMcpServerId);
+
+      existing.push({
+        agentToolId: assignment.agentToolId,
+        agent: {
+          id: assignment.agentId,
+          name: assignment.agentName,
+        },
+        credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
+        credentialOwnerEmail: credentialServerAccessible
+          ? assignment.credentialOwnerEmail
+          : null,
+        executionSourceMcpServerId: assignment.executionSourceMcpServerId,
+        executionOwnerEmail: executionServerAccessible
+          ? assignment.executionOwnerEmail
+          : null,
+        useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+        responseModifierTemplate: assignment.responseModifierTemplate,
+      });
+      assignmentsByToolId.set(assignment.toolId, existing);
+    }
+
+    // Build the final result
+    const result: ToolWithAssignments[] = toolsWithCount.map((tool) => ({
+      id: tool.id as string,
+      name: tool.name as string,
+      description: tool.description as string | null,
+      parameters: (tool.parameters as Record<string, unknown>) ?? {},
+      catalogId: tool.catalogId as string | null,
+      mcpServerId: tool.mcpServerId as string | null,
+      mcpServerName: tool.mcpServerName as string | null,
+      mcpServerCatalogId: tool.mcpServerCatalogId as string | null,
+      createdAt: tool.createdAt as Date,
+      updatedAt: tool.updatedAt as Date,
+      assignmentCount: Number(tool.assignmentCount),
+      assignments: assignmentsByToolId.get(tool.id as string) || [],
+    }));
+
+    return createPaginatedResult(result, Number(total), {
+      limit: pagination.limit ?? 20,
+      offset: pagination.offset ?? 0,
+    });
   }
 }
 

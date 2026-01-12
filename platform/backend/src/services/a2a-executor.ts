@@ -10,6 +10,13 @@ export interface A2AExecuteParams {
   message: string;
   organizationId: string;
   userId: string;
+  /** Session ID to group related LLM requests together in logs */
+  sessionId?: string;
+  /**
+   * Parent delegation chain (colon-separated prompt IDs).
+   * The current promptId will be appended to form the new chain.
+   */
+  parentDelegationChain?: string;
 }
 
 export interface A2AExecuteResult {
@@ -30,7 +37,19 @@ export interface A2AExecuteResult {
 export async function executeA2AMessage(
   params: A2AExecuteParams,
 ): Promise<A2AExecuteResult> {
-  const { promptId, message, organizationId, userId } = params;
+  const {
+    promptId,
+    message,
+    organizationId,
+    userId,
+    sessionId,
+    parentDelegationChain,
+  } = params;
+
+  // Build delegation chain: append current promptId to parent chain
+  const delegationChain = parentDelegationChain
+    ? `${parentDelegationChain}:${promptId}`
+    : promptId;
 
   // Fetch prompt
   const prompt = await PromptModel.findById(promptId);
@@ -66,6 +85,7 @@ export async function executeA2AMessage(
   }
 
   // Fetch MCP tools for the agent (including agent tools for the prompt)
+  // Pass sessionId and delegationChain so nested agent calls are grouped together
   const mcpTools = await getChatMcpTools({
     agentName: agent.name,
     agentId: agent.id,
@@ -73,6 +93,8 @@ export async function executeA2AMessage(
     userIsProfileAdmin: true, // A2A agents have full access
     promptId,
     organizationId,
+    sessionId,
+    delegationChain,
   });
 
   logger.info(
@@ -89,12 +111,16 @@ export async function executeA2AMessage(
   );
 
   // Create LLM model using shared service
+  // Pass sessionId to group A2A requests with the calling session
+  // Pass delegationChain as externalAgentId so prompt names appear in logs
   const { model } = await createLLMModelForAgent({
     organizationId,
     userId,
     agentId: agent.id,
     model: selectedModel,
     provider,
+    sessionId,
+    externalAgentId: delegationChain,
   });
 
   // Execute with AI SDK using streamText (required for long-running requests)

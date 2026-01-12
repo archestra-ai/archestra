@@ -5,6 +5,7 @@ import {
   TimeInMs,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { uniqBy } from "lodash-es";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -103,19 +104,20 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
   const data = (await response.json()) as {
     data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];
   };
-
-  // Filter to only chat-compatible models
-  const chatModelPrefixes = ["gpt-", "o1-", "o3-", "o4-"];
-  const excludePatterns = ["-instruct", "-embedding", "-tts", "-whisper"];
+  const excludePatterns = [
+    "instruct",
+    "embedding",
+    "tts",
+    "whisper",
+    "image",
+    "audio",
+    "sora",
+    "dall-e",
+  ];
 
   return data.data
     .filter((model) => {
       const id = model.id.toLowerCase();
-      // Must start with a chat model prefix
-      const hasValidPrefix = chatModelPrefixes.some((prefix) =>
-        id.startsWith(prefix),
-      );
-      if (!hasValidPrefix) return false;
 
       // Must not contain excluded patterns
       const hasExcludedPattern = excludePatterns.some((pattern) =>
@@ -189,6 +191,98 @@ export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
         provider: "gemini" as const,
       };
     });
+}
+
+/**
+ * Fetch models from vLLM API
+ * vLLM exposes an OpenAI-compatible /models endpoint
+ * See: https://docs.vllm.ai/en/latest/features/openai_api.html
+ */
+async function fetchVllmModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.vllm.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      // vLLM typically doesn't require API keys, but pass it if provided
+      Authorization: apiKey ? `Bearer ${apiKey}` : "Bearer EMPTY",
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch vLLM models",
+    );
+    throw new Error(`Failed to fetch vLLM models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      object: string;
+      created?: number;
+      owned_by?: string;
+      root?: string;
+      parent?: string | null;
+    }>;
+  };
+
+  // vLLM returns all loaded models, no filtering needed
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "vllm" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }));
+}
+
+/**
+ * Fetch models from Ollama API
+ * Ollama exposes an OpenAI-compatible /models endpoint
+ * See: https://github.com/ollama/ollama/blob/main/docs/openai.md
+ */
+async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.ollama.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      // Ollama typically doesn't require API keys, but pass it if provided
+      Authorization: apiKey ? `Bearer ${apiKey}` : "Bearer EMPTY",
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Ollama models",
+    );
+    throw new Error(`Failed to fetch Ollama models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      object: string;
+      created?: number;
+      owned_by?: string;
+    }>;
+  };
+
+  // Ollama returns all locally available models, no filtering needed
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "ollama" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }));
 }
 
 /**
@@ -300,6 +394,12 @@ async function getProviderApiKey({
       return config.chat.openai.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "vllm":
+      // vLLM typically doesn't require API keys, return empty or configured key
+      return config.chat.vllm.apiKey || "";
+    case "ollama":
+      // Ollama typically doesn't require API keys, return empty or configured key
+      return config.chat.ollama.apiKey || "";
     default:
       return null;
   }
@@ -313,6 +413,8 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
+  vllm: fetchVllmModels,
+  ollama: fetchOllamaModels,
 };
 
 /**
@@ -345,9 +447,13 @@ export async function fetchModelsForProvider({
   });
 
   const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
+  // vLLM and Ollama typically don't require API keys
+  const isVllm = provider === "vllm";
+  const isOllama = provider === "ollama";
 
   // For Gemini with Vertex AI, we don't need an API key - authentication is via ADC
-  if (!apiKey && !vertexAiEnabled) {
+  // For vLLM and Ollama, API key is optional
+  if (!apiKey && !vertexAiEnabled && !isVllm && !isOllama) {
     logger.debug(
       { provider, organizationId },
       "No API key available for provider",
@@ -379,6 +485,12 @@ export async function fetchModelsForProvider({
         // Use standard Gemini API with API key
         models = await modelFetchers[provider](apiKey);
       }
+    } else if (provider === "vllm") {
+      // vLLM doesn't require API key, pass empty or configured key
+      models = await modelFetchers[provider](apiKey || "EMPTY");
+    } else if (provider === "ollama") {
+      // Ollama doesn't require API key, pass empty or configured key
+      models = await modelFetchers[provider](apiKey || "EMPTY");
     }
     await cacheManager.set(cacheKey, models, CHAT_MODELS_CACHE_TTL_MS);
     return models;
@@ -432,7 +544,9 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning chat models",
       );
 
-      return reply.send(models);
+      return reply.send(
+        uniqBy(models, (model) => `${model.provider}:${model.id}`),
+      );
     },
   );
 };

@@ -1,6 +1,7 @@
 import type { archestraApiTypes } from "@shared";
 import { toPath } from "lodash-es";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
+import { CaseSensitiveTooltip } from "@/components/case-sensitive-tooltip";
 import { CodeText } from "@/components/code-text";
 import { DebouncedInput } from "@/components/debounced-input";
 import {
@@ -149,11 +150,11 @@ function AttributePathExamples() {
   );
 }
 
-export function ToolResultPolicies({
-  agentTool,
-}: {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
-}) {
+type ToolForPolicies = {
+  id: string;
+};
+
+export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
   const toolResultPoliciesCreateMutation =
     useToolResultPoliciesCreateMutation();
   const {
@@ -161,7 +162,7 @@ export function ToolResultPolicies({
     data: resultPolicies,
   } = useToolResultPolicies();
   const { data: operators } = useOperators();
-  const allPolicies = byProfileToolId[agentTool.tool.id] || [];
+  const allPolicies = byProfileToolId[tool.id] || [];
   // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
   const policies = allPolicies.filter((policy) => policy.conditions.length > 0);
   const toolResultPoliciesUpdateMutation =
@@ -172,7 +173,7 @@ export function ToolResultPolicies({
 
   // Derive treatment from policies (default policy with empty conditions)
   const toolResultTreatment = getResultTreatmentFromPolicies(
-    agentTool.tool.id,
+    tool.id,
     resultPolicies,
   );
 
@@ -208,7 +209,7 @@ export function ToolResultPolicies({
             onValueChange={(value) => {
               if (value === toolResultTreatment) return;
               resultPolicyMutation.mutate({
-                toolId: agentTool.tool.id,
+                toolId: tool.id,
                 treatment: value as ToolResultTreatment,
               });
             }}
@@ -228,12 +229,13 @@ export function ToolResultPolicies({
       </div>
       {policies.map((policy) => (
         <PolicyCard key={policy.id}>
-          <div className="flex flex-col gap-2 w-full">
-            <div className="flex flex-row items-center gap-4 justify-between">
-              <div className="flex flex-row items-center gap-4">
-                If
+          <div className="flex flex-col gap-3 w-full">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm">If</span>
                 <DebouncedInput
                   placeholder="Attribute path"
+                  className="w-[140px]"
                   initialValue={policy.attributePath}
                   onChange={(attributePath) =>
                     toolResultPoliciesUpdateMutation.mutate({
@@ -267,6 +269,7 @@ export function ToolResultPolicies({
                 </Select>
                 <DebouncedInput
                   placeholder="Value"
+                  className="w-[120px]"
                   initialValue={policy.value}
                   onChange={(value) =>
                     toolResultPoliciesUpdateMutation.mutate({
@@ -275,6 +278,7 @@ export function ToolResultPolicies({
                     })
                   }
                 />
+                <CaseSensitiveTooltip />
               </div>
               <Button
                 variant="ghost"
@@ -330,7 +334,7 @@ export function ToolResultPolicies({
         className="w-full"
         onClick={() =>
           toolResultPoliciesCreateMutation.mutate({
-            toolId: agentTool.tool.id,
+            toolId: tool.id,
             attributePath: "result",
           })
         }

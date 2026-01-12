@@ -3,6 +3,7 @@
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
 import { type APIRequestContext, test as base } from "@playwright/test";
+import type { SupportedProvider } from "@shared";
 import {
   API_BASE_URL,
   editorAuthFile,
@@ -496,7 +497,7 @@ const createOptimizationRule = async (
   rule: {
     entityType: "organization" | "team" | "agent";
     entityId: string;
-    provider: "openai" | "anthropic" | "gemini";
+    provider: SupportedProvider;
     conditions: OptimizationRuleCondition[];
     targetModel: string;
     enabled?: boolean;
@@ -607,7 +608,7 @@ const getLimits = async (
 const createTokenPrice = async (
   request: APIRequestContext,
   tokenPrice: {
-    provider: "openai" | "anthropic" | "gemini";
+    provider: SupportedProvider;
     model: string;
     pricePerMillionInput: string;
     pricePerMillionOutput: string;

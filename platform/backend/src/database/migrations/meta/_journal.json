@@ -771,6 +771,13 @@
       "when": 1767884255010,
       "tag": "0109_remove_block_always_default",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1768045332938,
+      "tag": "0110_melted_grim_reaper",
+      "breakpoints": true
     }
   ]
 }

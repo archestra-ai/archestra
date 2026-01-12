@@ -2,23 +2,39 @@ import { isAgentTool, isArchestraMcpServerTool } from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
+import type { CallPolicyCondition } from "@/database/schemas/tool-invocation-policy";
 import logger from "@/logging";
-import type { GlobalToolPolicy, ToolInvocation } from "@/types";
+import type {
+  AutonomyPolicyOperator,
+  GlobalToolPolicy,
+  ToolInvocation,
+} from "@/types";
 
 type EvaluationResult = {
   isAllowed: boolean;
   reason: string;
 };
 
-function matchContextCondition(path, value, operator, context) {
-  let contextValue;
+export type PolicyEvaluationContext = {
+  profileId: string;
+  teamId: string | null;
+  headers: Record<string, string>;
+};
+
+function matchContextCondition(
+  path: string,
+  value: string,
+  operator: AutonomyPolicyOperator.SupportedOperator,
+  context: PolicyEvaluationContext,
+): boolean {
+  let contextValue: string | null;
   if (path === "profile") {
     contextValue = context.profileId;
   } else if (path === "team") {
     contextValue = context.teamId;
   } else if (/^headers\./.test(path)) {
-    const [, name] = path.split('.');
-    if (!context.headers.hasOwnProperty(name)) {
+    const [, name] = path.split(".");
+    if (!Object.prototype.hasOwnProperty.call(context.headers, name)) {
       return false;
     }
     contextValue = context.headers[name];
@@ -35,52 +51,58 @@ function matchContextCondition(path, value, operator, context) {
   }
 }
 
-function matchInputCondition(key, value, operator, input) {
-    const argumentValue = get(input, key);
-    if (argumentValue === undefined) return false;
+function matchInputCondition(
+  key: string,
+  value: string,
+  operator: AutonomyPolicyOperator.SupportedOperator,
+  // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+  input: Record<string, any>,
+): boolean {
+  const argumentValue = get(input, key);
+  if (argumentValue === undefined) return false;
 
-    switch (operator) {
-      case "endsWith":
-        return (
-          typeof argumentValue === "string" &&
-          argumentValue.endsWith(value)
-        );
-      case "startsWith":
-        return (
-          typeof argumentValue === "string" &&
-          argumentValue.startsWith(value)
-        );
-      case "contains":
-        return (
-          typeof argumentValue === "string" &&
-          argumentValue.includes(value)
-        );
-      case "notContains":
-        return (
-          typeof argumentValue === "string" &&
-          !argumentValue.includes(value)
-        );
-      case "equal":
-        return argumentValue === value;
-      case "notEqual":
-        return argumentValue !== value;
-      case "regex":
-        return (
-          typeof argumentValue === "string" &&
-          new RegExp(value).test(argumentValue)
-        );
-      default:
-        return false;
-    }
+  switch (operator) {
+    case "endsWith":
+      return (
+        typeof argumentValue === "string" && argumentValue.endsWith(value)
+      );
+    case "startsWith":
+      return (
+        typeof argumentValue === "string" && argumentValue.startsWith(value)
+      );
+    case "contains":
+      return (
+        typeof argumentValue === "string" && argumentValue.includes(value)
+      );
+    case "notContains":
+      return (
+        typeof argumentValue === "string" && !argumentValue.includes(value)
+      );
+    case "equal":
+      return argumentValue === value;
+    case "notEqual":
+      return argumentValue !== value;
+    case "regex":
+      return (
+        typeof argumentValue === "string" && new RegExp(value).test(argumentValue)
+      );
+    default:
+      return false;
+  }
 }
 
-function matchCondition({key, value, operator}, input, context) {
-  const [scope, ...path] = key.split('.');
-  if (scope === 'context') {
-    return matchContextCondition(path, value, operator, context)
-  } else {
-    return matchInputCondition(key, value, operator, input)
+function matchCondition(
+  condition: CallPolicyCondition,
+  // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+  input: Record<string, any>,
+  context: PolicyEvaluationContext,
+): boolean {
+  const { key, value, operator } = condition;
+  const [scope, ...pathParts] = key.split(".");
+  if (scope === "context") {
+    return matchContextCondition(pathParts.join("."), value, operator, context);
   }
+  return matchInputCondition(key, value, operator, input);
 }
 
 class ToolInvocationPolicyModel {
@@ -260,7 +282,7 @@ class ToolInvocationPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
       toolInput: Record<string, any>;
     }>,
-    context: { profileId: string, teamId: string, headers: Record<string, string> },
+    context: PolicyEvaluationContext,
     isContextTrusted: boolean,
     globalToolPolicy: GlobalToolPolicy,
   ): Promise<EvaluationResult & { toolCallName?: string }> {

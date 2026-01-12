@@ -1,6 +1,13 @@
 import { describe, expect, test } from "@/test";
 import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
+import type { PolicyEvaluationContext } from "./tool-invocation-policy";
+
+const mockContext: PolicyEvaluationContext = {
+  profileId: "test-profile-id",
+  teamId: null,
+  headers: {},
+};
 
 describe("ToolInvocationPolicyModel", () => {
   describe("evaluateBatch", () => {
@@ -21,6 +28,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "tool-1", toolInput: { arg: "value1" } },
           { toolCallName: "tool-2", toolInput: { arg: "value2" } },
         ],
+        mockContext,
         true,
         "restrictive",
       );
@@ -64,6 +72,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "tool-1", toolInput: { email: "bad@evil.com" } },
           { toolCallName: "tool-2", toolInput: { email: "bad@evil.com" } },
         ],
+        mockContext,
         true,
         "restrictive",
       );
@@ -85,6 +94,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "archestra__whoami", toolInput: {} },
           { toolCallName: "archestra__get_profile", toolInput: { id: "123" } },
         ],
+        mockContext,
         false, // untrusted context
         "restrictive",
       );
@@ -117,6 +127,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "archestra__whoami", toolInput: {} },
           { toolCallName: "regular-tool", toolInput: { action: "delete" } },
         ],
+        mockContext,
         true,
         "restrictive",
       );
@@ -134,6 +145,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [],
+        mockContext,
         false,
         "restrictive",
       );
@@ -168,6 +180,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "permissive-tool", toolInput: { arg: "value" } }],
+        mockContext,
         false, // untrusted context
         "restrictive",
       );
@@ -190,6 +203,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "strict-tool", toolInput: { arg: "value" } }],
+        mockContext,
         false, // untrusted context
         "restrictive",
       );
@@ -212,6 +226,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "lenient-tool", toolInput: { arg: "value" } }],
+        mockContext,
         false, // untrusted context
         "permissive",
       );
@@ -240,6 +255,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "blocked-tool", toolInput: { action: "delete" } }],
+        mockContext,
         true, // trusted context
         "permissive", // YOLO mode
       );
@@ -274,6 +290,7 @@ describe("ToolInvocationPolicyModel", () => {
             toolInput: { path: "/safe/file.txt" },
           },
         ],
+        mockContext,
         false,
         "restrictive",
       );
@@ -314,6 +331,7 @@ describe("ToolInvocationPolicyModel", () => {
             toolInput: { body: "malicious content" },
           },
         ],
+        mockContext,
         false,
         "restrictive",
       );
@@ -373,6 +391,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "blocked-tool", toolInput: { dangerous: "true" } },
           { toolCallName: "another-blocked", toolInput: { bad: "yes" } },
         ],
+        mockContext,
         true,
         "restrictive",
       );
@@ -400,17 +419,19 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { status: "active" } }],
-          true,
+        agent.id,
+        [{ toolCallName: "test-tool", toolInput: { status: "active" } }],
+        mockContext,
+        true,
           "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { status: "inactive" } }],
-          true,
+        agent.id,
+        [{ toolCallName: "test-tool", toolInput: { status: "inactive" } }],
+        mockContext,
+        true,
           "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -435,17 +456,19 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { env: "development" } }],
-          true,
+        agent.id,
+        [{ toolCallName: "test-tool", toolInput: { env: "development" } }],
+        mockContext,
+        true,
           "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { env: "production" } }],
-          true,
+        agent.id,
+        [{ toolCallName: "test-tool", toolInput: { env: "production" } }],
+        mockContext,
+        true,
           "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -470,27 +493,29 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { message: "This contains a secret value" },
             },
           ],
-          true,
+        mockContext,
+        true,
           "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { message: "This is safe content" },
             },
           ],
-          true,
+        mockContext,
+        true,
           "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -515,27 +540,29 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { message: "This is not yet ready" },
             },
           ],
-          true,
+        mockContext,
+        true,
           "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { message: "This is approved content" },
             },
           ],
-          true,
+        mockContext,
+        true,
           "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -558,22 +585,24 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { path: "/tmp/file.txt" } }],
-          true,
+        agent.id,
+        [{ toolCallName: "test-tool", toolInput: { path: "/tmp/file.txt" } }],
+        mockContext,
+        true,
           "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { path: "/home/file.txt" },
             },
           ],
-          true,
+        mockContext,
+        true,
           "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -596,17 +625,19 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { file: "malware.exe" } }],
-          true,
+        agent.id,
+        [{ toolCallName: "test-tool", toolInput: { file: "malware.exe" } }],
+        mockContext,
+        true,
           "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { file: "document.pdf" } }],
-          true,
+        agent.id,
+        [{ toolCallName: "test-tool", toolInput: { file: "document.pdf" } }],
+        mockContext,
+        true,
           "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -635,27 +666,29 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { email: "user@example.com" },
             },
           ],
-          true,
+        mockContext,
+        true,
           "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { email: "user@other.com" },
             },
           ],
-          true,
+        mockContext,
+        true,
           "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -682,8 +715,8 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: {
@@ -691,20 +724,22 @@ describe("ToolInvocationPolicyModel", () => {
               },
             },
           ],
-          true,
+        mockContext,
+        true,
           "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { user: { email: "user@allowed.com", name: "User" } },
             },
           ],
-          true,
+        mockContext,
+        true,
           "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -734,9 +769,10 @@ describe("ToolInvocationPolicyModel", () => {
         // Since the condition doesn't match (missing argument), the specific policy doesn't apply
         // No default policy exists, so falls back to globalToolPolicy (restrictive = blocked)
         const result = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
-          false, // context is untrusted
+        agent.id,
+        [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
+        mockContext,
+        false, // context is untrusted
           "restrictive",
         );
 
@@ -763,9 +799,10 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const result = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
-          true, // context is trusted
+        agent.id,
+        [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
+        mockContext,
+        true, // context is trusted
           "restrictive",
         );
 
@@ -803,14 +840,15 @@ describe("ToolInvocationPolicyModel", () => {
 
         // Specific policy matches - should be allowed even though default blocks
         const result = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { path: "/safe/file.txt" },
             },
           ],
-          false, // untrusted context
+        mockContext,
+        false, // untrusted context
           "restrictive",
         );
 
@@ -847,14 +885,15 @@ describe("ToolInvocationPolicyModel", () => {
 
         // Specific policy doesn't match, fall back to default allow
         const result = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [
+        agent.id,
+        [
             {
               toolCallName: "test-tool",
               toolInput: { path: "/normal/file.txt" },
             },
           ],
-          false, // untrusted context
+        mockContext,
+        false, // untrusted context
           "restrictive",
         );
 

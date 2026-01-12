@@ -348,7 +348,7 @@ class TrustedDataPolicyModel {
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
     globalToolPolicy: GlobalToolPolicy = "restrictive",
-    context: PolicyEvaluationContext,
+    context: PolicyEvaluationContext = { teamIds: [] },
   ): Promise<{
     isTrusted: boolean;
     isBlocked: boolean;

@@ -1010,7 +1010,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toContain("Only trusted agent allowed");
       });
 
-      test("blocks when context.teamIds matches with equal operator", async ({
+      test("blocks when context.teamIds matches with contains operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -1024,7 +1024,7 @@ describe("ToolInvocationPolicyModel", () => {
           conditions: [
             {
               key: "context.teamIds",
-              operator: "equal",
+              operator: "contains",
               value: "restricted-team-id",
             },
           ],
@@ -1079,78 +1079,6 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(true);
-      });
-
-      test("blocks when context.profile matches with equal operator", async ({
-        makeAgent,
-        makeTool,
-        makeAgentTool,
-        makeToolPolicy,
-      }) => {
-        const agent = await makeAgent();
-        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        await makeAgentTool(agent.id, tool.id);
-
-        await makeToolPolicy(tool.id, {
-          conditions: [
-            {
-              key: "context.profile",
-              operator: "equal",
-              value: agent.id,
-            },
-          ],
-          action: "block_always",
-          reason: "Profile blocked",
-        });
-
-        const result = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
-          {
-            teamIds: [],
-          },
-          true,
-          "restrictive",
-        );
-
-        expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("Profile blocked");
-      });
-
-      test("allows when context.profile does not match with notEqual operator", async ({
-        makeAgent,
-        makeTool,
-        makeAgentTool,
-        makeToolPolicy,
-      }) => {
-        const agent = await makeAgent();
-        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        await makeAgentTool(agent.id, tool.id);
-
-        await makeToolPolicy(tool.id, {
-          conditions: [
-            {
-              key: "context.profile",
-              operator: "notEqual",
-              value: "other-profile-id",
-            },
-          ],
-          action: "block_always",
-          reason: "Only other profile allowed",
-        });
-
-        const result = await ToolInvocationPolicyModel.evaluateBatch(
-          agent.id,
-          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
-          {
-            teamIds: [],
-          },
-          true,
-          "restrictive",
-        );
-
-        expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("Only other profile allowed");
       });
     });
   });

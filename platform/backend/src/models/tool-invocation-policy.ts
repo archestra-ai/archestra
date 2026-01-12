@@ -10,6 +10,79 @@ type EvaluationResult = {
   reason: string;
 };
 
+function matchContextCondition(path, value, operator, context) {
+  let contextValue;
+  if (path === "profile") {
+    contextValue = context.profileId;
+  } else if (path === "team") {
+    contextValue = context.teamId;
+  } else if (/^headers\./.test(path)) {
+    const [, name] = path.split('.');
+    if (!context.headers.hasOwnProperty(name)) {
+      return false;
+    }
+    contextValue = context.headers[name];
+  } else {
+    return false;
+  }
+  switch (operator) {
+    case "equal":
+      return contextValue === value;
+    case "notEqual":
+      return contextValue !== value;
+    default:
+      return false;
+  }
+}
+
+function matchInputCondition(key, value, operator, input) {
+    const argumentValue = get(input, key);
+    if (argumentValue === undefined) return false;
+
+    switch (operator) {
+      case "endsWith":
+        return (
+          typeof argumentValue === "string" &&
+          argumentValue.endsWith(value)
+        );
+      case "startsWith":
+        return (
+          typeof argumentValue === "string" &&
+          argumentValue.startsWith(value)
+        );
+      case "contains":
+        return (
+          typeof argumentValue === "string" &&
+          argumentValue.includes(value)
+        );
+      case "notContains":
+        return (
+          typeof argumentValue === "string" &&
+          !argumentValue.includes(value)
+        );
+      case "equal":
+        return argumentValue === value;
+      case "notEqual":
+        return argumentValue !== value;
+      case "regex":
+        return (
+          typeof argumentValue === "string" &&
+          new RegExp(value).test(argumentValue)
+        );
+      default:
+        return false;
+    }
+}
+
+function matchCondition({key, value, operator}, input, context) {
+  const [scope, ...path] = key.split('.');
+  if (scope === 'context') {
+    return matchContextCondition(path, value, operator, context)
+  } else {
+    return matchInputCondition(key, value, operator, input)
+  }
+}
+
 class ToolInvocationPolicyModel {
   static async create(
     policy: ToolInvocation.InsertToolInvocationPolicy,
@@ -187,6 +260,7 @@ class ToolInvocationPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
       toolInput: Record<string, any>;
     }>,
+    context: { profileId: string, teamId: string, headers: Record<string, string> },
     isContextTrusted: boolean,
     globalToolPolicy: GlobalToolPolicy,
   ): Promise<EvaluationResult & { toolCallName?: string }> {
@@ -269,44 +343,7 @@ class ToolInvocationPolicyModel {
 
       for (const policy of specificPolicies) {
         // Check if all conditions match (AND logic)
-        const conditionsMatch = policy.conditions.every((condition) => {
-          const argumentValue = get(toolInput, condition.key);
-          if (argumentValue === undefined) return false;
-
-          switch (condition.operator) {
-            case "endsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.endsWith(condition.value)
-              );
-            case "startsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.startsWith(condition.value)
-              );
-            case "contains":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.includes(condition.value)
-              );
-            case "notContains":
-              return (
-                typeof argumentValue === "string" &&
-                !argumentValue.includes(condition.value)
-              );
-            case "equal":
-              return argumentValue === condition.value;
-            case "notEqual":
-              return argumentValue !== condition.value;
-            case "regex":
-              return (
-                typeof argumentValue === "string" &&
-                new RegExp(condition.value).test(argumentValue)
-              );
-            default:
-              return false;
-          }
-        });
+        const conditionsMatch = policy.conditions.every(condition => matchCondition(condition, toolInput, context));
 
         if (!conditionsMatch) continue;
 

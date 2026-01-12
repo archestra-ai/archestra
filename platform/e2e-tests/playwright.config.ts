@@ -209,6 +209,9 @@ export default defineConfig({
       name: projectNames.apiMcpServer,
       testDir: "./tests/api",
       testMatch: testPatterns.mcpServerApiTests,
+      // Disable parallel execution so orchestrator.spec.ts and mcp-gateway.spec.ts
+      // run sequentially (one file completes before the next starts)
+      fullyParallel: false,
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state

@@ -98,6 +98,9 @@ export default function ChatPage() {
   });
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
+  const pendingFilesRef = useRef<
+    Array<{ url: string; mediaType: string; filename?: string }>
+  >([]);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -498,13 +501,38 @@ export default function ChatPage() {
       setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
 
-      // If there's a pending prompt and the conversation is empty, send it
-      if (pendingPromptRef.current && conversation.messages.length === 0) {
+      // If there's a pending prompt/files and the conversation is empty, send it
+      if (
+        (pendingPromptRef.current || pendingFilesRef.current.length > 0) &&
+        conversation.messages.length === 0
+      ) {
         const promptToSend = pendingPromptRef.current;
+        const filesToSend = pendingFilesRef.current;
         pendingPromptRef.current = undefined;
+        pendingFilesRef.current = [];
+
+        // Build message parts
+        const parts: Array<
+          | { type: "text"; text: string }
+          | { type: "file"; url: string; mediaType: string; filename?: string }
+        > = [];
+
+        if (promptToSend) {
+          parts.push({ type: "text", text: promptToSend });
+        }
+
+        for (const file of filesToSend) {
+          parts.push({
+            type: "file",
+            url: file.url,
+            mediaType: file.mediaType,
+            filename: file.filename,
+          });
+        }
+
         sendMessage({
           role: "user",
-          parts: [{ type: "text", text: promptToSend }],
+          parts,
         });
       }
     }
@@ -593,18 +621,43 @@ export default function ChatPage() {
       stop?.();
     }
 
+    const hasText = message.text?.trim();
+    const hasFiles = message.files && message.files.length > 0;
+
     if (
       !sendMessage ||
-      !message.text?.trim() ||
+      (!hasText && !hasFiles) ||
       status === "submitted" ||
       status === "streaming"
     ) {
       return;
     }
 
+    // Build message parts: text first, then file attachments
+    const parts: Array<
+      | { type: "text"; text: string }
+      | { type: "file"; url: string; mediaType: string; filename?: string }
+    > = [];
+
+    if (hasText) {
+      parts.push({ type: "text", text: message.text as string });
+    }
+
+    // Add file parts
+    if (hasFiles) {
+      for (const file of message.files) {
+        parts.push({
+          type: "file",
+          url: file.url,
+          mediaType: file.mediaType,
+          filename: file.filename,
+        });
+      }
+    }
+
     sendMessage?.({
       role: "user",
-      parts: [{ type: "text", text: message.text }],
+      parts,
     });
   };
 
@@ -621,8 +674,11 @@ export default function ChatPage() {
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
     (message, e) => {
       e.preventDefault();
+      const hasText = message.text?.trim();
+      const hasFiles = message.files && message.files.length > 0;
+
       if (
-        !message.text?.trim() ||
+        (!hasText && !hasFiles) ||
         !initialAgentId ||
         !initialModel ||
         createConversationMutation.isPending
@@ -630,8 +686,9 @@ export default function ChatPage() {
         return;
       }
 
-      // Store the message to send after conversation is created
-      pendingPromptRef.current = message.text;
+      // Store the message (text and files) to send after conversation is created
+      pendingPromptRef.current = message.text || "";
+      pendingFilesRef.current = message.files || [];
 
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(

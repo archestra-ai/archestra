@@ -429,18 +429,24 @@ export async function findCatalogItem(
 }
 
 /**
- * Find an installed MCP server by catalog ID
+ * Find an installed MCP server by catalog ID and optionally by team ID.
+ * When teamId is provided, only returns servers installed for that specific team.
  */
 export async function findInstalledServer(
   request: APIRequestContext,
   catalogId: string,
-): Promise<{ id: string; catalogId: string } | undefined> {
+  teamId?: string,
+): Promise<{ id: string; catalogId: string; teamId?: string } | undefined> {
   const response = await request.get(`${API_BASE_URL}/api/mcp_server`, {
     headers: { Origin: UI_BASE_URL },
   });
   const serversData = await response.json();
   const servers = serversData.data || serversData;
-  return servers.find((s: { catalogId: string }) => s.catalogId === catalogId);
+  return servers.find((s: { catalogId: string; teamId?: string }) => {
+    if (s.catalogId !== catalogId) return false;
+    if (teamId !== undefined && s.teamId !== teamId) return false;
+    return true;
+  });
 }
 
 /**

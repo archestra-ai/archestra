@@ -426,8 +426,12 @@ test.describe
             );
           }
 
-          // Check if already installed
-          let testServer = await findInstalledServer(request, catalogItem.id);
+          // Check if already installed for this team
+          let testServer = await findInstalledServer(
+            request,
+            catalogItem.id,
+            defaultTeam.id,
+          );
 
           // Handle existing server based on its status
           if (testServer) {
@@ -628,8 +632,12 @@ test.describe
             );
           }
 
-          // Check if already installed
-          let testServer = await findInstalledServer(request, catalogItem.id);
+          // Check if already installed for this team
+          let testServer = await findInstalledServer(
+            request,
+            catalogItem.id,
+            defaultTeam.id,
+          );
 
           // Handle existing server based on its status
           if (testServer) {

@@ -155,8 +155,12 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           );
         }
 
-        // Check if already installed
-        let testServer = await findInstalledServer(request, catalogItem.id);
+        // Check if already installed for this team
+        let testServer = await findInstalledServer(
+          request,
+          catalogItem.id,
+          defaultTeam.id,
+        );
 
         // Handle existing server based on its status
         if (testServer) {

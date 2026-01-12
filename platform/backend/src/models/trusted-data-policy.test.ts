@@ -45,12 +45,17 @@ describe("TrustedDataPolicyModel", () => {
       });
 
       // Evaluate multiple tools in bulk
-      const results = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
-        { toolName: "tool-1", toolOutput: { value: "data1" } },
-        { toolName: "tool-2", toolOutput: { status: "safe" } },
-        { toolName: "tool-3", toolOutput: { value: "data3" } },
-        { toolName: "unknown-tool", toolOutput: { value: "data4" } },
-      ]);
+      const results = await TrustedDataPolicyModel.evaluateBulk(
+        agent.id,
+        [
+          { toolName: "tool-1", toolOutput: { value: "data1" } },
+          { toolName: "tool-2", toolOutput: { status: "safe" } },
+          { toolName: "tool-3", toolOutput: { value: "data3" } },
+          { toolName: "unknown-tool", toolOutput: { value: "data4" } },
+        ],
+        "restrictive",
+        { teamIds: [] },
+      );
 
       expect(results.size).toBe(4);
 
@@ -113,10 +118,15 @@ describe("TrustedDataPolicyModel", () => {
       });
 
       // Test with spam email (should be blocked)
-      const spamResults = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
-        { toolName: "email-tool", toolOutput: { from: "user@spam.com" } },
-        { toolName: "file-tool", toolOutput: { path: "/etc/passwd" } },
-      ]);
+      const spamResults = await TrustedDataPolicyModel.evaluateBulk(
+        agent.id,
+        [
+          { toolName: "email-tool", toolOutput: { from: "user@spam.com" } },
+          { toolName: "file-tool", toolOutput: { path: "/etc/passwd" } },
+        ],
+        "restrictive",
+        { teamIds: [] },
+      );
 
       // Email with spam.com - blocked (index 0)
       const spamEmailResult = spamResults.get("0");
@@ -129,9 +139,12 @@ describe("TrustedDataPolicyModel", () => {
       expect(fileResult?.reason).toContain("Block sensitive files");
 
       // Test with safe email (should not be blocked)
-      const safeResults = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
-        { toolName: "email-tool", toolOutput: { from: "user@safe.com" } },
-      ]);
+      const safeResults = await TrustedDataPolicyModel.evaluateBulk(
+        agent.id,
+        [{ toolName: "email-tool", toolOutput: { from: "user@safe.com" } }],
+        "restrictive",
+        { teamIds: [] },
+      );
 
       const safeEmailResult = safeResults.get("0");
       expect(safeEmailResult?.isBlocked).toBe(false);
@@ -141,11 +154,16 @@ describe("TrustedDataPolicyModel", () => {
     test("handles Archestra tools in bulk", async ({ makeAgent }) => {
       const agent = await makeAgent();
 
-      const results = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
-        { toolName: "archestra__whoami", toolOutput: { user: "test" } },
-        { toolName: "regular-tool", toolOutput: { data: "test" } },
-        { toolName: "archestra__create_profile", toolOutput: { id: "123" } },
-      ]);
+      const results = await TrustedDataPolicyModel.evaluateBulk(
+        agent.id,
+        [
+          { toolName: "archestra__whoami", toolOutput: { user: "test" } },
+          { toolName: "regular-tool", toolOutput: { data: "test" } },
+          { toolName: "archestra__create_profile", toolOutput: { id: "123" } },
+        ],
+        "restrictive",
+        { teamIds: [] },
+      );
 
       // Archestra tools should be trusted (indices 0 and 2)
       const whoamiResult = results.get("0");
@@ -183,6 +201,8 @@ describe("TrustedDataPolicyModel", () => {
         agent.id,
         "test-tool",
         { data: "test" },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.isTrusted).toBe(true);

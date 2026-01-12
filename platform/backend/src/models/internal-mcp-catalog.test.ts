@@ -1,4 +1,6 @@
+import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
 import { describe, expect, test } from "@/test";
+import { SelectInternalMcpCatalogSchema } from "@/types/mcp-catalog";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 
 describe("InternalMcpCatalogModel", () => {
@@ -178,7 +180,8 @@ describe("InternalMcpCatalogModel", () => {
 
     test("returns empty Map when no catalog items exist", async () => {
       const nonExistentId1 = "00000000-0000-0000-0000-000000000000";
-      const nonExistentId2 = "00000000-0000-0000-0000-000000000001";
+      // Note: 00000000-0000-4000-8000-000000000001 is ARCHESTRA_MCP_CATALOG_ID (virtual)
+      const nonExistentId2 = "00000000-0000-0000-0000-000000000002";
 
       const catalogItemsMap = await InternalMcpCatalogModel.getByIds([
         nonExistentId1,
@@ -206,6 +209,36 @@ describe("InternalMcpCatalogModel", () => {
       expect(catalogItemsMap.size).toBe(1);
       expect(catalogItemsMap.has(catalog.id)).toBe(true);
       expect(catalogItemsMap.get(catalog.id)?.id).toBe(catalog.id);
+    });
+  });
+
+  describe("Virtual Archestra Catalog", () => {
+    test("virtual catalog validates against SelectInternalMcpCatalogSchema", async () => {
+      // Find the Archestra catalog via findById
+      const archestra = await InternalMcpCatalogModel.findById(
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+
+      expect(archestra).not.toBeNull();
+
+      // Validate against schema
+      const result = SelectInternalMcpCatalogSchema.safeParse(archestra);
+      expect(result.success).toBe(true);
+    });
+
+    test("findAll includes virtual Archestra catalog", async () => {
+      const catalogItems = await InternalMcpCatalogModel.findAll({
+        expandSecrets: false,
+      });
+
+      // Archestra should be the first item
+      const archestraCatalog = catalogItems.find(
+        (item) => item.id === ARCHESTRA_MCP_CATALOG_ID,
+      );
+
+      expect(archestraCatalog).toBeDefined();
+      expect(archestraCatalog?.name).toBe("Archestra");
+      expect(archestraCatalog?.serverType).toBe("builtin");
     });
   });
 });

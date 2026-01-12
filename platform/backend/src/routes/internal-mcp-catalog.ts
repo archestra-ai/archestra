@@ -14,6 +14,22 @@ import {
   UuidIdSchema,
 } from "@/types";
 
+// Match the schema from getMcpServerTools endpoint
+const ToolWithAssignedAgentCountSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  parameters: z.record(z.string(), z.any()),
+  createdAt: z.coerce.date(),
+  assignedAgentCount: z.number(),
+  assignedAgents: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  ),
+});
+
 const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/internal_mcp_catalog",
@@ -194,6 +210,35 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(catalogItem);
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/:id/tools",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogTools,
+        description:
+          "Get tools for a catalog item (including builtin Archestra tools)",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.array(ToolWithAssignedAgentCountSchema),
+        ),
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      // Verify catalog exists (including virtual Archestra catalog)
+      const catalogItem = await InternalMcpCatalogModel.findById(id);
+
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      const tools = await ToolModel.findByCatalogId(id);
+      return reply.send(tools);
     },
   );
 

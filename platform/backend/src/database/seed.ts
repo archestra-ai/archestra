@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  ARCHESTRA_MCP_CATALOG_ID,
   type PredefinedRoleName,
   testMcpServerCommand,
 } from "@shared";
@@ -394,18 +395,15 @@ async function seedDefaultRegularPrompts(): Promise<void> {
 }
 
 /**
- * Creates and assigns Archestra MCP tools to all agents
+ * Seeds Archestra MCP tools.
+ * The Archestra catalog entry is virtual (not stored in DB) and provided by InternalMcpCatalogModel.
+ * Tools are NOT automatically assigned to agents - users must assign them manually.
  */
 async function seedArchestraTools(): Promise<void> {
-  const agents = await AgentModel.findAll();
-
-  for (const agent of agents) {
-    // Assigns Archestra MCP tools, while also creating them in the database if they are missing.
-    await ToolModel.assignArchestraToolsToAgent(agent.id);
-    logger.info(
-      `✓ Assigned Archestra MCP tools to agent: ${agent.name} (${agent.id})`,
-    );
-  }
+  // Create/update Archestra tools with the catalog ID
+  // The catalog entry itself is virtual and doesn't need to be seeded
+  await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+  logger.info("✓ Seeded Archestra tools");
 }
 
 /**

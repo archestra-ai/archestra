@@ -152,14 +152,16 @@ describe("executeArchestraTool", () => {
 
       expect(result.isError).toBe(false);
       expect(result.content).toHaveLength(1);
+      // Virtual Archestra catalog is always included, so we expect 2 servers
       expect((result.content[0] as any).text).toContain(
-        "Found 1 MCP server(s)",
+        "Found 2 MCP server(s)",
       );
       expect((result.content[0] as any).text).toContain("Test Server");
+      expect((result.content[0] as any).text).toContain("Archestra");
     });
 
-    test("should return empty message when no items found", async () => {
-      // No items created, so search should return empty
+    test("should return virtual Archestra catalog when no other items exist", async () => {
+      // No items created, but virtual Archestra catalog should be returned
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         undefined,
@@ -168,7 +170,9 @@ describe("executeArchestraTool", () => {
 
       expect(result.isError).toBe(false);
 
-      expect((result.content[0] as any).text).toContain("No MCP servers found");
+      // Virtual Archestra catalog is always returned
+      expect((result.content[0] as any).text).toContain("Archestra");
+      expect((result.content[0] as any).text).toContain("builtin");
     });
 
     test("should handle search with query parameter", async ({

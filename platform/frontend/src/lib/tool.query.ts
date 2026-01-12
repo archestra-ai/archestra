@@ -67,7 +67,6 @@ export function useToolsWithAssignments({
           sortDirection: sorting?.sortDirection,
           search: filters?.search,
           origin: filters?.origin,
-          excludeArchestraTools: true,
         },
       });
       return (

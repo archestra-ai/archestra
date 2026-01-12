@@ -2,7 +2,7 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
-import { MEMBER_ROLE_NAME } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID, MEMBER_ROLE_NAME } from "@shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
@@ -69,6 +69,7 @@ interface TestFixtures {
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
   makeSsoProvider: typeof makeSsoProvider;
+  seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
 }
 
 async function _makeUser(
@@ -668,6 +669,21 @@ async function makeSsoProvider(
   return provider;
 }
 
+/**
+ * Seeds and assigns Archestra tools to an agent.
+ * The Archestra catalog entry is virtual and doesn't need to be created.
+ * This is useful for tests that need Archestra tools to be available.
+ */
+async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
+  // Seed and assign Archestra tools
+  // The catalog entry is virtual (provided by InternalMcpCatalogModel)
+  await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+  await ToolModel.assignArchestraToolsToAgent(
+    agentId,
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+}
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async ({}, use) => {
@@ -735,5 +751,8 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSsoProvider: async ({}, use) => {
     await use(makeSsoProvider);
+  },
+  seedAndAssignArchestraTools: async ({}, use) => {
+    await use(seedAndAssignArchestraTools);
   },
 });

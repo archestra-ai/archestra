@@ -7,7 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
-   useLayoutEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -26,7 +26,7 @@ import { ConversationArtifactPanel } from "@/components/chat/conversation-artifa
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
-import { QueuedMessage } from "@/components/chat/queued-message";
+import { QueuedMessagesList } from "@/components/chat/queued-messages-list";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { Button } from "@/components/ui/button";
 import {
@@ -1000,7 +1000,7 @@ export default function ChatPage() {
                                 const userPrompt = selectedPrompt.userPrompt;
                                 if (!userPrompt) return;
                                 const syntheticEvent = {
-                                  preventDefault: () => {},
+                                  preventDefault: () => { },
                                 } as React.FormEvent<HTMLFormElement>;
                                 handleInitialSubmit(
                                   { text: userPrompt, files: [] },
@@ -1097,11 +1097,11 @@ export default function ChatPage() {
                     {({ hasPermission }) => {
                       return hasPermission ===
                         undefined ? null : hasPermission ? (
-                        <McpToolsDisplay
-                          agentId={currentProfileId}
-                          className="text-xs text-muted-foreground"
-                        />
-                      ) : (
+                          <McpToolsDisplay
+                            agentId={currentProfileId}
+                            className="text-xs text-muted-foreground"
+                          />
+                        ) : (
                         <Badge variant="outline" className="text-xs my-2">
                           Unable to show the list of tools
                         </Badge>
@@ -1111,24 +1111,12 @@ export default function ChatPage() {
                 )}
                 {chatSession?.queuedMessages &&
                   chatSession.queuedMessages.length > 0 && (
-                    <div className="space-y-2">
-                      {chatSession.queuedMessages.map((queuedMsg, index) => {
-                        const textPart = queuedMsg.parts.find(
-                          (part) => part.type === "text" && "text" in part,
-                        );
-
-                        return (
-                          <QueuedMessage
-                            key={queuedMsg.id}
-                            message={
-                              textPart && "text" in textPart ? textPart.text : ""
-                            }
-                            position={index}
-                            onDelete={() => handleDeleteQueued(queuedMsg.id)}
-                            onSendNow={() => handleSendNow(queuedMsg.id)}
-                          />
-                        );
-                      })}
+                    <div className="mb-2">
+                      <QueuedMessagesList
+                        messages={chatSession.queuedMessages}
+                        onDelete={handleDeleteQueued}
+                        onSendNow={handleSendNow}
+                      />
                     </div>
                   )}
                 <ArchestraPromptInput

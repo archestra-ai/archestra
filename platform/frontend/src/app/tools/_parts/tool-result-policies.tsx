@@ -458,6 +458,10 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                       value: "mark_as_trusted",
                       label: "Mark as trusted",
                     },
+                    {
+                      value: "mark_as_untrusted",
+                      label: "Mark as untrusted",
+                    },
                     { value: "block_always", label: "Block always" },
                     {
                       value: "sanitize_with_dual_llm",

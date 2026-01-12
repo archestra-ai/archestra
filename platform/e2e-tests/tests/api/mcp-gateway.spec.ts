@@ -482,7 +482,7 @@ test.describe
           // Check if already installed
           let testServer = await findInstalledServer(request, catalogItem.id);
 
-          // If server exists but is not in success status, uninstall it to start fresh
+          // Handle existing server based on its status
           if (testServer) {
             const serverResponse = await request.get(
               `${API_BASE_URL}/api/mcp_server/${testServer.id}`,
@@ -490,12 +490,17 @@ test.describe
             );
             const serverStatus = await serverResponse.json();
 
-            if (serverStatus.localInstallationStatus !== "success") {
+            if (serverStatus.localInstallationStatus === "error") {
+              // Only uninstall if in error state - don't interrupt pending installations
               await uninstallMcpServer(request, testServer.id);
               // Wait for K8s to clean up the deployment before reinstalling
               await new Promise((resolve) => setTimeout(resolve, 5000));
               testServer = undefined;
+            } else if (serverStatus.localInstallationStatus !== "success") {
+              // Server is still installing (pending/discovering-tools) - wait for it
+              await waitForServerInstallation(request, testServer.id);
             }
+            // If already success, we'll use it as-is
           }
 
           if (!testServer) {
@@ -679,7 +684,7 @@ test.describe
           // Check if already installed
           let testServer = await findInstalledServer(request, catalogItem.id);
 
-          // If server exists but is not in success status, uninstall it to start fresh
+          // Handle existing server based on its status
           if (testServer) {
             const serverResponse = await request.get(
               `${API_BASE_URL}/api/mcp_server/${testServer.id}`,
@@ -687,12 +692,17 @@ test.describe
             );
             const serverStatus = await serverResponse.json();
 
-            if (serverStatus.localInstallationStatus !== "success") {
+            if (serverStatus.localInstallationStatus === "error") {
+              // Only uninstall if in error state - don't interrupt pending installations
               await uninstallMcpServer(request, testServer.id);
               // Wait for K8s to clean up the deployment before reinstalling
               await new Promise((resolve) => setTimeout(resolve, 5000));
               testServer = undefined;
+            } else if (serverStatus.localInstallationStatus !== "success") {
+              // Server is still installing (pending/discovering-tools) - wait for it
+              await waitForServerInstallation(request, testServer.id);
             }
+            // If already success, we'll use it as-is
           }
 
           if (!testServer) {

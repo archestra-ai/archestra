@@ -193,7 +193,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         // Check if already installed
         let testServer = await findInstalledServer(request, catalogItem.id);
 
-        // If server exists but is not in success status, uninstall it to start fresh
+        // Handle existing server based on its status
         if (testServer) {
           const statusResponse = await makeApiRequest({
             request,
@@ -202,12 +202,17 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           });
           const status = await statusResponse.json();
 
-          if (status.localInstallationStatus !== "success") {
+          if (status.localInstallationStatus === "error") {
+            // Only uninstall if in error state - don't interrupt pending installations
             await uninstallMcpServer(request, testServer.id);
             // Wait for K8s to clean up the deployment before reinstalling
             await new Promise((resolve) => setTimeout(resolve, 5000));
             testServer = undefined;
+          } else if (status.localInstallationStatus !== "success") {
+            // Server is still installing (pending/discovering-tools) - wait for it
+            await waitForMcpServerReady(request, makeApiRequest, testServer.id);
           }
+          // If already success, we'll use it as-is
         }
 
         if (!testServer) {

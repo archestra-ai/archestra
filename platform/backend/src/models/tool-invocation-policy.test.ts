@@ -901,7 +901,7 @@ describe("ToolInvocationPolicyModel", () => {
     });
 
     describe("context-based conditions", () => {
-      test("blocks when context.externalAgent matches with equal operator", async ({
+      test("blocks when context.externalAgentId matches with equal operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -914,7 +914,7 @@ describe("ToolInvocationPolicyModel", () => {
         await makeToolPolicy(tool.id, {
           conditions: [
             {
-              key: "context.externalAgent",
+              key: "context.externalAgentId",
               operator: "equal",
               value: "blocked-external-agent",
             },
@@ -939,7 +939,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toContain("External agent blocked");
       });
 
-      test("allows when context.externalAgent does not match with equal operator", async ({
+      test("allows when context.externalAgentId does not match with equal operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -952,7 +952,7 @@ describe("ToolInvocationPolicyModel", () => {
         await makeToolPolicy(tool.id, {
           conditions: [
             {
-              key: "context.externalAgent",
+              key: "context.externalAgentId",
               operator: "equal",
               value: "blocked-external-agent",
             },
@@ -976,7 +976,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.isAllowed).toBe(true);
       });
 
-      test("blocks when context.externalAgent matches with notEqual operator", async ({
+      test("blocks when context.externalAgentId matches with notEqual operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -989,7 +989,7 @@ describe("ToolInvocationPolicyModel", () => {
         await makeToolPolicy(tool.id, {
           conditions: [
             {
-              key: "context.externalAgent",
+              key: "context.externalAgentId",
               operator: "notEqual",
               value: "trusted-agent",
             },
@@ -1014,7 +1014,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toContain("Only trusted agent allowed");
       });
 
-      test("blocks when context.team matches with equal operator", async ({
+      test("blocks when context.teamIds matches with equal operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -1027,7 +1027,7 @@ describe("ToolInvocationPolicyModel", () => {
         await makeToolPolicy(tool.id, {
           conditions: [
             {
-              key: "context.team",
+              key: "context.teamIds",
               operator: "equal",
               value: "restricted-team-id",
             },
@@ -1051,7 +1051,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toContain("Team restricted");
       });
 
-      test("allows when context.team does not match any teamIds", async ({
+      test("allows when context.teamIds does not match any teamIds", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -1064,7 +1064,7 @@ describe("ToolInvocationPolicyModel", () => {
         await makeToolPolicy(tool.id, {
           conditions: [
             {
-              key: "context.team",
+              key: "context.teamIds",
               operator: "equal",
               value: "restricted-team-id",
             },

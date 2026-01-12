@@ -28,7 +28,7 @@ function matchContextCondition(
 ): boolean {
 
   // Team matching - check if value is in teamIds array
-  if (path === "teams") {
+  if (path === "teamIds") {
     switch (operator) {
       case "contains":
         return context.teamIds.includes(value);
@@ -42,7 +42,7 @@ function matchContextCondition(
   // Single value matching for other context fields
   let contextValue: string | undefined;
   if (path === "externalAgentId") {
-    contextValue = context.externalAgent;
+    contextValue = context.externalAgentId;
   } else {
     return false;
   }

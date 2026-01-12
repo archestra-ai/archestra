@@ -195,6 +195,11 @@ class ToolInvocationPolicyModel {
       "ToolInvocationPolicy.evaluateBatch: global policy",
     );
 
+    // YOLO mode: allow all tool calls immediately, skip policy evaluation
+    if (globalToolPolicy === "permissive") {
+      return { isAllowed: true, reason: "" };
+    }
+
     // Filter out Archestra tools and agent delegation tools (always allowed)
     const externalToolCalls = toolCalls.filter(
       (tc) =>
@@ -390,8 +395,8 @@ class ToolInvocationPolicyModel {
         continue; // Tool is allowed by default policy, skip global policy check
       }
 
-      // No policies exist - fall back to global policy
-      if (!isContextTrusted && globalToolPolicy !== "permissive") {
+      // No policies exist - block in untrusted context (restrictive mode only reaches here)
+      if (!isContextTrusted) {
         return {
           isAllowed: false,
           reason:

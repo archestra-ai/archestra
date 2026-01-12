@@ -1,0 +1,23 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/ollama/v1/models"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "meta-llama/Llama-3.1-8B-Instruct",
+          "object": "model",
+          "created": 1686935002,
+          "owned_by": "ollama"
+        }
+      ]
+    }
+  }
+}

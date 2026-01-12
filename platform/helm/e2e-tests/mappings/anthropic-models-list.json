@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "GET",
-    "urlPathPattern": "/v1/models.*",
+    "urlPathPattern": "/anthropic/v1/models.*",
     "headers": {
       "x-api-key": {
         "matches": ".*"

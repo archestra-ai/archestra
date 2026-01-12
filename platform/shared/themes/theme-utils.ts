@@ -3,17 +3,18 @@
  */
 
 import {
+  DARK_ONLY_THEMES,
   DEFAULT_THEME_ID,
+  LIGHT_ONLY_THEMES,
   SUPPORTED_THEMES,
-  type THEME_IDS,
 } from "./theme-config";
 import themeRegistry from "./tweakcn-themes.json";
 
 // Re-export for convenience
-export { DEFAULT_THEME_ID };
+export { DARK_ONLY_THEMES, DEFAULT_THEME_ID, LIGHT_ONLY_THEMES };
 
 // Extract theme ID type from the const tuple
-export type ThemeId = (typeof THEME_IDS)[number];
+export type ThemeId = (typeof SUPPORTED_THEMES)[number];
 
 export interface ThemeItem {
   name: ThemeId;

@@ -67,11 +67,9 @@ export function useModelsByProvider() {
  */
 export function useChatModelsQuery(conversationId?: string) {
   return useQuery({
+    // Include conversationId in cache key for invalidation when conversation changes
     queryKey: ["chat-models", conversationId],
     queryFn: async () => {
-      if (!conversationId) {
-        return [];
-      }
       const { data, error } = await getChatModels();
       if (error) {
         throw new Error(

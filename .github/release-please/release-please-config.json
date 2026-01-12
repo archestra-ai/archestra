@@ -73,23 +73,22 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "platform/shared/package.json",
+          "path": "shared/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "platform/frontend/package.json",
+          "path": "frontend/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "platform/backend/package.json",
+          "path": "backend/package.json",
           "jsonpath": "$.version"
         },
         {
-          "type": "yaml",
-          "path": "platform/helm/archestra/values.yaml",
-          "jsonpath": "$.archestra.imageTag"
+          "type": "generic",
+          "path": "helm/archestra/values.yaml"
         }
       ]
     }

@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "GET",
-    "urlPathPattern": "/v1beta/models.*"
+    "urlPathPattern": "/gemini/v1beta/models.*"
   },
   "response": {
     "status": 200,

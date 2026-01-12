@@ -210,6 +210,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUniqueUserIds]: {
     interaction: ["read"],
   },
+  [RouteId.GetInteractionSessions]: {
+    interaction: ["read"],
+  },
   [RouteId.GetOperators]: {
     policy: ["read"],
   },

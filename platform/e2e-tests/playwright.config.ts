@@ -34,7 +34,7 @@ const testPatterns = {
  * Tests to ignore in standard browser projects (chromium, firefox, webkit).
  * These tests run in their own dedicated projects for isolation.
  */
-const browserTestIgnore = [
+const _browserTestIgnore = [
   testPatterns.credentialsWithVault,
   testPatterns.ssoProviders,
 ];

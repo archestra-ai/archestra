@@ -647,6 +647,10 @@ for (const config of testConfigs) {
       const toolInvocationPolicy = await toolInvocationPolicyResponse.json();
       toolInvocationPolicyId = toolInvocationPolicy.id;
 
+      // Wait for policies to be fully active before testing
+      // This helps prevent race conditions where policies aren't immediately effective
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       // 6. Send a request with untrusted data
       const response = await makeApiRequest({
         request,

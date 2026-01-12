@@ -53,7 +53,7 @@ const dependencies = {
   ],
   // API tests should run after all UI tests to avoid DB state conflicts
   // apiProject: [projectNames.sso],
-  apiProject: [projectNames.setupTeams]
+  apiProject: [projectNames.setupTeams],
 };
 
 /**

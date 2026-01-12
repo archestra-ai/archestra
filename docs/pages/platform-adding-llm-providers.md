@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-01-02
+lastUpdated: 2026-01-12
 ---
 
 <!--
@@ -279,167 +279,262 @@ Note, that Archestra Chat uses streaming for all LLM interactions. To test non-s
 
 ## Model Capabilities
 
-Archestra automatically detects and displays model capabilities in the UI using pattern-based detection. This helps users understand what each model can do (reasoning, vision, audio, etc.) without manual configuration.
+Archestra automatically detects and displays model capabilities in the UI using **real data from the OpenRouter API** combined with intelligent fallback patterns. This provides accurate capability information without manual configuration.
 
 ### How Capabilities Work
 
-Capabilities are detected automatically based on model ID patterns. The system:
+The system uses a multi-layered detection approach:
 
-1. **Scans model IDs** against predefined regex patterns for each capability
-2. **Prioritizes matches** when multiple patterns match (reasoning > vision > multimodal > etc.)
-3. **Extracts metadata** like context window size and feature support
-4. **Displays badges** in the model selector UI with tooltips
+1. **OpenRouter API Integration** - Fetches real model data from `https://openrouter.ai/api/v1/models`
+2. **Architecture Parsing** - Extracts capabilities from OpenRouter's `architecture` field (modality, input/output modalities)
+3. **Description Analysis** - Uses NLP-style pattern matching on model descriptions
+4. **Provider-Specific Fallbacks** - Regex patterns for each provider when OpenRouter data is unavailable
+5. **Caching** - 30-minute cache with stale-while-revalidate pattern for performance
+
+### Capability Detection Flow
+
+```
+getModelCapabilities(modelId, provider)
+    │
+    ├─► fetchModelCapabilitiesFromOpenRouter(modelId)
+    │       │
+    │       └─► getOpenRouterModelById(modelId)
+    │               │
+    │               └─► [Cache Hit?] → Return cached model
+    │                       │
+    │                       └─► [Cache Miss] → fetchAllOpenRouterModels()
+    │                                                       │
+    │                                                       └─► OpenRouter API (with retry/backoff)
+    │
+    ├─► [OpenRouter Data Available?] → resolveCapabilitiesFromModel(model)
+    │       │
+    │       ├─► parseCapabilitiesFromArchitecture(...)
+    │       ├─► parseCapabilitiesFromDescription(...)
+    │       └─► applyFallbackPatterns(modelId, "default", ...)
+    │
+    └─► [No OpenRouter Data] → resolveFallbackCapabilities(modelId, provider)
+            │
+            └─► applyFallbackPatterns(modelId, provider, ...)
+
+```
 
 ### Available Capabilities
 
 The platform supports 15 capability categories:
 
-- **reasoning**: Advanced reasoning models (Claude Sonnet, GPT-4o, Gemini Thinking)
-- **vision**: Image/visual understanding capabilities
-- **multimodal**: Multi-modal input support
-- **audio**: Audio processing capabilities
-- **functionCalling**: Function/tool calling support
-- **jsonMode**: JSON mode support
-- **streaming**: Streaming response support
-- **highContext**: Large context windows (128K+ tokens)
-- **highSpeed**: Fast inference models
-- **highAccuracy**: High-accuracy models
-- **code**: Code generation capabilities
-- **math**: Mathematical reasoning capabilities
-- **creative**: Creative writing capabilities
-- **instructionFollowing**: Strong instruction following
+| Capability | Icon | Description |
+|------------|------|-------------|
+| `reasoning` | 🧠 | Extended chain-of-thought reasoning |
+| `vision` | 👁️ | Can analyze and understand images |
+| `multimodal` | 🔮 | Supports mixed inputs (text, images, audio) |
+| `audio` | 🎤 | Can process audio input/output |
+| `code` | 💻 | Optimized for code tasks |
+| `chat` | 💬 | General conversation |
+| `function-calling` | 🛠️ | Function/tool calling support |
+| `json-mode` | 📋 | Guaranteed JSON output |
+| `streaming` | ⚡ | Streaming responses |
+| `parallel-tools` | 🔀 | Parallel tool execution |
+| `system-prompt` | ⚙️ | System prompts supported |
+| `context-window` | 📚 | Extended context window (100K+ tokens) |
+| `image-gen` | 🎨 | Image generation |
+| `embedding` | 📊 | Text embeddings |
+| `fine-tuned` | ✨ | Custom fine-tuned model |
 
-### Adding Capability Detection for New Models
+### Architecture Detection
 
-When adding support for new models, ensure capability detection works correctly:
-
-#### 1. Update Pattern Detection
-
-Add model ID patterns to the capability detection file:
-
-| File | Description |
-|------|-------------|
-| `backend/src/routes/chat/model-capabilities-detection.ts` | Add regex patterns for new models |
-
-**Example patterns to add:**
+OpenRouter provides detailed architecture information for each model:
 
 ```typescript
-// For a new reasoning model
-reasoning: [
-  /your-new-model-reasoning/i,
-  // ... existing patterns
-],
-
-// For a new vision model  
-vision: [
-  /your-new-model-vision/i,
-  // ... existing patterns
-]
-```
-
-#### 2. Add Context Window Metadata
-
-Update context window sizes for accurate token counting:
-
-| File | Description |
-|------|-------------|
-| `backend/src/routes/chat/model-capabilities-detection.ts` | Add context window sizes |
-
-**Example metadata addition:**
-
-```typescript
-const contextWindowSizes = {
-  'your-new-model': 128000,
-  'your-new-model-vision': 200000,
-  // ... existing sizes
-};
-```
-
-#### 3. Test Capability Detection
-
-Verify detection works correctly by testing model IDs:
-
-```bash
-# Run capability detection test
-cd platform && npx tsx test-capabilities.ts
-```
-
-### Manual Capability Configuration
-
-For models that don't follow standard naming patterns, you can add manual capability mappings:
-
-#### Option 1: Add to Pattern Detection
-
-Add specific model IDs to existing patterns:
-
-```typescript
-// In model-capabilities-detection.ts
-const capabilityPatterns = {
-  reasoning: [
-    /custom-model-reasoning/i,
-    /another-custom-reasoning-model/i,
-    // ... existing patterns
-  ],
-  // ... other capabilities
-};
-```
-
-#### Option 2: Create Custom Detection Logic
-
-For complex detection logic, extend the detection function:
-
-```typescript
-function detectModelCapabilities(modelId: string): ModelCapabilities {
-  // Custom logic for specific models
-  if (modelId === 'custom-special-model') {
-    return {
-      capabilities: ['reasoning', 'vision', 'highContext'],
-      metadata: { maxTokens: 256000 }
-    };
-  }
-  
-  // Fall back to pattern detection
-  return detectCapabilitiesByPattern(modelId);
+interface OpenRouterModelArchitecture {
+  modality: string;          // e.g., "text+image->text"
+  input_modalities: string[]; // ["text", "image", "video"]
+  output_modalities: string[];// ["text"]
+  tokenizer: string;
+  instruct_type: string | null;
 }
+```
+
+The system parses this to detect:
+- **Vision**: `input_modalities` includes "image" or "video"
+- **Audio**: `input_modalities` includes "audio"
+- **Multimodal**: Multiple input modalities
+- **Image Gen**: `modality` contains "->image"
+- **Chat**: Text input + text output
+
+### Description Pattern Matching
+
+The system analyzes model descriptions for capability keywords:
+
+| Pattern | Capability | Metadata |
+|---------|------------|----------|
+| `vision`, `image`, `visual` | `vision` | `supportsImages: true` |
+| `audio`, `sound`, `speech` | `audio` | `supportsAudio: true` |
+| `video` | `multimodal` | `supportsVideo: true` |
+| `multimodal` | `multimodal` | - |
+| `reasoning`, `think` | `reasoning` | `hasReasoning: true` |
+| `code`, `programming` | `code` | - |
+| `json`, `structured output` | `json-mode` | `supportsJsonMode: true` |
+| `function call`, `tool use` | `function-calling` | `supportsFunctionCalling: true` |
+
+### Provider-Specific Fallback Patterns
+
+When OpenRouter data is unavailable, the system uses provider-specific regex patterns:
+
+| Provider | Pattern Example | Capability |
+|----------|-----------------|------------|
+| **openai** | `gpt-4o`, `vision` | `vision` |
+| openai | `o1`, `gpt-4o-reason` | `reasoning` |
+| openai | `-128k`, `-256k`, `-1m` | `context-window` |
+| anthropic | `claude-3.5`, `claude-opus` | `vision` |
+| anthropic | `opus`, `sonnet-4` | `reasoning` |
+| anthropic | `-200k` | `context-window` |
+| gemini | `1.5`, `2.0` | `vision`, `multimodal` |
+| gemini | `-pro`, `-ultra` | `reasoning` |
+| gemini | `-1m`, `-2m` | `context-window` |
+| vllm | `-vision` | `vision` |
+| vllm | `-code` | `code` |
+| ollama | `llava`, `vision` | `vision` |
+| ollama | `codellama` | `code` |
+
+### Configuration
+
+The capability detection system uses these constants:
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `CACHE_DURATION` | 30 * 60 * 1000 | 30 minutes cache TTL |
+| `MAX_CACHE_SIZE` | 2000 | Max models in cache |
+| `FETCH_TIMEOUT_MS` | 10000 | 10 second API timeout |
+| `MAX_RETRIES` | 2 | Number of retry attempts |
+
+### Adding Fallback Patterns for New Providers
+
+To add a new provider to the fallback system:
+
+#### 1. Update `FALLBACK_PATTERNS` in `model-capabilities.ts`
+
+```typescript
+const FALLBACK_PATTERNS: Record<string, ProviderFallbackPatterns> = {
+  // ... existing providers
+  newprovider: {
+    patterns: [
+      {
+        test: (id) => /\b(newprovider-.*-vision)\b/i.test(id),
+        capabilities: ["vision"],
+        metadata: { supportsImages: true },
+      },
+      {
+        test: (id) => /\b(newprovider-.*-reason)\b/i.test(id),
+        capabilities: ["reasoning"],
+        metadata: { hasReasoning: true },
+      },
+      {
+        test: (id) => /\b(newprovider-.*-(\d+)k)\b/i.test(id),
+        capabilities: ["context-window"],
+      },
+    ],
+  },
+};
+```
+
+#### 2. Add Description Patterns (Optional)
+
+For better detection when OpenRouter descriptions are available:
+
+```typescript
+const DESCRIPTION_PATTERNS: Array<{
+  test: (desc: string) => boolean;
+  capabilities: ModelCapability[];
+  metadata?: Partial<CapabilityMetadata>;
+}> = [
+  // ... existing patterns
+  {
+    test: (desc) => /\b(your-custom-keyword)\b/i.test(desc),
+    capabilities: ["custom-capability"],
+    metadata: { customMetadata: true },
+  },
+];
 ```
 
 ### Frontend Integration
 
-Capabilities are automatically displayed in the UI through:
+Capabilities are automatically displayed in the UI:
 
 | Component | Description |
 |-----------|-------------|
-| `frontend/src/components/ai-elements/model-capability-badge.tsx` | Individual capability badges with tooltips |
+| `frontend/src/components/ai-elements/model-capability-badge.tsx` | Individual capability badges with icons, colors, and tooltips |
 | `frontend/src/components/chat/model-selector.tsx` | Model selector with capability display |
 
-**Badge Display Rules:**
+**Badge Features:**
+- Color-coded by capability category (reasoning=purple, vision=blue, etc.)
+- Icons from Lucide React
+- Tooltips with capability descriptions
+- Responsive sizing (sm/md options)
+- Dark mode support
+
+**Display Rules:**
 - Shows top 3 prioritized capabilities by default
 - Shows "+N more" for additional capabilities
 - Prioritization: reasoning > vision > multimodal > audio > functionCalling > etc.
 
-### Testing Capability Display
+### Testing Capability Detection
 
-After adding new models, verify the UI displays capabilities correctly:
+```bash
+# Start development environment
+tilt up
 
-1. **Start the development environment**: `tilt up`
-2. **Access Chat UI**: http://localhost:3000/chat
-3. **Open model selector**: Check that capabilities appear as badges
-4. **Hover over badges**: Verify tooltips show correct capability descriptions
+# Test capability detection via API
+curl http://localhost:9000/api/chat/models
 
-### Common Patterns
-
-Use these naming conventions for consistent capability detection:
-
-- **Reasoning models**: Include "reasoning", "thinking", "sonnet", "opus"
-- **Vision models**: Include "vision", "visual", "multimodal"
-- **Audio models**: Include "audio", "whisper", "speech"
-- **High-context models**: Include context size in model name or metadata
+# Check model capabilities in response
+# {
+#   "id": "anthropic/claude-sonnet-4-20250514",
+#   "capabilities": {
+#     "capabilities": ["reasoning", "vision", "chat", "streaming"],
+#     "metadata": {
+#       "supportsImages": true,
+#       "hasReasoning": true,
+#       "supportsStreaming": true
+#     }
+#   }
+# }
+```
 
 ### Troubleshooting
 
 If capabilities aren't detected correctly:
 
-1. **Check pattern matching**: Verify model ID matches regex patterns
-2. **Test detection**: Use the test script to verify detection logic
-3. **Update patterns**: Add more specific patterns if needed
-4. **Check priority**: Ensure higher-priority capabilities aren't overriding lower ones
+1. **Check OpenRouter availability**:
+   ```bash
+   curl https://openrouter.ai/api/v1/models | head -100
+   ```
+
+2. **Verify model ID format**:
+   ```typescript
+   // Test pattern matching
+   const modelId = "anthropic/claude-sonnet-4-20250514";
+   console.log(/\b(claude-3\.[57]|claude-opus)\b/i.test(modelId));
+   ```
+
+3. **Check cache state**:
+   ```typescript
+   // In model-capabilities.ts
+   console.log({
+     cacheSize: MODELS_CACHE.size,
+     lastFetch: new Date(LAST_FETCH_TIME),
+   });
+   ```
+
+4. **Force cache clear**:
+   ```typescript
+   import { clearCapabilitiesCache } from "./model-capabilities";
+   clearCapabilitiesCache();
+   ```
+
+### Performance Considerations
+
+- **Cache Hit**: < 1ms (in-memory Map lookup)
+- **Cache Miss**: ~100-500ms (OpenRouter API call with retry)
+- **Fallback Mode**: < 1ms (regex pattern matching only)
+
+The system uses stale-while-revalidate pattern: if API fails, it returns stale cache data if available, ensuring zero downtime for capability detection.

@@ -22,9 +22,11 @@ import {
   useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
 import { getAllowUsageFromPolicies } from "@/lib/policy.utils";
+import { useTeams } from "@/lib/team.query";
 import { PolicyCard } from "./policy-card";
 
 const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
+const CONTEXT_TEAM = "context.team";
 
 type ToolForPolicies = {
   id: string;
@@ -45,6 +47,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
   const callPolicyMutation = useCallPolicyMutation();
   const { data: operators } = useOperators();
   const { data: externalAgentIds } = useUniqueExternalAgentIds();
+  const { data: teams } = useTeams();
 
   const allPolicies = byProfileToolId[tool.id] || [];
   // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
@@ -52,10 +55,11 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
 
   const argumentNames = Object.keys(tool.parameters?.properties || []);
   // Combine argument names with context condition options
-  const conditionKeyOptions = [
-    ...argumentNames,
+  const contextOptions = [
     ...(externalAgentIds.length > 0 ? [CONTEXT_EXTERNAL_AGENT_ID] : []),
+    ...((teams?.length ?? 0) > 0 ? [CONTEXT_TEAM] : []),
   ];
+  const conditionKeyOptions = [...argumentNames, ...contextOptions];
 
   // Derive allow usage from policies (default policy with empty conditions)
   const allowUsageWhenUntrustedDataIsPresent = getAllowUsageFromPolicies(
@@ -100,11 +104,24 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                 <Select
                   defaultValue={policy.argumentName}
                   onValueChange={(value) => {
+                    // Auto-select value if only one option available
+                    let autoValue = "";
+                    if (
+                      value === CONTEXT_EXTERNAL_AGENT_ID &&
+                      externalAgentIds.length === 1
+                    ) {
+                      autoValue = externalAgentIds[0];
+                    } else if (value === CONTEXT_TEAM && teams?.length === 1) {
+                      autoValue = teams[0].id;
+                    }
                     toolInvocationPolicyUpdateMutation.mutate({
                       ...policy,
                       argumentName: value,
-                      // Clear value when switching between context and argument keys
-                      value: "",
+                      value: autoValue,
+                      // Set operator to "contains" for team context
+                      ...(value === CONTEXT_TEAM
+                        ? { operator: "contains" }
+                        : {}),
                     });
                   }}
                 >
@@ -128,7 +145,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                         ))}
                       </>
                     )}
-                    {externalAgentIds.length > 0 && (
+                    {contextOptions.length > 0 && (
                       <>
                         <SelectItem
                           disabled
@@ -137,9 +154,14 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                         >
                           Context
                         </SelectItem>
-                        <SelectItem value={CONTEXT_EXTERNAL_AGENT_ID}>
-                          External Agent ID
-                        </SelectItem>
+                        {externalAgentIds.length > 0 && (
+                          <SelectItem value={CONTEXT_EXTERNAL_AGENT_ID}>
+                            External Agent ID
+                          </SelectItem>
+                        )}
+                        {(teams?.length ?? 0) > 0 && (
+                          <SelectItem value={CONTEXT_TEAM}>Team</SelectItem>
+                        )}
                       </>
                     )}
                   </SelectContent>
@@ -165,31 +187,63 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                   </SelectContent>
                 </Select>
                 {policy.argumentName === CONTEXT_EXTERNAL_AGENT_ID ? (
-                  <Select
-                    value={policy.value || "__none__"}
-                    onValueChange={(value) =>
-                      toolInvocationPolicyUpdateMutation.mutate({
-                        ...policy,
-                        value: value === "__none__" ? "" : value,
-                      })
-                    }
-                  >
-                    <SelectTrigger
-                      className={`w-[180px] ${!policy.value ? "text-muted-foreground" : ""}`}
+                  externalAgentIds.length === 1 ? (
+                    <Select value={externalAgentIds[0]} disabled>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue>{externalAgentIds[0]}</SelectValue>
+                      </SelectTrigger>
+                    </Select>
+                  ) : (
+                    <Select
+                      value={policy.value || undefined}
+                      onValueChange={(value) =>
+                        toolInvocationPolicyUpdateMutation.mutate({
+                          ...policy,
+                          value,
+                        })
+                      }
                     >
-                      <SelectValue placeholder="Select agent ID" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__" className="text-muted-foreground">
-                        (none)
-                      </SelectItem>
-                      {externalAgentIds.map((agentId) => (
-                        <SelectItem key={agentId} value={agentId}>
-                          {agentId}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select agent ID" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {externalAgentIds.map((agentId) => (
+                          <SelectItem key={agentId} value={agentId}>
+                            {agentId}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
+                ) : policy.argumentName === CONTEXT_TEAM ? (
+                  teams?.length === 1 ? (
+                    <Select value={teams[0].id} disabled>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue>{teams[0].name}</SelectValue>
+                      </SelectTrigger>
+                    </Select>
+                  ) : (
+                    <Select
+                      value={policy.value || undefined}
+                      onValueChange={(value) =>
+                        toolInvocationPolicyUpdateMutation.mutate({
+                          ...policy,
+                          value,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams?.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
                 ) : (
                   <DebouncedInput
                     placeholder="Value"
@@ -203,9 +257,9 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                     }
                   />
                 )}
-                {policy.argumentName !== CONTEXT_EXTERNAL_AGENT_ID && (
-                  <CaseSensitiveTooltip />
-                )}
+                {![CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM].includes(
+                  policy.argumentName,
+                ) && <CaseSensitiveTooltip />}
               </div>
               <Button
                 variant="ghost"

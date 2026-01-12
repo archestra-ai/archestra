@@ -31,9 +31,9 @@ function matchContextCondition(
   // Team matching - check if value is in teamIds array
   if (path === "team") {
     switch (operator) {
-      case "equal":
+      case "contains":
         return context.teamIds.includes(value);
-      case "notEqual":
+      case "notContains":
         return !context.teamIds.includes(value);
       default:
         return false;

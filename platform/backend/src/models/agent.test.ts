@@ -1196,7 +1196,9 @@ describe("AgentModel", () => {
       );
 
       // Find our test agent
-      const testAgent = result.data.find((a) => a.name === "Pattern Test Agent");
+      const testAgent = result.data.find(
+        (a) => a.name === "Pattern Test Agent",
+      );
       expect(testAgent).toBeDefined();
 
       // Should have 3 tools (excludes only archestra__pattern_test_tool)

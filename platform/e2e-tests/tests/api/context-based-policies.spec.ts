@@ -2,7 +2,7 @@ import type { APIRequestContext } from "@playwright/test";
 import { expect, type TestFixtures, test } from "./fixtures";
 
 /**
- * Tests for context-based policy conditions (context.teamIds, context.externalprofileId)
+ * Tests for context-based policy conditions (context.teamIds, context.externalAgentId)
  * These tests verify that policies with context conditions can be created and work correctly.
  */
 

@@ -1,13 +1,7 @@
-import {
-  RouteId,
-  type SupportedProvider,
-  SupportedProviders,
-  TimeInMs,
-} from "@shared";
+import { RouteId, type SupportedProvider, SupportedProviders } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
@@ -23,10 +17,6 @@ import {
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
-
-/** TTL for caching chat models from provider APIs */
-const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
-const CHAT_MODELS_CACHE_TTL_HOURS = CHAT_MODELS_CACHE_TTL_MS / TimeInMs.Hour;
 
 // Response schema for models
 const ChatModelSchema = z.object({
@@ -506,16 +496,6 @@ export async function fetchModelsForProvider({
     return [];
   }
 
-  // Cache key for Vertex AI doesn't include API key since it uses ADC
-  const cacheKey = vertexAiEnabled
-    ? (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-vertexai` as const)
-    : (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-${apiKey?.slice(0, 6)}` as const);
-  const cachedModels = await cacheManager.get<ModelInfo[]>(cacheKey);
-
-  if (cachedModels) {
-    return cachedModels;
-  }
-
   try {
     let models: ModelInfo[] = [];
     if (["anthropic", "cerebras", "openai"].includes(provider)) {
@@ -537,12 +517,20 @@ export async function fetchModelsForProvider({
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     }
-    await cacheManager.set(cacheKey, models, CHAT_MODELS_CACHE_TTL_MS);
+    logger.info(
+      { provider, modelCount: models.length },
+      "fetchModelsForProvider:fetched models from provider",
+    );
     return models;
   } catch (error) {
     logger.error(
-      { provider, organizationId, error },
-      "Error fetching models from provider",
+      {
+        provider,
+        organizationId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      },
+      "fetchModelsForProvider:error fetching models from provider",
     );
     return [];
   }
@@ -555,7 +543,8 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetChatModels,
-        description: `Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for ${CHAT_MODELS_CACHE_TTL_HOURS} hours.`,
+        description:
+          "Get available LLM models from all configured providers. Models are fetched directly from provider APIs.",
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedChatProviderSchema.optional(),

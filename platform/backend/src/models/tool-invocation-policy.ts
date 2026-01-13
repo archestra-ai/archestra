@@ -3,11 +3,20 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type { GlobalToolPolicy, ToolInvocation } from "@/types";
+import type {
+  AutonomyPolicyOperator,
+  GlobalToolPolicy,
+  ToolInvocation,
+} from "@/types";
 
 type EvaluationResult = {
   isAllowed: boolean;
   reason: string;
+};
+
+export type PolicyEvaluationContext = {
+  teamIds: string[];
+  externalAgentId?: string;
 };
 
 class ToolInvocationPolicyModel {
@@ -174,6 +183,83 @@ class ToolInvocationPolicyModel {
     return { updated, created };
   }
 
+  private static evaluateContextCondition(
+    path: string,
+    value: string,
+    operator: AutonomyPolicyOperator.SupportedOperator,
+    context: PolicyEvaluationContext,
+  ): boolean {
+    // Team matching - check if value is in teamIds array
+    if (path === "teamIds") {
+      switch (operator) {
+        case "contains":
+          return context.teamIds.includes(value);
+        case "notContains":
+          return !context.teamIds.includes(value);
+        default:
+          return false;
+      }
+    }
+
+    // Single value matching for other context fields
+    let contextValue: string | undefined;
+    if (path === "externalAgentId") {
+      contextValue = context.externalAgentId;
+    } else {
+      return false;
+    }
+
+    switch (operator) {
+      case "equal":
+        return contextValue === value;
+      case "notEqual":
+        return contextValue !== value;
+      default:
+        return false;
+    }
+  }
+
+  private static evaluateInputCondition(
+    key: string,
+    value: string,
+    operator: AutonomyPolicyOperator.SupportedOperator,
+    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+    input: Record<string, any>,
+  ): boolean {
+    const argumentValue = get(input, key);
+    if (argumentValue === undefined) return false;
+
+    switch (operator) {
+      case "endsWith":
+        return (
+          typeof argumentValue === "string" && argumentValue.endsWith(value)
+        );
+      case "startsWith":
+        return (
+          typeof argumentValue === "string" && argumentValue.startsWith(value)
+        );
+      case "contains":
+        return (
+          typeof argumentValue === "string" && argumentValue.includes(value)
+        );
+      case "notContains":
+        return (
+          typeof argumentValue === "string" && !argumentValue.includes(value)
+        );
+      case "equal":
+        return argumentValue === value;
+      case "notEqual":
+        return argumentValue !== value;
+      case "regex":
+        return (
+          typeof argumentValue === "string" &&
+          new RegExp(value).test(argumentValue)
+        );
+      default:
+        return false;
+    }
+  }
+
   /**
    * Batch evaluate tool invocation policies for multiple tool calls at once.
    * This avoids N+1 queries by fetching all policies upfront.
@@ -187,6 +273,7 @@ class ToolInvocationPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
       toolInput: Record<string, any>;
     }>,
+    context: PolicyEvaluationContext,
     isContextTrusted: boolean,
     globalToolPolicy: GlobalToolPolicy,
   ): Promise<EvaluationResult & { toolCallName?: string }> {
@@ -269,44 +356,26 @@ class ToolInvocationPolicyModel {
 
       for (const policy of specificPolicies) {
         // Check if all conditions match (AND logic)
-        const conditionsMatch = policy.conditions.every((condition) => {
-          const argumentValue = get(toolInput, condition.key);
-          if (argumentValue === undefined) return false;
-
-          switch (condition.operator) {
-            case "endsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.endsWith(condition.value)
+        const conditionsMatch = policy.conditions.every(
+          function evaluateCondition(condition) {
+            const { key, value, operator } = condition;
+            const [scope, ...pathParts] = key.split(".");
+            if (scope === "context") {
+              return ToolInvocationPolicyModel.evaluateContextCondition(
+                pathParts.join("."),
+                value,
+                operator,
+                context,
               );
-            case "startsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.startsWith(condition.value)
-              );
-            case "contains":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.includes(condition.value)
-              );
-            case "notContains":
-              return (
-                typeof argumentValue === "string" &&
-                !argumentValue.includes(condition.value)
-              );
-            case "equal":
-              return argumentValue === condition.value;
-            case "notEqual":
-              return argumentValue !== condition.value;
-            case "regex":
-              return (
-                typeof argumentValue === "string" &&
-                new RegExp(condition.value).test(argumentValue)
-              );
-            default:
-              return false;
-          }
-        });
+            }
+            return ToolInvocationPolicyModel.evaluateInputCondition(
+              key,
+              value,
+              operator,
+              toolInput,
+            );
+          },
+        );
 
         if (!conditionsMatch) continue;
 

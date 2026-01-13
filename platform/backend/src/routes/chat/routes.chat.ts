@@ -41,6 +41,7 @@ import {
   InsertConversationSchema,
   SelectConversationSchema,
   type SupportedChatProvider,
+  SupportedChatProviderSchema,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
@@ -107,6 +108,9 @@ async function getSmartDefaultModel(
 
   // Check if Vertex AI is enabled - use Gemini without API key
   if (isVertexAiEnabled()) {
+    logger.info(
+      "getSmartDefaultModel:Vertex AI is enabled, using gemini-2.5-pro",
+    );
     return { model: "gemini-2.5-pro", provider: "gemini" };
   }
 

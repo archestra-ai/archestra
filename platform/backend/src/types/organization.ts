@@ -48,6 +48,7 @@ export const UpdateOrganizationSchema = z.object({
   compressionScope: OrganizationCompressionScopeSchema,
   autoConfigureNewTools: z.boolean(),
   globalToolPolicy: GlobalToolPolicySchema,
+  allowChatFileUploads: z.boolean(),
 });
 
 export type OrganizationLimitCleanupInterval = z.infer<

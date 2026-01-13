@@ -370,7 +370,7 @@ export const updateChatApiKey = <ThrowOnError extends boolean = false>(options: 
 });
 
 /**
- * Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for 2 hours.
+ * Get available LLM models from all configured providers. Models are fetched directly from provider APIs.
  */
 export const getChatModels = <ThrowOnError extends boolean = false>(options?: Options<GetChatModelsData, ThrowOnError>) => (options?.client ?? client).get<GetChatModelsResponses, GetChatModelsErrors, ThrowOnError>({ url: '/api/chat/models', ...options });
 
@@ -1293,6 +1293,11 @@ export const getTools = <ThrowOnError extends boolean = false>(options?: Options
  * Get all tools with their profile assignments (one entry per tool)
  */
 export const getToolsWithAssignments = <ThrowOnError extends boolean = false>(options?: Options<GetToolsWithAssignmentsData, ThrowOnError>) => (options?.client ?? client).get<GetToolsWithAssignmentsResponses, GetToolsWithAssignmentsErrors, ThrowOnError>({ url: '/api/tools/with-assignments', ...options });
+
+/**
+ * Delete an auto-discovered tool (tools without an MCP server)
+ */
+export const deleteTool = <ThrowOnError extends boolean = false>(options: Options<DeleteToolData, ThrowOnError>) => (options.client ?? client).delete<DeleteToolResponses, DeleteToolErrors, ThrowOnError>({ url: '/api/tools/{id}', ...options });
 
 /**
  * Get current user's personal token

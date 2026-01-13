@@ -27,6 +27,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -168,6 +169,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const resolvedAgentId = resolvedAgent.id;
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
 
     fastify.log.info(
       {
@@ -321,6 +323,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "openai",
           resolvedAgent.considerContextUntrusted,
           globalToolPolicy,
+          { teamIds, externalAgentId },
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -594,6 +597,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               }),
               resolvedAgentId,
+              { teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,
@@ -904,6 +908,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             }),
             resolvedAgentId,
+            { teamIds, externalAgentId },
             contextIsTrusted,
             enabledToolNames,
             globalToolPolicy,

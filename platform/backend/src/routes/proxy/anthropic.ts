@@ -28,6 +28,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -188,6 +189,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const resolvedAgentId = resolvedAgent.id;
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
 
     logger.debug(
       {
@@ -378,6 +380,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "anthropic",
           resolvedAgent.considerContextUntrusted,
           globalToolPolicy,
+          { teamIds, externalAgentId },
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -638,6 +641,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
               resolvedAgentId,
+              { teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,
@@ -984,6 +988,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
               resolvedAgentId,
+              { teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,

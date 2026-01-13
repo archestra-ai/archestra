@@ -161,7 +161,10 @@ const createToolInvocationPolicy = async (
   policy: {
     toolId: string;
     conditions: Array<{ key: string; operator: string; value: string }>;
-    action: "allow_when_context_is_untrusted" | "block_always";
+    action:
+      | "allow_when_context_is_untrusted"
+      | "block_when_context_is_untrusted"
+      | "block_always";
     reason?: string;
   },
 ) =>
@@ -200,7 +203,11 @@ const createTrustedDataPolicy = async (
   policy: {
     toolId: string;
     conditions: Array<{ key: string; operator: string; value: string }>;
-    action: "block_always" | "mark_as_trusted" | "sanitize_with_dual_llm";
+    action:
+      | "block_always"
+      | "mark_as_trusted"
+      | "mark_as_untrusted"
+      | "sanitize_with_dual_llm";
     description?: string;
   },
 ) =>

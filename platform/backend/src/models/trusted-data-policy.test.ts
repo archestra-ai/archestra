@@ -1045,7 +1045,7 @@ describe("TrustedDataPolicyModel", () => {
         expect(result.reason).toContain("Internal verified data");
       });
 
-      test("does not apply when all output conditions match", async ({
+      test("does not apply when only some output conditions match", async ({
         makeTrustedDataPolicy,
       }) => {
         await makeTrustedDataPolicy(toolId, {

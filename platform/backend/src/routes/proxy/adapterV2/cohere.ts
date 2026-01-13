@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
@@ -51,8 +52,7 @@ function safeJsonParse(input: string): { ok: true; value: unknown } | { ok: fals
 // =============================================================================
 
 class CohereRequestAdapter
-  implements LLMRequestAdapter<CohereRequest, CohereMessages>
-{
+  implements LLMRequestAdapter<CohereRequest, CohereMessages> {
   readonly provider = "cohere" as const;
   private request: CohereRequest;
   private modifiedModel: string | null = null;
@@ -173,10 +173,24 @@ class CohereRequestAdapter
     return {
       ...this.request,
       model: this.getModel(),
-      messages,
+      messages: messages.filter((msg) => {
+        // Filter out empty assistant messages that have no tool calls
+        if (msg.role === "assistant") {
+          const assistantMsg = msg as Cohere.Types.AssistantMessage;
+          const hasContent =
+            (typeof assistantMsg.content === "string" &&
+              assistantMsg.content.length > 0) ||
+            (Array.isArray(assistantMsg.content) &&
+              assistantMsg.content.length > 0);
+          const hasToolCalls =
+            assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0;
+
+          return hasContent || hasToolCalls;
+        }
+        return true;
+      }),
     };
   }
-
   // ---------------------------------------------------------------------------
   // Private Helpers
   // ---------------------------------------------------------------------------
@@ -342,8 +356,7 @@ class CohereResponseAdapter implements LLMResponseAdapter<CohereResponse> {
 // =============================================================================
 
 class CohereStreamAdapter
-  implements LLMStreamAdapter<CohereStreamChunk, CohereResponse>
-{
+  implements LLMStreamAdapter<CohereStreamChunk, CohereResponse> {
   readonly provider = "cohere" as const;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndex = -1;
@@ -369,67 +382,128 @@ class CohereStreamAdapter
       this.state.timing.firstChunkTime = Date.now();
     }
 
+    // logger.debug({ type: chunk.type }, "CohereStreamAdapter processing chunk");
+    logger.debug({ chunk }, "CohereStreamAdapter processing chunk - FULL");
+
     let sseData: string | null = null;
     let isToolCallChunk = false;
     let isFinal = false;
 
+    // Helper to format SSE events reliably
+    const formatSSE = (data: unknown) => `data: ${JSON.stringify(data)}\n\n`;
+
+    // Process chunk based on type
     switch (chunk.type) {
       case "message-start": {
         const id = get(chunk, "message.id", "") as string;
         this.state.responseId = id;
-        sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+        sseData = formatSSE(chunk);
         break;
       }
 
       case "content-start": {
-        sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+        // Pass through raw Cohere chunk - @ai-sdk/cohere expects native format
+        // The SDK schema expects: { type, index, delta: { message: { content: {...} } } }
+        // Cohere API sends this structure natively - do not modify
+        sseData = formatSSE(chunk);
         break;
       }
 
       case "content-delta": {
-        const delta = get(chunk, "delta", {}) as Record<string, unknown>;
-        if (delta.type === "text_delta") {
-          const text = get(delta, "text", "") as string;
+        // Pass through raw Cohere chunk - @ai-sdk/cohere expects native format
+        // The SDK schema expects: { type, index, delta: { message: { content: {...} } } }
+        // Extract text for internal accumulation but don't modify the chunk
+        const delta = get(chunk, "delta.message.content", {}) as Record<string, unknown>;
+        const text = (delta.text as string) || "";
+        if (text) {
           this.state.text += text;
-          sseData = `data: ${JSON.stringify(chunk)}\n\n`;
         }
+        sseData = formatSSE(chunk);
         break;
       }
 
       case "content-end": {
-        sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+        // Pass through raw Cohere chunk
+        sseData = formatSSE(chunk);
         break;
       }
 
       case "tool-call-start": {
         this.currentToolCallIndex = this.state.toolCalls.length;
-        const toolCall = get(chunk, "tool_call", {}) as Record<string, unknown>;
+        // SDK expects: delta.message.tool_calls structure
+        const toolCallData = get(chunk, "delta.message.tool_calls", {}) as Record<string, unknown>;
+
+        // Fallback to old structure if new structure not present
+        const toolCall = Object.keys(toolCallData).length > 0
+          ? toolCallData
+          : (get(chunk, "tool_call", {}) as Record<string, unknown>);
+
+        // Critically: Generate ID if missing. Cohere V2 sometimes omits it.
+        const fixedId = (toolCall.id as string) || randomUUID();
+        const funcData = get(toolCall, "function", {}) as Record<string, unknown>;
+
         this.state.toolCalls.push({
-          id: (toolCall.id as string) ?? "",
-          name: get(toolCall, "function.name", "") as string,
-          arguments: "",
+          id: fixedId,
+          name: (funcData.name as string) || "",
+          arguments: (funcData.arguments as string) || "",
         });
-        this.state.rawToolCallEvents.push(chunk);
+
+        // Build event in SDK-expected format
+        const modifiedChunk = {
+          type: "tool-call-start",
+          delta: {
+            message: {
+              tool_calls: {
+                id: fixedId,
+                type: "function",
+                function: {
+                  name: funcData.name || "",
+                  arguments: funcData.arguments || "",
+                },
+              },
+            },
+          },
+        };
+        this.state.rawToolCallEvents.push(modifiedChunk);
         isToolCallChunk = true;
         break;
       }
 
       case "tool-call-delta": {
-        if (this.currentToolCallIndex >= 0) {
-          const delta = get(chunk, "delta", {}) as Record<string, unknown>;
-          const args = get(delta, "function.arguments", "") as string;
+        // SDK expects: delta.message.tool_calls.function.arguments
+        const deltaData = get(chunk, "delta.message.tool_calls.function", {}) as Record<string, unknown>;
+        const args = (deltaData.arguments as string) ||
+          (get(chunk, "delta.function.arguments", "") as string);
+
+        if (this.currentToolCallIndex >= 0 && args) {
           this.state.toolCalls[this.currentToolCallIndex].arguments += args;
         }
-        this.state.rawToolCallEvents.push(chunk);
+
+        // Build event in SDK-expected format
+        const modifiedChunk = {
+          type: "tool-call-delta",
+          delta: {
+            message: {
+              tool_calls: {
+                function: {
+                  arguments: args,
+                },
+              },
+            },
+          },
+        };
+        this.state.rawToolCallEvents.push(modifiedChunk);
         isToolCallChunk = true;
         break;
       }
 
       case "tool-call-end": {
-        this.state.rawToolCallEvents.push(chunk);
+        // Pass through - SDK expects { type: "tool-call-end" }
+        this.state.rawToolCallEvents.push({ type: "tool-call-end" });
         isToolCallChunk = true;
         break;
       }
+
 
       case "message-end": {
         const finishReason = get(
@@ -448,10 +522,23 @@ class CohereStreamAdapter
             (get(usage, "billed_units.output_tokens", 0) as number),
         };
         isFinal = true;
+        // Do NOT send message-end yet if you want to inspect or modify final state
+        // But for Cohere we generally pass it through unless we need policy check refutation
+        // The Proxy Handler handles policy checks on completion.
+        sseData = formatSSE(chunk);
+        break;
+      }
+
+      default: {
+        // Log unknown chunks but don't break
+        // logger.debug({ type: chunk.type }, "Ignored unknown Cohere chunk type");
         break;
       }
     }
 
+    if (sseData) {
+      logger.debug({ sseDataLength: sseData.length, sseDeltaSnippet: sseData.substring(0, 50) }, "CohereStreamAdapter emitting SSE data");
+    }
     return { sseData, isToolCallChunk, isFinal };
   }
 
@@ -465,11 +552,16 @@ class CohereStreamAdapter
   }
 
   formatTextDeltaSSE(text: string): string {
+    // Format must match Cohere API stream format for @ai-sdk/cohere
     const event = {
       type: "content-delta",
+      index: 0,
       delta: {
-        type: "text_delta",
-        text,
+        message: {
+          content: {
+            text,
+          },
+        },
       },
     };
     return `data: ${JSON.stringify(event)}\n\n`;
@@ -482,14 +574,30 @@ class CohereStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    // Format must match Cohere API stream format for @ai-sdk/cohere
     return [
       `data: ${JSON.stringify({
         type: "content-start",
         index: 0,
+        delta: {
+          message: {
+            content: {
+              type: "text",
+              text: "",
+            },
+          },
+        },
       })}\n\n`,
       `data: ${JSON.stringify({
         type: "content-delta",
-        delta: { type: "text_delta", text },
+        index: 0,
+        delta: {
+          message: {
+            content: {
+              text,
+            },
+          },
+        },
       })}\n\n`,
       `data: ${JSON.stringify({
         type: "content-end",
@@ -783,7 +891,7 @@ export const cohereAdapterFactory: LLMProvider<
 
   createClient(apiKey: string, options: CreateClientOptions) {
     if (options.mockMode) {
-  
+
       throw new Error("Mock mode not yet implemented for Cohere");
     }
     return createCohereClient(apiKey, options);

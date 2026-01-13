@@ -264,8 +264,8 @@ export default {
       },
     },
     cohere: {
-         enabled: Boolean(process.env.ARCHESTRA_COHERE_BASE_URL),
-      baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL,
+      baseUrl:
+        process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.ai",
       useV2Routes: process.env.ARCHESTRA_COHERE_USE_V2_ROUTES !== "false",
     },
     vllm: {
@@ -297,7 +297,8 @@ export default {
     },
     cohere: {
       apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
-      baseUrl: process.env.ARCHESTRA_CHAT_COHERE_BASE_URL || "https://api.cohere.com",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_COHERE_BASE_URL || "https://api.cohere.ai",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

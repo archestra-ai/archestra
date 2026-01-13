@@ -2,7 +2,7 @@ import { SupportedProvidersDiscriminatorSchema } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { Anthropic, Gemini, Ollama, OpenAi, Vllm } from "./llm-providers";
+import { Anthropic, Cohere, Gemini, Ollama, OpenAi, Vllm } from "./llm-providers";
 
 export const UserInfoSchema = z.object({
   id: z.string(),
@@ -19,6 +19,7 @@ export const InteractionRequestSchema = z.union([
   Anthropic.API.MessagesRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
+  Cohere.API.ChatRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -27,6 +28,7 @@ export const InteractionResponseSchema = z.union([
   Anthropic.API.MessagesResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
+  Cohere.API.ChatResponseSchema,
 ]);
 
 /**
@@ -75,6 +77,12 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Ollama.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Ollama.API.ChatCompletionResponseSchema,
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["cohere:chat"]),
+    request: Cohere.API.ChatRequestSchema,
+    processedRequest: Cohere.API.ChatRequestSchema.nullable().optional(),
+    response: Cohere.API.ChatResponseSchema,
   }),
 ]);
 

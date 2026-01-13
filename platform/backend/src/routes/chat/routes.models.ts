@@ -309,18 +309,25 @@ async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
 
   const data = (await response.json()) as {
     models: Array<{
-      id: string;
       name: string;
+      endpoints?: string[];
       created_at?: string;
     }>;
   };
 
-  return data.models.map((model) => ({
-    id: model.id,
-    displayName: model.name,
-    provider: "cohere" as const,
-    createdAt: model.created_at,
-  }));
+  // Only include models that expose chat/generate endpoints (exclude embed/rerank)
+  return data.models
+    .filter((model) => {
+      const endpoints = model.endpoints || [];
+      // accept models that support chat or generate
+      return endpoints.includes("chat") || endpoints.includes("generate");
+    })
+    .map((model) => ({
+      id: model.name,
+      displayName: model.name,
+      provider: "cohere" as const,
+      createdAt: model.created_at,
+    }));
 }
 
 /**
@@ -583,9 +590,17 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning chat models",
       );
 
-      return reply.send(
-        uniqBy(models, (model) => `${model.provider}:${model.id}`),
-      );
+      const sanitizedModels = uniqBy(
+        models,
+        (model) => `${model.provider}:${model.id}`,
+      ).map((model) => ({
+        id: String(model.id),
+        displayName: model.displayName || String(model.id),
+        provider: model.provider,
+        createdAt: model.createdAt ?? undefined,
+      }));
+
+      return reply.send(sanitizedModels);
     },
   );
 };

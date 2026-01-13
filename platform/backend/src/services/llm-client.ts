@@ -1,4 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createCohere } from "@ai-sdk/cohere";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { EXTERNAL_AGENT_ID_HEADER, USER_ID_HEADER } from "@shared";
@@ -52,7 +53,7 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "cohere";
   }
 
- 
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -217,12 +218,14 @@ export function createLLMModel(params: {
   }
 
   if (provider === "cohere") {
-    const client = createOpenAI({
+    // URL format: /v1/cohere/:agentId (SDK appends /chat)
+    // We use the native Cohere provider which uses the V2 API
+    const client = createCohere({
       apiKey,
-      baseURL: `http://localhost:${config.api.port}/v1/cohere/${agentId}/compatibility/v1`,
+      baseURL: `http://localhost:${config.api.port}/v1/cohere/${agentId}`,
       headers,
     });
-    return client.chat(modelName);
+    return client(modelName);
   }
 
   if (provider === "vllm") {

@@ -83,9 +83,9 @@ export function ToolCallPolicyCondition({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
+    <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 whitespace-nowrap">
       <Select defaultValue={argumentName} onValueChange={handleKeyChange}>
-        <SelectTrigger className="w-[180px] h-8">
+        <SelectTrigger className="w-[140px] h-9">
           <SelectValue placeholder="parameter" />
         </SelectTrigger>
         <SelectContent>
@@ -135,7 +135,7 @@ export function ToolCallPolicyCondition({
           })
         }
       >
-        <SelectTrigger className="w-[120px] h-8">
+        <SelectTrigger className="w-[120px] h-9">
           <SelectValue placeholder="Operator" />
         </SelectTrigger>
         <SelectContent>
@@ -174,12 +174,13 @@ export function ToolCallPolicyCondition({
         ) : (
           <Select
             value={value || undefined}
+            className="w-[140px]"
             onValueChange={(newValue) =>
               onChange({ ...condition, value: newValue })
             }
           >
-            <SelectTrigger className="w-[180px] h-8">
-              <SelectValue placeholder="Select agent ID" />
+            <SelectTrigger className="w-[140px] h-9">
+              <SelectValue placeholder="Select agent" />
             </SelectTrigger>
             <SelectContent>
               {externalAgentIds.map((agentId) => (
@@ -212,7 +213,7 @@ export function ToolCallPolicyCondition({
               onChange({ ...condition, value: newValue })
             }
           >
-            <SelectTrigger className="w-[180px] h-8">
+            <SelectTrigger className="w-[140px] h-9">
               <SelectValue placeholder="Select team" />
             </SelectTrigger>
             <SelectContent>
@@ -227,7 +228,7 @@ export function ToolCallPolicyCondition({
       ) : (
         <DebouncedInput
           placeholder="Value"
-          className="w-[120px] h-8"
+          className="w-[140px] h-9"
           initialValue={value}
           onChange={(newValue) => onChange({ ...condition, value: newValue })}
         />

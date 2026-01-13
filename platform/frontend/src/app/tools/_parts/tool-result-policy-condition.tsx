@@ -87,10 +87,10 @@ export function ToolResultPolicyCondition({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
+    <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 whitespace-nowrap">
       <SearchableSelect
         placeholder="Attribute path"
-        className="w-[180px]"
+        className="w-[140px]"
         value={attributePath}
         items={keyItems}
         allowCustom
@@ -111,7 +111,7 @@ export function ToolResultPolicyCondition({
           })
         }
       >
-        <SelectTrigger className="w-[120px] h-8">
+        <SelectTrigger className="w-[140px] h-9">
           <SelectValue placeholder="Operator" />
         </SelectTrigger>
         <SelectContent>
@@ -154,7 +154,7 @@ export function ToolResultPolicyCondition({
               onChange({ ...condition, value: newValue })
             }
           >
-            <SelectTrigger className="w-[180px] h-8">
+            <SelectTrigger className="w-[140px] h-9">
               <SelectValue placeholder="Select agent ID" />
             </SelectTrigger>
             <SelectContent>
@@ -188,7 +188,7 @@ export function ToolResultPolicyCondition({
               onChange({ ...condition, value: newValue })
             }
           >
-            <SelectTrigger className="w-[180px] h-8">
+            <SelectTrigger className="w-[140px] h-9">
               <SelectValue placeholder="Select team" />
             </SelectTrigger>
             <SelectContent>
@@ -203,7 +203,7 @@ export function ToolResultPolicyCondition({
       ) : (
         <DebouncedInput
           placeholder="Value"
-          className="w-[120px] h-8"
+          className="w-[140px] h-9"
           initialValue={value}
           onChange={(newValue) => onChange({ ...condition, value: newValue })}
         />

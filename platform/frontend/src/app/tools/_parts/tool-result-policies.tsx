@@ -293,45 +293,44 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
           <div className="flex flex-col gap-3 w-full">
             <div className="flex items-start justify-between">
               <div className="flex flex-col gap-2">
-                <span className="text-sm text-muted-foreground">If</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  {policy.conditions.map((condition, index) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: conditions don't have unique IDs
-                    <div key={index} className="flex items-center gap-2">
-                      {index > 0 && (
-                        <span className="text-sm text-muted-foreground">
-                          and
-                        </span>
-                      )}
-                      <ToolResultPolicyCondition
-                        condition={condition}
-                        keyItems={keyItems}
-                        removable={policy.conditions.length > 1}
-                        onChange={(updated) =>
-                          handleConditionChange(policy, index, updated)
-                        }
-                        onRemove={() => handleConditionRemove(policy, index)}
-                      />
-                    </div>
-                  ))}
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleConditionAdd(policy)}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Add condition</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
+                {policy.conditions.map((condition, index) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: conditions don't have unique IDs
+                  <div key={index} className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground w-2">
+                      {index === 0 ? "If" : ""}
+                    </span>
+                    <ToolResultPolicyCondition
+                      condition={condition}
+                      keyItems={keyItems}
+                      removable={policy.conditions.length > 1}
+                      onChange={(updated) =>
+                        handleConditionChange(policy, index, updated)
+                      }
+                      onRemove={() => handleConditionRemove(policy, index)}
+                    />
+                    {index < policy.conditions.length - 1 ? (
+                      <span className="text-sm text-muted-foreground">and</span>
+                    ) : (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="h-9 w-9 p-0"
+                              onClick={() => handleConditionAdd(policy)}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Add condition</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                ))}
               </div>
               <Button
                 variant="ghost"
@@ -344,7 +343,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                 <Trash2Icon className="w-4 h-4" />
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-2 pl-4">
+            <div className="flex flex-wrap items-center gap-2 pl-12">
               <ArrowRightIcon className="w-4 h-4 text-muted-foreground" />
               <Select
                 defaultValue={policy.action}

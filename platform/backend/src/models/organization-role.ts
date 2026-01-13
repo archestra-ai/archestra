@@ -379,14 +379,34 @@ class OrganizationRoleModel {
 
   /**
    * List all roles for an organization (including predefined)
+   * @param organizationId - The organization ID
+   * @param filter - Optional filter to narrow results
+   * @param filter.name - If provided, returns only the role matching this name
    */
   static async getAll(
     organizationId: string,
+    filter?: { name?: string },
   ): Promise<Array<OrganizationRole>> {
     logger.debug(
-      { organizationId },
+      { organizationId, filter },
       "OrganizationRoleModel.getAll: fetching roles",
     );
+
+    // If filtering by name, use getByName for efficient lookup
+    if (filter?.name) {
+      // Try predefined (name equals identifier) then custom by name
+      const byIdentifier = await OrganizationRoleModel.getByIdentifier(
+        filter.name,
+        organizationId,
+      );
+      const role = byIdentifier || (await OrganizationRoleModel.getByName(filter.name, organizationId));
+
+      if (role) {
+        return [role];
+      }
+      return [];
+    }
+
     const predefinedRoles = [
       generatePredefinedRole(ADMIN_ROLE_NAME, organizationId),
       generatePredefinedRole(EDITOR_ROLE_NAME, organizationId),

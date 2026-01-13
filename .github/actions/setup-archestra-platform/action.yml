@@ -105,18 +105,52 @@ runs:
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
       run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
 
-    - name: Deploy e2e test dependencies (WireMock, Keycloak) in background
+    - name: Deploy e2e dependencies and platform in parallel
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       shell: bash
       env:
+        HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
+        HELM_CHART_VERSION: ${{ inputs.helm-chart-version }}
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+        HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
       run: |
-        # Run e2e deps install in background to parallelize with platform deployment
+        # Start e2e-tests Helm install in background
+        echo "Starting e2e-tests Helm install in background..."
         helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" &
-        echo $! > /tmp/e2e-helm-pid
-        echo "Started e2e-tests Helm install in background (PID: $(cat /tmp/e2e-helm-pid))"
+        E2E_PID=$!
+
+        # Determine chart reference for platform
+        if [ -n "${HELM_CHART_REF}" ]; then
+          CHART_REF="${HELM_CHART_REF}"
+          VERSION_FLAG=""
+          if [ -n "${HELM_CHART_VERSION}" ]; then
+            VERSION_FLAG="--version ${HELM_CHART_VERSION}"
+          fi
+        else
+          CHART_REF="${PLATFORM_CONTEXT}/helm/archestra"
+          VERSION_FLAG=""
+        fi
+
+        # Deploy platform (this takes longer, so e2e-tests will finish during this)
+        echo "Deploying Archestra Platform..."
+        helm install archestra-platform "${CHART_REF}" \
+          ${VERSION_FLAG} \
+          --values "${HELM_VALUES_PATH}" \
+          --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
+          --atomic --timeout=4m
+
+        # Wait for e2e-tests to complete (should already be done by now)
+        echo "Waiting for e2e-tests Helm install to complete..."
+        if wait "$E2E_PID"; then
+          echo "e2e-tests Helm install completed successfully"
+        else
+          echo "e2e-tests Helm install failed"
+          exit 1
+        fi
 
     - name: Deploy Archestra Platform with Helm
+      if: ${{ inputs.deploy-e2e-dependencies != 'true' }}
       shell: bash
       env:
         HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
@@ -142,21 +176,6 @@ runs:
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
           --atomic --timeout=4m
-
-    - name: Wait for e2e dependencies to complete
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
-      shell: bash
-      run: |
-        if [ -f /tmp/e2e-helm-pid ]; then
-          E2E_PID=$(cat /tmp/e2e-helm-pid)
-          echo "Waiting for e2e-tests Helm install (PID: $E2E_PID) to complete..."
-          if wait "$E2E_PID"; then
-            echo "e2e-tests Helm install completed successfully"
-          else
-            echo "e2e-tests Helm install failed"
-            exit 1
-          fi
-        fi
 
     - name: Verify deployment
       shell: bash

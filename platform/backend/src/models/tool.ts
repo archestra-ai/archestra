@@ -480,6 +480,9 @@ class ToolModel {
    * Creates the Archestra catalog entry if it doesn't exist (for FK constraint),
    * then creates/updates tools with the catalog ID.
    * Called during server startup to ensure Archestra tools exist.
+   *
+   * Also migrates any pre-existing "discovered" Archestra tools (catalog_id = NULL)
+   * to use the proper catalog ID.
    */
   static async seedArchestraTools(catalogId: string): Promise<void> {
     // Ensure the Archestra catalog entry exists in the database for FK constraint
@@ -497,18 +500,29 @@ class ToolModel {
       .onConflictDoNothing();
 
     const archestraTools = getArchestraMcpTools();
+    const archestraToolNames = archestraTools.map((t) => t.name);
 
-    // Get all existing Archestra tools in a single query
+    // Migrate pre-existing "discovered" Archestra tools (catalog_id = NULL) to use the catalog
+    // This handles tools that were auto-discovered via proxy before the catalog was introduced
+    await db
+      .update(schema.toolsTable)
+      .set({ catalogId })
+      .where(
+        and(
+          isNull(schema.toolsTable.catalogId),
+          isNull(schema.toolsTable.agentId),
+          inArray(schema.toolsTable.name, archestraToolNames),
+        ),
+      );
+
+    // Get all existing Archestra tools in a single query (now including migrated ones)
     const existingTools = await db
       .select()
       .from(schema.toolsTable)
       .where(
         and(
           eq(schema.toolsTable.catalogId, catalogId),
-          inArray(
-            schema.toolsTable.name,
-            archestraTools.map((t) => t.name),
-          ),
+          inArray(schema.toolsTable.name, archestraToolNames),
         ),
       );
 

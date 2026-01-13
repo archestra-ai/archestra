@@ -166,9 +166,7 @@ describe("executeArchestraTool", () => {
       );
 
       expect(result.isError).toBe(false);
-      expect((result.content[0] as any).text).toContain(
-        "No MCP servers found",
-      );
+      expect((result.content[0] as any).text).toContain("No MCP servers found");
     });
 
     test("should include Archestra catalog when seeded", async ({

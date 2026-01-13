@@ -349,6 +349,79 @@ export class McpServerRuntimeManager {
   }
 
   /**
+   * Get a deployment by MCP server ID, loading from database if not in memory.
+   * This handles the case where multiple replicas exist and the deployment was
+   * created by a different replica.
+   */
+  async getOrLoadDeployment(
+    mcpServerId: string,
+  ): Promise<K8sDeployment | undefined> {
+    // First check if already in memory
+    const existing = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (existing) {
+      return existing;
+    }
+
+    // Not in memory - try to load from database
+    if (!this.k8sApi || !this.k8sAppsApi || !this.k8sAttach || !this.k8sLog) {
+      logger.warn(
+        `Cannot load deployment for ${mcpServerId}: K8s clients not initialized`,
+      );
+      return undefined;
+    }
+
+    try {
+      const mcpServer = await McpServerModel.findById(mcpServerId);
+      if (!mcpServer) {
+        logger.debug(`MCP server ${mcpServerId} not found in database`);
+        return undefined;
+      }
+
+      // Check if it's a local server
+      if (!mcpServer.catalogId) {
+        logger.debug(`MCP server ${mcpServerId} has no catalog ID`);
+        return undefined;
+      }
+
+      const catalogItem = await InternalMcpCatalogModel.findById(
+        mcpServer.catalogId,
+      );
+      if (!catalogItem || catalogItem.serverType !== "local") {
+        logger.debug(
+          `MCP server ${mcpServerId} is not a local server or catalog not found`,
+        );
+        return undefined;
+      }
+
+      // Create the K8sDeployment object and register it
+      // Note: We don't call startOrCreateDeployment() because the deployment
+      // should already exist in K8s (created by another replica)
+      const k8sDeployment = new K8sDeployment(
+        mcpServer,
+        this.k8sApi,
+        this.k8sAppsApi,
+        this.k8sAttach,
+        this.k8sLog,
+        this.namespace,
+        catalogItem,
+      );
+
+      this.mcpServerIdToDeploymentMap.set(mcpServerId, k8sDeployment);
+      logger.info(
+        `Lazy-loaded MCP server deployment ${mcpServerId} into memory`,
+      );
+
+      return k8sDeployment;
+    } catch (error) {
+      logger.error(
+        { err: error, mcpServerId },
+        `Failed to lazy-load MCP server deployment`,
+      );
+      return undefined;
+    }
+  }
+
+  /**
    * Remove an MCP server deployment completely
    */
   async removeMcpServer(mcpServerId: string): Promise<void> {

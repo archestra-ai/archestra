@@ -248,7 +248,7 @@ jobs:
             -e CI=true \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --reporter=blob --reporter=line" \
+            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --reporter=blob --reporter=line" \
             2>&1 | tee playwright-output.txt
 
       - name: Check for flaky tests

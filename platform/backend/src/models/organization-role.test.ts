@@ -255,6 +255,55 @@ describe("OrganizationRoleModel", () => {
       expect(result[1].role).toBe(EDITOR_ROLE_NAME);
       expect(result[2].role).toBe(MEMBER_ROLE_NAME);
     });
+
+    test("should filter by predefined role name", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const result = await OrganizationRoleModel.getAll(org.id, { name: ADMIN_ROLE_NAME });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: ADMIN_ROLE_NAME,
+        name: ADMIN_ROLE_NAME,
+        predefined: true,
+      });
+    });
+
+    test("should filter by custom role name", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, {
+        role: "custom_role_1",
+        name: "My Custom Role",
+        permission: { profile: ["read"] },
+      });
+      await makeCustomRole(org.id, {
+        role: "custom_role_2",
+        name: "Another Role",
+        permission: { profile: ["create"] },
+      });
+
+      const result = await OrganizationRoleModel.getAll(org.id, { name: "My Custom Role" });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        role: "custom_role_1",
+        name: "My Custom Role",
+        predefined: false,
+      });
+    });
+
+    test("should return empty array when filtering by non-existent name", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const result = await OrganizationRoleModel.getAll(org.id, { name: "non-existent-role" });
+
+      expect(result).toHaveLength(0);
+    });
   });
 
   describe("canDelete", () => {

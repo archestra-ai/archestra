@@ -296,8 +296,10 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
               {policy.conditions.map((condition, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: conditions don't have unique IDs
-                <div key={index} className="flex items-center gap-2">
+                <div
+                  key={`${condition.key}-${condition.operator}-${condition.value}`}
+                  className="flex items-center gap-2"
+                >
                   <span className="text-sm text-muted-foreground w-2">
                     {index === 0 ? "If" : ""}
                   </span>

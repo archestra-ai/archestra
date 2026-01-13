@@ -191,20 +191,20 @@ export function getModelCapabilities(modelId: string): ModelCapability[] {
   const lowerModelId = modelId.toLowerCase();
 
   // Try exact match first
-  if (modelCapabilitiesMap[modelId]) {
-    return modelCapabilitiesMap[modelId];
+  if (modelCapabilitiesMap[lowerModelId]) {
+    return modelCapabilitiesMap[lowerModelId];
   }
 
   // Try prefix match (e.g., "gpt-4o-2024-08-06" matches "gpt-4o")
   for (const [pattern, capabilities] of Object.entries(modelCapabilitiesMap)) {
-    if (lowerModelId.startsWith(pattern.toLowerCase())) {
+    if (lowerModelId.startsWith(pattern)) {
       return capabilities;
     }
   }
 
   // Try contains match for versioned models
   for (const [pattern, capabilities] of Object.entries(modelCapabilitiesMap)) {
-    if (lowerModelId.includes(pattern.toLowerCase())) {
+    if (lowerModelId.includes(pattern)) {
       return capabilities;
     }
   }

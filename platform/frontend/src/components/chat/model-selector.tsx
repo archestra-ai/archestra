@@ -47,7 +47,18 @@ import {
 } from "@/components/ui/tooltip";
 import { useModelsByProvider } from "@/lib/chat-models.query";
 
-/** Map capability to icon component */
+/**
+ * Map capability to icon component.
+ *
+ * This is intentionally a Partial<Record<...>> because not every
+ * ModelCapability has (or should have) a visual indicator. Only
+ * user-facing capabilities that make sense as badges are mapped here
+ * (e.g. reasoning, vision, audio, tools, streaming, code).
+ *
+ * Capabilities that are more about behavior or configuration rather than
+ * user-visible features (for example, "json_mode", "high_context") are
+ * intentionally excluded so they do not clutter the UI with technical details.
+ */
 const capabilityIcons: Partial<
   Record<ModelCapability, React.ComponentType<{ className?: string }>>
 > = {

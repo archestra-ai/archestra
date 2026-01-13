@@ -51,3 +51,18 @@ export type InsertOrganizationRole = z.infer<
 export type UpdateOrganizationRole = z.infer<
   typeof UpdateOrganizationRoleSchema
 >;
+
+/**
+ * Convert Permissions object to flat array of "resource:action" strings
+ */
+export const flattenPermissions = (
+  permissions: z.infer<typeof PermissionsSchema>,
+): string[] => {
+  const result: string[] = [];
+  for (const [resource, actions] of Object.entries(permissions)) {
+    for (const action of actions) {
+      result.push(`${resource}:${action}`);
+    }
+  }
+  return result;
+};

@@ -667,7 +667,20 @@ export async function getChatMcpTools({
               // When isError is true, throw to signal AI SDK that tool execution failed
               // This allows AI SDK to create a tool-error part and continue the conversation
               if (result.isError) {
-                throw new Error(result.error || "Tool execution failed");
+                // Extract error message from content (where MCP server puts the error details)
+                // Content can be an array (from MCP server response) or null (from internal errors)
+                const extractedError = Array.isArray(result.content)
+                  ? result.content
+                      .map((item: { type: string; text?: string }) =>
+                        item.type === "text" && item.text
+                          ? item.text
+                          : JSON.stringify(item),
+                      )
+                      .join("\n")
+                  : null;
+                const errorMessage =
+                  extractedError || result.error || "Tool execution failed";
+                throw new Error(errorMessage);
               }
 
               // Convert MCP content to string for AI SDK

@@ -6,7 +6,14 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Loader2, Search, Wand2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Pencil,
+  Search,
+  Wand2,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -545,7 +552,14 @@ export function AssignedToolsTable({
 
           if (hasCustomPolicy) {
             return (
-              <span className="text-xs font-medium text-primary">Custom</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-[90px] text-xs"
+                onClick={() => onToolClick(row.original)}
+              >
+                Custom
+              </Button>
             );
           }
 
@@ -598,7 +612,14 @@ export function AssignedToolsTable({
 
           if (hasCustomPolicy) {
             return (
-              <span className="text-xs font-medium text-primary">Custom</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-[90px] text-xs"
+                onClick={() => onToolClick(row.original)}
+              >
+                Custom
+              </Button>
             );
           }
 
@@ -664,6 +685,38 @@ export function AssignedToolsTable({
         },
         size: 170,
       },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => (
+          <WithPermissions
+            permissions={{ policy: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={!hasPermission}
+                      onClick={() => onToolClick(row.original)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Edit policies</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </WithPermissions>
+        ),
+        size: 60,
+      },
     ],
     [
       invocationPolicies,
@@ -671,6 +724,7 @@ export function AssignedToolsTable({
       internalMcpCatalogItems,
       isRowFieldUpdating,
       handleSingleRowUpdate,
+      onToolClick,
     ],
   );
 
@@ -874,17 +928,6 @@ export function AssignedToolsTable({
           <DataTable
             columns={columns}
             data={tools}
-            onRowClick={(tool, event) => {
-              const target = event.target as HTMLElement;
-              const isCheckboxClick =
-                target.closest('[data-column-id="select"]') ||
-                target.closest('input[type="checkbox"]') ||
-                target.closest('button[role="checkbox"]') ||
-                target.closest('button[role="switch"]');
-              if (!isCheckboxClick) {
-                onToolClick(tool);
-              }
-            }}
             sorting={sorting}
             onSortingChange={handleSortingChange}
             manualSorting={true}

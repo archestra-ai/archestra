@@ -30,7 +30,7 @@ export function CallPolicyToggle({
 
   return (
     // <ButtonGroup >
-    <div className="rounded-md ring-2 ring-secondary bg-secondary flex gap-[1px]">
+    <div className="rounded-md bg-secondary p-[2px] flex gap-[1px]">
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>

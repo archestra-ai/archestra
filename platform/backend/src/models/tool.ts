@@ -341,16 +341,13 @@ class ToolModel {
 
   /**
    * Get only MCP tools assigned to an agent (those from connected MCP servers)
-   * Includes: MCP server tools (catalogId set) and Archestra built-in tools (both null)
+   * Includes: MCP server tools (catalogId set, including Archestra builtin tools)
    * Excludes: proxy-discovered tools (agentId set, catalogId null)
    *
-   * Automatically assigns Archestra built-in tools to the agent if not already assigned.
+   * Note: Archestra tools are no longer automatically assigned - they must be
+   * explicitly assigned like any other MCP server tools.
    */
   static async getMcpToolsByAgent(agentId: string): Promise<Tool[]> {
-    // Ensure Archestra built-in tools are assigned to this agent
-    // This auto-migrates existing agents that were created before auto-assignment was added
-    await ToolModel.assignArchestraToolsToAgent(agentId);
-
     // Get tool IDs assigned via junction table (MCP tools)
     const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agentId);
 
@@ -358,23 +355,16 @@ class ToolModel {
       return [];
     }
 
-    // Return tools that are assigned via junction table AND:
-    // 1. Have catalogId set (regular MCP server tools), OR
-    // 2. Have both catalogId AND agentId null (Archestra built-in tools)
-    // This excludes proxy-discovered tools which have agentId set and catalogId null
+    // Return tools that are assigned via junction table AND have catalogId set
+    // This includes both regular MCP server tools and Archestra builtin tools
+    // Excludes proxy-discovered tools which have agentId set and catalogId null
     const tools = await db
       .select()
       .from(schema.toolsTable)
       .where(
         and(
           inArray(schema.toolsTable.id, assignedToolIds),
-          or(
-            isNotNull(schema.toolsTable.catalogId),
-            and(
-              isNull(schema.toolsTable.catalogId),
-              isNull(schema.toolsTable.agentId),
-            ),
-          ),
+          isNotNull(schema.toolsTable.catalogId),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -486,24 +476,53 @@ class ToolModel {
   }
 
   /**
-   * Assign Archestra built-in tools to an agent
-   * Creates the tools globally if they don't exist, then assigns them via junction table
+   * Seed Archestra built-in tools in the database.
+   * Creates the Archestra catalog entry if it doesn't exist (for FK constraint),
+   * then creates/updates tools with the catalog ID.
+   * Called during server startup to ensure Archestra tools exist.
+   *
+   * Also migrates any pre-existing "discovered" Archestra tools (catalog_id = NULL)
+   * to use the proper catalog ID.
    */
-  static async assignArchestraToolsToAgent(agentId: string): Promise<void> {
-    const archestraTools = getArchestraMcpTools();
+  static async seedArchestraTools(catalogId: string): Promise<void> {
+    // Ensure the Archestra catalog entry exists in the database for FK constraint
+    // This is a no-op if the entry already exists
+    await db
+      .insert(schema.internalMcpCatalogTable)
+      .values({
+        id: catalogId,
+        name: "Archestra",
+        description:
+          "Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.",
+        serverType: "builtin",
+        requiresAuth: false,
+      })
+      .onConflictDoNothing();
 
-    // Get all existing Archestra tools in a single query
+    const archestraTools = getArchestraMcpTools();
+    const archestraToolNames = archestraTools.map((t) => t.name);
+
+    // Migrate pre-existing "discovered" Archestra tools (catalog_id = NULL) to use the catalog
+    // This handles tools that were auto-discovered via proxy before the catalog was introduced
+    await db
+      .update(schema.toolsTable)
+      .set({ catalogId })
+      .where(
+        and(
+          isNull(schema.toolsTable.catalogId),
+          isNull(schema.toolsTable.agentId),
+          inArray(schema.toolsTable.name, archestraToolNames),
+        ),
+      );
+
+    // Get all existing Archestra tools in a single query (now including migrated ones)
     const existingTools = await db
       .select()
       .from(schema.toolsTable)
       .where(
         and(
-          isNull(schema.toolsTable.agentId),
-          isNull(schema.toolsTable.catalogId),
-          inArray(
-            schema.toolsTable.name,
-            archestraTools.map((t) => t.name),
-          ),
+          eq(schema.toolsTable.catalogId, catalogId),
+          inArray(schema.toolsTable.name, archestraToolNames),
         ),
       );
 
@@ -511,18 +530,15 @@ class ToolModel {
 
     // Prepare tools to insert (only those that don't exist)
     const toolsToInsert: InsertTool[] = [];
-    const toolIds: string[] = [];
 
     for (const archestraTool of archestraTools) {
       const existingTool = existingToolsByName.get(archestraTool.name);
-      if (existingTool) {
-        toolIds.push(existingTool.id);
-      } else {
+      if (!existingTool) {
         toolsToInsert.push({
           name: archestraTool.name,
           description: archestraTool.description || null,
           parameters: archestraTool.inputSchema,
-          catalogId: null,
+          catalogId,
           agentId: null,
         });
       }
@@ -530,12 +546,25 @@ class ToolModel {
 
     // Bulk insert new tools if any
     if (toolsToInsert.length > 0) {
-      const insertedTools = await db
-        .insert(schema.toolsTable)
-        .values(toolsToInsert)
-        .returning();
-      toolIds.push(...insertedTools.map((t) => t.id));
+      await db.insert(schema.toolsTable).values(toolsToInsert).returning();
     }
+  }
+
+  /**
+   * Assign Archestra built-in tools to an agent.
+   * Assumes tools have already been seeded via seedArchestraTools().
+   */
+  static async assignArchestraToolsToAgent(
+    agentId: string,
+    catalogId: string,
+  ): Promise<void> {
+    // Get all Archestra tools from the catalog
+    const archestraTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalogId));
+
+    const toolIds = archestraTools.map((t) => t.id);
 
     // Assign all tools to agent in bulk to avoid N+1
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);

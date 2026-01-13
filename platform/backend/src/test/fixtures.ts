@@ -2,7 +2,7 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
-import { MEMBER_ROLE_NAME } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID, MEMBER_ROLE_NAME } from "@shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
@@ -69,6 +69,7 @@ interface TestFixtures {
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
   makeSsoProvider: typeof makeSsoProvider;
+  seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
 }
 
 async function _makeUser(
@@ -668,6 +669,34 @@ async function makeSsoProvider(
   return provider;
 }
 
+/**
+ * Seeds and assigns Archestra tools to an agent.
+ * Creates the Archestra catalog entry if it doesn't exist, then seeds tools.
+ * This is useful for tests that need Archestra tools to be available.
+ */
+async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
+  // Create Archestra catalog entry if it doesn't exist
+  const existing = await InternalMcpCatalogModel.findById(
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+  if (!existing) {
+    await db.insert(schema.internalMcpCatalogTable).values({
+      id: ARCHESTRA_MCP_CATALOG_ID,
+      name: "Archestra",
+      description:
+        "Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.",
+      serverType: "builtin",
+    });
+  }
+
+  // Seed and assign Archestra tools
+  await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+  await ToolModel.assignArchestraToolsToAgent(
+    agentId,
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+}
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async ({}, use) => {
@@ -735,5 +764,8 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSsoProvider: async ({}, use) => {
     await use(makeSsoProvider);
+  },
+  seedAndAssignArchestraTools: async ({}, use) => {
+    await use(seedAndAssignArchestraTools);
   },
 });

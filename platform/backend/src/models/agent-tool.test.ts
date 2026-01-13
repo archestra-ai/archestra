@@ -987,12 +987,18 @@ describe("AgentToolModel.findAll", () => {
       expect(relevantAssignments).toHaveLength(0);
     });
 
-    test("handles empty tool IDs array", async ({ makeAgent }) => {
+    test("handles empty tool IDs array", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
       const agent1 = await makeAgent({ name: "Agent 1" });
+
+      // Seed and assign Archestra tools first
+      await seedAndAssignArchestraTools(agent1.id);
 
       await AgentToolModel.bulkCreateForAgentsAndTools([agent1.id], []);
 
-      // Should not throw and should not create any relationships
+      // Should not throw and should not create any relationships beyond Archestra tools
       const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
       // Only Archestra tools should be present
       expect(agent1Tools.length).toBeGreaterThan(0);

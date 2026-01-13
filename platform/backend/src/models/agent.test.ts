@@ -63,7 +63,7 @@ describe("AgentModel", () => {
 
     test("returns empty Set when no agents exist", async () => {
       const nonExistentId1 = "00000000-0000-0000-0000-000000000000";
-      const nonExistentId2 = "00000000-0000-0000-0000-000000000001";
+      const nonExistentId2 = "00000000-0000-4000-8000-000000000099";
 
       const existingIds = await AgentModel.existsBatch([
         nonExistentId1,

@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID, type archestraApiTypes } from "@shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -516,6 +516,13 @@ export function AssignToolsDialog({
                             (t) => t.toolId === tool.id,
                           );
 
+                          // Don't show credential selector for built-in Archestra tools
+                          const isBuiltinArchestraTool =
+                            tool.catalogId === ARCHESTRA_MCP_CATALOG_ID;
+                          if (isBuiltinArchestraTool) {
+                            return null;
+                          }
+
                           // Determine value to show - use dynamic constant if useDynamicTeamCredential is true
                           const displayValue =
                             selectedTool?.useDynamicTeamCredential
@@ -572,24 +579,26 @@ export function AssignToolsDialog({
           )}
         </div>
 
-        {originFilter !== "all" && filteredTools.length > 0 && (
-          <div className="pt-4 border-t">
-            <Label className="text-md font-medium mb-1">
-              Bulk assign credential
-            </Label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Select a credential to apply to all {filteredTools.length} visible
-              tool{filteredTools.length !== 1 ? "s" : ""}
-            </p>
-            <TokenSelect
-              catalogId={originFilter}
-              onValueChange={handleBulkCredentialChange}
-              value={undefined}
-              className="w-full"
-              shouldSetDefaultValue={false}
-            />
-          </div>
-        )}
+        {originFilter !== "all" &&
+          originFilter !== ARCHESTRA_MCP_CATALOG_ID &&
+          filteredTools.length > 0 && (
+            <div className="pt-4 border-t">
+              <Label className="text-md font-medium mb-1">
+                Bulk assign credential
+              </Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Select a credential to apply to all {filteredTools.length}{" "}
+                visible tool{filteredTools.length !== 1 ? "s" : ""}
+              </p>
+              <TokenSelect
+                catalogId={originFilter}
+                onValueChange={handleBulkCredentialChange}
+                value={undefined}
+                className="w-full"
+                shouldSetDefaultValue={false}
+              />
+            </div>
+          )}
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={isSaving}>
@@ -610,6 +619,11 @@ export function AssignToolsDialog({
                 );
                 // Tools without a catalog item can't have credentials configured - skip validation
                 if (!mcpCatalogItem) {
+                  return false;
+                }
+
+                // Built-in Archestra tools don't require credentials
+                if (mcpTool?.catalogId === ARCHESTRA_MCP_CATALOG_ID) {
                   return false;
                 }
 

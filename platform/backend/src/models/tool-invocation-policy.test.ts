@@ -82,9 +82,10 @@ describe("ToolInvocationPolicyModel", () => {
 
     test("returns success when only Archestra tools are in the batch", async ({
       makeAgent,
+      seedAndAssignArchestraTools,
     }) => {
       const agent = await makeAgent();
-      await ToolModel.assignArchestraToolsToAgent(agent.id);
+      await seedAndAssignArchestraTools(agent.id);
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
@@ -106,9 +107,10 @@ describe("ToolInvocationPolicyModel", () => {
       makeTool,
       makeAgentTool,
       makeToolPolicy,
+      seedAndAssignArchestraTools,
     }) => {
       const agent = await makeAgent();
-      await ToolModel.assignArchestraToolsToAgent(agent.id);
+      await seedAndAssignArchestraTools(agent.id);
 
       const tool = await makeTool({ agentId: agent.id, name: "regular-tool" });
       await makeAgentTool(agent.id, tool.id);

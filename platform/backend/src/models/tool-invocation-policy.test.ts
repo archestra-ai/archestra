@@ -1,6 +1,11 @@
 import { describe, expect, test } from "@/test";
 import ToolModel from "./tool";
+import type { PolicyEvaluationContext } from "./tool-invocation-policy";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
+
+const mockContext: PolicyEvaluationContext = {
+  teamIds: [],
+};
 
 describe("ToolInvocationPolicyModel", () => {
   describe("evaluateBatch", () => {
@@ -21,6 +26,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "tool-1", toolInput: { arg: "value1" } },
           { toolCallName: "tool-2", toolInput: { arg: "value2" } },
         ],
+        mockContext,
         true,
         "restrictive",
       );
@@ -64,6 +70,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "tool-1", toolInput: { email: "bad@evil.com" } },
           { toolCallName: "tool-2", toolInput: { email: "bad@evil.com" } },
         ],
+        mockContext,
         true,
         "restrictive",
       );
@@ -85,6 +92,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "archestra__whoami", toolInput: {} },
           { toolCallName: "archestra__get_profile", toolInput: { id: "123" } },
         ],
+        mockContext,
         false, // untrusted context
         "restrictive",
       );
@@ -117,6 +125,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "archestra__whoami", toolInput: {} },
           { toolCallName: "regular-tool", toolInput: { action: "delete" } },
         ],
+        mockContext,
         true,
         "restrictive",
       );
@@ -134,6 +143,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [],
+        mockContext,
         false,
         "restrictive",
       );
@@ -168,6 +178,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "permissive-tool", toolInput: { arg: "value" } }],
+        mockContext,
         false, // untrusted context
         "restrictive",
       );
@@ -190,6 +201,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "strict-tool", toolInput: { arg: "value" } }],
+        mockContext,
         false, // untrusted context
         "restrictive",
       );
@@ -212,6 +224,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "lenient-tool", toolInput: { arg: "value" } }],
+        mockContext,
         false, // untrusted context
         "permissive",
       );
@@ -240,6 +253,7 @@ describe("ToolInvocationPolicyModel", () => {
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "blocked-tool", toolInput: { action: "delete" } }],
+        mockContext,
         true, // trusted context
         "permissive", // YOLO mode
       );
@@ -274,6 +288,7 @@ describe("ToolInvocationPolicyModel", () => {
             toolInput: { path: "/safe/file.txt" },
           },
         ],
+        mockContext,
         false,
         "restrictive",
       );
@@ -314,6 +329,7 @@ describe("ToolInvocationPolicyModel", () => {
             toolInput: { body: "malicious content" },
           },
         ],
+        mockContext,
         false,
         "restrictive",
       );
@@ -373,6 +389,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "blocked-tool", toolInput: { dangerous: "true" } },
           { toolCallName: "another-blocked", toolInput: { bad: "yes" } },
         ],
+        mockContext,
         true,
         "restrictive",
       );
@@ -402,6 +419,7 @@ describe("ToolInvocationPolicyModel", () => {
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { status: "active" } }],
+          mockContext,
           true,
           "restrictive",
         );
@@ -410,6 +428,7 @@ describe("ToolInvocationPolicyModel", () => {
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { status: "inactive" } }],
+          mockContext,
           true,
           "restrictive",
         );
@@ -437,6 +456,7 @@ describe("ToolInvocationPolicyModel", () => {
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { env: "development" } }],
+          mockContext,
           true,
           "restrictive",
         );
@@ -445,6 +465,7 @@ describe("ToolInvocationPolicyModel", () => {
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { env: "production" } }],
+          mockContext,
           true,
           "restrictive",
         );
@@ -477,6 +498,7 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { message: "This contains a secret value" },
             },
           ],
+          mockContext,
           true,
           "restrictive",
         );
@@ -490,6 +512,7 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { message: "This is safe content" },
             },
           ],
+          mockContext,
           true,
           "restrictive",
         );
@@ -522,6 +545,7 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { message: "This is not yet ready" },
             },
           ],
+          mockContext,
           true,
           "restrictive",
         );
@@ -535,6 +559,7 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { message: "This is approved content" },
             },
           ],
+          mockContext,
           true,
           "restrictive",
         );
@@ -560,6 +585,7 @@ describe("ToolInvocationPolicyModel", () => {
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { path: "/tmp/file.txt" } }],
+          mockContext,
           true,
           "restrictive",
         );
@@ -573,6 +599,7 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { path: "/home/file.txt" },
             },
           ],
+          mockContext,
           true,
           "restrictive",
         );
@@ -598,6 +625,7 @@ describe("ToolInvocationPolicyModel", () => {
         const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { file: "malware.exe" } }],
+          mockContext,
           true,
           "restrictive",
         );
@@ -606,6 +634,7 @@ describe("ToolInvocationPolicyModel", () => {
         const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { file: "document.pdf" } }],
+          mockContext,
           true,
           "restrictive",
         );
@@ -642,6 +671,7 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { email: "user@example.com" },
             },
           ],
+          mockContext,
           true,
           "restrictive",
         );
@@ -655,6 +685,7 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { email: "user@other.com" },
             },
           ],
+          mockContext,
           true,
           "restrictive",
         );
@@ -691,6 +722,7 @@ describe("ToolInvocationPolicyModel", () => {
               },
             },
           ],
+          mockContext,
           true,
           "restrictive",
         );
@@ -704,6 +736,7 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { user: { email: "user@allowed.com", name: "User" } },
             },
           ],
+          mockContext,
           true,
           "restrictive",
         );
@@ -736,6 +769,7 @@ describe("ToolInvocationPolicyModel", () => {
         const result = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
+          mockContext,
           false, // context is untrusted
           "restrictive",
         );
@@ -765,6 +799,7 @@ describe("ToolInvocationPolicyModel", () => {
         const result = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
+          mockContext,
           true, // context is trusted
           "restrictive",
         );
@@ -810,6 +845,7 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { path: "/safe/file.txt" },
             },
           ],
+          mockContext,
           false, // untrusted context
           "restrictive",
         );
@@ -854,7 +890,191 @@ describe("ToolInvocationPolicyModel", () => {
               toolInput: { path: "/normal/file.txt" },
             },
           ],
+          mockContext,
           false, // untrusted context
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(true);
+      });
+    });
+
+    describe("context-based conditions", () => {
+      test("blocks when context.externalAgentId matches with equal operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "equal",
+              value: "blocked-external-agent",
+            },
+          ],
+          action: "block_always",
+          reason: "External agent blocked",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            teamIds: [],
+            externalAgentId: "blocked-external-agent",
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain("External agent blocked");
+      });
+
+      test("allows when context.externalAgentId does not match with equal operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "equal",
+              value: "blocked-external-agent",
+            },
+          ],
+          action: "block_always",
+          reason: "External agent blocked",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            teamIds: [],
+            externalAgentId: "allowed-external-agent",
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(true);
+      });
+
+      test("blocks when context.externalAgentId matches with notEqual operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "notEqual",
+              value: "trusted-agent",
+            },
+          ],
+          action: "block_always",
+          reason: "Only trusted agent allowed",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            teamIds: [],
+            externalAgentId: "untrusted-agent",
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain("Only trusted agent allowed");
+      });
+
+      test("blocks when context.teamIds matches with contains operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.teamIds",
+              operator: "contains",
+              value: "restricted-team-id",
+            },
+          ],
+          action: "block_always",
+          reason: "Team restricted",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            teamIds: ["other-team", "restricted-team-id"],
+          },
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain("Team restricted");
+      });
+
+      test("allows when context.teamIds does not match any teamIds", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.teamIds",
+              operator: "equal",
+              value: "restricted-team-id",
+            },
+          ],
+          action: "block_always",
+          reason: "Team restricted",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "test-tool", toolInput: { arg: "value" } }],
+          {
+            teamIds: ["allowed-team-1", "allowed-team-2"],
+          },
+          true,
           "restrictive",
         );
 

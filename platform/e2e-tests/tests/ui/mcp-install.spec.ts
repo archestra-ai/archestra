@@ -45,14 +45,14 @@ test.describe("MCP Install", () => {
     await adminPage.getByTestId(E2eTestId.AddCatalogItemButton).first().click();
     await adminPage.waitForLoadState("networkidle");
 
-    // Wait for the connect button to appear after adding to registry
-    const connectButton = adminPage.getByTestId(
-      `connect-catalog-item-button-${CONTEXT7_CATALOG_ITEM_NAME}`,
+    // Wait for the card to appear in the registry (more robust than waiting for button directly)
+    const serverCard = adminPage.getByTestId(
+      `${E2eTestId.McpServerCard}-${CONTEXT7_CATALOG_ITEM_NAME}`,
     );
-    await connectButton.waitFor({ state: "visible", timeout: 30000 });
+    await serverCard.waitFor({ state: "visible", timeout: 30000 });
 
-    // install the server
-    await connectButton.click();
+    // Click the Connect button within the card
+    await serverCard.getByRole("button", { name: "Connect" }).click();
     await adminPage.waitForTimeout(2_000);
 
     // fill the api key (just fake value)
@@ -65,10 +65,7 @@ test.describe("MCP Install", () => {
     await adminPage.waitForLoadState("networkidle");
 
     // Check that tools are discovered
-    await adminPage
-      .getByTestId(`mcp-server-card-${CONTEXT7_CATALOG_ITEM_NAME}`)
-      .getByText("out of 2")
-      .waitFor({ state: "visible" });
+    await serverCard.getByText("out of 2").waitFor({ state: "visible" });
 
     // cleanup
     await deleteCatalogItem(

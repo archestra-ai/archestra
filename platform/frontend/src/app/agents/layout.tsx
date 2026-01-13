@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { PageLayout } from "@/components/page-layout";
+import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -44,6 +45,7 @@ export default function AgentsLayout({
 
   return (
     <ErrorBoundary>
+      <PermissivePolicyBar />
       <PageLayout
         title="Agents"
         description={

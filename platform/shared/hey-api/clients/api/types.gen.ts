@@ -9811,6 +9811,12 @@ export type GetFeaturesResponses = {
         ollamaEnabled: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
         browserStreamingEnabled: boolean;
+        incomingEmail: {
+            enabled: boolean;
+            provider?: 'outlook';
+            displayName?: string;
+            emailDomain?: string;
+        };
     };
 };
 
@@ -10159,6 +10165,114 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
 };
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
+
+export type PostApiWebhooksIncomingEmailData = {
+    body?: unknown;
+    path?: never;
+    query?: never;
+    url: '/api/webhooks/incoming-email';
+};
+
+export type PostApiWebhooksIncomingEmailErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string;
+    };
+};
+
+export type PostApiWebhooksIncomingEmailError = PostApiWebhooksIncomingEmailErrors[keyof PostApiWebhooksIncomingEmailErrors];
+
+export type PostApiWebhooksIncomingEmailResponses = {
+    /**
+     * Default Response
+     */
+    200: string | {
+        success: boolean;
+        processed?: number;
+        errors?: number;
+    };
+};
+
+export type PostApiWebhooksIncomingEmailResponse = PostApiWebhooksIncomingEmailResponses[keyof PostApiWebhooksIncomingEmailResponses];
+
+export type GetApiPromptsByPromptIdEmailAddressData = {
+    body?: never;
+    path: {
+        promptId: string;
+    };
+    query?: never;
+    url: '/api/prompts/{promptId}/email-address';
+};
+
+export type GetApiPromptsByPromptIdEmailAddressErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string;
+    };
+};
+
+export type GetApiPromptsByPromptIdEmailAddressError = GetApiPromptsByPromptIdEmailAddressErrors[keyof GetApiPromptsByPromptIdEmailAddressErrors];
+
+export type GetApiPromptsByPromptIdEmailAddressResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        emailAddress: string | null;
+    };
+};
+
+export type GetApiPromptsByPromptIdEmailAddressResponse = GetApiPromptsByPromptIdEmailAddressResponses[keyof GetApiPromptsByPromptIdEmailAddressResponses];
+
+export type PostApiWebhooksIncomingEmailSetupData = {
+    body?: {
+        webhookUrl?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/webhooks/incoming-email/setup';
+};
+
+export type PostApiWebhooksIncomingEmailSetupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string;
+    };
+};
+
+export type PostApiWebhooksIncomingEmailSetupError = PostApiWebhooksIncomingEmailSetupErrors[keyof PostApiWebhooksIncomingEmailSetupErrors];
+
+export type PostApiWebhooksIncomingEmailSetupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        subscriptionId?: string;
+        message?: string;
+    };
+};
+
+export type PostApiWebhooksIncomingEmailSetupResponse = PostApiWebhooksIncomingEmailSetupResponses[keyof PostApiWebhooksIncomingEmailSetupResponses];
 
 export type GetInteractionsData = {
     body?: never;

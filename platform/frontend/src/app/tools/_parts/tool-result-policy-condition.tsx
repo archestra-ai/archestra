@@ -20,23 +20,10 @@ import {
 import { useUniqueExternalAgentIds } from "@/lib/interaction.query";
 import { useOperators } from "@/lib/policy.query";
 import { useTeams } from "@/lib/team.query";
+import type { PolicyCondition } from "./tool-call-policy-condition";
 
 const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
 const CONTEXT_TEAM_IDS = "context.teamIds";
-
-export type PolicyCondition = {
-  key: string;
-  operator:
-    | "equal"
-    | "notEqual"
-    | "contains"
-    | "notContains"
-    | "startsWith"
-    | "endsWith"
-    | "regex";
-  value: string;
-};
-
 type KeyItem = {
   value: string;
   label: string;
@@ -224,6 +211,7 @@ export function ToolResultPolicyCondition({
           className="w-6 h-6 p-0 hover:text-red-500 shrink-0"
           onClick={onRemove}
           title="Remove condition"
+          aria-label="Remove condition"
         >
           <X className="h-4 w-4" />
         </Button>

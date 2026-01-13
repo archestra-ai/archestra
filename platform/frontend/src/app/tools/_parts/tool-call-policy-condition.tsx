@@ -244,6 +244,7 @@ export function ToolCallPolicyCondition({
           className="w-6 h-6 p-0 hover:text-red-500 shrink-0"
           onClick={onRemove}
           title="Remove condition"
+          aria-label="Remove condition"
         >
           <X className="h-4 w-4" />
         </Button>

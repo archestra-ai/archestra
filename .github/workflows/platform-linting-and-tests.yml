@@ -342,7 +342,8 @@ jobs:
       - name: Merge reports
         working-directory: ./platform/e2e-tests
         run: |
-          npx playwright merge-reports --reporter=html --reporter=json ./blob-reports
+          npx playwright merge-reports --reporter=html --reporter='json,outputFile=results.json' ./blob-reports
+          ls -la  # Debug: show what files were created
 
       - name: Upload merged Playwright report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

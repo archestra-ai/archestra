@@ -1,9 +1,0 @@
-# GitHub API client
-PyGithub>=2.1.0
-
-# Git operations
-GitPython>=3.1.40
-
-# HTTP requests (fallback for GitHub API)
-requests>=2.31.0
-

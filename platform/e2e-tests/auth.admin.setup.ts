@@ -1,5 +1,5 @@
-import { SecretsManagerType } from "@shared";
 import { expect, test as setup } from "@playwright/test";
+import { SecretsManagerType } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,

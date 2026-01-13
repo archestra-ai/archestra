@@ -631,6 +631,8 @@ class McpClient {
         const headers: Record<string, string> = {};
         if (secrets.access_token) {
           headers.Authorization = `Bearer ${secrets.access_token}`;
+        } else if (secrets.raw_access_token) {
+          headers.Authorization = String(secrets.raw_access_token);
         }
 
         return new StreamableHTTPClientTransport(

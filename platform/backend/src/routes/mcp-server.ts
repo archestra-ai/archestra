@@ -241,11 +241,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Validate connection for remote servers
         if (secretId) {
-          const isValid = await McpServerModel.validateConnection(
-            serverData.name,
-            serverData.catalogId ?? undefined,
-            secretId,
-          );
+          const { isValid, errorMessage } =
+            await McpServerModel.validateConnection(
+              serverData.name,
+              serverData.catalogId ?? undefined,
+              secretId,
+            );
 
           if (!isValid) {
             // Clean up the secret we just created if validation fails
@@ -255,7 +256,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             throw new ApiError(
               400,
-              "Failed to connect to MCP server with provided credentials",
+              errorMessage ||
+                "Failed to connect to MCP server with provided credentials",
             );
           }
         }

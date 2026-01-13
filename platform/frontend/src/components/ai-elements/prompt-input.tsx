@@ -117,7 +117,9 @@ function getMediaType(file: File): string {
     xml: "application/xml",
   };
 
-  return ext ? extensionMap[ext] || "application/octet-stream" : "application/octet-stream";
+  return ext
+    ? extensionMap[ext] || "application/octet-stream"
+    : "application/octet-stream";
 }
 
 export type TextInputContext = {
@@ -428,7 +430,7 @@ export function PromptInputAttachments({
 
   return (
     <div
-      className={cn("flex flex-wrap items-center gap-2 p-3 w-full", className)}
+      className={cn("flex flex-wrap items-center gap-2 px-3 pt-1 pb-0 w-full", className)}
       {...props}
     >
       {attachments.files.map((file) => (

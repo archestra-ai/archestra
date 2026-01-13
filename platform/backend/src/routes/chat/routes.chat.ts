@@ -125,6 +125,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/chat",
     {
+      bodyLimit: config.api.bodyLimit,
       schema: {
         operationId: RouteId.StreamChat,
         description: "Stream chat response with MCP tools (useChat format)",

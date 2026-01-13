@@ -6,6 +6,7 @@ import {
   getDatabaseUrl,
   getOtlpAuthHeaders,
   getTrustedOrigins,
+  parseBodyLimit,
 } from "./config";
 
 // Mock the logger
@@ -492,5 +493,119 @@ describe("getAdditionalTrustedSsoProviderIds", () => {
     const result = getAdditionalTrustedSsoProviderIds();
 
     expect(result).toEqual(["my-provider", "another_provider", "provider123"]);
+  });
+});
+
+describe("parseBodyLimit", () => {
+  const DEFAULT_VALUE = 1024; // 1KB default for testing
+
+  describe("undefined or empty input", () => {
+    test("should return default value when input is undefined", () => {
+      expect(parseBodyLimit(undefined, DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    });
+
+    test("should return default value when input is empty string", () => {
+      expect(parseBodyLimit("", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    });
+  });
+
+  describe("numeric bytes input", () => {
+    test("should parse plain numeric value as bytes", () => {
+      expect(parseBodyLimit("52428800", DEFAULT_VALUE)).toBe(52428800);
+    });
+
+    test("should parse small numeric value", () => {
+      expect(parseBodyLimit("1024", DEFAULT_VALUE)).toBe(1024);
+    });
+
+    test("should parse zero", () => {
+      expect(parseBodyLimit("0", DEFAULT_VALUE)).toBe(0);
+    });
+  });
+
+  describe("human-readable format (KB)", () => {
+    test("should parse KB lowercase", () => {
+      expect(parseBodyLimit("100kb", DEFAULT_VALUE)).toBe(100 * 1024);
+    });
+
+    test("should parse KB uppercase", () => {
+      expect(parseBodyLimit("100KB", DEFAULT_VALUE)).toBe(100 * 1024);
+    });
+
+    test("should parse KB mixed case", () => {
+      expect(parseBodyLimit("100Kb", DEFAULT_VALUE)).toBe(100 * 1024);
+    });
+  });
+
+  describe("human-readable format (MB)", () => {
+    test("should parse MB lowercase", () => {
+      expect(parseBodyLimit("50mb", DEFAULT_VALUE)).toBe(50 * 1024 * 1024);
+    });
+
+    test("should parse MB uppercase", () => {
+      expect(parseBodyLimit("50MB", DEFAULT_VALUE)).toBe(50 * 1024 * 1024);
+    });
+
+    test("should parse MB mixed case", () => {
+      expect(parseBodyLimit("50Mb", DEFAULT_VALUE)).toBe(50 * 1024 * 1024);
+    });
+
+    test("should parse 100MB correctly", () => {
+      expect(parseBodyLimit("100MB", DEFAULT_VALUE)).toBe(100 * 1024 * 1024);
+    });
+  });
+
+  describe("human-readable format (GB)", () => {
+    test("should parse GB lowercase", () => {
+      expect(parseBodyLimit("1gb", DEFAULT_VALUE)).toBe(1 * 1024 * 1024 * 1024);
+    });
+
+    test("should parse GB uppercase", () => {
+      expect(parseBodyLimit("1GB", DEFAULT_VALUE)).toBe(1 * 1024 * 1024 * 1024);
+    });
+
+    test("should parse GB mixed case", () => {
+      expect(parseBodyLimit("2Gb", DEFAULT_VALUE)).toBe(2 * 1024 * 1024 * 1024);
+    });
+  });
+
+  describe("whitespace handling", () => {
+    test("should handle leading whitespace", () => {
+      expect(parseBodyLimit("  50MB", DEFAULT_VALUE)).toBe(50 * 1024 * 1024);
+    });
+
+    test("should handle trailing whitespace", () => {
+      expect(parseBodyLimit("50MB  ", DEFAULT_VALUE)).toBe(50 * 1024 * 1024);
+    });
+
+    test("should handle surrounding whitespace", () => {
+      expect(parseBodyLimit("  50MB  ", DEFAULT_VALUE)).toBe(50 * 1024 * 1024);
+    });
+  });
+
+  describe("invalid input", () => {
+    test("should return default value for invalid unit", () => {
+      expect(parseBodyLimit("50TB", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    });
+
+    test("should return default value for text without numbers", () => {
+      expect(parseBodyLimit("MB", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    });
+
+    test("should return default value for random text", () => {
+      expect(parseBodyLimit("invalid", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    });
+
+    test("should return default value for negative with unit", () => {
+      expect(parseBodyLimit("-50MB", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    });
+
+    test("should return default value for decimal with unit", () => {
+      expect(parseBodyLimit("1.5MB", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    });
+
+    test("should return default value for space between number and unit", () => {
+      expect(parseBodyLimit("50 MB", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    });
   });
 });

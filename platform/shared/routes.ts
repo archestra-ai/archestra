@@ -31,6 +31,7 @@ export const RouteId = {
   GetInternalMcpCatalog: "getInternalMcpCatalog",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",

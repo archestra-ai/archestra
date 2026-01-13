@@ -12,7 +12,11 @@ import {
   waitForServerInstallation,
 } from "../../utils";
 import { expect, test } from "./fixtures";
-import { getOrgTokenForProfile, makeApiRequest } from "./mcp-gateway-utils";
+import {
+  assignArchestraToolsToProfile,
+  getOrgTokenForProfile,
+  makeApiRequest,
+} from "./mcp-gateway-utils";
 
 /**
  * MCP Gateway Authentication Tests
@@ -26,12 +30,16 @@ test.describe("MCP Gateway - Legacy Auth (profile ID as token)", () => {
   let profileId: string;
 
   test.beforeAll(async ({ request, createAgent }) => {
+    // Create test profile
     const createResponse = await createAgent(
       request,
       "MCP Gateway Legacy Auth Test",
     );
     const profile = await createResponse.json();
     profileId = profile.id;
+
+    // Assign Archestra tools to the profile (required for tools/list to return them)
+    await assignArchestraToolsToProfile(request, profileId);
   });
 
   test.afterAll(async ({ request, deleteAgent }) => {
@@ -198,6 +206,9 @@ test.describe("MCP Gateway - New Auth (archestra token)", () => {
     );
     const profile = await createResponse.json();
     profileId = profile.id;
+
+    // Assign Archestra tools to the profile (required for tools/list to return them)
+    await assignArchestraToolsToProfile(request, profileId);
 
     // Get org token using shared utility
     archestraToken = await getOrgTokenForProfile(request);

@@ -291,6 +291,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInternalMcpCatalogItem]: {
     internalMcpCatalog: ["read"],
   },
+  [RouteId.GetInternalMcpCatalogTools]: {
+    internalMcpCatalog: ["read"],
+  },
   [RouteId.UpdateInternalMcpCatalogItem]: {
     internalMcpCatalog: ["update"],
   },

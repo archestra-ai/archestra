@@ -1,14 +1,7 @@
-import {
-  type ModelCapabilities,
-  RouteId,
-  type SupportedProvider,
-  SupportedProviders,
-  TimeInMs,
-} from "@shared";
+import { RouteId, type SupportedProvider, SupportedProviders } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
@@ -24,11 +17,6 @@ import {
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
-import { getModelCapabilities } from "./model-capabilities";
-
-/** TTL for caching chat models from provider APIs */
-const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
-const CHAT_MODELS_CACHE_TTL_HOURS = CHAT_MODELS_CACHE_TTL_MS / TimeInMs.Hour;
 
 // Response schema for models
 const ChatModelSchema = z.object({
@@ -36,28 +24,6 @@ const ChatModelSchema = z.object({
   displayName: z.string(),
   provider: SupportedChatProviderSchema,
   createdAt: z.string().optional(),
-  capabilities: z
-    .object({
-      capabilities: z.array(z.string()),
-      metadata: z
-        .object({
-          maxTokens: z.number().optional(),
-          contextLength: z.number().optional(),
-          modelName: z.string().optional(),
-          maxCompletionTokens: z.number().optional(),
-          isModerated: z.boolean().optional(),
-          supportsImages: z.boolean().optional(),
-          supportsAudio: z.boolean().optional(),
-          supportsVideo: z.boolean().optional(),
-          supportsStreaming: z.boolean().optional(),
-          supportsFunctionCalling: z.boolean().optional(),
-          supportsJsonMode: z.boolean().optional(),
-          hasReasoning: z.boolean().optional(),
-          canGenerateImages: z.boolean().optional(),
-        })
-        .optional(),
-    })
-    .optional(),
 });
 
 export interface ModelInfo {
@@ -65,7 +31,6 @@ export interface ModelInfo {
   displayName: string;
   provider: SupportedProvider;
   createdAt?: string;
-  capabilities?: ModelCapabilities;
 }
 
 /**
@@ -95,15 +60,13 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
     data: Anthropic.Types.Model[];
   };
 
-  return Promise.all(
-    data.data.map(async (model) => ({
-      id: model.id,
-      displayName: model.display_name,
-      provider: "anthropic" as const,
-      createdAt: model.created_at,
-      capabilities: await getModelCapabilities(model.id, "anthropic"),
-    })),
-  );
+  // All Anthropic models are chat models, no filtering needed
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.display_name,
+    provider: "anthropic" as const,
+    createdAt: model.created_at,
+  }));
 }
 
 /**
@@ -142,24 +105,27 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
     "dall-e",
   ];
 
-  return Promise.all(
-    data.data
-      .filter((model) => {
-        const id = model.id.toLowerCase();
-        const hasExcludedPattern = excludePatterns.some((pattern) =>
-          id.includes(pattern),
-        );
-        return !hasExcludedPattern;
-      })
-      .map(mapOpenAiModelToModelInfo),
-  );
+  return data.data
+    .filter((model) => {
+      const id = model.id.toLowerCase();
+
+      // Must not contain excluded patterns
+      const hasExcludedPattern = excludePatterns.some((pattern) =>
+        id.includes(pattern),
+      );
+      return !hasExcludedPattern;
+    })
+    .map(mapOpenAiModelToModelInfo);
 }
 
-export async function mapOpenAiModelToModelInfo(
+export function mapOpenAiModelToModelInfo(
   model: OpenAi.Types.Model | OpenAi.Types.OrlandoModel,
-): Promise<ModelInfo> {
+): ModelInfo {
+  // by default it's openai
   let provider: SupportedProvider = "openai";
+  // but if it's an orlando model (we identify that by missing owned_by property)
   if (!("owned_by" in model)) {
+    // then we need to determine the provider based on the model id (falling back to default openai)
     if (model.id.startsWith("claude-")) {
       provider = "anthropic";
     } else if (model.id.startsWith("gemini-")) {
@@ -175,7 +141,6 @@ export async function mapOpenAiModelToModelInfo(
       "created" in model
         ? new Date(model.created * 1000).toISOString()
         : undefined,
-    capabilities: await getModelCapabilities(model.id, provider),
   };
 }
 
@@ -201,23 +166,21 @@ export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
     models: Gemini.Types.Model[];
   };
 
-  return Promise.all(
-    data.models
-      .filter(
-        (model) =>
-          model.supportedGenerationMethods?.includes("generateContent") ??
-          false,
-      )
-      .map(async (model) => {
-        const modelId = model.name.replace("models/", "");
-        return {
-          id: modelId,
-          displayName: model.displayName ?? modelId,
-          provider: "gemini" as const,
-          capabilities: await getModelCapabilities(modelId, "gemini"),
-        };
-      }),
-  );
+  // Filter to only models that support generateContent (chat)
+  return data.models
+    .filter(
+      (model) =>
+        model.supportedGenerationMethods?.includes("generateContent") ?? false,
+    )
+    .map((model) => {
+      // Model name is in format "models/gemini-1.5-flash-001", extract just the model ID
+      const modelId = model.name.replace("models/", "");
+      return {
+        id: modelId,
+        displayName: model.displayName ?? modelId,
+        provider: "gemini" as const,
+      };
+    });
 }
 
 /**
@@ -273,6 +236,7 @@ async function fetchVllmModels(apiKey: string): Promise<ModelInfo[]> {
 
   const response = await fetch(url, {
     headers: {
+      // vLLM typically doesn't require API keys, but pass it if provided
       Authorization: apiKey ? `Bearer ${apiKey}` : "Bearer EMPTY",
     },
   });
@@ -297,17 +261,15 @@ async function fetchVllmModels(apiKey: string): Promise<ModelInfo[]> {
     }>;
   };
 
-  return Promise.all(
-    data.data.map(async (model) => ({
-      id: model.id,
-      displayName: model.id,
-      provider: "vllm" as const,
-      createdAt: model.created
-        ? new Date(model.created * 1000).toISOString()
-        : undefined,
-      capabilities: await getModelCapabilities(model.id, "vllm"),
-    })),
-  );
+  // vLLM returns all loaded models, no filtering needed
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "vllm" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }));
 }
 
 /**
@@ -321,6 +283,7 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
 
   const response = await fetch(url, {
     headers: {
+      // Ollama typically doesn't require API keys, but pass it if provided
       Authorization: apiKey ? `Bearer ${apiKey}` : "Bearer EMPTY",
     },
   });
@@ -343,21 +306,25 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
     }>;
   };
 
-  return Promise.all(
-    data.data.map(async (model) => ({
-      id: model.id,
-      displayName: model.id,
-      provider: "ollama" as const,
-      createdAt: model.created
-        ? new Date(model.created * 1000).toISOString()
-        : undefined,
-      capabilities: await getModelCapabilities(model.id, "ollama"),
-    })),
-  );
+  // Ollama returns all locally available models, no filtering needed
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "ollama" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }));
 }
 
 /**
  * Fetch models from Gemini API via Vertex AI SDK
+ * Uses Application Default Credentials (ADC) for authentication
+ *
+ * Note: Vertex AI returns models in a different format than Google AI Studio:
+ * - Model names are "publishers/google/models/xxx" not "models/xxx"
+ * - No supportedActions or displayName fields available
+ * - We filter by model name pattern to get chat-capable Gemini models
  */
 export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
   logger.debug(
@@ -368,19 +335,26 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
     "Fetching Gemini models via Vertex AI SDK",
   );
 
+  // Create a client without API key (uses ADC for Vertex AI)
   const ai = createGoogleGenAIClient(undefined, "[ChatModels]");
+
   const pager = await ai.models.list({ config: { pageSize: 100 } });
 
   const models: ModelInfo[] = [];
+
+  // Patterns to exclude non-chat models
   const excludePatterns = ["embedding", "imagen", "text-bison", "code-bison"];
 
   for await (const model of pager) {
     const modelName = model.name ?? "";
 
+    // Only include Gemini models that are chat-capable
+    // Vertex AI returns names like "publishers/google/models/gemini-2.0-flash-001"
     if (!modelName.includes("gemini")) {
       continue;
     }
 
+    // Exclude embedding and other non-chat models
     const isExcluded = excludePatterns.some((pattern) =>
       modelName.toLowerCase().includes(pattern),
     );
@@ -388,7 +362,11 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
       continue;
     }
 
+    // Extract model ID from "publishers/google/models/gemini-xxx" format
     const modelId = modelName.replace("publishers/google/models/", "");
+
+    // Generate a readable display name from the model ID
+    // e.g., "gemini-2.0-flash-001" -> "Gemini 2.0 Flash 001"
     const displayName = modelId
       .split("-")
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -398,7 +376,6 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
       id: modelId,
       displayName,
       provider: "gemini" as const,
-      capabilities: await getModelCapabilities(modelId, "gemini"),
     });
   }
 
@@ -427,6 +404,7 @@ async function getProviderApiKey({
     userId,
     userTeamIds: await TeamModel.getUserTeamIds(userId),
     provider,
+    // set null to autoresolve the api key
     conversationId: null,
   });
 
@@ -440,6 +418,7 @@ async function getProviderApiKey({
     }
   }
 
+  // Fall back to environment variable
   switch (provider) {
     case "anthropic":
       return config.chat.anthropic.apiKey || null;
@@ -450,8 +429,10 @@ async function getProviderApiKey({
     case "openai":
       return config.chat.openai.apiKey || null;
     case "vllm":
+      // vLLM typically doesn't require API keys, return empty or configured key
       return config.chat.vllm.apiKey || "";
     case "ollama":
+      // Ollama typically doesn't require API keys, return empty or configured key
       return config.chat.ollama.apiKey || "";
     default:
       return null;
@@ -501,24 +482,18 @@ export async function fetchModelsForProvider({
   });
 
   const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
+  // vLLM and Ollama typically don't require API keys
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
 
+  // For Gemini with Vertex AI, we don't need an API key - authentication is via ADC
+  // For vLLM and Ollama, API key is optional
   if (!apiKey && !vertexAiEnabled && !isVllm && !isOllama) {
     logger.debug(
       { provider, organizationId },
       "No API key available for provider",
     );
     return [];
-  }
-
-  const cacheKey = vertexAiEnabled
-    ? (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-vertexai` as const)
-    : (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-${apiKey?.slice(0, 6)}` as const);
-  const cachedModels = await cacheManager.get<ModelInfo[]>(cacheKey);
-
-  if (cachedModels) {
-    return cachedModels;
   }
 
   try {
@@ -529,33 +504,47 @@ export async function fetchModelsForProvider({
       }
     } else if (provider === "gemini") {
       if (vertexAiEnabled) {
+        // Use Vertex AI SDK for model listing (uses ADC for authentication)
         models = await fetchGeminiModelsViaVertexAi();
       } else if (apiKey) {
+        // Use standard Gemini API with API key
         models = await modelFetchers[provider](apiKey);
       }
     } else if (provider === "vllm") {
+      // vLLM doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     } else if (provider === "ollama") {
+      // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     }
-    await cacheManager.set(cacheKey, models, CHAT_MODELS_CACHE_TTL_MS);
+    logger.info(
+      { provider, modelCount: models.length },
+      "fetchModelsForProvider:fetched models from provider",
+    );
     return models;
   } catch (error) {
     logger.error(
-      { provider, organizationId, error },
-      "Error fetching models from provider",
+      {
+        provider,
+        organizationId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      },
+      "fetchModelsForProvider:error fetching models from provider",
     );
     return [];
   }
 }
 
 const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // Get available models from all configured providers
   fastify.get(
     "/api/chat/models",
     {
       schema: {
         operationId: RouteId.GetChatModels,
-        description: `Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for ${CHAT_MODELS_CACHE_TTL_HOURS} hours.`,
+        description:
+          "Get available LLM models from all configured providers. Models are fetched directly from provider APIs.",
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedChatProviderSchema.optional(),

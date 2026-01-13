@@ -32,7 +32,10 @@ export function PermissivePolicyOverlay({
       {children}
       {isPermissive && (
         <>
-          <div className="absolute inset-0 bg-background/60 dark:bg-background/60 rounded-lg z-10 pointer-events-none" />
+          <div
+            data-label="Permissive policy overlay"
+            className="absolute inset-0 bg-background/60 dark:bg-background/60 rounded-lg z-10"
+          />
           <div className="absolute inset-x-0 top-0 bottom-0 z-20 pointer-events-none">
             <div className="sticky top-1/3 flex justify-center pointer-events-auto">
               <div className="text-center p-6 max-w-md bg-background border rounded-lg shadow-lg">

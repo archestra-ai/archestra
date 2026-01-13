@@ -2,6 +2,7 @@ import type { GoogleGenAI } from "@google/genai";
 import { vi } from "vitest";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
+import { getModelCapabilities } from "./model-capabilities";
 import {
   fetchGeminiModels,
   fetchGeminiModelsViaVertexAi,
@@ -25,11 +26,21 @@ import {
 
 const mockCreateGoogleGenAIClient = vi.mocked(createGoogleGenAIClient);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
+vi.mock("./model-capabilities", () => ({
+  getModelCapabilities: vi.fn(),
+}));
+
+const mockGetModelCapabilities = vi.mocked(getModelCapabilities);
 
 describe("chat-models", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockReset();
+    // Default mock behavior - return basic capabilities
+    mockGetModelCapabilities.mockResolvedValue({
+      capabilities: ["streaming", "chat"],
+      metadata: { supportsStreaming: true },
+    });
   });
 
   describe("fetchGeminiModels (API key mode)", () => {
@@ -71,13 +82,19 @@ describe("chat-models", () => {
           id: "gemini-2.5-pro",
           displayName: "Gemini 2.5 Pro",
           provider: "gemini",
-          capabilities: { capabilities: ["chat"], metadata: undefined },
+          capabilities: {
+            capabilities: ["streaming", "chat"],
+            metadata: { supportsStreaming: true },
+          },
         },
         {
           id: "gemini-2.5-flash",
           displayName: "Gemini 2.5 Flash",
           provider: "gemini",
-          capabilities: { capabilities: ["chat"], metadata: undefined },
+          capabilities: {
+            capabilities: ["streaming", "chat"],
+            metadata: { supportsStreaming: true },
+          },
         },
       ]);
 
@@ -210,8 +227,8 @@ describe("chat-models", () => {
           displayName: "Gemini 2.5 Pro",
           provider: "gemini",
           capabilities: {
-            capabilities: ["reasoning", "chat", "multimodal", "streaming"],
-            metadata: { hasReasoning: true, supportsStreaming: true },
+            capabilities: ["streaming", "chat"],
+            metadata: { supportsStreaming: true },
           },
         },
         {
@@ -219,7 +236,7 @@ describe("chat-models", () => {
           displayName: "Gemini 2.5 Flash",
           provider: "gemini",
           capabilities: {
-            capabilities: ["chat", "multimodal", "streaming"],
+            capabilities: ["streaming", "chat"],
             metadata: { supportsStreaming: true },
           },
         },
@@ -366,8 +383,8 @@ describe("chat-models", () => {
 
   describe("mapOpenAiModelToModelInfo", () => {
     describe("OpenAi.Types.Model", () => {
-      test("maps standard OpenAI model", () => {
-        const result = mapOpenAiModelToModelInfo({
+      test("maps standard OpenAI model", async () => {
+        const result = await mapOpenAiModelToModelInfo({
           id: "gpt-4o",
           created: 1715367049,
           object: "model",
@@ -380,16 +397,16 @@ describe("chat-models", () => {
           provider: "openai",
           createdAt: new Date(1715367049 * 1000).toISOString(),
           capabilities: {
-            capabilities: ["vision"],
-            metadata: { supportsImages: true },
+            capabilities: ["streaming", "chat"],
+            metadata: { supportsStreaming: true },
           },
         });
       });
     });
 
     describe("OpenAi.Types.OrlandoModel", () => {
-      test("maps Claude model with anthropic provider", () => {
-        const result = mapOpenAiModelToModelInfo({
+      test("maps Claude model with anthropic provider", async () => {
+        const result = await mapOpenAiModelToModelInfo({
           id: "claude-3-5-sonnet",
           name: "claude-3-5-sonnet",
         });
@@ -400,14 +417,14 @@ describe("chat-models", () => {
           provider: "anthropic",
           createdAt: undefined,
           capabilities: {
-            capabilities: ["vision"],
-            metadata: { supportsImages: true },
+            capabilities: ["streaming", "chat"],
+            metadata: { supportsStreaming: true },
           },
         });
       });
 
-      test("maps Gemini model with gemini provider", () => {
-        const result = mapOpenAiModelToModelInfo({
+      test("maps Gemini model with gemini provider", async () => {
+        const result = await mapOpenAiModelToModelInfo({
           id: "gemini-2.5-pro",
           name: "gemini-2.5-pro",
         });
@@ -418,14 +435,14 @@ describe("chat-models", () => {
           provider: "gemini",
           createdAt: undefined,
           capabilities: {
-            capabilities: ["vision"],
-            metadata: { supportsImages: true },
+            capabilities: ["streaming", "chat"],
+            metadata: { supportsStreaming: true },
           },
         });
       });
 
-      test("maps GPT model with openai provider", () => {
-        const result = mapOpenAiModelToModelInfo({
+      test("maps GPT model with openai provider", async () => {
+        const result = await mapOpenAiModelToModelInfo({
           id: "gpt-5",
           name: "gpt-5",
         });
@@ -435,7 +452,10 @@ describe("chat-models", () => {
           displayName: "gpt-5",
           provider: "openai",
           createdAt: undefined,
-          capabilities: { capabilities: [], metadata: undefined },
+          capabilities: {
+            capabilities: ["streaming", "chat"],
+            metadata: { supportsStreaming: true },
+          },
         });
       });
     });

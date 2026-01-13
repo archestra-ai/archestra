@@ -13,7 +13,7 @@ interface OpenRouterModelArchitecture {
   instruct_type: string | null;
 }
 
-interface OpenRouterModel {
+export interface OpenRouterModel {
   id: string;
   canonical_slug?: string;
   hugging_face_id?: string;
@@ -38,7 +38,7 @@ interface OpenRouterModelsResponse {
   data: OpenRouterModel[];
 }
 
-interface CapabilityMetadata {
+export interface CapabilityMetadata {
   maxTokens?: number;
   contextLength?: number;
   modelName?: string;
@@ -54,14 +54,6 @@ interface CapabilityMetadata {
   canGenerateImages?: boolean;
 }
 
-interface ProviderFallbackPatterns {
-  patterns: Array<{
-    test: (id: string) => boolean;
-    capabilities: ModelCapability[];
-    metadata?: Partial<CapabilityMetadata>;
-  }>;
-}
-
 const MODELS_CACHE = new Map<string, OpenRouterModel>();
 let ALL_MODELS_CACHE: OpenRouterModel[] | null = null;
 let LAST_FETCH_TIME = 0;
@@ -69,168 +61,6 @@ const CACHE_DURATION = 30 * 60 * 1000;
 const MAX_CACHE_SIZE = 2000;
 const FETCH_TIMEOUT_MS = 10000;
 const MAX_RETRIES = 2;
-
-const DESCRIPTION_PATTERNS: Array<{
-  test: (desc: string) => boolean;
-  capabilities: ModelCapability[];
-  metadata?: Partial<CapabilityMetadata>;
-}> = [
-  {
-    test: (desc) => /\b(vision|image|visual)\b/i.test(desc),
-    capabilities: ["vision"],
-    metadata: { supportsImages: true },
-  },
-  {
-    test: (desc) => /\b(audio|sound|speech)\b/i.test(desc),
-    capabilities: ["audio"],
-    metadata: { supportsAudio: true },
-  },
-  {
-    test: (desc) => /\bvideo\b/i.test(desc),
-    capabilities: ["multimodal"],
-    metadata: { supportsVideo: true },
-  },
-  {
-    test: (desc) => /\bmultimodal\b/i.test(desc),
-    capabilities: ["multimodal"],
-  },
-  {
-    test: (desc) => /\b(reasoning|think)\b/i.test(desc),
-    capabilities: ["reasoning"],
-    metadata: { hasReasoning: true },
-  },
-  {
-    test: (desc) => /\b(code|programming)\b/i.test(desc),
-    capabilities: ["code"],
-  },
-  {
-    test: (desc) => /\b(json|structured output)\b/i.test(desc),
-    capabilities: ["json-mode"],
-    metadata: { supportsJsonMode: true },
-  },
-  {
-    test: (desc) => /\b(function call|tool use)\b/i.test(desc),
-    capabilities: ["function-calling"],
-    metadata: { supportsFunctionCalling: true },
-  },
-];
-
-const FALLBACK_PATTERNS: Record<string, ProviderFallbackPatterns> = {
-  openai: {
-    patterns: [
-      {
-        test: (id) => /\b(gpt-4o|vision)\b/i.test(id),
-        capabilities: ["vision"],
-        metadata: { supportsImages: true },
-      },
-      {
-        test: (id) => /\b(o1|gpt-4o-reason)\b/i.test(id),
-        capabilities: ["reasoning"],
-        metadata: { hasReasoning: true },
-      },
-      {
-        test: (id) => /-(128k|256k|1m)\b/i.test(id),
-        capabilities: ["context-window"],
-      },
-      {
-        test: (id) => /-(json|function-call)\b/i.test(id),
-        capabilities: ["function-calling", "json-mode"],
-      },
-    ],
-  },
-  anthropic: {
-    patterns: [
-      {
-        test: (id) => /\b(claude-3\.[57]|claude-opus)\b/i.test(id),
-        capabilities: ["vision"],
-        metadata: { supportsImages: true },
-      },
-      {
-        test: (id) => /\b(opus|sonnet-4)\b/i.test(id),
-        capabilities: ["reasoning"],
-        metadata: { hasReasoning: true },
-      },
-      { test: (id) => /-200k\b/i.test(id), capabilities: ["context-window"] },
-    ],
-  },
-  gemini: {
-    patterns: [
-      {
-        test: (id) => /\b(1\.5|2\.0)\b/i.test(id),
-        capabilities: ["vision", "multimodal"],
-        metadata: { supportsImages: true },
-      },
-      {
-        test: (id) => /-(pro|ultra)\b/i.test(id),
-        capabilities: ["reasoning"],
-        metadata: { hasReasoning: true },
-      },
-      {
-        test: (id) => /-(1m|2m)\b/i.test(id),
-        capabilities: ["context-window"],
-      },
-    ],
-  },
-  vllm: {
-    patterns: [
-      {
-        test: (id) => /-vision\b/i.test(id),
-        capabilities: ["vision"],
-        metadata: { supportsImages: true },
-      },
-      { test: (id) => /-code\b/i.test(id), capabilities: ["code"] },
-    ],
-  },
-  ollama: {
-    patterns: [
-      {
-        test: (id) => /\b(llava|vision)\b/i.test(id),
-        capabilities: ["vision"],
-        metadata: { supportsImages: true },
-      },
-      { test: (id) => /\bcodellama\b/i.test(id), capabilities: ["code"] },
-    ],
-  },
-  default: {
-    patterns: [
-      {
-        test: (id) => /\b(gpt-4o|claude-3|gemini|vision|molmo)\b/i.test(id),
-        capabilities: ["vision"],
-        metadata: { supportsImages: true },
-      },
-      {
-        test: (id) => /\b(o1|opus|reasoning)\b/i.test(id),
-        capabilities: ["reasoning"],
-        metadata: { hasReasoning: true },
-      },
-      {
-        test: (id) => /\b(128k|200k|1m)\b/i.test(id),
-        capabilities: ["context-window"],
-      },
-      {
-        test: (id) => /\b(code|codellama|deepseek-coder)\b/i.test(id),
-        capabilities: ["code"],
-      },
-    ],
-  },
-};
-
-function parseCapabilitiesFromDescription(
-  description: string,
-  capabilities: Set<ModelCapability>,
-  metadata: CapabilityMetadata,
-): void {
-  for (const pattern of DESCRIPTION_PATTERNS) {
-    if (pattern.test(description)) {
-      for (const c of pattern.capabilities) {
-        capabilities.add(c);
-      }
-      if (pattern.metadata) {
-        Object.assign(metadata, pattern.metadata);
-      }
-    }
-  }
-}
 
 function parseCapabilitiesFromArchitecture(
   architecture: OpenRouterModelArchitecture,
@@ -279,27 +109,6 @@ function parseCapabilitiesFromArchitecture(
 
   if (input_modalities.includes("text") && output_modalities.includes("text")) {
     capabilities.add("chat");
-  }
-}
-
-function applyFallbackPatterns(
-  modelId: string,
-  provider: string,
-  capabilities: Set<ModelCapability>,
-  metadata: CapabilityMetadata,
-): void {
-  const patterns =
-    FALLBACK_PATTERNS[provider]?.patterns ?? FALLBACK_PATTERNS.default.patterns;
-
-  for (const pattern of patterns) {
-    if (pattern.test(modelId)) {
-      for (const c of pattern.capabilities) {
-        capabilities.add(c);
-      }
-      if (pattern.metadata) {
-        Object.assign(metadata, pattern.metadata);
-      }
-    }
   }
 }
 
@@ -427,12 +236,6 @@ export function resolveCapabilitiesFromModel(
     );
   }
 
-  if (model.description) {
-    parseCapabilitiesFromDescription(model.description, capabilities, metadata);
-  }
-
-  applyFallbackPatterns(model.id, "default", capabilities, metadata);
-
   if (model.context_length && model.context_length > 100000) {
     capabilities.add("context-window");
   }
@@ -458,13 +261,11 @@ export function resolveCapabilitiesFromModel(
 }
 
 export function resolveFallbackCapabilities(
-  modelId: string,
-  provider: string,
+  _modelId: string,
+  _provider: string,
 ): ModelCapabilities {
   const capabilities: Set<ModelCapability> = new Set();
   const metadata: CapabilityMetadata = {};
-
-  applyFallbackPatterns(modelId, provider, capabilities, metadata);
 
   capabilities.add("streaming");
   metadata.supportsStreaming = true;

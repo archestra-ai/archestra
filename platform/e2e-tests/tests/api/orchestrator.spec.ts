@@ -261,4 +261,83 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
       expect(toolsAfter.length).toBe(toolsCountBefore);
     });
   });
+
+  test.describe("Local MCP Server - Docker Image", () => {
+    // Extend timeout for this describe block since Docker image pull and MCP server installation can take a while
+    test.describe.configure({ timeout: 60_000 });
+
+    let catalogId: string;
+    let serverId: string;
+
+    test.beforeAll(
+      async ({
+        request,
+        createAgent,
+        createMcpCatalogItem,
+        installMcpServer,
+        getTeamByName,
+      }) => {
+        // Create agent for testing (needed for cleanup)
+        await createAgent(request, "Orchestrator Test Agent - Docker");
+
+        // Get the Default Team (required for MCP server installation when Vault is enabled)
+        const defaultTeam = await getTeamByName(request, "Default Team");
+        if (!defaultTeam) {
+          throw new Error("Default Team not found");
+        }
+
+        // Create a catalog item for context7 MCP server using Docker image
+        const catalogResponse = await createMcpCatalogItem(request, {
+          name: "Context7 - Docker Based",
+          description:
+            "Context7 MCP Server for testing Docker image installation",
+          serverType: "local",
+          localConfig: {
+            /**
+             * NOTE: we use this image instead of the mcp/context7 one as this one exposes stdio..
+             * the other one exposes SSE (which we don't support yet as a transport type)..
+             *
+             * https://github.com/dolasoft/stdio_context7_mcp
+             */
+            dockerImage: "dolasoft/stdio-context7-mcp",
+            transportType: "stdio",
+            environment: [],
+          },
+        });
+        const catalogItem = await catalogResponse.json();
+        catalogId = catalogItem.id;
+
+        // Install the MCP server with team assignment
+        const installResponse = await installMcpServer(request, {
+          name: "Test Context7 Docker Server",
+          catalogId: catalogId,
+          teamId: defaultTeam.id,
+        });
+        const server = await installResponse.json();
+        serverId = server.id;
+
+        // Wait for MCP server to be ready
+        await waitForServerInstallation(request, serverId);
+      },
+    );
+
+    test.afterAll(
+      async ({ request, deleteMcpCatalogItem, uninstallMcpServer }) => {
+        // Clean up in reverse order
+        if (serverId) await uninstallMcpServer(request, serverId);
+        if (catalogId) await deleteMcpCatalogItem(request, catalogId);
+      },
+    );
+
+    test("should install local MCP server via Docker and discover its tools", async ({
+      request,
+      makeApiRequest,
+    }) => {
+      // Get tools directly from MCP server
+      const tools = await getMcpServerTools(request, makeApiRequest, serverId);
+
+      // Should have discovered tools from the Docker server
+      expect(tools.length).toBeGreaterThan(0);
+    });
+  });
 });

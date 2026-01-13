@@ -142,11 +142,7 @@ test.describe(
 
         // Wait for sign-up to complete and redirect
         // The page should redirect to the main app after successful sign-up
-        // Use a longer timeout as sign-up can take time in CI, and wait for URL to NOT contain invitation path
-        await newUserPage.waitForURL(
-          (url) => !url.pathname.includes("/auth/sign-up-with-invitation"),
-          { timeout: 12_000 },
-        );
+        await newUserPage.waitForURL(/\/$/, { timeout: 10000 });
 
         // Verify we're successfully logged in by checking for user elements
         // Look for the user button/menu that should appear when authenticated
@@ -155,7 +151,7 @@ test.describe(
             name: new RegExp(uniqueName, "i"),
           }),
         ).toBeVisible({
-          timeout: 12_000,
+          timeout: 10000,
         });
 
         // PART 3: Verify the new user is listed in members (back to admin context)

@@ -83,17 +83,54 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
 
-  # API E2E tests - runs API integration tests only (lighter workload)
-  # Runs validation checks (codegen, migrations) before tests
-  platform-e2e-api:
-    name: Platform E2E Tests (API)
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+  # E2E tests - runs all e2e test suites in parallel
+  # Uses matrix strategy to run API, UI (sharded), and Vault tests concurrently
+  platform-e2e-tests:
+    name: Platform E2E Tests (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # API tests - also runs validation checks (codegen, migrations)
+          - name: API
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: api
+            shard: ""
+            artifact: blob-report-api
+            run-validation: true
+          # UI tests - sharded across 3 parallel jobs
+          - name: UI 1/3
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: chromium --project=firefox --project=webkit --project=sso
+            shard: "--shard=1/3"
+            artifact: blob-report-ui-1
+            run-validation: false
+          - name: UI 2/3
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: chromium --project=firefox --project=webkit --project=sso
+            shard: "--shard=2/3"
+            artifact: blob-report-ui-2
+            run-validation: false
+          - name: UI 3/3
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: chromium --project=firefox --project=webkit --project=sso
+            shard: "--shard=3/3"
+            artifact: blob-report-ui-3
+            run-validation: false
+          # Vault tests - isolated to avoid race conditions with secrets manager switching
+          - name: Vault
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: credentials-with-vault
+            shard: ""
+            artifact: blob-report-vault
+            run-validation: false
     steps:
-      # Generate a GitHub App token for release-please PRs
+      # Generate GitHub App token for release-please PRs (only needed for validation job)
       - name: Generate token for release-please PR
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true && matrix.run-validation }}
         id: generate-token
         uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
         with:
@@ -104,8 +141,8 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked]
-          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
+          persist-credentials: ${{ inputs.is-release-please-pr && matrix.run-validation }} # zizmor: ignore[artipacked]
+          ref: ${{ (inputs.is-release-please-pr && matrix.run-validation) && github.head_ref || '' }}
           token: ${{ steps.generate-token.outputs.token || github.token }}
 
       - name: Setup environment
@@ -114,16 +151,16 @@ jobs:
         with:
           working-directory: ./platform
 
-      # Run validation checks BEFORE platform setup for faster feedback (fail fast)
+      # Validation checks - only run on the API job for fast feedback
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && matrix.run-validation }}
         working-directory: ./platform
         env:
           IS_RELEASE_PLEASE_PR: ${{ inputs.is-release-please-pr }}
         run: |
           set -e
 
-          # Start drizzle-kit check in background (read-only, can run in parallel)
+          # Start drizzle-kit check in background
           echo "Starting drizzle-kit check in background..."
           (cd backend && pnpm drizzle-kit check) &
           DRIZZLE_PID=$!
@@ -181,7 +218,7 @@ jobs:
           fi
           echo "✅ No pending database migrations"
 
-          # Wait for drizzle-kit check to complete
+          # Wait for drizzle-kit check
           echo "Waiting for drizzle-kit check..."
           if wait "$DRIZZLE_PID"; then
             echo "✅ drizzle-kit check passed"
@@ -212,7 +249,7 @@ jobs:
           VERSION=$(cat platform/e2e-tests/package.json | jq -r '.devDependencies["@playwright/test"]' | sed 's/^[\^~]//')
           echo "PLAYWRIGHT_VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Run API E2E tests
+      - name: Run E2E tests
         id: e2e
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
@@ -222,92 +259,12 @@ jobs:
             --network host \
             --ipc=host \
             -v "$GITHUB_WORKSPACE:/work" \
-            -w /work/platform \
+            -w /work/platform/e2e-tests \
             -e CI=true \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=api --reporter=blob --reporter=line" \
-            2>&1 | tee playwright-output.txt
-
-      - name: Upload blob report
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: blob-report-api
-          path: platform/e2e-tests/blob-report/
-          retention-days: 1
-
-      - name: Show logs on failure
-        if: failure()
-        run: |
-          echo "=== Kubernetes Pods ==="
-          kubectl get pods -o wide
-          echo "=== Archestra Platform Logs ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
-          echo "=== PostgreSQL Logs ==="
-          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200
-
-  # UI E2E tests - runs browser tests with sharding for parallelization
-  platform-e2e-ui:
-    name: Platform E2E Tests (UI ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        shardIndex: [1, 2]
-        shardTotal: [2]
-    steps:
-      - name: Checkout repository
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-
-      - name: Setup environment
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
-      - name: Setup Archestra Platform
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/setup-archestra-platform
-        with:
-          kind-config-path: .github/kind.yaml
-          kind-cluster-name: archestra-ci-cluster
-          helm-values-path: .github/values-ci.yaml
-          deploy-e2e-dependencies: "true"
-          build-platform-image: "true"
-          platform-image-tag: archestra/platform:ci-test
-          platform-context: ./platform
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Resolve Playwright version
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          VERSION=$(cat platform/e2e-tests/package.json | jq -r '.devDependencies["@playwright/test"]' | sed 's/^[\^~]//')
-          echo "PLAYWRIGHT_VERSION=$VERSION" >> $GITHUB_ENV
-
-      # Run UI tests (all projects except API)
-      - name: Run UI E2E tests (shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
-        id: e2e
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform
-        run: |
-          set -o pipefail
-          docker run --rm \
-            --network host \
-            --ipc=host \
-            -v "$GITHUB_WORKSPACE:/work" \
-            -w /work/platform \
-            -e CI=true \
-            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-            "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=chromium --project=firefox --project=webkit --project=sso --project=credentials-with-vault --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --reporter=blob --reporter=line" \
-            2>&1 | tee playwright-output.txt
+            /bin/bash -c "npx playwright test --project=${{ matrix.projects }} ${{ matrix.shard }} --reporter=blob --reporter=line" \
+            2>&1 | tee ../playwright-output.txt
 
       - name: Check for flaky tests
         id: check-flaky
@@ -322,7 +279,7 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: blob-report-ui-${{ matrix.shardIndex }}
+          name: ${{ matrix.artifact }}
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
@@ -342,21 +299,18 @@ jobs:
           kubectl logs -l app.kubernetes.io/name=postgresql --tail=200
 
           echo "=== WireMock Logs ==="
-          kubectl logs -l app=e2e-tests-wiremock --tail=200
+          kubectl logs -l app=e2e-tests-wiremock --tail=200 2>/dev/null || true
 
           echo "=== Keycloak Logs ==="
-          kubectl logs -l app.kubernetes.io/name=keycloak --tail=200
+          kubectl logs -l app.kubernetes.io/name=keycloak --tail=200 2>/dev/null || true
 
-          echo "=== Describe Archestra Platform Pod ==="
-          kubectl describe pod -l app.kubernetes.io/name=archestra-platform
-
-          echo "=== Describe PostgreSQL Pod ==="
-          kubectl describe pod -l app.kubernetes.io/name=postgresql
+          echo "=== Vault Logs ==="
+          kubectl logs -l app.kubernetes.io/name=vault --tail=200 2>/dev/null || true
 
   # Merge all Playwright reports into a single HTML report
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
-    needs: [platform-e2e-api, platform-e2e-ui]
+    needs: [platform-e2e-tests]
     if: ${{ !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
     runs-on: ubuntu-latest
     steps:
@@ -388,7 +342,7 @@ jobs:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
           # Shorter retention for success, full retention for failures
-          retention-days: ${{ (needs.platform-e2e-api.result == 'success' && needs.platform-e2e-ui.result == 'success') && 7 || 30 }}
+          retention-days: ${{ needs.platform-e2e-tests.result == 'success' && 7 || 30 }}
 
   platform-docker-image-scanning:
     name: Platform Docker Image Scanning

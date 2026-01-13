@@ -4,6 +4,7 @@ import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
 import logger from "@/logging";
+import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type {
   AutonomyPolicyOperator,
   GlobalToolPolicy,
@@ -207,9 +208,46 @@ class TrustedDataPolicyModel {
   }
 
   /**
+   * Match a context-based condition (e.g., context.teamIds, context.externalAgentId)
+   */
+  private static evaluateContextCondition(
+    path: string,
+    value: string,
+    operator: AutonomyPolicyOperator.SupportedOperator,
+    context: PolicyEvaluationContext,
+  ): boolean {
+    // Team matching - check if value is in teamIds array
+    if (path === "teamIds") {
+      switch (operator) {
+        case "contains":
+          return context.teamIds.includes(value);
+        case "notContains":
+          return !context.teamIds.includes(value);
+        default:
+          return false;
+      }
+    }
+
+    // Single value matching for externalAgentId
+    if (path === "externalAgentId") {
+      const contextValue = context.externalAgentId;
+      switch (operator) {
+        case "equal":
+          return contextValue === value;
+        case "notEqual":
+          return contextValue !== value;
+        default:
+          return false;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Evaluate if a value matches a condition
    */
-  private static evaluateCondition(
+  private static evaluateOutputCondition(
     // biome-ignore lint/suspicious/noExplicitAny: policy values can be any type
     value: any,
     operator: AutonomyPolicyOperator.SupportedOperator,
@@ -242,6 +280,7 @@ class TrustedDataPolicyModel {
     conditions: ResultPolicyCondition[],
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
+    context: PolicyEvaluationContext,
   ): boolean {
     // Empty conditions = default policy, always matches
     if (conditions.length === 0) {
@@ -250,10 +289,29 @@ class TrustedDataPolicyModel {
 
     // All conditions must match (AND logic)
     for (const condition of conditions) {
+      const { key, value, operator } = condition;
+      const [scope, ...pathParts] = key.split(".");
+
+      // Check if this is a context condition
+      if (scope === "context") {
+        if (
+          !TrustedDataPolicyModel.evaluateContextCondition(
+            pathParts.join("."),
+            value,
+            operator,
+            context,
+          )
+        ) {
+          return false;
+        }
+        continue;
+      }
+
+      // Regular output-based condition
       const outputValue = toolOutput?.value || toolOutput;
       const values = TrustedDataPolicyModel.extractValuesFromPath(
         outputValue,
-        condition.key,
+        key,
       );
 
       // If no values found for this path, condition doesn't match
@@ -262,12 +320,8 @@ class TrustedDataPolicyModel {
       }
 
       // All extracted values must match the condition
-      const allMatch = values.every((value) =>
-        TrustedDataPolicyModel.evaluateCondition(
-          value,
-          condition.operator,
-          condition.value,
-        ),
+      const allMatch = values.every((v) =>
+        TrustedDataPolicyModel.evaluateOutputCondition(v, operator, value),
       );
 
       if (!allMatch) {
@@ -294,6 +348,7 @@ class TrustedDataPolicyModel {
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
     globalToolPolicy: GlobalToolPolicy = "restrictive",
+    context: PolicyEvaluationContext,
   ): Promise<{
     isTrusted: boolean;
     isBlocked: boolean;
@@ -305,6 +360,7 @@ class TrustedDataPolicyModel {
       agentId,
       [{ toolName, toolOutput }],
       globalToolPolicy,
+      context,
     );
     return (
       results.get("0") || {
@@ -328,6 +384,7 @@ class TrustedDataPolicyModel {
       toolOutput: any;
     }>,
     globalToolPolicy: GlobalToolPolicy = "restrictive",
+    context: PolicyEvaluationContext,
   ): Promise<
     Map<
       string,
@@ -488,6 +545,7 @@ class TrustedDataPolicyModel {
           TrustedDataPolicyModel.evaluateConditions(
             policy.conditions,
             toolOutput,
+            context,
           )
         ) {
           isBlocked = true;
@@ -513,6 +571,7 @@ class TrustedDataPolicyModel {
           TrustedDataPolicyModel.evaluateConditions(
             policy.conditions,
             toolOutput,
+            context,
           )
         ) {
           matchedSpecific = true;

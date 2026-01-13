@@ -18,6 +18,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -251,6 +252,9 @@ export async function handleLLMProxy<
     const globalToolPolicy =
       await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
+    // Fetch team IDs for policy evaluation context (needed for trusted data evaluation)
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
+
     // Evaluate trusted data policies
     logger.debug(
       {
@@ -270,6 +274,7 @@ export async function handleLLMProxy<
         providerName,
         resolvedAgent.considerContextUntrusted,
         globalToolPolicy,
+        { teamIds, externalAgentId },
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {
@@ -359,6 +364,15 @@ export async function handleLLMProxy<
     // Extract enabled tool names for filtering in evaluatePolicies
     const enabledToolNames = new Set(tools.map((t) => t.name).filter(Boolean));
 
+    // Convert headers to Record<string, string> for policy evaluation context
+    const headersRecord: Record<string, string> = {};
+    const rawHeaders = headers as Record<string, unknown>;
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (typeof value === "string") {
+        headersRecord[key] = value;
+      }
+    }
+
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
@@ -378,6 +392,7 @@ export async function handleLLMProxy<
         context.userId,
         sessionId,
         sessionSource,
+        teamIds,
       );
     } else {
       return handleNonStreaming(
@@ -397,6 +412,7 @@ export async function handleLLMProxy<
         context.userId,
         sessionId,
         sessionSource,
+        teamIds,
       );
     }
   } catch (error) {
@@ -437,6 +453,7 @@ async function handleStreaming<
   userId?: string,
   sessionId?: string | null,
   sessionSource?: SessionSource,
+  teamIds?: string[],
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -524,6 +541,10 @@ async function handleStreaming<
       toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
         toolCallsForPolicy,
         agent.id,
+        {
+          teamIds: teamIds ?? [],
+          externalAgentId,
+        },
         contextIsTrusted,
         enabledToolNames,
         globalToolPolicy,
@@ -673,6 +694,7 @@ async function handleNonStreaming<
   userId?: string,
   sessionId?: string | null,
   sessionSource?: SessionSource,
+  teamIds?: string[],
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -715,6 +737,10 @@ async function handleNonStreaming<
             : JSON.stringify(tc.arguments),
       })),
       agent.id,
+      {
+        teamIds: teamIds ?? [],
+        externalAgentId,
+      },
       contextIsTrusted,
       enabledToolNames,
       globalToolPolicy,

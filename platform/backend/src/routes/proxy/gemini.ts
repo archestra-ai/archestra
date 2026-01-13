@@ -29,6 +29,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -155,6 +156,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const resolvedAgentId = resolvedAgent.id;
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
     logger.debug(
       {
         resolvedAgentId,
@@ -325,6 +327,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "gemini",
           resolvedAgent.considerContextUntrusted,
           globalToolPolicy,
+          { teamIds, externalAgentId },
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -557,6 +560,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 await utils.toolInvocation.evaluatePolicies(
                   validToolCalls,
                   resolvedAgentId,
+                  { teamIds, externalAgentId },
                   contextIsTrusted,
                   enabledToolNames,
                   globalToolPolicy,
@@ -841,6 +845,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
               validToolCalls,
               resolvedAgentId,
+              { teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,

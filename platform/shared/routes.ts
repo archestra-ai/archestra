@@ -95,6 +95,7 @@ export const RouteId = {
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
   GetUnassignedTools: "getUnassignedTools",
+  DeleteTool: "deleteTool",
 
   // Interaction Routes
   GetInteractions: "getInteractions",

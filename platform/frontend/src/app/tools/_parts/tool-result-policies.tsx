@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@shared";
 import { toPath } from "lodash-es";
-import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
+import { ArrowRightIcon, Info, Plus, Trash2Icon } from "lucide-react";
 import { CaseSensitiveTooltip } from "@/components/case-sensitive-tooltip";
 import { CodeText } from "@/components/code-text";
 import { DebouncedInput } from "@/components/debounced-input";
@@ -11,6 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -18,6 +19,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useUniqueExternalAgentIds } from "@/lib/interaction.query";
 import {
   useOperators,
   useResultPolicyMutation,
@@ -30,7 +38,11 @@ import {
   getResultTreatmentFromPolicies,
   type ToolResultTreatment,
 } from "@/lib/policy.utils";
+import { useTeams } from "@/lib/team.query";
 import { PolicyCard } from "./policy-card";
+
+const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
+const CONTEXT_TEAM_IDS = "context.teamIds";
 
 function AttributePathExamples() {
   return (
@@ -162,6 +174,22 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
     data: resultPolicies,
   } = useToolResultPolicies();
   const { data: operators } = useOperators();
+  const { data: externalAgentIds } = useUniqueExternalAgentIds();
+  const { data: teams } = useTeams();
+
+  // Build context options for the key dropdown
+  const contextOptions = [
+    ...(externalAgentIds.length > 0 ? [CONTEXT_EXTERNAL_AGENT_ID] : []),
+    ...((teams?.length ?? 0) > 0 ? [CONTEXT_TEAM_IDS] : []),
+  ];
+
+  // Build items for SearchableSelect with context options
+  const keyItems = [
+    ...contextOptions.map((key) => ({
+      value: key,
+      label: key === CONTEXT_EXTERNAL_AGENT_ID ? "External Agent" : "Teams",
+    })),
+  ];
   const allPolicies = byProfileToolId[tool.id] || [];
   // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
   const policies = allPolicies.filter((policy) => policy.conditions.length > 0);
@@ -233,22 +261,49 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
             <div className="flex items-center justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm">If</span>
-                <DebouncedInput
+                <SearchableSelect
                   placeholder="Attribute path"
-                  className="w-[140px]"
-                  initialValue={policy.attributePath}
-                  onChange={(attributePath) =>
+                  className="w-[180px]"
+                  value={policy.attributePath}
+                  items={keyItems}
+                  allowCustom
+                  searchPlaceholder="Type attribute path..."
+                  showSearchIcon={false}
+                  onValueChange={(attributePath) => {
+                    // Auto-select value if only one option available
+                    let autoValue = "";
+                    if (
+                      attributePath === CONTEXT_EXTERNAL_AGENT_ID &&
+                      externalAgentIds.length === 1
+                    ) {
+                      autoValue = externalAgentIds[0];
+                    } else if (
+                      attributePath === CONTEXT_TEAM_IDS &&
+                      teams?.length === 1
+                    ) {
+                      autoValue = teams[0].id;
+                    }
+                    // Set default operator based on key type
+                    let defaultOperator = policy.operator;
+                    if (attributePath === CONTEXT_TEAM_IDS) {
+                      defaultOperator = "contains";
+                    } else if (attributePath === CONTEXT_EXTERNAL_AGENT_ID) {
+                      defaultOperator = "equal";
+                    }
                     toolResultPoliciesUpdateMutation.mutate({
                       ...policy,
                       attributePath,
-                    })
-                  }
+                      value: autoValue,
+                      operator: defaultOperator,
+                    });
+                  }}
                 />
-                {!isValidPathSyntax(policy.attributePath) && (
-                  <span className="text-red-500 text-sm">Invalid path</span>
-                )}
+                {!policy.attributePath.startsWith("context.") &&
+                  !isValidPathSyntax(policy.attributePath) && (
+                    <span className="text-red-500 text-sm">Invalid path</span>
+                  )}
                 <Select
-                  defaultValue={policy.operator}
+                  value={policy.operator}
                   onValueChange={(value: string) =>
                     toolResultPoliciesUpdateMutation.mutate({
                       ...policy,
@@ -256,29 +311,119 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                     })
                   }
                 >
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-[120px]">
                     <SelectValue placeholder="Operator" />
                   </SelectTrigger>
                   <SelectContent>
-                    {operators.map((operator) => (
-                      <SelectItem key={operator.value} value={operator.value}>
-                        {operator.label}
-                      </SelectItem>
-                    ))}
+                    {operators
+                      .filter((op) => {
+                        if (
+                          policy.attributePath === CONTEXT_EXTERNAL_AGENT_ID
+                        ) {
+                          return ["equal", "notEqual"].includes(op.value);
+                        }
+                        if (policy.attributePath === CONTEXT_TEAM_IDS) {
+                          return ["contains", "notContains"].includes(op.value);
+                        }
+                        return true;
+                      })
+                      .map((operator) => (
+                        <SelectItem key={operator.value} value={operator.value}>
+                          {operator.label}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
-                <DebouncedInput
-                  placeholder="Value"
-                  className="w-[120px]"
-                  initialValue={policy.value}
-                  onChange={(value) =>
-                    toolResultPoliciesUpdateMutation.mutate({
-                      ...policy,
-                      value,
-                    })
-                  }
-                />
-                <CaseSensitiveTooltip />
+                {policy.attributePath === CONTEXT_EXTERNAL_AGENT_ID ? (
+                  externalAgentIds.length === 1 ? (
+                    <>
+                      <span className="text-sm">{externalAgentIds[0]}</span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Only one external agent available</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </>
+                  ) : (
+                    <Select
+                      value={policy.value || undefined}
+                      onValueChange={(value) =>
+                        toolResultPoliciesUpdateMutation.mutate({
+                          ...policy,
+                          value,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select agent ID" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {externalAgentIds.map((agentId) => (
+                          <SelectItem key={agentId} value={agentId}>
+                            {agentId}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
+                ) : policy.attributePath === CONTEXT_TEAM_IDS ? (
+                  teams?.length === 1 ? (
+                    <>
+                      <span className="text-sm">{teams[0].name}</span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Only one team available</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </>
+                  ) : (
+                    <Select
+                      value={policy.value || undefined}
+                      onValueChange={(value) =>
+                        toolResultPoliciesUpdateMutation.mutate({
+                          ...policy,
+                          value,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams?.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
+                ) : (
+                  <DebouncedInput
+                    placeholder="Value"
+                    className="w-[120px]"
+                    initialValue={policy.value}
+                    onChange={(value) =>
+                      toolResultPoliciesUpdateMutation.mutate({
+                        ...policy,
+                        value,
+                      })
+                    }
+                  />
+                )}
+                {![CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS].includes(
+                  policy.attributePath,
+                ) && <CaseSensitiveTooltip />}
               </div>
               <Button
                 variant="ghost"
@@ -313,6 +458,10 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                       value: "mark_as_trusted",
                       label: "Mark as trusted",
                     },
+                    {
+                      value: "mark_as_untrusted",
+                      label: "Mark as untrusted",
+                    },
                     { value: "block_always", label: "Block always" },
                     {
                       value: "sanitize_with_dual_llm",
@@ -335,7 +484,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
         onClick={() =>
           toolResultPoliciesCreateMutation.mutate({
             toolId: tool.id,
-            attributePath: "result",
+            attributePath: "",
           })
         }
       >

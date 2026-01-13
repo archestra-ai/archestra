@@ -25,6 +25,7 @@ import type {
 } from "@/types";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
+import ToolModel from "./tool";
 
 class AgentModel {
   static async create({
@@ -47,18 +48,27 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
 
-    // Note: Archestra tools are no longer auto-assigned. Users must manually assign them
-    // like any other MCP server tools through the UI or API.
+    // Assign default Archestra tools (artifact_write, todo_write) to new profiles
+    await ToolModel.assignDefaultArchestraToolsToAgent(createdAgent.id);
 
-    // Get team details for the created agent
-    const teamDetails =
+    // Get team details and tools for the created agent
+    const [teamDetails, assignedTools] = await Promise.all([
       teams && teams.length > 0
-        ? await AgentTeamModel.getTeamDetailsForAgent(createdAgent.id)
-        : [];
+        ? AgentTeamModel.getTeamDetailsForAgent(createdAgent.id)
+        : Promise.resolve([]),
+      db
+        .select({ tool: schema.toolsTable })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(eq(schema.agentToolsTable.agentId, createdAgent.id)),
+    ]);
 
     return {
       ...createdAgent,
-      tools: [],
+      tools: assignedTools.map((row) => row.tool),
       teams: teamDetails,
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
     };

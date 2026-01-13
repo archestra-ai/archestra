@@ -136,7 +136,7 @@ test.describe("MCP Install", () => {
       );
     });
 
-    test("PAT", async ({ adminPage, extractCookieHeaders }) => {
+    test("Bearer Token", async ({ adminPage, extractCookieHeaders }) => {
       await deleteCatalogItem(
         adminPage,
         extractCookieHeaders,
@@ -188,7 +188,7 @@ test.describe("MCP Install", () => {
 
       // It should fail with error message because token is invalid and remote hf refuses to install the server
       await adminPage
-        .getByText("Failed to install")
+        .getByText(/Failed to connect to MCP server/)
         .waitFor({ state: "visible" });
 
       // cleanup

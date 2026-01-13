@@ -610,6 +610,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
+      // Prevent deletion of built-in MCP servers
+      if (mcpServer.serverType === "builtin") {
+        throw new ApiError(400, "Cannot delete built-in MCP servers");
+      }
+
       // For local servers, stop the server (this will delete the K8s Secret)
       if (mcpServer.serverType === "local") {
         try {

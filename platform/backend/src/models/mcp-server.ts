@@ -534,7 +534,7 @@ class McpServerModel {
     serverName: string,
     catalogId?: string,
     secretId?: string,
-  ): Promise<boolean> {
+  ): Promise<{ isValid: boolean; errorMessage?: string }> {
     // Load secrets if secretId is provided
     let secrets: Record<string, unknown> = {};
     if (secretId) {
@@ -556,18 +556,21 @@ class McpServerModel {
             mcpServerId: "validation",
             secrets,
           });
-          return tools.length > 0;
+          return {
+            isValid: tools.length > 0,
+            errorMessage: tools.length > 0 ? undefined : "No tools found",
+          };
         }
       } catch (error) {
         logger.error(
           { err: error },
           `Validation failed for remote MCP server ${serverName}:`,
         );
-        return false;
+        return { isValid: false, errorMessage: (error as Error).message };
       }
     }
 
-    return false;
+    return { isValid: false, errorMessage: "No catalog ID provided" };
   }
 }
 

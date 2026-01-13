@@ -88,18 +88,31 @@ export function transformFormToApiData(
 
     // Clear userConfig when using OAuth
     data.userConfig = {};
-  } else if (values.authMethod === "pat") {
-    // Handle PAT configuration
+  } else if (values.authMethod === "bearer") {
+    // Handle Bearer Token configuration
     data.userConfig = {
       access_token: {
         type: "string" as const,
         title: "Access Token",
-        description: "Personal access token for authentication",
+        description: "Bearer token for authentication",
         required: true,
         sensitive: true,
       },
     };
-    // Clear oauthConfig when using PAT
+    // Clear oauthConfig when using Bearer Token
+    data.oauthConfig = undefined;
+  } else if (values.authMethod === "raw_token") {
+    // Handle Token (no prefix) configuration
+    data.userConfig = {
+      raw_access_token: {
+        type: "string" as const,
+        title: "Access Token",
+        description: "Token for authentication (sent without Bearer prefix)",
+        required: true,
+        sensitive: true,
+      },
+    };
+    // Clear oauthConfig when using Token
     data.oauthConfig = undefined;
   } else {
     // No authentication - clear both configs
@@ -118,17 +131,19 @@ export function transformCatalogItemToFormValues(
   } | null,
 ): McpCatalogFormValues {
   // Determine auth method
-  let authMethod: "none" | "pat" | "oauth" = "none";
+  let authMethod: "none" | "bearer" | "raw_token" | "oauth" = "none";
   if (item.oauthConfig) {
     authMethod = "oauth";
+  } else if (item.userConfig?.raw_access_token) {
+    authMethod = "raw_token";
   } else if (item.userConfig?.access_token) {
-    authMethod = "pat";
+    authMethod = "bearer";
   } else if (
-    // Special case: GitHub server uses PAT but external catalog doesn't define userConfig
+    // Special case: GitHub server uses Bearer Token but external catalog doesn't define userConfig
     item.name.includes("githubcopilot") ||
     item.name.includes("github")
   ) {
-    authMethod = "pat";
+    authMethod = "bearer";
   }
 
   // Check if OAuth client_secret is a BYOS vault reference

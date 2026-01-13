@@ -19,7 +19,7 @@ export const formSchema = z
       .url({ error: "Must be a valid URL" })
       .optional()
       .or(z.literal("")),
-    authMethod: z.enum(["none", "pat", "oauth"]),
+    authMethod: z.enum(["none", "bearer", "raw_token", "oauth"]),
     oauthConfig: oauthConfigSchema.optional(),
     localConfig: LocalConfigFormSchema.optional(),
     // BYOS: External Vault path for OAuth client secret

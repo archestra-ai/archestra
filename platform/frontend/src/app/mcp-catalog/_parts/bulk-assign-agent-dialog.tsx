@@ -1,5 +1,6 @@
 "use client";
 
+import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -58,6 +59,9 @@ export function BulkAssignProfileDialog({
     (server) => server.catalogId === catalogId,
   );
   const isLocalServer = mcpServer?.serverType === "local";
+
+  // Check if this is a built-in Archestra tool (no credentials required)
+  const isBuiltinArchestraTool = catalogId === ARCHESTRA_MCP_CATALOG_ID;
 
   const filteredProfiles = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents;
@@ -217,30 +221,35 @@ export function BulkAssignProfileDialog({
             )}
           </div>
 
-          <div className="mt-10">
-            <Label htmlFor="token-select" className="text-md font-medium mb-1">
-              Credential to use *
-            </Label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Select which credential will be used when profiles execute these
-              tools
-            </p>
-            <TokenSelect
-              value={
-                isLocalServer
-                  ? executionSourceMcpServerId
-                  : credentialSourceMcpServerId
-              }
-              onValueChange={
-                isLocalServer
-                  ? setExecutionSourceMcpServerId
-                  : setCredentialSourceMcpServerId
-              }
-              className="w-full"
-              catalogId={catalogId}
-              shouldSetDefaultValue
-            />
-          </div>
+          {!isBuiltinArchestraTool && (
+            <div className="mt-10">
+              <Label
+                htmlFor="token-select"
+                className="text-md font-medium mb-1"
+              >
+                Credential to use *
+              </Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Select which credential will be used when profiles execute these
+                tools
+              </p>
+              <TokenSelect
+                value={
+                  isLocalServer
+                    ? executionSourceMcpServerId
+                    : credentialSourceMcpServerId
+                }
+                onValueChange={
+                  isLocalServer
+                    ? setExecutionSourceMcpServerId
+                    : setCredentialSourceMcpServerId
+                }
+                className="w-full"
+                catalogId={catalogId}
+                shouldSetDefaultValue
+              />
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -261,8 +270,9 @@ export function BulkAssignProfileDialog({
             disabled={
               selectedProfileIds.length === 0 ||
               bulkAssignMutation.isPending ||
-              (isLocalServer && !executionSourceMcpServerId) ||
-              (!isLocalServer && !credentialSourceMcpServerId)
+              (!isBuiltinArchestraTool &&
+                ((isLocalServer && !executionSourceMcpServerId) ||
+                  (!isLocalServer && !credentialSourceMcpServerId)))
             }
           >
             {bulkAssignMutation.isPending

@@ -798,6 +798,23 @@ class ToolModel {
     return result.rowCount || 0;
   }
 
+  /**
+   * Delete a tool by ID.
+   * Only allows deletion of auto-discovered tools (no mcpServerId).
+   */
+  static async delete(id: string): Promise<boolean> {
+    const result = await db
+      .delete(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.id, id),
+          isNull(schema.toolsTable.mcpServerId),
+        ),
+      );
+
+    return (result.rowCount || 0) > 0;
+  }
+
   static async getByIds(ids: string[]): Promise<Tool[]> {
     return db
       .select()

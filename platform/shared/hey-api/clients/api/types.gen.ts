@@ -15702,6 +15702,7 @@ export type GetOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         autoConfigureNewTools: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
     };
 };
 
@@ -15718,6 +15719,7 @@ export type UpdateOrganizationData = {
         onboardingComplete?: boolean;
         convertToolResultsToToon?: boolean;
         autoConfigureNewTools?: boolean;
+        allowChatFileUploads?: boolean;
     };
     path?: never;
     query?: never;
@@ -15802,6 +15804,7 @@ export type UpdateOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         autoConfigureNewTools: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
     };
 };
 

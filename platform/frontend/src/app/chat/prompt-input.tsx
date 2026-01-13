@@ -57,6 +57,8 @@ interface ArchestraPromptInputProps {
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Callback for profile change in initial chat mode (no conversation) */
   onProfileChange?: (agentId: string) => void;
+  /** Whether file uploads are allowed (controlled by organization setting) */
+  allowFileUploads?: boolean;
 }
 
 // Inner component that has access to the controller context
@@ -76,6 +78,7 @@ const PromptInputContent = ({
   onProviderChange,
   textareaRef: externalTextareaRef,
   onProfileChange,
+  allowFileUploads = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -123,15 +126,17 @@ const PromptInputContent = ({
       </PromptInputBody>
       <PromptInputFooter>
         <PromptInputTools>
-          {/* File attachment button */}
-          <PromptInputActionMenu>
-            <PromptInputActionMenuTrigger>
-              <PaperclipIcon className="size-4" />
-            </PromptInputActionMenuTrigger>
-            <PromptInputActionMenuContent>
-              <PromptInputActionAddAttachments label="Attach files" />
-            </PromptInputActionMenuContent>
-          </PromptInputActionMenu>
+          {/* File attachment button - only shown when file uploads are enabled */}
+          {allowFileUploads && (
+            <PromptInputActionMenu>
+              <PromptInputActionMenuTrigger>
+                <PaperclipIcon className="size-4" />
+              </PromptInputActionMenuTrigger>
+              <PromptInputActionMenuContent>
+                <PromptInputActionAddAttachments label="Attach files" />
+              </PromptInputActionMenuContent>
+            </PromptInputActionMenu>
+          )}
           <ModelSelector
             selectedModel={selectedModel}
             onModelChange={onModelChange}
@@ -180,6 +185,7 @@ const ArchestraPromptInput = ({
   onProviderChange,
   textareaRef,
   onProfileChange,
+  allowFileUploads = false,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -200,6 +206,7 @@ const ArchestraPromptInput = ({
           onProviderChange={onProviderChange}
           textareaRef={textareaRef}
           onProfileChange={onProfileChange}
+          allowFileUploads={allowFileUploads}
         />
       </PromptInputProvider>
     </div>

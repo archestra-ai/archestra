@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.16"
+    "version": "1.0.18"
   },
   "components": {
     "schemas": {
@@ -26699,7 +26699,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for 2 hours.",
+        "description": "Get available LLM models from all configured providers. Models are fetched directly from provider APIs.",
         "parameters": [
           {
             "schema": {
@@ -54358,6 +54358,9 @@
                         "permissive",
                         "restrictive"
                       ]
+                    },
+                    "allowChatFileUploads": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -54374,7 +54377,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "autoConfigureNewTools",
-                    "globalToolPolicy"
+                    "globalToolPolicy",
+                    "allowChatFileUploads"
                   ],
                   "additionalProperties": false
                 }
@@ -54682,6 +54686,9 @@
                   },
                   "autoConfigureNewTools": {
                     "type": "boolean"
+                  },
+                  "allowChatFileUploads": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -54790,6 +54797,9 @@
                         "permissive",
                         "restrictive"
                       ]
+                    },
+                    "allowChatFileUploads": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -54806,7 +54816,8 @@
                     "convertToolResultsToToon",
                     "compressionScope",
                     "autoConfigureNewTools",
-                    "globalToolPolicy"
+                    "globalToolPolicy",
+                    "allowChatFileUploads"
                   ],
                   "additionalProperties": false
                 }

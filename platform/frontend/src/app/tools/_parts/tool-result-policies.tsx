@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@shared";
-import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
+import { ArrowRightIcon, Plus } from "lucide-react";
 import { CodeText } from "@/components/code-text";
 import {
   Accordion,
@@ -289,59 +289,50 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
         </div>
       </div>
       {policies.map((policy) => (
-        <PolicyCard key={policy.id}>
-          <div className="flex flex-col gap-3 w-full">
-            <div className="flex items-start justify-between">
-              <div className="flex flex-col gap-2">
-                {policy.conditions.map((condition, index) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: conditions don't have unique IDs
-                  <div key={index} className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground w-2">
-                      {index === 0 ? "If" : ""}
-                    </span>
-                    <ToolResultPolicyCondition
-                      condition={condition}
-                      keyItems={keyItems}
-                      removable={policy.conditions.length > 1}
-                      onChange={(updated) =>
-                        handleConditionChange(policy, index, updated)
-                      }
-                      onRemove={() => handleConditionRemove(policy, index)}
-                    />
-                    {index < policy.conditions.length - 1 ? (
-                      <span className="text-sm text-muted-foreground">and</span>
-                    ) : (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="h-9 w-9 p-0"
-                              onClick={() => handleConditionAdd(policy)}
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Add condition</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hover:text-red-500 ml-2"
-                onClick={() =>
-                  toolResultPoliciesDeleteMutation.mutate(policy.id)
-                }
-              >
-                <Trash2Icon className="w-4 h-4" />
-              </Button>
+        <PolicyCard
+          key={policy.id}
+          onDelete={() => toolResultPoliciesDeleteMutation.mutate(policy.id)}
+        >
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              {policy.conditions.map((condition, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: conditions don't have unique IDs
+                <div key={index} className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground w-2">
+                    {index === 0 ? "If" : ""}
+                  </span>
+                  <ToolResultPolicyCondition
+                    condition={condition}
+                    keyItems={keyItems}
+                    removable={policy.conditions.length > 1}
+                    onChange={(updated) =>
+                      handleConditionChange(policy, index, updated)
+                    }
+                    onRemove={() => handleConditionRemove(policy, index)}
+                  />
+                  {index < policy.conditions.length - 1 ? (
+                    <span className="text-sm text-muted-foreground">and</span>
+                  ) : (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-9 w-9 p-0"
+                            onClick={() => handleConditionAdd(policy)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Add condition</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+              ))}
             </div>
             <div className="flex flex-wrap items-center gap-2 pl-12">
               <ArrowRightIcon className="w-4 h-4 text-muted-foreground" />

@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@shared";
-import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
+import { ArrowRightIcon, Plus } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Button } from "@/components/ui/button";
@@ -123,7 +123,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
           Can tool be used when untrusted data is present in the context?
         </p>
       </div>
-      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md border border-border">
+      <div className="flex items-center justify-between p-3 bg-muted rounded-md border border-border">
         <div className="flex items-center gap-3">
           <div className="text-xs font-medium text-muted-foreground">
             DEFAULT
@@ -144,105 +144,98 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
         />
       </div>
       {policies.map((policy) => (
-        <PolicyCard key={policy.id}>
-          <div className="flex flex-col gap-3 w-full">
-            <div className="flex items-start justify-between">
-              <div className="flex flex-col gap-2">
-                {policy.conditions.map((condition, index) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: conditions don't have unique IDs
-                  <div key={index} className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground w-2">
-                      {index === 0 ? "If" : ""}
-                    </span>
-                    <ToolCallPolicyCondition
-                      condition={condition}
-                      conditionKeyOptions={{ argumentNames, contextOptions }}
-                      removable={policy.conditions.length > 1}
-                      onChange={(updated) =>
-                        handleConditionChange(policy, index, updated)
-                      }
-                      onRemove={() => handleConditionRemove(policy, index)}
-                    />
-                    {index < policy.conditions.length - 1 ? (
-                      <span className="text-sm text-muted-foreground">and</span>
-                    ) : (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="h-9 w-9 p-0"
-                              onClick={() => handleConditionAdd(policy)}
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Add condition</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hover:text-red-500 ml-2"
-                onClick={() =>
-                  toolInvocationPolicyDeleteMutation.mutate(policy.id)
-                }
-              >
-                <Trash2Icon className="w-4 h-4" />
-              </Button>
+        <PolicyCard
+          key={policy.id}
+          onDelete={() => toolInvocationPolicyDeleteMutation.mutate(policy.id)}
+        >
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              {policy.conditions.map((condition, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: conditions don't have unique IDs
+                <div key={index} className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground w-2">
+                    {index === 0 ? "If" : ""}
+                  </span>
+                  <ToolCallPolicyCondition
+                    condition={condition}
+                    conditionKeyOptions={{ argumentNames, contextOptions }}
+                    removable={policy.conditions.length > 1}
+                    onChange={(updated) =>
+                      handleConditionChange(policy, index, updated)
+                    }
+                    onRemove={() => handleConditionRemove(policy, index)}
+                  />
+                  {index < policy.conditions.length - 1 ? (
+                    <span className="text-sm text-muted-foreground">and</span>
+                  ) : (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-9 w-9 p-0"
+                            onClick={() => handleConditionAdd(policy)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Add condition</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+              ))}
             </div>
-            <div className="flex flex-wrap items-center gap-2 pl-12">
-              <ArrowRightIcon className="w-4 h-4 text-muted-foreground" />
-              <Select
-                defaultValue={policy.action}
-                onValueChange={(
-                  value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["action"],
-                ) =>
-                  toolInvocationPolicyUpdateMutation.mutate({
-                    id: policy.id,
-                    action: value,
-                  })
-                }
-              >
-                <SelectTrigger className="w-[240px]">
-                  <SelectValue placeholder="Action" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[
-                    {
-                      value: "allow_when_context_is_untrusted",
-                      label: "Allow when untrusted data present",
-                    },
-                    {
-                      value: "block_when_context_is_untrusted",
-                      label: "Block when untrusted data present",
-                    },
-                    { value: "block_always", label: "Block always" },
-                  ].map(({ value, label }) => (
-                    <SelectItem key={label} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <DebouncedInput
-                placeholder="Reason"
-                className="flex-1 min-w-[150px]"
-                initialValue={policy.reason || ""}
-                onChange={(value) =>
-                  toolInvocationPolicyUpdateMutation.mutate({
-                    id: policy.id,
-                    reason: value,
-                  })
-                }
-              />
+            <div className="flex items-center gap-2 pl-12">
+              <ArrowRightIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+              <div className="grid grid-cols-2 gap-2 flex-1 min-w-0 max-w-xl">
+                <Select
+                  defaultValue={policy.action}
+                  onValueChange={(
+                    value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["action"],
+                  ) =>
+                    toolInvocationPolicyUpdateMutation.mutate({
+                      id: policy.id,
+                      action: value,
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Action" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      {
+                        value: "allow_when_context_is_untrusted",
+                        label: "Allow when untrusted data present",
+                      },
+                      {
+                        value: "block_when_context_is_untrusted",
+                        label: "Block when untrusted data present",
+                      },
+                      { value: "block_always", label: "Block always" },
+                    ].map(({ value, label }) => (
+                      <SelectItem key={label} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <DebouncedInput
+                  placeholder="Reason"
+                  className="w-full"
+                  initialValue={policy.reason || ""}
+                  onChange={(value) =>
+                    toolInvocationPolicyUpdateMutation.mutate({
+                      id: policy.id,
+                      reason: value,
+                    })
+                  }
+                />
+              </div>
             </div>
           </div>
         </PolicyCard>

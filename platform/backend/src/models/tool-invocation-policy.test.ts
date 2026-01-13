@@ -900,6 +900,136 @@ describe("ToolInvocationPolicyModel", () => {
       });
     });
 
+    describe("multiple conditions (AND logic)", () => {
+      test("applies when all input conditions match", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "action", operator: "equal", value: "delete" },
+            { key: "target", operator: "equal", value: "production" },
+          ],
+          action: "block_always",
+          reason: "Cannot delete in production",
+        });
+
+        // Both conditions match - should be blocked
+        const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "test-tool",
+              toolInput: { action: "delete", target: "production" },
+            },
+          ],
+          mockContext,
+          true,
+          "restrictive",
+        );
+        expect(blockedResult.isAllowed).toBe(false);
+        expect(blockedResult.reason).toContain("Cannot delete in production");
+      });
+
+      test("does not apply when only some input conditions match", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "action", operator: "equal", value: "delete" },
+            { key: "target", operator: "equal", value: "production" },
+          ],
+          action: "block_always",
+          reason: "Cannot delete in production",
+        });
+
+        // Only first condition matches - should be allowed
+        const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "test-tool",
+              toolInput: { action: "delete", target: "staging" },
+            },
+          ],
+          mockContext,
+          true,
+          "restrictive",
+        );
+        expect(allowedResult.isAllowed).toBe(true);
+      });
+
+      test("handles mixed context and input conditions", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "mixed-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "equal",
+              value: "restricted-agent",
+            },
+            { key: "action", operator: "equal", value: "delete" },
+          ],
+          action: "block_always",
+          reason: "Restricted agent cannot delete",
+        });
+
+        // Both conditions match - should be blocked
+        const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "mixed-tool", toolInput: { action: "delete" } }],
+          { teamIds: [], externalAgentId: "restricted-agent" },
+          true,
+          "restrictive",
+        );
+        expect(blockedResult.isAllowed).toBe(false);
+        expect(blockedResult.reason).toContain(
+          "Restricted agent cannot delete",
+        );
+
+        // Only context condition matches - should be allowed
+        const allowedResult1 = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "mixed-tool", toolInput: { action: "read" } }],
+          { teamIds: [], externalAgentId: "restricted-agent" },
+          true,
+          "restrictive",
+        );
+        expect(allowedResult1.isAllowed).toBe(true);
+
+        // Only data condition matches - should be allowed
+        const allowedResult2 = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [{ toolCallName: "mixed-tool", toolInput: { action: "delete" } }],
+          { teamIds: [], externalAgentId: "other-agent" },
+          true,
+          "restrictive",
+        );
+        expect(allowedResult2.isAllowed).toBe(true);
+      });
+    });
+
     describe("context-based conditions", () => {
       test("blocks when context.externalAgentId matches with equal operator", async ({
         makeAgent,

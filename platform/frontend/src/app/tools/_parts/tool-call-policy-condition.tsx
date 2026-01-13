@@ -83,156 +83,157 @@ export function ToolCallPolicyCondition({
   };
 
   return (
-    <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 whitespace-nowrap">
-      <Select defaultValue={argumentName} onValueChange={handleKeyChange}>
-        <SelectTrigger className="w-[140px] h-9">
-          <SelectValue placeholder="parameter" />
-        </SelectTrigger>
-        <SelectContent>
-          {argumentNames.length > 0 && (
-            <>
-              <SelectItem
-                disabled
-                value="__param_header__"
-                className="text-xs text-muted-foreground font-medium"
-              >
-                Parameters
-              </SelectItem>
-              {argumentNames.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
+    <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2">
+      <div className="grid grid-cols-3 gap-2 flex-1 min-w-0">
+        <Select defaultValue={argumentName} onValueChange={handleKeyChange}>
+          <SelectTrigger className="w-full h-9">
+            <SelectValue placeholder="parameter" />
+          </SelectTrigger>
+          <SelectContent>
+            {contextOptions.length > 0 && (
+              <>
+                <SelectItem
+                  disabled
+                  value="__context_header__"
+                  className="text-xs text-muted-foreground font-medium"
+                >
+                  Context
                 </SelectItem>
-              ))}
-            </>
-          )}
-          {contextOptions.length > 0 && (
-            <>
-              <SelectItem
-                disabled
-                value="__context_header__"
-                className="text-xs text-muted-foreground font-medium"
-              >
-                Context
-              </SelectItem>
-              {externalAgentIds.length > 0 && (
-                <SelectItem value={CONTEXT_EXTERNAL_AGENT_ID}>
-                  External Agent
+                {externalAgentIds.length > 0 && (
+                  <SelectItem value={CONTEXT_EXTERNAL_AGENT_ID}>
+                    External Agent
+                  </SelectItem>
+                )}
+                {(teams?.length ?? 0) > 0 && (
+                  <SelectItem value={CONTEXT_TEAM_IDS}>Teams</SelectItem>
+                )}
+              </>
+            )}
+            {argumentNames.length > 0 && (
+              <>
+                <SelectItem
+                  disabled
+                  value="__param_header__"
+                  className="text-xs text-muted-foreground font-medium"
+                >
+                  Parameters
                 </SelectItem>
-              )}
-              {(teams?.length ?? 0) > 0 && (
-                <SelectItem value={CONTEXT_TEAM_IDS}>Teams</SelectItem>
-              )}
-            </>
-          )}
-        </SelectContent>
-      </Select>
-      <Select
-        value={operator}
-        onValueChange={(newOperator) =>
-          onChange({
-            ...condition,
-            operator: newOperator as PolicyCondition["operator"],
-          })
-        }
-      >
-        <SelectTrigger className="w-[120px] h-9">
-          <SelectValue placeholder="Operator" />
-        </SelectTrigger>
-        <SelectContent>
-          {operators
-            .filter((op) => {
-              if (argumentName === CONTEXT_EXTERNAL_AGENT_ID) {
-                return ["equal", "notEqual"].includes(op.value);
-              }
-              if (argumentName === CONTEXT_TEAM_IDS) {
-                return ["contains", "notContains"].includes(op.value);
-              }
-              return true;
+                {argumentNames.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </>
+            )}
+          </SelectContent>
+        </Select>
+        <Select
+          value={operator}
+          onValueChange={(newOperator) =>
+            onChange({
+              ...condition,
+              operator: newOperator as PolicyCondition["operator"],
             })
-            .map((op) => (
-              <SelectItem key={op.value} value={op.value}>
-                {op.label}
-              </SelectItem>
-            ))}
-        </SelectContent>
-      </Select>
-      {argumentName === CONTEXT_EXTERNAL_AGENT_ID ? (
-        externalAgentIds.length === 1 ? (
-          <>
-            <span className="text-sm">{externalAgentIds[0]}</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Only one external agent available</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </>
-        ) : (
-          <Select
-            value={value || undefined}
-            className="w-[140px]"
-            onValueChange={(newValue) =>
-              onChange({ ...condition, value: newValue })
-            }
-          >
-            <SelectTrigger className="w-[140px] h-9">
-              <SelectValue placeholder="Select agent" />
-            </SelectTrigger>
-            <SelectContent>
-              {externalAgentIds.map((agentId) => (
-                <SelectItem key={agentId} value={agentId}>
-                  {agentId}
+          }
+        >
+          <SelectTrigger className="w-full h-9">
+            <SelectValue placeholder="Operator" />
+          </SelectTrigger>
+          <SelectContent>
+            {operators
+              .filter((op) => {
+                if (argumentName === CONTEXT_EXTERNAL_AGENT_ID) {
+                  return ["equal", "notEqual"].includes(op.value);
+                }
+                if (argumentName === CONTEXT_TEAM_IDS) {
+                  return ["contains", "notContains"].includes(op.value);
+                }
+                return true;
+              })
+              .map((op) => (
+                <SelectItem key={op.value} value={op.value}>
+                  {op.label}
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        )
-      ) : argumentName === CONTEXT_TEAM_IDS ? (
-        teams?.length === 1 ? (
-          <>
-            <span className="text-sm">{teams[0].name}</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Only one team available</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </>
+          </SelectContent>
+        </Select>
+        {argumentName === CONTEXT_EXTERNAL_AGENT_ID ? (
+          externalAgentIds.length === 1 ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm truncate">{externalAgentIds[0]}</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-4 h-4 text-muted-foreground cursor-help shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Only one external agent available</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          ) : (
+            <Select
+              value={value || undefined}
+              onValueChange={(newValue) =>
+                onChange({ ...condition, value: newValue })
+              }
+            >
+              <SelectTrigger className="w-full h-9">
+                <SelectValue placeholder="Select agent" />
+              </SelectTrigger>
+              <SelectContent>
+                {externalAgentIds.map((agentId) => (
+                  <SelectItem key={agentId} value={agentId}>
+                    {agentId}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )
+        ) : argumentName === CONTEXT_TEAM_IDS ? (
+          teams?.length === 1 ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm truncate">{teams[0].name}</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-4 h-4 text-muted-foreground cursor-help shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Only one team available</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          ) : (
+            <Select
+              value={value || undefined}
+              onValueChange={(newValue) =>
+                onChange({ ...condition, value: newValue })
+              }
+            >
+              <SelectTrigger className="w-full h-9">
+                <SelectValue placeholder="Select team" />
+              </SelectTrigger>
+              <SelectContent>
+                {teams?.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>
+                    {team.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )
         ) : (
-          <Select
-            value={value || undefined}
-            onValueChange={(newValue) =>
-              onChange({ ...condition, value: newValue })
-            }
-          >
-            <SelectTrigger className="w-[140px] h-9">
-              <SelectValue placeholder="Select team" />
-            </SelectTrigger>
-            <SelectContent>
-              {teams?.map((team) => (
-                <SelectItem key={team.id} value={team.id}>
-                  {team.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )
-      ) : (
-        <DebouncedInput
-          placeholder="Value"
-          className="w-[140px] h-9"
-          initialValue={value}
-          onChange={(newValue) => onChange({ ...condition, value: newValue })}
-        />
-      )}
+          <DebouncedInput
+            placeholder="Value"
+            className="w-full h-9"
+            initialValue={value}
+            onChange={(newValue) => onChange({ ...condition, value: newValue })}
+          />
+        )}
+      </div>
       {![CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS].includes(
         argumentName,
       ) && <CaseSensitiveTooltip />}
@@ -240,7 +241,7 @@ export function ToolCallPolicyCondition({
         <Button
           variant="ghost"
           size="sm"
-          className="w-6 h-6 p-0 hover:text-red-500"
+          className="w-6 h-6 p-0 hover:text-red-500 shrink-0"
           onClick={onRemove}
           title="Remove condition"
         >

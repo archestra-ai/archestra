@@ -194,7 +194,6 @@ export default function ChatPage() {
         if (models && models.length > 0) {
           setInitialModel(models[0].id);
         }
-      } else {
       }
     }
   }, [modelsByProvider, initialModel]);

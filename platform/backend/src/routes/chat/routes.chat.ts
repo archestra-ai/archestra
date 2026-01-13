@@ -41,6 +41,7 @@ import {
   InsertConversationSchema,
   SelectConversationSchema,
   type SupportedChatProvider,
+  SupportedChatProviderSchema,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";

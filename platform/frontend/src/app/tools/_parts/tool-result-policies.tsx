@@ -322,11 +322,12 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                             variant="secondary"
                             size="sm"
                             className="h-9 w-9 p-0"
+                            aria-label="Add condition"
                             onClick={() => handleConditionAdd(policy)}
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
-                        </TooltipTrigger>
+                        </TooltipTrigger
                         <TooltipContent>
                           <p>Add condition</p>
                         </TooltipContent>

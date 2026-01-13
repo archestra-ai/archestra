@@ -15,6 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useUniqueExternalAgentIds } from "@/lib/interaction.query";
 import {
   useResultPolicyMutation,
@@ -29,7 +35,10 @@ import {
 } from "@/lib/policy.utils";
 import { useTeams } from "@/lib/team.query";
 import { PolicyCard } from "./policy-card";
-import { ToolResultPolicyCondition } from "./tool-result-policy-condition";
+import {
+  type PolicyCondition,
+  ToolResultPolicyCondition,
+} from "./tool-result-policy-condition";
 
 const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
 const CONTEXT_TEAM_IDS = "context.teamIds";
@@ -194,6 +203,41 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
     resultPolicies,
   );
 
+  const handleConditionChange = (
+    policy: (typeof policies)[number],
+    index: number,
+    updatedCondition: PolicyCondition,
+  ) => {
+    const newConditions = [...policy.conditions];
+    newConditions[index] = updatedCondition;
+    toolResultPoliciesUpdateMutation.mutate({
+      id: policy.id,
+      conditions: newConditions,
+    });
+  };
+
+  const handleConditionRemove = (
+    policy: (typeof policies)[number],
+    index: number,
+  ) => {
+    const newConditions = policy.conditions.filter((_, i) => i !== index);
+    toolResultPoliciesUpdateMutation.mutate({
+      id: policy.id,
+      conditions: newConditions,
+    });
+  };
+
+  const handleConditionAdd = (policy: (typeof policies)[number]) => {
+    const newConditions: PolicyCondition[] = [
+      ...policy.conditions,
+      { key: "", operator: "equal", value: "" },
+    ];
+    toolResultPoliciesUpdateMutation.mutate({
+      id: policy.id,
+      conditions: newConditions,
+    });
+  };
+
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
       <div className="flex flex-col gap-4">
@@ -247,8 +291,48 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
       {policies.map((policy) => (
         <PolicyCard key={policy.id}>
           <div className="flex flex-col gap-3 w-full">
-            <div className="flex items-center justify-between">
-              <ToolResultPolicyCondition policy={policy} keyItems={keyItems} />
+            <div className="flex items-start justify-between">
+              <div className="flex flex-col gap-2">
+                <span className="text-sm text-muted-foreground">If</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {policy.conditions.map((condition, index) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: conditions don't have unique IDs
+                    <div key={index} className="flex items-center gap-2">
+                      {index > 0 && (
+                        <span className="text-sm text-muted-foreground">
+                          and
+                        </span>
+                      )}
+                      <ToolResultPolicyCondition
+                        condition={condition}
+                        keyItems={keyItems}
+                        removable={policy.conditions.length > 1}
+                        onChange={(updated) =>
+                          handleConditionChange(policy, index, updated)
+                        }
+                        onRemove={() => handleConditionRemove(policy, index)}
+                      />
+                    </div>
+                  ))}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => handleConditionAdd(policy)}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Add condition</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -268,7 +352,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                   value: archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number]["action"],
                 ) =>
                   toolResultPoliciesUpdateMutation.mutate({
-                    ...policy,
+                    id: policy.id,
                     action: value,
                   })
                 }

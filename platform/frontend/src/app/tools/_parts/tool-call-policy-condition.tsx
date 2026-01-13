@@ -1,7 +1,7 @@
-import type { archestraApiTypes } from "@shared";
-import { Info } from "lucide-react";
+import { Info, X } from "lucide-react";
 import { CaseSensitiveTooltip } from "@/components/case-sensitive-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -16,17 +16,24 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUniqueExternalAgentIds } from "@/lib/interaction.query";
-import {
-  useOperators,
-  useToolInvocationPolicyUpdateMutation,
-} from "@/lib/policy.query";
+import { useOperators } from "@/lib/policy.query";
 import { useTeams } from "@/lib/team.query";
 
 const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
 const CONTEXT_TEAM_IDS = "context.teamIds";
 
-type ToolInvocationPolicy =
-  archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number];
+export type PolicyCondition = {
+  key: string;
+  operator:
+    | "equal"
+    | "notEqual"
+    | "contains"
+    | "notContains"
+    | "startsWith"
+    | "endsWith"
+    | "regex";
+  value: string;
+};
 
 type ConditionKeyOptions = {
   argumentNames: string[];
@@ -34,58 +41,51 @@ type ConditionKeyOptions = {
 };
 
 export function ToolCallPolicyCondition({
-  policy,
+  condition,
   conditionKeyOptions,
+  removable,
+  onChange,
+  onRemove,
 }: {
-  policy: ToolInvocationPolicy;
+  condition: PolicyCondition;
   conditionKeyOptions: ConditionKeyOptions;
+  removable: boolean;
+  onChange: (condition: PolicyCondition) => void;
+  onRemove: () => void;
 }) {
-  const toolInvocationPolicyUpdateMutation =
-    useToolInvocationPolicyUpdateMutation();
   const { data: operators } = useOperators();
   const { data: externalAgentIds } = useUniqueExternalAgentIds();
   const { data: teams } = useTeams();
 
   const { argumentNames, contextOptions } = conditionKeyOptions;
+  const { key: argumentName, operator, value } = condition;
 
-  // Extract first condition (UI currently supports single condition)
-  const condition = policy.conditions[0];
-  const argumentName = condition?.key ?? "";
-  const operator = condition?.operator ?? "equal";
-  const value = condition?.value ?? "";
+  const handleKeyChange = (newKey: string) => {
+    // Auto-select value if only one option available
+    let autoValue = "";
+    if (newKey === CONTEXT_EXTERNAL_AGENT_ID && externalAgentIds.length === 1) {
+      autoValue = externalAgentIds[0];
+    } else if (newKey === CONTEXT_TEAM_IDS && teams?.length === 1) {
+      autoValue = teams[0].id;
+    }
+    // Set default operator based on key type
+    let defaultOperator = operator;
+    if (newKey === CONTEXT_TEAM_IDS) {
+      defaultOperator = "contains";
+    } else if (newKey === CONTEXT_EXTERNAL_AGENT_ID) {
+      defaultOperator = "equal";
+    }
+    onChange({
+      key: newKey,
+      operator: defaultOperator,
+      value: autoValue,
+    });
+  };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm">If</span>
-      <Select
-        defaultValue={argumentName}
-        onValueChange={(newKey) => {
-          // Auto-select value if only one option available
-          let autoValue = "";
-          if (
-            newKey === CONTEXT_EXTERNAL_AGENT_ID &&
-            externalAgentIds.length === 1
-          ) {
-            autoValue = externalAgentIds[0];
-          } else if (newKey === CONTEXT_TEAM_IDS && teams?.length === 1) {
-            autoValue = teams[0].id;
-          }
-          // Set default operator based on key type
-          let defaultOperator = operator;
-          if (newKey === CONTEXT_TEAM_IDS) {
-            defaultOperator = "contains";
-          } else if (newKey === CONTEXT_EXTERNAL_AGENT_ID) {
-            defaultOperator = "equal";
-          }
-          toolInvocationPolicyUpdateMutation.mutate({
-            ...policy,
-            argumentName: newKey,
-            value: autoValue,
-            operator: defaultOperator,
-          });
-        }}
-      >
-        <SelectTrigger className="w-[180px]">
+    <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
+      <Select defaultValue={argumentName} onValueChange={handleKeyChange}>
+        <SelectTrigger className="w-[180px] h-8">
           <SelectValue placeholder="parameter" />
         </SelectTrigger>
         <SelectContent>
@@ -128,14 +128,14 @@ export function ToolCallPolicyCondition({
       </Select>
       <Select
         value={operator}
-        onValueChange={(newOperator: string) =>
-          toolInvocationPolicyUpdateMutation.mutate({
-            ...policy,
-            operator: newOperator,
+        onValueChange={(newOperator) =>
+          onChange({
+            ...condition,
+            operator: newOperator as PolicyCondition["operator"],
           })
         }
       >
-        <SelectTrigger className="w-[120px]">
+        <SelectTrigger className="w-[120px] h-8">
           <SelectValue placeholder="Operator" />
         </SelectTrigger>
         <SelectContent>
@@ -175,13 +175,10 @@ export function ToolCallPolicyCondition({
           <Select
             value={value || undefined}
             onValueChange={(newValue) =>
-              toolInvocationPolicyUpdateMutation.mutate({
-                ...policy,
-                value: newValue,
-              })
+              onChange({ ...condition, value: newValue })
             }
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px] h-8">
               <SelectValue placeholder="Select agent ID" />
             </SelectTrigger>
             <SelectContent>
@@ -212,13 +209,10 @@ export function ToolCallPolicyCondition({
           <Select
             value={value || undefined}
             onValueChange={(newValue) =>
-              toolInvocationPolicyUpdateMutation.mutate({
-                ...policy,
-                value: newValue,
-              })
+              onChange({ ...condition, value: newValue })
             }
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px] h-8">
               <SelectValue placeholder="Select team" />
             </SelectTrigger>
             <SelectContent>
@@ -233,18 +227,24 @@ export function ToolCallPolicyCondition({
       ) : (
         <DebouncedInput
           placeholder="Value"
-          className="w-[120px]"
+          className="w-[120px] h-8"
           initialValue={value}
-          onChange={(newValue) =>
-            toolInvocationPolicyUpdateMutation.mutate({
-              ...policy,
-              value: newValue,
-            })
-          }
+          onChange={(newValue) => onChange({ ...condition, value: newValue })}
         />
       )}
-      {![CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS].includes(argumentName) && (
-        <CaseSensitiveTooltip />
+      {![CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS].includes(
+        argumentName,
+      ) && <CaseSensitiveTooltip />}
+      {removable && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-6 h-6 p-0 hover:text-red-500"
+          onClick={onRemove}
+          title="Remove condition"
+        >
+          <X className="h-4 w-4" />
+        </Button>
       )}
     </div>
   );

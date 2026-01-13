@@ -1,14 +1,13 @@
-import { PermissionsSchema, RouteId } from "@shared";
+import { RouteId, MEMBER_ROLE_NAME } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
-import db, { schema } from "@/database";
 import logger from "@/logging";
 import { MemberModel, OrganizationRoleModel, UserModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  flattenPermissions,
 } from "@/types";
 
 /**
@@ -60,75 +59,10 @@ const RoleAssignmentWithRoleResponseSchema = z.object({
   }),
 });
 
-/**
- * Convert Permissions object to flat array of "resource:action" strings
- */
-const flattenPermissions = (
-  permissions: z.infer<typeof PermissionsSchema>,
-): string[] => {
-  const result: string[] = [];
-  for (const [resource, actions] of Object.entries(permissions)) {
-    for (const action of actions) {
-      result.push(`${resource}:${action}`);
-    }
-  }
-  return result;
-};
 
 const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
-   * Aliased user lookup for compatibility (Terraform expects GetUser)
-   * GET /api/users/:userId
-   */
-  fastify.get(
-    "/api/users/:userId",
-    {
-      schema: {
-        operationId: RouteId.GetUser,
-        description: "Get a user by ID within the current organization",
-        tags: ["Members"],
-        params: z.object({
-          userId: z.string().describe("User ID to look up"),
-        }),
-        response: constructResponseSchema(MemberUserResponseSchema),
-      },
-    },
-    async ({ params: { userId }, organizationId }, reply) => {
-      const member = await MemberModel.getByUserId(userId, organizationId);
-
-      if (!member) {
-        throw new ApiError(404, "User not found in this organization");
-      }
-
-      const [user] = await db
-        .select()
-        .from(schema.usersTable)
-        .where(eq(schema.usersTable.id, userId))
-        .limit(1);
-
-      if (!user) {
-        throw new ApiError(404, "User not found");
-      }
-
-      return reply.send({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        emailVerified: user.emailVerified,
-        image: user.image,
-        role: member.role,
-        banned: user.banned,
-        banReason: user.banReason,
-        banExpires: user.banExpires?.toISOString() ?? null,
-        twoFactorEnabled: user.twoFactorEnabled,
-        createdAt: user.createdAt.toISOString(),
-        updatedAt: user.updatedAt.toISOString(),
-      });
-    },
-  );
-
-  /**
-   * OPERATION 1: Lookup user by ID (org-scoped)
+   * Lookup user by ID (org-scoped)
    * GET /api/members/:userId
    */
   fastify.get(
@@ -158,11 +92,7 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Get user details
-      const [user] = await db
-        .select()
-        .from(schema.usersTable)
-        .where(eq(schema.usersTable.id, userId))
-        .limit(1);
+      const user = await UserModel.getById(userId);
 
       if (!user) {
         throw new ApiError(404, "User not found");
@@ -275,16 +205,11 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Update member's role
-      const [updated] = await db
-        .update(schema.membersTable)
-        .set({ role: roleIdentifier })
-        .where(
-          and(
-            eq(schema.membersTable.userId, userId),
-            eq(schema.membersTable.organizationId, organizationId),
-          ),
-        )
-        .returning();
+      const updated = await MemberModel.updateRole(
+        userId,
+        organizationId,
+        roleIdentifier,
+      );
 
       if (!updated) {
         throw new ApiError(500, "Failed to update member role");
@@ -308,7 +233,7 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * OPERATION 3: Remove role from user
    * DELETE /api/members/:userId/role/:roleId
    *
-   * IMPORTANT: Returns 404 if assignment does not exist (Terraform relies on this)
+   * IMPORTANT: Returns 404 if assignment does not exist
    */
   fastify.delete(
     "/api/members/:userId/role/:roleId",
@@ -354,20 +279,24 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check if this role is actually assigned to the user
       if (member.role !== roleIdentifier) {
-        // Terraform explicitly relies on 404 for missing assignment
+        // Return 404 for missing assignment
         throw new ApiError(
           404,
           "Role assignment does not exist for this user",
         );
       }
 
-      // Cannot remove role entirely - must assign a different role
-      // For Terraform compatibility, we interpret "remove role X" as
-      // "verify role X is assigned" - actual removal happens via member deletion
-      // However, the contract expects success/404, so we return success if matched
+      // Remove the role by assigning the default "member" role
       logger.info(
         { userId, roleId: roleIdentifier, organizationId },
-        "Role assignment verified and marked for removal",
+        "Removing role assignment and assigning default member role",
+      );
+
+      await MemberModel.updateRole(userId, organizationId, MEMBER_ROLE_NAME);
+
+      logger.info(
+        { userId, previousRole: roleIdentifier, newRole: MEMBER_ROLE_NAME, organizationId },
+        "Role assignment removed, user assigned to member role",
       );
 
       return reply.send({ success: true });
@@ -420,14 +349,14 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check if this role is actually assigned to the user
       if (member.role !== roleIdentifier) {
-        // Terraform removes from state on 404
+        // Return 404 for missing assignment
         throw new ApiError(
           404,
           "Role assignment does not exist for this user",
         );
       }
 
-      // Flatten permissions to array format expected by Terraform
+      // Flatten permissions to array format
       const permissionsArray = flattenPermissions(resolvedRole.permission);
 
       return reply.send({

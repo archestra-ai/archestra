@@ -5,7 +5,6 @@ import {
 } from "@shared";
 import { ArrowRightIcon, Plus } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
-import { CaseSensitiveTooltip } from "@/components/case-sensitive-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Button } from "@/components/ui/button";
 import {
@@ -199,52 +198,49 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
             </div>
             <div className="flex items-center gap-2 pl-12">
               <ArrowRightIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-              <div className="grid grid-cols-2 gap-2 flex-1 min-w-0 max-w-xl">
-                <Select
-                  defaultValue={policy.action}
-                  onValueChange={(
-                    value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["action"],
-                  ) =>
-                    toolInvocationPolicyUpdateMutation.mutate({
-                      id: policy.id,
-                      action: value,
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Action" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[
-                      {
-                        value: "allow_when_context_is_untrusted",
-                        label: "Allow always",
-                      },
-                      {
-                        value: "block_when_context_is_untrusted",
-                        label: "Allow in trusted context",
-                      },
-                      { value: "block_always", label: "Block always" },
-                    ].map(({ value, label }) => (
-                      <SelectItem key={label} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <DebouncedInput
-                  placeholder="Reason"
-                  className="w-full"
-                  initialValue={policy.reason || ""}
-                  onChange={(value) =>
-                    toolInvocationPolicyUpdateMutation.mutate({
-                      id: policy.id,
-                      reason: value,
-                    })
-                  }
-                />
-                <CaseSensitiveTooltip />
-              </div>
+              <Select
+                defaultValue={policy.action}
+                onValueChange={(
+                  value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["action"],
+                ) =>
+                  toolInvocationPolicyUpdateMutation.mutate({
+                    id: policy.id,
+                    action: value,
+                  })
+                }
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Action" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    {
+                      value: "allow_when_context_is_untrusted",
+                      label: "Allow always",
+                    },
+                    {
+                      value: "block_when_context_is_untrusted",
+                      label: "Allow in trusted context",
+                    },
+                    { value: "block_always", label: "Block always" },
+                  ].map(({ value, label }) => (
+                    <SelectItem key={label} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <DebouncedInput
+                placeholder="Reason"
+                className="flex-1 min-w-[150px] max-w-[300px]"
+                initialValue={policy.reason || ""}
+                onChange={(value) =>
+                  toolInvocationPolicyUpdateMutation.mutate({
+                    id: policy.id,
+                    reason: value,
+                  })
+                }
+              />
             </div>
           </div>
         </PolicyCard>

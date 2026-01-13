@@ -775,7 +775,7 @@ export default function ChatPage() {
     if (conversationId) return;
 
     // Wait for agent to be ready.
-    if (!initialAgentId ) return;
+    if (!initialAgentId) return;
 
     // Skip if mutation is already in progress
     if (createConversationMutation.isPending) return;

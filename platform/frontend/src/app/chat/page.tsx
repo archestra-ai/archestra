@@ -185,32 +185,16 @@ export default function ChatPage() {
   }, [allProfiles, initialAgentId, searchParams, prompts]);
 
   useEffect(() => {
-    console.log(
-      "[DEBUG page] useEffect for initialModel - current initialModel:",
-      initialModel,
-    );
-    console.log("[DEBUG page] modelsByProvider:", modelsByProvider);
     if (!initialModel) {
       const providers = Object.keys(modelsByProvider);
-      console.log("[DEBUG page] providers:", providers);
       if (providers.length > 0) {
         const firstProvider = providers[0];
         const models =
           modelsByProvider[firstProvider as keyof typeof modelsByProvider];
-        console.log(
-          "[DEBUG page] firstProvider:",
-          firstProvider,
-          "models:",
-          models,
-        );
         if (models && models.length > 0) {
-          console.log("[DEBUG page] Setting initialModel to:", models[0].id);
           setInitialModel(models[0].id);
         }
       } else {
-        console.log(
-          "[DEBUG page] No providers available, cannot set initialModel",
-        );
       }
     }
   }, [modelsByProvider, initialModel]);
@@ -702,20 +686,8 @@ export default function ChatPage() {
         // !initialModel ||
         createConversationMutation.isPending
       ) {
-        console.log(
-          "[DEBUG handleInitialSubmit] Early return - missing requirements:",
-          {
-            hasMessageText: !!message.text?.trim(),
-            hasInitialAgentId: !!initialAgentId,
-            hasInitialModel: !!initialModel,
-            isPending: createConversationMutation.isPending,
-          },
-        );
         return;
       }
-      console.log(
-        "[DEBUG handleInitialSubmit] Proceeding with conversation creation",
-      );
 
       // Store the message (text and files) to send after conversation is created
       pendingPromptRef.current = message.text || "";

@@ -5,6 +5,7 @@ import {
   testMcpServerCommand,
 } from "@shared";
 import { auth } from "@/auth/better-auth";
+import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -395,13 +396,32 @@ async function seedDefaultRegularPrompts(): Promise<void> {
 }
 
 /**
- * Seeds Archestra MCP tools.
- * The Archestra catalog entry is virtual (not stored in DB) and provided by InternalMcpCatalogModel.
+ * Seeds Archestra MCP catalog and tools.
+ * Creates the Archestra catalog entry in the database if it doesn't exist,
+ * then seeds all Archestra tools.
  * Tools are NOT automatically assigned to agents - users must assign them manually.
  */
-async function seedArchestraTools(): Promise<void> {
-  // Create/update Archestra tools with the catalog ID
-  // The catalog entry itself is virtual and doesn't need to be seeded
+async function seedArchestraCatalogAndTools(): Promise<void> {
+  // Check if Archestra catalog already exists
+  const existing = await InternalMcpCatalogModel.findById(
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+
+  if (!existing) {
+    // Create Archestra catalog entry with the fixed ID
+    await db.insert(schema.internalMcpCatalogTable).values({
+      id: ARCHESTRA_MCP_CATALOG_ID,
+      name: "Archestra",
+      description:
+        "Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.",
+      serverType: "builtin",
+    });
+    logger.info("✓ Seeded Archestra catalog entry");
+  } else {
+    logger.info("✓ Archestra catalog entry already exists, skipping");
+  }
+
+  // Create/update Archestra tools
   await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
   logger.info("✓ Seeded Archestra tools");
 }
@@ -528,7 +548,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultTeam();
   await seedN8NSystemPrompt();
   await seedDefaultRegularPrompts();
-  await seedArchestraTools();
+  await seedArchestraCatalogAndTools();
   await seedTestMcpServer();
   await seedTeamTokens();
 }

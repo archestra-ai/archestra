@@ -1,4 +1,3 @@
-import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
 import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
@@ -9,38 +8,6 @@ import type {
 } from "@/types";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
-
-/**
- * Virtual Archestra catalog entry that is not stored in the database.
- * This allows the Archestra MCP server to appear in the UI like other servers
- * without requiring database seeding.
- */
-function getVirtualArchestraCatalog(): InternalMcpCatalog {
-  const now = new Date();
-  return {
-    id: ARCHESTRA_MCP_CATALOG_ID,
-    name: "Archestra",
-    description:
-      "Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.",
-    instructions: null,
-    docsUrl: null,
-    serverType: "builtin",
-    serverUrl: null,
-    version: null,
-    repository: null,
-    installationCommand: null,
-    requiresAuth: false,
-    authDescription: null,
-    authFields: [], // Use empty array (matches database default)
-    userConfig: {}, // Use empty object (matches database default)
-    oauthConfig: null,
-    localConfig: null,
-    clientSecretId: null,
-    localConfigSecretId: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
 
 class InternalMcpCatalogModel {
   /**
@@ -210,14 +177,7 @@ class InternalMcpCatalogModel {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
     }
 
-    // Filter out the Archestra entry from DB (it's added as virtual below)
-    // The DB entry exists only to satisfy FK constraint for tools
-    const nonArchestraItems = catalogItems.filter(
-      (item) => item.id !== ARCHESTRA_MCP_CATALOG_ID,
-    );
-
-    // Include the virtual Archestra catalog entry at the beginning
-    return [getVirtualArchestraCatalog(), ...nonArchestraItems];
+    return catalogItems;
   }
 
   static async searchByQuery(
@@ -240,35 +200,13 @@ class InternalMcpCatalogModel {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
     }
 
-    // Filter out Archestra from DB results (it's handled as virtual catalog)
-    const nonArchestraItems = catalogItems.filter(
-      (item) => item.id !== ARCHESTRA_MCP_CATALOG_ID,
-    );
-
-    // Check if Archestra matches the search query
-    const archestraCatalog = getVirtualArchestraCatalog();
-    const lowerQuery = query.toLowerCase();
-    const archestraMatches =
-      archestraCatalog.name.toLowerCase().includes(lowerQuery) ||
-      (archestraCatalog.description?.toLowerCase().includes(lowerQuery) ??
-        false);
-
-    if (archestraMatches) {
-      return [archestraCatalog, ...nonArchestraItems];
-    }
-
-    return nonArchestraItems;
+    return catalogItems;
   }
 
   static async findById(
     id: string,
     options?: { expandSecrets?: boolean },
   ): Promise<InternalMcpCatalog | null> {
-    // Return virtual Archestra catalog if requested
-    if (id === ARCHESTRA_MCP_CATALOG_ID) {
-      return getVirtualArchestraCatalog();
-    }
-
     const { expandSecrets = true } = options ?? {};
 
     const [catalogItem] = await db
@@ -294,11 +232,6 @@ class InternalMcpCatalogModel {
   static async findByIdWithResolvedSecrets(
     id: string,
   ): Promise<InternalMcpCatalog | null> {
-    // Return virtual Archestra catalog if requested (no secrets to resolve)
-    if (id === ARCHESTRA_MCP_CATALOG_ID) {
-      return getVirtualArchestraCatalog();
-    }
-
     const [catalogItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
@@ -326,36 +259,20 @@ class InternalMcpCatalogModel {
       return new Map();
     }
 
+    const catalogItems = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(inArray(schema.internalMcpCatalogTable.id, ids));
+
     const result = new Map<string, InternalMcpCatalog>();
-
-    // Check if Archestra catalog is requested
-    if (ids.includes(ARCHESTRA_MCP_CATALOG_ID)) {
-      result.set(ARCHESTRA_MCP_CATALOG_ID, getVirtualArchestraCatalog());
-    }
-
-    // Filter out Archestra ID for database query
-    const dbIds = ids.filter((id) => id !== ARCHESTRA_MCP_CATALOG_ID);
-    if (dbIds.length > 0) {
-      const catalogItems = await db
-        .select()
-        .from(schema.internalMcpCatalogTable)
-        .where(inArray(schema.internalMcpCatalogTable.id, dbIds));
-
-      for (const item of catalogItems) {
-        result.set(item.id, item);
-      }
+    for (const item of catalogItems) {
+      result.set(item.id, item);
     }
 
     return result;
   }
 
   static async findByName(name: string): Promise<InternalMcpCatalog | null> {
-    // Check for virtual Archestra catalog
-    const archestraCatalog = getVirtualArchestraCatalog();
-    if (name.toLowerCase() === archestraCatalog.name.toLowerCase()) {
-      return archestraCatalog;
-    }
-
     const [catalogItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)

@@ -179,9 +179,8 @@ describe("InternalMcpCatalogModel", () => {
     });
 
     test("returns empty Map when no catalog items exist", async () => {
-      const nonExistentId1 = "00000000-0000-0000-0000-000000000000";
-      // Note: 00000000-0000-4000-8000-000000000001 is ARCHESTRA_MCP_CATALOG_ID (virtual)
-      const nonExistentId2 = "00000000-0000-0000-0000-000000000002";
+      const nonExistentId1 = "00000000-0000-4000-8000-000000000099";
+      const nonExistentId2 = "00000000-0000-4000-8000-000000000098";
 
       const catalogItemsMap = await InternalMcpCatalogModel.getByIds([
         nonExistentId1,
@@ -212,8 +211,15 @@ describe("InternalMcpCatalogModel", () => {
     });
   });
 
-  describe("Virtual Archestra Catalog", () => {
-    test("virtual catalog validates against SelectInternalMcpCatalogSchema", async () => {
+  describe("Archestra Catalog", () => {
+    test("Archestra catalog validates against SelectInternalMcpCatalogSchema", async ({
+      seedAndAssignArchestraTools,
+      makeAgent,
+    }) => {
+      // Seed Archestra catalog and tools
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
+
       // Find the Archestra catalog via findById
       const archestra = await InternalMcpCatalogModel.findById(
         ARCHESTRA_MCP_CATALOG_ID,
@@ -226,12 +232,18 @@ describe("InternalMcpCatalogModel", () => {
       expect(result.success).toBe(true);
     });
 
-    test("findAll includes virtual Archestra catalog", async () => {
+    test("findAll includes Archestra catalog", async ({
+      seedAndAssignArchestraTools,
+      makeAgent,
+    }) => {
+      // Seed Archestra catalog and tools
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
+
       const catalogItems = await InternalMcpCatalogModel.findAll({
         expandSecrets: false,
       });
 
-      // Archestra should be the first item
       const archestraCatalog = catalogItems.find(
         (item) => item.id === ARCHESTRA_MCP_CATALOG_ID,
       );

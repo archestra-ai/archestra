@@ -554,25 +554,10 @@ export function McpServerCard({
       >
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            <div className="flex items-center gap-2">
-              <Wrench className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">
-                Tools discovered:{" "}
-                <span className="font-medium text-foreground">
-                  {toolsDiscoveredCount}
-                </span>
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {toolsAssigned}
           </div>
         </div>
       </WithPermissions>
-      <div className="text-sm text-muted-foreground">
-        Built-in tools are always available. Assign tools to profiles to use
-        them.
-      </div>
     </>
   );
 

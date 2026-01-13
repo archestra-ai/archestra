@@ -7,10 +7,14 @@ describe("ConversationEnabledToolModel", () => {
     makeUser,
     makeOrganization,
     makeAgent,
+    seedAndAssignArchestraTools,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
     const agent = await makeAgent({ name: "Test Agent", teams: [] });
+
+    // Seed and assign Archestra tools to the agent
+    await seedAndAssignArchestraTools(agent.id);
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -32,10 +36,14 @@ describe("ConversationEnabledToolModel", () => {
     makeUser,
     makeOrganization,
     makeAgent,
+    seedAndAssignArchestraTools,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
     const agent = await makeAgent({ name: "Test Agent", teams: [] });
+
+    // Seed and assign Archestra tools to the agent
+    await seedAndAssignArchestraTools(agent.id);
 
     const conversation = await ConversationModel.create({
       userId: user.id,
@@ -288,10 +296,14 @@ describe("ConversationEnabledToolModel", () => {
     makeUser,
     makeOrganization,
     makeAgent,
+    seedAndAssignArchestraTools,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
     const agent = await makeAgent({ name: "Test Agent", teams: [] });
+
+    // Seed and assign Archestra tools to the agent
+    await seedAndAssignArchestraTools(agent.id);
 
     const conversation1 = await ConversationModel.create({
       userId: user.id,
@@ -330,12 +342,16 @@ describe("ConversationEnabledToolModel", () => {
     makeOrganization,
     makeAgent,
     makeTool,
+    seedAndAssignArchestraTools,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
     const agent = await makeAgent({ name: "Test Agent", teams: [] });
     const tool1 = await makeTool({ name: "tool1" });
     const tool2 = await makeTool({ name: "tool2" });
+
+    // Seed and assign Archestra tools to the agent
+    await seedAndAssignArchestraTools(agent.id);
 
     const conversation1 = await ConversationModel.create({
       userId: user.id,

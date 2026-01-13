@@ -671,12 +671,25 @@ async function makeSsoProvider(
 
 /**
  * Seeds and assigns Archestra tools to an agent.
- * The Archestra catalog entry is virtual and doesn't need to be created.
+ * Creates the Archestra catalog entry if it doesn't exist, then seeds tools.
  * This is useful for tests that need Archestra tools to be available.
  */
 async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
+  // Create Archestra catalog entry if it doesn't exist
+  const existing = await InternalMcpCatalogModel.findById(
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+  if (!existing) {
+    await db.insert(schema.internalMcpCatalogTable).values({
+      id: ARCHESTRA_MCP_CATALOG_ID,
+      name: "Archestra",
+      description:
+        "Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.",
+      serverType: "builtin",
+    });
+  }
+
   // Seed and assign Archestra tools
-  // The catalog entry is virtual (provided by InternalMcpCatalogModel)
   await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
   await ToolModel.assignArchestraToolsToAgent(
     agentId,

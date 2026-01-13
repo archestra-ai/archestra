@@ -139,11 +139,11 @@ export const memberRole = ac.newRole({
 });
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
-  {
-    [ADMIN_ROLE_NAME]: adminRole.statements,
-    [EDITOR_ROLE_NAME]: editorRole.statements,
-    [MEMBER_ROLE_NAME]: memberRole.statements,
-  };
+{
+  [ADMIN_ROLE_NAME]: adminRole.statements,
+  [EDITOR_ROLE_NAME]: editorRole.statements,
+  [MEMBER_ROLE_NAME]: memberRole.statements,
+};
 
 /**
  * Available resources and actions
@@ -250,7 +250,6 @@ export const RouteId = {
   GetRoles: "getRoles",
   CreateRole: "createRole",
   GetRole: "getRole",
-  GetRoleByName: "getRoleByName",
   UpdateRole: "updateRole",
   DeleteRole: "deleteRole",
 
@@ -639,9 +638,6 @@ export const requiredEndpointPermissionsMap: Partial<
     organization: ["update"],
   },
   [RouteId.GetRole]: {
-    organization: ["read"],
-  },
-  [RouteId.GetRoleByName]: {
     organization: ["read"],
   },
   [RouteId.UpdateRole]: {

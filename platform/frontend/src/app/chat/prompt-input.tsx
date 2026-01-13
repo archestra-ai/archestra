@@ -59,6 +59,12 @@ interface ArchestraPromptInputProps {
   onProfileChange?: (agentId: string) => void;
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
+  /** Feature flags for detecting key-less providers */
+  features?: {
+    geminiVertexAiEnabled?: boolean;
+    vllmEnabled?: boolean;
+    ollamaEnabled?: boolean;
+  };
 }
 
 // Inner component that has access to the controller context
@@ -79,6 +85,7 @@ const PromptInputContent = ({
   textareaRef: externalTextareaRef,
   onProfileChange,
   allowFileUploads = false,
+  features,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -154,6 +161,7 @@ const PromptInputContent = ({
               messageCount={messageCount}
               onApiKeyChange={onApiKeyChange}
               onProviderChange={onProviderChange}
+              features={features}
             />
           )}
         </PromptInputTools>
@@ -186,6 +194,7 @@ const ArchestraPromptInput = ({
   textareaRef,
   onProfileChange,
   allowFileUploads = false,
+  features,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -207,6 +216,7 @@ const ArchestraPromptInput = ({
           textareaRef={textareaRef}
           onProfileChange={onProfileChange}
           allowFileUploads={allowFileUploads}
+          features={features}
         />
       </PromptInputProvider>
     </div>

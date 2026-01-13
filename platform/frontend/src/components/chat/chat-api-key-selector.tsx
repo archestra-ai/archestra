@@ -53,6 +53,12 @@ interface ChatApiKeySelectorProps {
   onProviderChange?: (provider: SupportedChatProvider) => void;
   /** Current provider (derived from selected model) - used to detect provider changes */
   currentProvider?: SupportedChatProvider;
+  /** Feature flags for detecting key-less providers */
+  features?: {
+    geminiVertexAiEnabled?: boolean;
+    vllmEnabled?: boolean;
+    ollamaEnabled?: boolean;
+  };
 }
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
@@ -75,6 +81,7 @@ export function ChatApiKeySelector({
   onApiKeyChange,
   onProviderChange,
   currentProvider,
+  features,
 }: ChatApiKeySelectorProps) {
   // Fetch ALL available API keys (no provider filter)
   const { data: availableKeys = [], isLoading } = useAvailableChatApiKeys();
@@ -248,6 +255,28 @@ export function ChatApiKeySelector({
   const handleCancelChange = () => {
     setPendingKeyId(null);
   };
+
+  // Check if current provider is key-less (doesn't require API key)
+  const isCurrentProviderKeyLess = useMemo(() => {
+    if (!currentProvider) return false;
+    // Gemini via Vertex AI is key-less
+    if (currentProvider === "gemini" && features?.geminiVertexAiEnabled) {
+      return true;
+    }
+    // vLLM and Ollama may not require API keys
+    if (currentProvider === "vllm" && features?.vllmEnabled) {
+      return true;
+    }
+    if (currentProvider === "ollama" && features?.ollamaEnabled) {
+      return true;
+    }
+    return false;
+  }, [currentProvider, features]);
+
+  // Hide selector if current provider is key-less
+  if (!isLoading && isCurrentProviderKeyLess) {
+    return null;
+  }
 
   // If no keys available for this provider
   if (!isLoading && availableKeys.length === 0) {

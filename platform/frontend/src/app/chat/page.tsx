@@ -1152,6 +1152,15 @@ export default function ChatPage() {
                       : initialPromptId
                   }
                   allowFileUploads={organization?.allowChatFileUploads ?? false}
+                  features={
+                    features
+                      ? {
+                          geminiVertexAiEnabled: features.geminiVertexAiEnabled,
+                          vllmEnabled: features.vllmEnabled,
+                          ollamaEnabled: features.ollamaEnabled,
+                        }
+                      : undefined
+                  }
                 />
                 <div className="text-center">
                   <Version inline />

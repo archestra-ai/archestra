@@ -1018,6 +1018,86 @@ describe("TrustedDataPolicyModel", () => {
       });
     });
 
+    describe("multiple conditions (AND logic)", () => {
+      test("applies when all output conditions match", async ({
+        makeTrustedDataPolicy,
+      }) => {
+        await makeTrustedDataPolicy(toolId, {
+          conditions: [
+            { key: "source", operator: "equal", value: "internal" },
+            { key: "verified", operator: "equal", value: "true" },
+          ],
+          action: "mark_as_trusted",
+          description: "Internal verified data",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { source: "internal", verified: "true", data: "content" },
+          },
+          "restrictive",
+          { teamIds: [] },
+        );
+
+        expect(result.isTrusted).toBe(true);
+        expect(result.reason).toContain("Internal verified data");
+      });
+
+      test("does not apply when only some output conditions match", async ({
+        makeTrustedDataPolicy,
+      }) => {
+        await makeTrustedDataPolicy(toolId, {
+          conditions: [
+            { key: "source", operator: "equal", value: "internal" },
+            { key: "verified", operator: "equal", value: "true" },
+          ],
+          action: "mark_as_trusted",
+          description: "Internal verified data",
+        });
+
+        // Only first condition matches
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { source: "internal", verified: "false", data: "content" },
+          },
+          "restrictive",
+          { teamIds: [] },
+        );
+
+        expect(result.isTrusted).toBe(false);
+      });
+
+      test("handles mixed output and context conditions", async ({
+        makeTrustedDataPolicy,
+      }) => {
+        await makeTrustedDataPolicy(toolId, {
+          conditions: [
+            { key: "type", operator: "equal", value: "email" },
+            { key: "from", operator: "endsWith", value: "@malicious.com" },
+          ],
+          action: "block_always",
+          description: "Block malicious emails",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { type: "email", from: "hacker@malicious.com" },
+          },
+          "restrictive",
+          { teamIds: [] },
+        );
+
+        expect(result.isBlocked).toBe(true);
+        expect(result.reason).toContain("Block malicious emails");
+      });
+    });
+
     describe("multiple policies", () => {
       test("trusts data when any policy matches", async ({
         makeTrustedDataPolicy,

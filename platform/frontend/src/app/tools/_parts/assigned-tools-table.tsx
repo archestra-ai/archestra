@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { PermissivePolicyOverlay } from "@/components/permissive-policy-overlay";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -556,19 +557,30 @@ export function AssignedToolsTable({
           );
 
           return (
-            <div className="flex items-center gap-2">
-              <CallPolicyToggle
-                value={currentAction}
-                onChange={(action) =>
-                  handleSingleRowUpdate(row.original.id, "callPolicy", action)
-                }
-                disabled={isUpdating}
-                size="sm"
-              />
-              {isUpdating && (
-                <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
+            <WithPermissions
+              permissions={{ policy: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex items-center gap-2">
+                  <CallPolicyToggle
+                    value={currentAction}
+                    onChange={(action) =>
+                      handleSingleRowUpdate(
+                        row.original.id,
+                        "callPolicy",
+                        action,
+                      )
+                    }
+                    disabled={isUpdating || !hasPermission}
+                    size="sm"
+                  />
+                  {isUpdating && (
+                    <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
+                  )}
+                </div>
               )}
-            </div>
+            </WithPermissions>
           );
         },
         size: 140,
@@ -608,39 +620,46 @@ export function AssignedToolsTable({
           );
 
           return (
-            <div className="flex items-center gap-2">
-              <Select
-                value={treatment}
-                disabled={isUpdating}
-                onValueChange={(value) => {
-                  // Only update if value actually changed
-                  if (value === treatment) return;
-                  handleSingleRowUpdate(
-                    row.original.id,
-                    "toolResultTreatment",
-                    value as ToolResultTreatment,
-                  );
-                }}
-              >
-                <SelectTrigger
-                  className="h-8 w-[150px] text-xs"
-                  onClick={(e) => e.stopPropagation()}
-                  size="sm"
-                >
-                  <SelectValue>{treatmentLabels[treatment]}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(treatmentLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {isUpdating && (
-                <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
+            <WithPermissions
+              permissions={{ policy: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={treatment}
+                    disabled={isUpdating || !hasPermission}
+                    onValueChange={(value) => {
+                      // Only update if value actually changed
+                      if (value === treatment) return;
+                      handleSingleRowUpdate(
+                        row.original.id,
+                        "toolResultTreatment",
+                        value as ToolResultTreatment,
+                      );
+                    }}
+                  >
+                    <SelectTrigger
+                      className="h-8 w-[150px] text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                      size="sm"
+                    >
+                      <SelectValue>{treatmentLabels[treatment]}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(treatmentLabels).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {isUpdating && (
+                    <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
+                  )}
+                </div>
               )}
-            </div>
+            </WithPermissions>
           );
         },
         size: 170,
@@ -721,53 +740,67 @@ export function AssignedToolsTable({
             )}
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                Call Policy:
-              </span>
-              <Select
-                disabled={!hasSelection || isBulkUpdating}
-                onValueChange={(value: CallPolicyAction) =>
-                  handleBulkAction("callPolicy", value)
-                }
-              >
-                <SelectTrigger className="h-8 w-[180px] text-sm" size="sm">
-                  <SelectValue placeholder="Select action" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="block_always">Block always</SelectItem>
-                  <SelectItem value="block_when_context_is_untrusted">
-                    Allow if trusted
-                  </SelectItem>
-                  <SelectItem value="allow_when_context_is_untrusted">
-                    Allow always
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                Results are:
-              </span>
-              <Select
-                disabled={!hasSelection || isBulkUpdating}
-                onValueChange={(value: ToolResultTreatment) =>
-                  handleBulkAction("toolResultTreatment", value)
-                }
-              >
-                <SelectTrigger className="h-8 w-[150px] text-sm" size="sm">
-                  <SelectValue placeholder="Select treatment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="trusted">Trusted</SelectItem>
-                  <SelectItem value="untrusted">Untrusted</SelectItem>
-                  <SelectItem value="sanitize_with_dual_llm">
-                    Dual LLM
-                  </SelectItem>
-                  <SelectItem value="block_always">Blocked</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <WithPermissions
+              permissions={{ policy: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    Call Policy:
+                  </span>
+                  <Select
+                    disabled={!hasSelection || isBulkUpdating || !hasPermission}
+                    onValueChange={(value: CallPolicyAction) =>
+                      handleBulkAction("callPolicy", value)
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-[180px] text-sm" size="sm">
+                      <SelectValue placeholder="Select action" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="block_always">Block always</SelectItem>
+                      <SelectItem value="block_when_context_is_untrusted">
+                        Allow if trusted
+                      </SelectItem>
+                      <SelectItem value="allow_when_context_is_untrusted">
+                        Allow always
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </WithPermissions>
+            <WithPermissions
+              permissions={{ policy: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    Results are:
+                  </span>
+                  <Select
+                    disabled={!hasSelection || isBulkUpdating || !hasPermission}
+                    onValueChange={(value: ToolResultTreatment) =>
+                      handleBulkAction("toolResultTreatment", value)
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-[150px] text-sm" size="sm">
+                      <SelectValue placeholder="Select treatment" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="trusted">Trusted</SelectItem>
+                      <SelectItem value="untrusted">Untrusted</SelectItem>
+                      <SelectItem value="sanitize_with_dual_llm">
+                        Dual LLM
+                      </SelectItem>
+                      <SelectItem value="block_always">Blocked</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </WithPermissions>
             <div className="ml-2 h-4 w-px bg-border" />
             <Tooltip>
               <TooltipTrigger asChild>

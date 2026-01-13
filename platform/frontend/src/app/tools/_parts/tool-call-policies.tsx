@@ -141,7 +141,6 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
           <div className="text-xs font-medium text-muted-foreground">
             DEFAULT
           </div>
-          <span className="text-sm">Call policy</span>
         </div>
         <CallPolicyToggle
           value={currentAction}

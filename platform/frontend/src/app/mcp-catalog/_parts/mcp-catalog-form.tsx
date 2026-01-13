@@ -435,9 +435,9 @@ export function McpCatalogForm({
                         </FormLabel>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="token" id="auth-token" />
+                        <RadioGroupItem value="raw_token" id="auth-raw-token" />
                         <FormLabel
-                          htmlFor="auth-token"
+                          htmlFor="auth-raw-token"
                           className="font-normal cursor-pointer"
                         >
                           "Authorization: &lt;your token&gt;" header
@@ -459,7 +459,7 @@ export function McpCatalogForm({
               )}
             />
 
-            {(authMethod === "bearer" || authMethod === "token") && (
+            {(authMethod === "bearer" || authMethod === "raw_token") && (
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-sm text-muted-foreground">
                   Users will be prompted to provide their access token when

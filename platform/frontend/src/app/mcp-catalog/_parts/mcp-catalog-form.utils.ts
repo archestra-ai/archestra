@@ -101,7 +101,7 @@ export function transformFormToApiData(
     };
     // Clear oauthConfig when using Bearer Token
     data.oauthConfig = undefined;
-  } else if (values.authMethod === "token") {
+  } else if (values.authMethod === "raw_token") {
     // Handle Token (no prefix) configuration
     data.userConfig = {
       raw_access_token: {
@@ -131,11 +131,11 @@ export function transformCatalogItemToFormValues(
   } | null,
 ): McpCatalogFormValues {
   // Determine auth method
-  let authMethod: "none" | "bearer" | "token" | "oauth" = "none";
+  let authMethod: "none" | "bearer" | "raw_token" | "oauth" = "none";
   if (item.oauthConfig) {
     authMethod = "oauth";
   } else if (item.userConfig?.raw_access_token) {
-    authMethod = "token";
+    authMethod = "raw_token";
   } else if (item.userConfig?.access_token) {
     authMethod = "bearer";
   } else if (

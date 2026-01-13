@@ -1,5 +1,4 @@
 import { describe, expect, test } from "@/test";
-import ToolModel from "./tool";
 import type { PolicyEvaluationContext } from "./tool-invocation-policy";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 

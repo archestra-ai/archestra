@@ -1,3 +1,5 @@
+/** biome-ignore-all lint/suspicious/noConsole: needed for debugging */
+
 import { archestraApiSdk, type SupportedProvider } from "@shared";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo } from "react";

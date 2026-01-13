@@ -1,4 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createCerebras } from "@ai-sdk/cerebras";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
@@ -103,6 +104,9 @@ export async function resolveProviderApiKey(params: {
     if (provider === "anthropic" && config.chat.anthropic.apiKey) {
       providerApiKey = config.chat.anthropic.apiKey;
       apiKeySource = "environment";
+    } else if (provider === "cerebras" && config.chat.cerebras.apiKey) {
+      providerApiKey = config.chat.cerebras.apiKey;
+      apiKeySource = "environment";
     } else if (provider === "openai" && config.chat.openai.apiKey) {
       providerApiKey = config.chat.openai.apiKey;
       apiKeySource = "environment";
@@ -205,6 +209,16 @@ export function createLLMModel(params: {
     // Use .chat() to force Chat Completions API (not Responses API)
     // so our proxy's tool policy evaluation is applied
     return client.chat(modelName);
+  }
+
+  if (provider === "cerebras") {
+    // URL format: /v1/cerebras/:agentId (SDK appends /chat/completions)
+    const client = createCerebras({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/cerebras/${agentId}`,
+      headers,
+    });
+    return client(modelName);
   }
 
   if (provider === "vllm") {

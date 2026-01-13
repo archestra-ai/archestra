@@ -90,6 +90,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://aistudio.google.com/app/apikey",
     consoleName: "Google AI Studio",
   },
+  cerebras: {
+    name: "Cerebras",
+    icon: "/icons/cerebras.png",
+    placeholder: "csk-...",
+    enabled: true,
+    consoleUrl: "https://cloud.cerebras.ai/platform",
+    consoleName: "Cerebras Cloud",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",

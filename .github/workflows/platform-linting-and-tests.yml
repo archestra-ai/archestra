@@ -322,13 +322,12 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
       - name: Build Docker image
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        if: ${{ github.event_name == 'merge_group' }}
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ./platform
@@ -346,7 +345,7 @@ jobs:
       # NOTE: Skipped for fork PRs because GitHub doesn't expose repository secrets
       # to workflows triggered by fork PRs. Docker Scout requires Docker Hub auth.
       - name: Docker Scout CVE Check
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
+        if: ${{ github.event_name == 'merge_group' && github.event.pull_request.head.repo.fork != true }}
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
         with:
           command: cves

@@ -58,6 +58,7 @@ import {
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
+import { useOrganization } from "@/lib/organization.query";
 import {
   applyPendingActions,
   clearPendingActions,
@@ -98,10 +99,12 @@ export default function ChatPage() {
   });
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
+  const pendingFilesRef = useRef<
+    Array<{ url: string; mediaType: string; filename?: string }>
+  >([]);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const autoSendTriggeredRef = useRef(false);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -181,32 +184,15 @@ export default function ChatPage() {
   }, [allProfiles, initialAgentId, searchParams, prompts]);
 
   useEffect(() => {
-    console.log(
-      "[DEBUG page] useEffect for initialModel - current initialModel:",
-      initialModel,
-    );
-    console.log("[DEBUG page] modelsByProvider:", modelsByProvider);
     if (!initialModel) {
       const providers = Object.keys(modelsByProvider);
-      console.log("[DEBUG page] providers:", providers);
       if (providers.length > 0) {
         const firstProvider = providers[0];
         const models =
           modelsByProvider[firstProvider as keyof typeof modelsByProvider];
-        console.log(
-          "[DEBUG page] firstProvider:",
-          firstProvider,
-          "models:",
-          models,
-        );
         if (models && models.length > 0) {
-          console.log("[DEBUG page] Setting initialModel to:", models[0].id);
           setInitialModel(models[0].id);
         }
-      } else {
-        console.log(
-          "[DEBUG page] No providers available, cannot set initialModel",
-        );
       }
     }
   }, [modelsByProvider, initialModel]);
@@ -228,6 +214,7 @@ export default function ChatPage() {
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   // vLLM/Ollama may not require an API key either
@@ -254,11 +241,6 @@ export default function ChatPage() {
       }
     }
   }, [searchParams, conversationId]);
-
-  // Get user_prompt from URL for auto-sending
-  const initialUserPrompt = useMemo(() => {
-    return searchParams.get("user_prompt") || undefined;
-  }, [searchParams]);
 
   // Update URL when conversation changes
   const selectConversation = useCallback(
@@ -515,13 +497,38 @@ export default function ChatPage() {
       setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
 
-      // If there's a pending prompt and the conversation is empty, send it
-      if (pendingPromptRef.current && conversation.messages.length === 0) {
+      // If there's a pending prompt/files and the conversation is empty, send it
+      if (
+        (pendingPromptRef.current || pendingFilesRef.current.length > 0) &&
+        conversation.messages.length === 0
+      ) {
         const promptToSend = pendingPromptRef.current;
+        const filesToSend = pendingFilesRef.current;
         pendingPromptRef.current = undefined;
+        pendingFilesRef.current = [];
+
+        // Build message parts
+        const parts: Array<
+          | { type: "text"; text: string }
+          | { type: "file"; url: string; mediaType: string; filename?: string }
+        > = [];
+
+        if (promptToSend) {
+          parts.push({ type: "text", text: promptToSend });
+        }
+
+        for (const file of filesToSend) {
+          parts.push({
+            type: "file",
+            url: file.url,
+            mediaType: file.mediaType,
+            filename: file.filename,
+          });
+        }
+
         sendMessage({
           role: "user",
-          parts: [{ type: "text", text: promptToSend }],
+          parts,
         });
       }
     }
@@ -610,18 +617,43 @@ export default function ChatPage() {
       stop?.();
     }
 
+    const hasText = message.text?.trim();
+    const hasFiles = message.files && message.files.length > 0;
+
     if (
       !sendMessage ||
-      !message.text?.trim() ||
+      (!hasText && !hasFiles) ||
       status === "submitted" ||
       status === "streaming"
     ) {
       return;
     }
 
+    // Build message parts: text first, then file attachments
+    const parts: Array<
+      | { type: "text"; text: string }
+      | { type: "file"; url: string; mediaType: string; filename?: string }
+    > = [];
+
+    if (hasText) {
+      parts.push({ type: "text", text: message.text as string });
+    }
+
+    // Add file parts
+    if (hasFiles) {
+      for (const file of message.files) {
+        parts.push({
+          type: "file",
+          url: file.url,
+          mediaType: file.mediaType,
+          filename: file.filename,
+        });
+      }
+    }
+
     sendMessage?.({
       role: "user",
-      parts: [{ type: "text", text: message.text }],
+      parts,
     });
   };
 
@@ -638,35 +670,21 @@ export default function ChatPage() {
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
     (message, e) => {
       e.preventDefault();
-      console.log("[DEBUG handleInitialSubmit] Called with:", {
-        messageText: message.text?.trim(),
-        initialAgentId,
-        initialModel,
-        isPending: createConversationMutation.isPending,
-      });
+      const hasText = message.text?.trim();
+      const hasFiles = message.files && message.files.length > 0;
+
       if (
-        !message.text?.trim() ||
+        (!hasText && !hasFiles) ||
         !initialAgentId ||
         // !initialModel ||
         createConversationMutation.isPending
       ) {
-        console.log(
-          "[DEBUG handleInitialSubmit] Early return - missing requirements:",
-          {
-            hasMessageText: !!message.text?.trim(),
-            hasInitialAgentId: !!initialAgentId,
-            hasInitialModel: !!initialModel,
-            isPending: createConversationMutation.isPending,
-          },
-        );
         return;
       }
-      console.log(
-        "[DEBUG handleInitialSubmit] Proceeding with conversation creation",
-      );
 
-      // Store the message to send after conversation is created
-      pendingPromptRef.current = message.text;
+      // Store the message (text and files) to send after conversation is created
+      pendingPromptRef.current = message.text || "";
+      pendingFilesRef.current = message.files || [];
 
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(
@@ -741,62 +759,6 @@ export default function ChatPage() {
       selectConversation,
     ],
   );
-
-  // Auto-send message from URL when conditions are met (deep link support)
-  useEffect(() => {
-    // Skip if already triggered or no user_prompt in URL
-    if (autoSendTriggeredRef.current || !initialUserPrompt) return;
-
-    // Skip if conversation already exists
-    if (conversationId) return;
-
-    // Wait for agent and model to be ready
-    if (!initialAgentId || !initialModel) return;
-
-    // Skip if mutation is already in progress
-    if (createConversationMutation.isPending) return;
-
-    // Mark as triggered to prevent duplicate sends
-    autoSendTriggeredRef.current = true;
-
-    // Store the message to send after conversation is created
-    pendingPromptRef.current = initialUserPrompt;
-
-    // Find the provider for the initial model
-    const modelInfo = chatModels.find((m) => m.id === initialModel);
-    const selectedProvider = modelInfo?.provider as
-      | SupportedChatProvider
-      | undefined;
-
-    // Create conversation and send message
-    createConversationMutation.mutate(
-      {
-        agentId: initialAgentId,
-        selectedModel: initialModel,
-        selectedProvider,
-        promptId: initialPromptId ?? undefined,
-        chatApiKeyId: initialApiKeyId,
-      },
-      {
-        onSuccess: (newConversation) => {
-          if (newConversation) {
-            newlyCreatedConversationRef.current = newConversation.id;
-            selectConversation(newConversation.id);
-          }
-        },
-      },
-    );
-  }, [
-    initialUserPrompt,
-    conversationId,
-    initialAgentId,
-    initialModel,
-    initialPromptId,
-    initialApiKeyId,
-    chatModels,
-    createConversationMutation,
-    selectConversation,
-  ]);
 
   // Determine which agent ID to use for prompt input
   const activeAgentId = conversationId
@@ -1189,6 +1151,7 @@ export default function ChatPage() {
                       ? (conversation?.promptId ?? null)
                       : initialPromptId
                   }
+                  allowFileUploads={organization?.allowChatFileUploads ?? false}
                 />
                 <div className="text-center">
                   <Version inline />

@@ -23,6 +23,7 @@ import {
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -282,6 +283,56 @@ export function ChatMessages({
                           isLastTextPart &&
                           status !== "streaming";
 
+                        // Check for <think> tags (used by Qwen and similar models)
+                        if (hasThinkingTags(part.text)) {
+                          const parsedParts = parseThinkingTags(part.text);
+                          return (
+                            <Fragment key={partKey}>
+                              {parsedParts.map((parsedPart, parsedIdx) => {
+                                const parsedKey = `${partKey}-parsed-${parsedIdx}`;
+                                if (parsedPart.type === "reasoning") {
+                                  return (
+                                    <Reasoning
+                                      key={parsedKey}
+                                      className="w-full"
+                                    >
+                                      <ReasoningTrigger />
+                                      <ReasoningContent>
+                                        {parsedPart.text}
+                                      </ReasoningContent>
+                                    </Reasoning>
+                                  );
+                                }
+                                // Render text parts - show actions only on the last text part
+                                const isLastParsedTextPart =
+                                  parsedIdx ===
+                                  parsedParts.length -
+                                    1 -
+                                    [...parsedParts]
+                                      .reverse()
+                                      .findIndex((p) => p.type === "text");
+                                return (
+                                  <EditableAssistantMessage
+                                    key={parsedKey}
+                                    messageId={message.id}
+                                    partIndex={i}
+                                    partKey={partKey}
+                                    text={parsedPart.text}
+                                    isEditing={editingPartKey === partKey}
+                                    showActions={
+                                      showActions && isLastParsedTextPart
+                                    }
+                                    editDisabled={isResponseInProgress}
+                                    onStartEdit={handleStartEdit}
+                                    onCancelEdit={handleCancelEdit}
+                                    onSave={handleSaveAssistantMessage}
+                                  />
+                                );
+                              })}
+                            </Fragment>
+                          );
+                        }
+
                         return (
                           <Fragment key={partKey}>
                             <EditableAssistantMessage
@@ -346,6 +397,85 @@ export function ChatMessages({
                           <ReasoningContent>{part.text}</ReasoningContent>
                         </Reasoning>
                       );
+
+                    case "file": {
+                      // Render file attachments
+                      const filePart = part as {
+                        type: "file";
+                        url: string;
+                        mediaType: string;
+                        filename?: string;
+                      };
+                      const isImage = filePart.mediaType?.startsWith("image/");
+                      const isVideo = filePart.mediaType?.startsWith("video/");
+                      const isPdf = filePart.mediaType === "application/pdf";
+
+                      return (
+                        <Message from={message.role} key={`${message.id}-${i}`}>
+                          <MessageContent>
+                            <div className="rounded-lg border bg-muted/50 p-3 max-w-sm">
+                              {isImage && (
+                                <img
+                                  src={filePart.url}
+                                  alt={filePart.filename || "Attached image"}
+                                  className="max-w-full max-h-64 rounded object-contain"
+                                />
+                              )}
+                              {isVideo && (
+                                <video
+                                  src={filePart.url}
+                                  controls
+                                  className="max-w-full max-h-64 rounded"
+                                >
+                                  <track kind="captions" />
+                                </video>
+                              )}
+                              {isPdf && (
+                                <div className="flex items-center gap-2 text-sm">
+                                  <svg
+                                    className="h-8 w-8 text-red-500"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <title>PDF Document</title>
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zm-3 9h2v2H10v-2zm0 3h2v2H10v-2zm-3-3h2v2H7v-2zm0 3h2v2H7v-2z" />
+                                  </svg>
+                                  <span className="font-medium">
+                                    {filePart.filename || "PDF Document"}
+                                  </span>
+                                </div>
+                              )}
+                              {!isImage && !isVideo && !isPdf && (
+                                <div className="flex items-center gap-2 text-sm">
+                                  <svg
+                                    className="h-6 w-6 text-muted-foreground"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <title>File Attachment</title>
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                                    />
+                                  </svg>
+                                  <span>
+                                    {filePart.filename || "Attached file"}
+                                  </span>
+                                </div>
+                              )}
+                              {filePart.filename && (isImage || isVideo) && (
+                                <p className="mt-2 text-xs text-muted-foreground truncate">
+                                  {filePart.filename}
+                                </p>
+                              )}
+                            </div>
+                          </MessageContent>
+                        </Message>
+                      );
+                    }
 
                     case "dynamic-tool": {
                       if (!isToolPart(part)) return null;

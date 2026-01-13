@@ -184,6 +184,48 @@ export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Cerebras API (OpenAI-compatible)
+ * Note: Llama models are excluded as they are not allowed in chat
+ */
+async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.chat.cerebras.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Cerebras models",
+    );
+    throw new Error(`Failed to fetch Cerebras models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  // Filter out Llama models - they are not allowed in chat for Cerebras provider
+  return data.data
+    .filter((model) => !model.id.toLowerCase().includes("llama"))
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "cerebras" as const,
+      createdAt: new Date(model.created * 1000).toISOString(),
+    }));
+}
+
+/**
  * Fetch models from vLLM API
  * vLLM exposes an OpenAI-compatible /models endpoint
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
@@ -380,10 +422,12 @@ async function getProviderApiKey({
   switch (provider) {
     case "anthropic":
       return config.chat.anthropic.apiKey || null;
-    case "openai":
-      return config.chat.openai.apiKey || null;
+    case "cerebras":
+      return config.chat.cerebras.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "openai":
+      return config.chat.openai.apiKey || null;
     case "vllm":
       // vLLM typically doesn't require API keys, return empty or configured key
       return config.chat.vllm.apiKey || "";
@@ -401,8 +445,9 @@ const modelFetchers: Record<
   (apiKey: string) => Promise<ModelInfo[]>
 > = {
   anthropic: fetchAnthropicModels,
-  openai: fetchOpenAiModels,
+  cerebras: fetchCerebrasModels,
   gemini: fetchGeminiModels,
+  openai: fetchOpenAiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
 };
@@ -453,7 +498,7 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "cerebras", "openai"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

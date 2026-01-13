@@ -22,6 +22,8 @@ const {
 } = archestraApiSdk;
 
 import {
+  type CallPolicyAction,
+  type ResultPolicyAction,
   transformToolInvocationPolicies,
   transformToolResultPolicies,
 } from "./policy.utils";
@@ -185,11 +187,6 @@ export function useToolResultPoliciesDeleteMutation() {
   });
 }
 
-type CallPolicyAction =
-  | "allow_when_context_is_untrusted"
-  | "block_when_context_is_untrusted"
-  | "block_always";
-
 // Upsert a default call policy (tool invocation policy with empty conditions)
 export function useCallPolicyMutation() {
   const queryClient = useQueryClient();
@@ -245,10 +242,10 @@ export function useResultPolicyMutation() {
   return useMutation({
     mutationFn: async ({
       toolId,
-      treatment,
+      action,
     }: {
       toolId: string;
-      treatment: ResultPolicyTreatment;
+      action: ResultPolicyAction;
     }) => {
       // Get current policies from cache
       const cachedPolicies = queryClient.getQueryData<
@@ -261,15 +258,6 @@ export function useResultPolicyMutation() {
       const defaultPolicy = existingPolicies.find(
         (p) => p.conditions.length === 0,
       );
-
-      // Map treatment to action
-      const actionMap = {
-        trusted: "mark_as_trusted",
-        untrusted: "mark_as_untrusted",
-        sanitize_with_dual_llm: "sanitize_with_dual_llm",
-        block_always: "block_always",
-      } as const;
-      const action = actionMap[treatment];
 
       if (defaultPolicy) {
         // Update existing default policy
@@ -317,30 +305,17 @@ export function useBulkCallPolicyMutation() {
   });
 }
 
-type ResultPolicyTreatment =
-  | "trusted"
-  | "untrusted"
-  | "sanitize_with_dual_llm"
-  | "block_always";
-
 // Bulk update default result policies for multiple tools
 export function useBulkResultPolicyMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       toolIds,
-      treatment,
+      action,
     }: {
       toolIds: string[];
-      treatment: ResultPolicyTreatment;
+      action: ResultPolicyAction;
     }) => {
-      const actionMap = {
-        trusted: "mark_as_trusted",
-        untrusted: "mark_as_untrusted",
-        sanitize_with_dual_llm: "sanitize_with_dual_llm",
-        block_always: "block_always",
-      } as const;
-      const action = actionMap[treatment];
       const result = await bulkUpsertDefaultResultPolicy({
         body: { toolIds, action },
       });

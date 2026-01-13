@@ -1,14 +1,20 @@
 import type { archestraApiTypes } from "@shared";
 
-export type ToolResultTreatment =
-  | "trusted"
-  | "untrusted"
-  | "sanitize_with_dual_llm";
-
 export type CallPolicyAction =
-  | "allow_when_context_is_untrusted"
-  | "block_when_context_is_untrusted"
-  | "block_always";
+  archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["action"];
+
+export type ResultPolicyAction =
+  archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number]["action"];
+
+export const RESULT_POLICY_ACTION_OPTIONS: {
+  value: ResultPolicyAction;
+  label: string;
+}[] = [
+  { value: "mark_as_trusted", label: "Trusted" },
+  { value: "mark_as_untrusted", label: "Untrusted" },
+  { value: "sanitize_with_dual_llm", label: "Dual LLM" },
+  { value: "block_always", label: "Block" },
+];
 
 type InvocationPolicy =
   archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number];
@@ -53,26 +59,23 @@ export function getAllowUsageFromPolicies(
   return action === "allow_when_context_is_untrusted";
 }
 
-// Helper to derive toolResultTreatment from result policies
-export function getResultTreatmentFromPolicies(
+// Helper to derive result policy action from result policies
+export function getResultPolicyActionFromPolicies(
   toolId: string,
   resultPolicies: {
     byProfileToolId: Record<string, ResultPolicy[]>;
   },
-): ToolResultTreatment {
+): ResultPolicyAction {
   const policies = resultPolicies.byProfileToolId[toolId] || [];
-  // If no policies, default to untrusted
-  if (policies.length === 0) return "untrusted";
+  // If no policies, default to mark_as_untrusted
+  if (policies.length === 0) return "mark_as_untrusted";
   // Check for a "default" policy (empty conditions array)
   const defaultPolicy = policies.find((p) => p.conditions.length === 0);
   if (defaultPolicy) {
-    const action = defaultPolicy.action;
-    if (action === "mark_as_trusted") return "trusted";
-    if (action === "sanitize_with_dual_llm") return "sanitize_with_dual_llm";
-    return "untrusted";
+    return defaultPolicy.action;
   }
-  // No default policy found, untrusted by default
-  return "untrusted";
+  // No default policy found, mark_as_untrusted by default
+  return "mark_as_untrusted";
 }
 
 // Transform policy to have flat fields for UI compatibility

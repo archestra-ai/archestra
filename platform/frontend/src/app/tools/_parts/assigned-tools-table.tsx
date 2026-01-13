@@ -54,7 +54,9 @@ import {
 import {
   type CallPolicyAction,
   getCallPolicyActionFromPolicies,
-  getResultTreatmentFromPolicies,
+  getResultPolicyActionFromPolicies,
+  RESULT_POLICY_ACTION_OPTIONS,
+  type ResultPolicyAction,
 } from "@/lib/policy.utils";
 import {
   type ToolWithAssignmentsData,
@@ -78,14 +80,6 @@ type ToolsSortByValues = NonNullable<
 type ToolsSortDirectionValues = NonNullable<
   GetToolsWithAssignmentsQueryParams["sortDirection"]
 > | null;
-
-// These fields were moved to policies in the new schema
-// Define the type directly since it's no longer on ProfileToolData
-type ToolResultTreatment =
-  | "trusted"
-  | "untrusted"
-  | "sanitize_with_dual_llm"
-  | "block_always";
 
 interface AssignedToolsTableProps {
   onToolClick: (tool: ToolWithAssignmentsData) => void;
@@ -273,8 +267,8 @@ export function AssignedToolsTable({
 
   const handleBulkAction = useCallback(
     async (
-      field: "callPolicy" | "toolResultTreatment",
-      value: CallPolicyAction | ToolResultTreatment,
+      field: "callPolicy" | "resultPolicyAction",
+      value: CallPolicyAction | ResultPolicyAction,
     ) => {
       // Filter out tools with custom policies (non-empty conditions)
       const toolIds = selectedTools
@@ -306,7 +300,7 @@ export function AssignedToolsTable({
       } else {
         bulkResultPolicyMutation.mutate({
           toolIds,
-          treatment: value as ToolResultTreatment,
+          action: value as ResultPolicyAction,
         });
       }
       setIsBulkUpdating(false);
@@ -363,7 +357,7 @@ export function AssignedToolsTable({
   }, []);
 
   const isRowFieldUpdating = useCallback(
-    (id: string, field: "callPolicy" | "toolResultTreatment") => {
+    (id: string, field: "callPolicy" | "resultPolicyAction") => {
       return Array.from(updatingRows).some(
         (row) => row.id === id && row.field === field,
       );
@@ -374,8 +368,8 @@ export function AssignedToolsTable({
   const handleSingleRowUpdate = useCallback(
     async (
       toolId: string,
-      field: "callPolicy" | "toolResultTreatment",
-      value: CallPolicyAction | ToolResultTreatment,
+      field: "callPolicy" | "resultPolicyAction",
+      value: CallPolicyAction | ResultPolicyAction,
     ) => {
       setUpdatingRows((prev) => new Set(prev).add({ id: toolId, field }));
       try {
@@ -387,7 +381,7 @@ export function AssignedToolsTable({
         } else {
           await resultPolicyMutation.mutateAsync({
             toolId,
-            treatment: value as ToolResultTreatment,
+            action: value as ResultPolicyAction,
           });
         }
       } catch (error) {
@@ -623,22 +617,20 @@ export function AssignedToolsTable({
             );
           }
 
-          const treatmentLabels: Record<ToolResultTreatment, string> = {
-            trusted: "Trusted",
-            untrusted: "Untrusted",
-            sanitize_with_dual_llm: "Dual LLM",
-            block_always: "Blocked",
-          };
-
           const isUpdating = isRowFieldUpdating(
             row.original.id,
-            "toolResultTreatment",
+            "resultPolicyAction",
           );
 
-          const treatment = getResultTreatmentFromPolicies(
+          const resultAction = getResultPolicyActionFromPolicies(
             row.original.id,
             resultPolicies,
           );
+
+          const actionLabel =
+            RESULT_POLICY_ACTION_OPTIONS.find(
+              (opt) => opt.value === resultAction,
+            )?.label ?? resultAction;
 
           return (
             <WithPermissions
@@ -648,15 +640,15 @@ export function AssignedToolsTable({
               {({ hasPermission }) => (
                 <div className="flex items-center gap-2">
                   <Select
-                    value={treatment}
+                    value={resultAction}
                     disabled={isUpdating || !hasPermission}
                     onValueChange={(value) => {
                       // Only update if value actually changed
-                      if (value === treatment) return;
+                      if (value === resultAction) return;
                       handleSingleRowUpdate(
                         row.original.id,
-                        "toolResultTreatment",
-                        value as ToolResultTreatment,
+                        "resultPolicyAction",
+                        value as ResultPolicyAction,
                       );
                     }}
                   >
@@ -665,10 +657,10 @@ export function AssignedToolsTable({
                       onClick={(e) => e.stopPropagation()}
                       size="sm"
                     >
-                      <SelectValue>{treatmentLabels[treatment]}</SelectValue>
+                      <SelectValue>{actionLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(treatmentLabels).map(([value, label]) => (
+                      {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
                         <SelectItem key={value} value={value}>
                           {label}
                         </SelectItem>
@@ -819,7 +811,7 @@ export function AssignedToolsTable({
                       <SelectItem value="block_when_context_is_untrusted">
                         Allow in trusted context
                       </SelectItem>
-                      <SelectItem value="block_always">Block</SelectItem>
+                      <SelectItem value="block_always">Block always</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -836,20 +828,19 @@ export function AssignedToolsTable({
                   </span>
                   <Select
                     disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                    onValueChange={(value: ToolResultTreatment) =>
-                      handleBulkAction("toolResultTreatment", value)
+                    onValueChange={(value: ResultPolicyAction) =>
+                      handleBulkAction("resultPolicyAction", value)
                     }
                   >
                     <SelectTrigger className="h-8 w-[160px] text-sm" size="sm">
-                      <SelectValue placeholder="Select treatment" />
+                      <SelectValue placeholder="Select action" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="trusted">Trusted</SelectItem>
-                      <SelectItem value="untrusted">Untrusted</SelectItem>
-                      <SelectItem value="sanitize_with_dual_llm">
-                        Dual LLM
-                      </SelectItem>
-                      <SelectItem value="block_always">Blocked</SelectItem>
+                      {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

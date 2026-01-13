@@ -10,23 +10,23 @@ export type CallPolicyAction =
   | "block_when_context_is_untrusted"
   | "block_always";
 
+type InvocationPolicy =
+  archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number];
+
+type ResultPolicy =
+  archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number];
+
 // Helper to derive call policy action from invocation policies
 // Checks if there's a default policy (no conditions or empty conditions)
 export function getCallPolicyActionFromPolicies(
   toolId: string,
   invocationPolicies: {
-    byProfileToolId: Record<
-      string,
-      { conditions?: unknown; action?: string }[]
-    >;
+    byProfileToolId: Record<string, InvocationPolicy[]>;
   },
 ): CallPolicyAction {
   const policies = invocationPolicies.byProfileToolId[toolId] || [];
   // Check for a "default" policy (empty conditions array)
-  const defaultPolicy = policies.find((p) => {
-    const conditions = p.conditions as unknown[];
-    return conditions.length === 0;
-  });
+  const defaultPolicy = policies.find((p) => p.conditions.length === 0);
   if (defaultPolicy) {
     const action = defaultPolicy.action as CallPolicyAction;
     if (
@@ -46,10 +46,7 @@ export function getCallPolicyActionFromPolicies(
 export function getAllowUsageFromPolicies(
   toolId: string,
   invocationPolicies: {
-    byProfileToolId: Record<
-      string,
-      { conditions?: unknown; action?: string }[]
-    >;
+    byProfileToolId: Record<string, InvocationPolicy[]>;
   },
 ): boolean {
   const action = getCallPolicyActionFromPolicies(toolId, invocationPolicies);
@@ -60,20 +57,14 @@ export function getAllowUsageFromPolicies(
 export function getResultTreatmentFromPolicies(
   toolId: string,
   resultPolicies: {
-    byProfileToolId: Record<
-      string,
-      { conditions?: unknown; action?: string }[]
-    >;
+    byProfileToolId: Record<string, ResultPolicy[]>;
   },
 ): ToolResultTreatment {
   const policies = resultPolicies.byProfileToolId[toolId] || [];
   // If no policies, default to untrusted
   if (policies.length === 0) return "untrusted";
   // Check for a "default" policy (empty conditions array)
-  const defaultPolicy = policies.find((p) => {
-    const conditions = p.conditions as unknown[];
-    return conditions.length === 0;
-  });
+  const defaultPolicy = policies.find((p) => p.conditions.length === 0);
   if (defaultPolicy) {
     const action = defaultPolicy.action;
     if (action === "mark_as_trusted") return "trusted";
@@ -84,19 +75,14 @@ export function getResultTreatmentFromPolicies(
   return "untrusted";
 }
 
-type InvocationPolicyRaw =
-  archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number];
-type ResultPolicyRaw =
-  archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number];
-
 // Transform policy to have flat fields for UI compatibility
-export type TransformedInvocationPolicy = InvocationPolicyRaw & {
+export type TransformedInvocationPolicy = InvocationPolicy & {
   argumentName: string;
   operator: string;
   value: string;
 };
 
-export type TransformedResultPolicy = ResultPolicyRaw & {
+export type TransformedResultPolicy = ResultPolicy & {
   attributePath: string;
   operator: string;
   value: string;

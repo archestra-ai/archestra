@@ -259,12 +259,12 @@ jobs:
             --network host \
             --ipc=host \
             -v "$GITHUB_WORKSPACE:/work" \
-            -w /work/platform/e2e-tests \
+            -w /work/platform \
             -e CI=true \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            /bin/bash -c "npx playwright test --project=${{ matrix.projects }} ${{ matrix.shard }} --reporter=blob --reporter=line" \
-            2>&1 | tee ../playwright-output.txt
+            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=${{ matrix.projects }} ${{ matrix.shard }} --reporter='blob,outputDir=e2e-tests/blob-report' --reporter=line" \
+            2>&1 | tee playwright-output.txt
 
       - name: Check for flaky tests
         id: check-flaky
@@ -274,6 +274,14 @@ jobs:
             echo "⚠️ Flaky tests detected"
             echo "has_flaky_tests=true" >> $GITHUB_OUTPUT
           fi
+
+      - name: Debug blob report directory
+        if: ${{ !cancelled() }}
+        run: |
+          echo "=== Checking blob report directory ==="
+          ls -la platform/e2e-tests/blob-report/ 2>/dev/null || echo "Directory does not exist or is empty"
+          echo "=== e2e-tests directory contents ==="
+          ls -la platform/e2e-tests/ | head -20
 
       - name: Upload blob report
         if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}

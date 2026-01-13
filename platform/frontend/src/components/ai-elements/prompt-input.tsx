@@ -93,7 +93,11 @@ function getMediaType(file: File): string {
   }
 
   // Fallback: detect from extension
-  const ext = file.name.split(".").pop()?.toLowerCase();
+  const lastDotIndex = file.name.lastIndexOf(".");
+  const ext =
+    lastDotIndex > 0 && lastDotIndex < file.name.length - 1
+      ? file.name.slice(lastDotIndex + 1).toLowerCase()
+      : undefined;
   const extensionMap: Record<string, string> = {
     // Images
     jpg: "image/jpeg",
@@ -430,7 +434,10 @@ export function PromptInputAttachments({
 
   return (
     <div
-      className={cn("flex flex-wrap items-center gap-2 px-3 pt-1 pb-0 w-full", className)}
+      className={cn(
+        "flex flex-wrap items-center gap-2 px-3 pt-1 pb-0 w-full",
+        className,
+      )}
       {...props}
     >
       {attachments.files.map((file) => (

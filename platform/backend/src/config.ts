@@ -205,7 +205,10 @@ export const getAdditionalTrustedSsoProviderIds = (): string[] => {
  * Parse body limit from environment variable.
  * Supports numeric bytes (e.g., "52428800") or human-readable format (e.g., "50MB", "100KB").
  */
-export const parseBodyLimit = (envValue: string | undefined, defaultValue: number): number => {
+export const parseBodyLimit = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
   if (!envValue) {
     return defaultValue;
   }
@@ -214,10 +217,10 @@ export const parseBodyLimit = (envValue: string | undefined, defaultValue: numbe
 
   // Try parsing human-readable format first (e.g., "50MB", "100KB")
   // This must come first because parseInt("50MB") would return 50
-  const match = trimmed.toUpperCase().match(/^(\d+)(KB|MB|GB)$/);
+  const match = trimmed.match(/^(\d+)(KB|MB|GB)$/i);
   if (match) {
     const value = Number.parseInt(match[1], 10);
-    const unit = match[2];
+    const unit = match[2].toUpperCase();
     switch (unit) {
       case "KB":
         return value * 1024;

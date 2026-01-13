@@ -8,6 +8,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  flattenPermissions,
   SelectOrganizationRoleSchema,
 } from "@/types";
 
@@ -24,27 +25,11 @@ const PredefinedRoleNameOrCustomRoleIdSchema = z
   .union([PredefinedRoleNameSchema, CustomRoleIdSchema])
   .describe("Predefined role name or custom role ID");
 
-/**
- * Generates an immutable role identifier from a human-readable name
- */
 const generateRoleIdentifier = (title: string): string => {
   return title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, ""); // Remove leading/trailing underscores
-};
-
-/**
- * Flattens permission object into an array of `resource:action` strings
- */
-const flattenPermissions = (permission: z.infer<typeof PermissionsSchema>) => {
-  const flat: string[] = [];
-  for (const [resource, actions] of Object.entries(permission)) {
-    for (const action of actions) {
-      flat.push(`${resource}:${action}`);
-    }
-  }
-  return flat;
 };
 
 const RoleResponseSchema = SelectOrganizationRoleSchema.extend({
@@ -58,14 +43,24 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetRoles,
-        description: "Get all roles in the organization",
+        description: "Get all roles in the organization. Optionally filter by name.",
         tags: ["Roles"],
+        querystring: z.object({
+          name: CreateUpdateRoleNameSchema.optional(),
+        }),
         response: constructResponseSchema(z.array(RoleResponseSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
-      // Get all roles including predefined ones
-      const roles = await OrganizationRoleModel.getAll(organizationId);
+    async ({ query, organizationId }, reply) => {
+      const { name } = query as { name?: string };
+
+      // Get roles, optionally filtered by name
+      const roles = await OrganizationRoleModel.getAll(organizationId, name ? { name } : undefined);
+
+      // If filtering by name, return 404 if not found
+      if (name && roles.length === 0) {
+        throw new ApiError(404, "Role not found");
+      }
 
       return reply.send(
         roles.map((role) => ({
@@ -74,39 +69,6 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           permissions: flattenPermissions(role.permission),
         })),
       );
-    },
-  );
-  fastify.get(
-    "/api/roles/by-name/:name",
-    {
-      schema: {
-        operationId: RouteId.GetRoleByName,
-        description: "Get a specific role by name",
-        tags: ["Roles"],
-        params: z.object({
-          name: CreateUpdateRoleNameSchema,
-        }),
-        response: constructResponseSchema(RoleResponseSchema),
-      },
-    },
-    async ({ params: { name }, organizationId }, reply) => {
-      // Try predefined (name equals identifier) then custom by name
-      const byIdentifier = await OrganizationRoleModel.getByIdentifier(
-        name,
-        organizationId,
-      );
-
-      const role = byIdentifier || (await OrganizationRoleModel.getByName(name, organizationId));
-
-      if (!role) {
-        throw new ApiError(404, "Role not found");
-      }
-
-      return reply.send({
-        ...role,
-        description: null,
-        permissions: flattenPermissions(role.permission),
-      });
     },
   );
   fastify.post(

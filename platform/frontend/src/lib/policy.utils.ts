@@ -5,7 +5,43 @@ export type ToolResultTreatment =
   | "untrusted"
   | "sanitize_with_dual_llm";
 
-// Helper to derive allowUsageWhenUntrustedDataIsPresent from invocation policies
+export type CallPolicyAction =
+  | "allow_when_context_is_untrusted"
+  | "block_when_context_is_untrusted"
+  | "block_always";
+
+// Helper to derive call policy action from invocation policies
+// Checks if there's a default policy (no conditions or empty conditions)
+export function getCallPolicyActionFromPolicies(
+  toolId: string,
+  invocationPolicies: {
+    byProfileToolId: Record<
+      string,
+      { conditions?: unknown; action?: string }[]
+    >;
+  },
+): CallPolicyAction {
+  const policies = invocationPolicies.byProfileToolId[toolId] || [];
+  // Check for a "default" policy (empty conditions array)
+  const defaultPolicy = policies.find((p) => {
+    const conditions = p.conditions as unknown[];
+    return conditions.length === 0;
+  });
+  if (defaultPolicy) {
+    const action = defaultPolicy.action as CallPolicyAction;
+    if (
+      action === "allow_when_context_is_untrusted" ||
+      action === "block_when_context_is_untrusted" ||
+      action === "block_always"
+    ) {
+      return action;
+    }
+  }
+  // No default policy found, block when untrusted by default
+  return "block_when_context_is_untrusted";
+}
+
+// Legacy helper - returns boolean for backwards compatibility
 // Checks if there's a default policy (no conditions or empty conditions) with action allow_when_context_is_untrusted
 export function getAllowUsageFromPolicies(
   toolId: string,
@@ -16,17 +52,8 @@ export function getAllowUsageFromPolicies(
     >;
   },
 ): boolean {
-  const policies = invocationPolicies.byProfileToolId[toolId] || [];
-  // Check for a "default" policy (empty conditions array)
-  const defaultPolicy = policies.find((p) => {
-    const conditions = p.conditions as unknown[];
-    return conditions.length === 0;
-  });
-  if (defaultPolicy) {
-    return defaultPolicy.action === "allow_when_context_is_untrusted";
-  }
-  // No default policy found, blocked by default
-  return false;
+  const action = getCallPolicyActionFromPolicies(toolId, invocationPolicies);
+  return action === "allow_when_context_is_untrusted";
 }
 
 // Helper to derive toolResultTreatment from result policies

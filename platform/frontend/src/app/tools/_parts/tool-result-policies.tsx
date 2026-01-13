@@ -399,4 +399,5 @@ const TOOL_RESULT_TREATMENT_OPTIONS = [
   { value: "trusted", label: "Mark as trusted" },
   { value: "untrusted", label: "Mark as untrusted" },
   { value: "sanitize_with_dual_llm", label: "Sanitize with Dual LLM" },
+  { value: "block_always", label: "Block always" },
 ] as const;

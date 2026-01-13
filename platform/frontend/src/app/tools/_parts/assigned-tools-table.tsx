@@ -16,7 +16,6 @@ import { PermissivePolicyOverlay } from "@/components/permissive-policy-overlay"
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -28,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -46,7 +44,8 @@ import {
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import {
-  getAllowUsageFromPolicies,
+  type CallPolicyAction,
+  getCallPolicyActionFromPolicies,
   getResultTreatmentFromPolicies,
 } from "@/lib/policy.utils";
 import {
@@ -60,6 +59,7 @@ import {
   DEFAULT_TOOLS_PAGE_SIZE,
 } from "@/lib/utils";
 import type { ToolsInitialData } from "../page";
+import { CallPolicyToggle } from "./call-policy-toggle";
 
 type GetToolsWithAssignmentsQueryParams = NonNullable<
   archestraApiTypes.GetToolsWithAssignmentsData["query"]
@@ -73,7 +73,11 @@ type ToolsSortDirectionValues = NonNullable<
 
 // These fields were moved to policies in the new schema
 // Define the type directly since it's no longer on ProfileToolData
-type ToolResultTreatment = "trusted" | "untrusted" | "sanitize_with_dual_llm";
+type ToolResultTreatment =
+  | "trusted"
+  | "untrusted"
+  | "sanitize_with_dual_llm"
+  | "block_always";
 
 interface AssignedToolsTableProps {
   onToolClick: (tool: ToolWithAssignmentsData) => void;
@@ -261,14 +265,14 @@ export function AssignedToolsTable({
 
   const handleBulkAction = useCallback(
     async (
-      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-      value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+      field: "callPolicy" | "toolResultTreatment",
+      value: CallPolicyAction | ToolResultTreatment,
     ) => {
       // Filter out tools with custom policies (non-empty conditions)
       const toolIds = selectedTools
         .filter((tool) => {
           const policies =
-            field === "allowUsageWhenUntrustedDataIsPresent"
+            field === "callPolicy"
               ? invocationPolicies?.byProfileToolId[tool.id] || []
               : resultPolicies?.byProfileToolId[tool.id] || [];
 
@@ -286,18 +290,15 @@ export function AssignedToolsTable({
       }
       setIsBulkUpdating(true);
 
-      if (field === "allowUsageWhenUntrustedDataIsPresent") {
+      if (field === "callPolicy") {
         bulkCallPolicyMutation.mutate({
           toolIds,
-          allowUsage: value as boolean,
+          action: value as CallPolicyAction,
         });
       } else {
         bulkResultPolicyMutation.mutate({
           toolIds,
-          treatment: value as
-            | "trusted"
-            | "untrusted"
-            | "sanitize_with_dual_llm",
+          treatment: value as ToolResultTreatment,
         });
       }
       setIsBulkUpdating(false);
@@ -354,10 +355,7 @@ export function AssignedToolsTable({
   }, []);
 
   const isRowFieldUpdating = useCallback(
-    (
-      id: string,
-      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-    ) => {
+    (id: string, field: "callPolicy" | "toolResultTreatment") => {
       return Array.from(updatingRows).some(
         (row) => row.id === id && row.field === field,
       );
@@ -368,15 +366,15 @@ export function AssignedToolsTable({
   const handleSingleRowUpdate = useCallback(
     async (
       toolId: string,
-      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-      value: boolean | ToolResultTreatment,
+      field: "callPolicy" | "toolResultTreatment",
+      value: CallPolicyAction | ToolResultTreatment,
     ) => {
       setUpdatingRows((prev) => new Set(prev).add({ id: toolId, field }));
       try {
-        if (field === "allowUsageWhenUntrustedDataIsPresent") {
+        if (field === "callPolicy") {
           await callPolicyMutation.mutateAsync({
             toolId,
-            allowUsage: value as boolean,
+            action: value as CallPolicyAction,
           });
         } else {
           await resultPolicyMutation.mutateAsync({
@@ -525,14 +523,14 @@ export function AssignedToolsTable({
         size: 100,
       },
       {
-        id: "allowUsageWhenUntrustedDataIsPresent",
+        id: "callPolicy",
         header: ({ column }) => (
           <Button
             variant="ghost"
             className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            In untrusted context
+            Call Policy
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
@@ -550,36 +548,23 @@ export function AssignedToolsTable({
             );
           }
 
-          const isUpdating = isRowFieldUpdating(
-            row.original.id,
-            "allowUsageWhenUntrustedDataIsPresent",
-          );
+          const isUpdating = isRowFieldUpdating(row.original.id, "callPolicy");
 
-          const allowUsage = getAllowUsageFromPolicies(
+          const currentAction = getCallPolicyActionFromPolicies(
             row.original.id,
             invocationPolicies,
           );
 
           return (
             <div className="flex items-center gap-2">
-              <Switch
-                checked={allowUsage}
+              <CallPolicyToggle
+                value={currentAction}
+                onChange={(action) =>
+                  handleSingleRowUpdate(row.original.id, "callPolicy", action)
+                }
                 disabled={isUpdating}
-                onClick={(e) => e.stopPropagation()}
-                onCheckedChange={(checked) => {
-                  // Only update if value actually changed
-                  if (checked === allowUsage) return;
-                  handleSingleRowUpdate(
-                    row.original.id,
-                    "allowUsageWhenUntrustedDataIsPresent",
-                    checked,
-                  );
-                }}
-                aria-label={`Allow ${row.original.name} in untrusted context`}
+                size="sm"
               />
-              <span className="text-xs text-muted-foreground">
-                {allowUsage ? "Allowed" : "Blocked"}
-              </span>
               {isUpdating && (
                 <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
               )}
@@ -608,7 +593,8 @@ export function AssignedToolsTable({
           const treatmentLabels: Record<ToolResultTreatment, string> = {
             trusted: "Trusted",
             untrusted: "Untrusted",
-            sanitize_with_dual_llm: "Sanitize with Dual LLM",
+            sanitize_with_dual_llm: "Dual LLM",
+            block_always: "Blocked",
           };
 
           const isUpdating = isRowFieldUpdating(
@@ -637,7 +623,7 @@ export function AssignedToolsTable({
                 }}
               >
                 <SelectTrigger
-                  className="h-8 w-[180px] text-xs"
+                  className="h-8 w-[150px] text-xs"
                   onClick={(e) => e.stopPropagation()}
                   size="sm"
                 >
@@ -657,7 +643,7 @@ export function AssignedToolsTable({
             </div>
           );
         },
-        size: 190,
+        size: 170,
       },
     ],
     [
@@ -737,88 +723,50 @@ export function AssignedToolsTable({
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
-                In untrusted context:
+                Call Policy:
               </span>
-              <ButtonGroup>
-                <PermissionButton
-                  permissions={{ tool: ["update"] }}
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction(
-                      "allowUsageWhenUntrustedDataIsPresent",
-                      true,
-                    )
-                  }
-                  disabled={!hasSelection || isBulkUpdating}
-                >
-                  Allow
-                </PermissionButton>
-                <PermissionButton
-                  permissions={{ tool: ["update"] }}
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction(
-                      "allowUsageWhenUntrustedDataIsPresent",
-                      false,
-                    )
-                  }
-                  disabled={!hasSelection || isBulkUpdating}
-                >
-                  Block
-                </PermissionButton>
-              </ButtonGroup>
+              <Select
+                disabled={!hasSelection || isBulkUpdating}
+                onValueChange={(value: CallPolicyAction) =>
+                  handleBulkAction("callPolicy", value)
+                }
+              >
+                <SelectTrigger className="h-8 w-[180px] text-sm" size="sm">
+                  <SelectValue placeholder="Select action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="block_always">Block always</SelectItem>
+                  <SelectItem value="block_when_context_is_untrusted">
+                    Allow if trusted
+                  </SelectItem>
+                  <SelectItem value="allow_when_context_is_untrusted">
+                    Allow always
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
                 Results are:
               </span>
-              <ButtonGroup>
-                <PermissionButton
-                  permissions={{ tool: ["update"] }}
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction("toolResultTreatment", "trusted")
-                  }
-                  disabled={!hasSelection || isBulkUpdating}
-                >
-                  Trusted
-                </PermissionButton>
-                <PermissionButton
-                  permissions={{ tool: ["update"] }}
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction("toolResultTreatment", "untrusted")
-                  }
-                  disabled={!hasSelection || isBulkUpdating}
-                >
-                  Untrusted
-                </PermissionButton>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <PermissionButton
-                      size="sm"
-                      variant="outline"
-                      permissions={{ tool: ["update"] }}
-                      onClick={() =>
-                        handleBulkAction(
-                          "toolResultTreatment",
-                          "sanitize_with_dual_llm",
-                        )
-                      }
-                      disabled={!hasSelection || isBulkUpdating}
-                    >
-                      Dual LLM
-                    </PermissionButton>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sanitize with Dual LLM</p>
-                  </TooltipContent>
-                </Tooltip>
-              </ButtonGroup>
+              <Select
+                disabled={!hasSelection || isBulkUpdating}
+                onValueChange={(value: ToolResultTreatment) =>
+                  handleBulkAction("toolResultTreatment", value)
+                }
+              >
+                <SelectTrigger className="h-8 w-[150px] text-sm" size="sm">
+                  <SelectValue placeholder="Select treatment" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="trusted">Trusted</SelectItem>
+                  <SelectItem value="untrusted">Untrusted</SelectItem>
+                  <SelectItem value="sanitize_with_dual_llm">
+                    Dual LLM
+                  </SelectItem>
+                  <SelectItem value="block_always">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="ml-2 h-4 w-px bg-border" />
             <Tooltip>

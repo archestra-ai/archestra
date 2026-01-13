@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -30,8 +29,12 @@ import {
   useToolInvocationPolicyDeleteMutation,
   useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
-import { getAllowUsageFromPolicies } from "@/lib/policy.utils";
+import {
+  type CallPolicyAction,
+  getCallPolicyActionFromPolicies,
+} from "@/lib/policy.utils";
 import { useTeams } from "@/lib/team.query";
+import { CallPolicyToggle } from "./call-policy-toggle";
 import { PolicyCard } from "./policy-card";
 import {
   type PolicyCondition,
@@ -70,8 +73,8 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
   ];
   const conditionKeyOptions = [...argumentNames, ...contextOptions];
 
-  // Derive allow usage from policies (default policy with empty conditions)
-  const allowUsageWhenUntrustedDataIsPresent = getAllowUsageFromPolicies(
+  // Derive call policy action from policies (default policy with empty conditions)
+  const currentAction = getCallPolicyActionFromPolicies(
     tool.id,
     invocationPolicies,
   );
@@ -117,12 +120,20 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
     });
   };
 
+  const handleActionChange = (action: CallPolicyAction) => {
+    if (action === currentAction) return;
+    callPolicyMutation.mutate({
+      toolId: tool.id,
+      action,
+    });
+  };
+
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
       <div>
         <h3 className="text-sm font-semibold mb-1">Tool Call Policies</h3>
         <p className="text-sm text-muted-foreground">
-          Can tool be used when untrusted data is present in the context?
+          Controls when the tool can be called based on context trust level
         </p>
       </div>
       <div className="flex items-center justify-between p-3 bg-muted rounded-md border border-border">
@@ -130,19 +141,12 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
           <div className="text-xs font-medium text-muted-foreground">
             DEFAULT
           </div>
-          <span className="text-sm">
-            Allow usage when untrusted data is present
-          </span>
+          <span className="text-sm">Call policy</span>
         </div>
-        <Switch
-          checked={allowUsageWhenUntrustedDataIsPresent}
-          onCheckedChange={(checked) => {
-            if (checked === allowUsageWhenUntrustedDataIsPresent) return;
-            callPolicyMutation.mutate({
-              toolId: tool.id,
-              allowUsage: checked,
-            });
-          }}
+        <CallPolicyToggle
+          value={currentAction}
+          onChange={handleActionChange}
+          size="lg"
         />
       </div>
       {policies.map((policy) => (

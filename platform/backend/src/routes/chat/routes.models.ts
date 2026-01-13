@@ -195,7 +195,6 @@ export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 
 /**
  * Fetch models from Cerebras API (OpenAI-compatible)
- * Note: Llama models are excluded as they are not allowed in chat
  */
 async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.chat.cerebras.baseUrl;
@@ -224,15 +223,13 @@ async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
     }>;
   };
 
-  // Filter out Llama models - they are not allowed in chat for Cerebras provider
-  return data.data
-    .filter((model) => !model.id.toLowerCase().includes("llama"))
-    .map((model) => ({
-      id: model.id,
-      displayName: model.id,
-      provider: "cerebras" as const,
-      createdAt: new Date(model.created * 1000).toISOString(),
-    }));
+  // Return all available models
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "cerebras" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
 }
 
 /**

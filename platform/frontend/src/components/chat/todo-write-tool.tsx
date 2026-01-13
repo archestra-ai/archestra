@@ -34,7 +34,11 @@ export function TodoWriteTool({
   let todos: Todo[] = [];
   try {
     if (part.input && typeof part.input === "object" && "todos" in part.input) {
-      todos = part.input.todos as Todo[];
+      const inputTodos = part.input.todos;
+      // Ensure todos is actually an array before assigning
+      if (Array.isArray(inputTodos)) {
+        todos = inputTodos as Todo[];
+      }
     }
   } catch (error) {
     console.error("Failed to parse todos", error);

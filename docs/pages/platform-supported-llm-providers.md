@@ -140,9 +140,12 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **Base URL**: `http://localhost:9000/v1/cerebras/{agent-id}`
 - **Authentication**: Pass your Cerebras API key in the `Authorization` header as `Bearer <your-api-key>`
 
-### Important Notes
+### Supported Models
 
-- Usage of the llama models in the chat ⚠️ Not yet supported ([GitHub Issue #2058](https://github.com/archestra-ai/archestra/issues/2058)) 
+All Cerebras models are supported, including:
+- **Llama models** (3.1, 3.3) - Fully supported with tool calling
+- **Qwen models** (e.g., `qwen-3-32b`) - Fully supported with tool calling
+
 
 ## vLLM
 

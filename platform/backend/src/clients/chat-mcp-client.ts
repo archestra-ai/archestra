@@ -399,14 +399,19 @@ export async function getChatMcpClient(
 }
 
 /**
- * Validate and normalize JSON Schema for OpenAI
+ * Validate and normalize JSON Schema for OpenAI/Cerebras
+ * Some providers (like Cerebras) require strict schemas with additionalProperties: false
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function normalizeJsonSchema(schema: unknown): JSONSchema7 {
-  const fallbackSchema: JSONSchema7 = { type: "object", properties: {} };
+  const fallbackSchema: JSONSchema7 = {
+    type: "object",
+    properties: {},
+    additionalProperties: false,
+  };
 
   // If schema is missing or invalid, return a minimal valid schema
   if (!isRecord(schema)) {
@@ -422,8 +427,14 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
     return fallbackSchema;
   }
 
-  // Return the schema as-is if it's already valid JSON Schema
-  return schema as JSONSchema7;
+  // Return the schema with additionalProperties: false added for strict validation
+  // This is required by some providers like Cerebras for proper tool calling
+  const result = { ...schema } as JSONSchema7;
+  if (result.type === "object" && result.additionalProperties === undefined) {
+    result.additionalProperties = false;
+  }
+
+  return result;
 }
 
 /**

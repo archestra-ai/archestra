@@ -123,6 +123,13 @@ export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
 export const USER_ID_HEADER = "X-Archestra-User-Id";
 
 /**
+ * Header name for session ID.
+ * Clients can pass this header to group related LLM requests into a session.
+ * This enables session-based grouping in the LLM proxy logs UI.
+ */
+export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
+
+/**
  * SSO Provider IDs - these are the canonical provider identifiers used for:
  * - Account linking (trustedProviders)
  * - Provider registration

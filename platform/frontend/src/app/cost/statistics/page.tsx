@@ -50,6 +50,8 @@ import {
   useTeamStatistics,
 } from "@/lib/statistics.query";
 
+const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
+
 export default function StatisticsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -76,11 +78,15 @@ export default function StatisticsPage() {
   });
 
   /**
-   * Initialize from URL parameters
+   * Initialize from URL parameters or localStorage
    */
   useEffect(() => {
+    const urlTimeframe = searchParams.get("timeframe");
+    const storedTimeframe = localStorage.getItem(TIMEFRAME_STORAGE_KEY);
+
+    // URL params take precedence, then localStorage, then default
     const { success, data } = StatisticsTimeFrameSchema.safeParse(
-      searchParams.get("timeframe"),
+      urlTimeframe ?? storedTimeframe,
     );
     if (success) {
       setTimeframe(data);
@@ -106,6 +112,7 @@ export default function StatisticsPage() {
   const handleTimeframeChange = useCallback(
     (tf: StatisticsTimeFrame) => {
       setTimeframe(tf);
+      localStorage.setItem(TIMEFRAME_STORAGE_KEY, tf);
       updateURL(tf);
     },
     [updateURL],
@@ -335,6 +342,20 @@ export default function StatisticsPage() {
       color: "var(--chart-5)",
     },
   };
+
+  // Sort statistics by cost for table display
+  const sortedTeamStatistics = useMemo(
+    () => [...teamStatistics].sort((a, b) => b.cost - a.cost),
+    [teamStatistics],
+  );
+  const sortedAgentStatistics = useMemo(
+    () => [...agentStatistics].sort((a, b) => b.cost - a.cost),
+    [agentStatistics],
+  );
+  const sortedModelStatistics = useMemo(
+    () => [...modelStatistics].sort((a, b) => b.cost - a.cost),
+    [modelStatistics],
+  );
 
   return (
     <div className="space-y-6">
@@ -673,6 +694,11 @@ export default function StatisticsPage() {
                   </div>
                 )}
               </ChartContainer>
+              {teamStatistics.length > 5 && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Chart shows top 5 by cost
+                </p>
+              )}
             </div>
 
             <div className="order-1 lg:order-2">
@@ -688,7 +714,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {teamStatistics.length === 0 ? (
+                  {sortedTeamStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={6}
@@ -698,7 +724,7 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    teamStatistics.map((team) => (
+                    sortedTeamStatistics.map((team) => (
                       <TableRow key={team.teamId}>
                         <TableCell className="font-medium">
                           {team.teamName}
@@ -784,6 +810,11 @@ export default function StatisticsPage() {
                   </div>
                 )}
               </ChartContainer>
+              {agentStatistics.length > 5 && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Chart shows top 5 by cost
+                </p>
+              )}
             </div>
 
             <div className="order-1 lg:order-2">
@@ -798,7 +829,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {agentStatistics.length === 0 ? (
+                  {sortedAgentStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -808,7 +839,7 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    agentStatistics.map((profile) => (
+                    sortedAgentStatistics.map((profile) => (
                       <TableRow key={profile.agentId}>
                         <TableCell className="font-medium">
                           {profile.agentName}
@@ -895,6 +926,11 @@ export default function StatisticsPage() {
                   </div>
                 )}
               </ChartContainer>
+              {modelStatistics.length > 5 && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Chart shows top 5 by cost
+                </p>
+              )}
             </div>
 
             <div className="order-1 lg:order-2">
@@ -909,7 +945,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {modelStatistics.length === 0 ? (
+                  {sortedModelStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -919,7 +955,7 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    modelStatistics.map((model) => (
+                    sortedModelStatistics.map((model) => (
                       <TableRow key={model.model}>
                         <TableCell className="font-medium">
                           {model.model}

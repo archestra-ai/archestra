@@ -26,11 +26,18 @@ export function useConversation(conversationId?: string) {
     queryKey: ["conversation", conversationId],
     queryFn: async () => {
       if (!conversationId) return null;
-      const { data, error } = await getChatConversation({
+      const response = await getChatConversation({
         path: { id: conversationId },
       });
-      if (error) throw new Error("Failed to fetch conversation");
-      return data;
+      // Return null for 400 (invalid UUID) or 404 (not found) - handled gracefully by UI
+      if (response.error) {
+        const status = response.response.status;
+        if (status === 400 || status === 404) {
+          return null;
+        }
+        throw new Error("Failed to fetch conversation");
+      }
+      return response.data;
     },
     enabled: !!conversationId,
     staleTime: 0, // Always refetch to ensure we have the latest messages

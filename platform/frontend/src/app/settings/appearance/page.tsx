@@ -62,7 +62,7 @@ export default function AppearanceSettingsPage() {
   return (
     <div>
       <div className="space-y-6">
-        <LightDarkToggle />
+        <LightDarkToggle currentThemeId={currentUITheme} />
         <LogoUpload currentLogo={logo} onLogoChange={handleLogoChange} />
         <ThemeSelector
           selectedTheme={currentUITheme}

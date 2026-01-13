@@ -1,7 +1,15 @@
 "use client";
 
-import { ShieldCheck, ShieldOff, Sparkles, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  FileImage,
+  ShieldCheck,
+  ShieldOff,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 import Link from "next/link";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Card,
   CardContent,
@@ -54,6 +62,12 @@ export default function SecuritySettingsPage() {
     });
   };
 
+  const handleToggleAllowChatFileUploads = async (checked: boolean) => {
+    await updateOrgMutation.mutateAsync({
+      allowChatFileUploads: checked,
+    });
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -86,8 +100,8 @@ export default function SecuritySettingsPage() {
               {organization?.globalToolPolicy === "restrictive" ? (
                 <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400">
                   <ShieldCheck className="h-4 w-4" />
-                  Agents' tools are blocked and results are untrusted unless a
-                  specific policy states otherwise.
+                  Policies apply to agents' tools. By default, only the first
+                  tool call in session is allowed and its results are untrusted.
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400">
@@ -98,6 +112,36 @@ export default function SecuritySettingsPage() {
               )}
             </p>
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileImage className="h-5 w-5 text-blue-500" />
+              <CardTitle>Chat File Uploads</CardTitle>
+            </div>
+            <Switch
+              id="allow-chat-file-uploads"
+              checked={organization?.allowChatFileUploads ?? true}
+              onCheckedChange={handleToggleAllowChatFileUploads}
+              disabled={updateOrgMutation.isPending}
+            />
+          </div>
+          <CardDescription>
+            Allow users to upload files in the Archestra chat UI
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert variant="warning">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Security notice:</strong> Tool invocation policies and
+              trusted data policies currently only apply to text-based content.
+              File-based content (images, PDFs) bypasses these security checks.
+              Support for file-based security policies is coming soon.
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 

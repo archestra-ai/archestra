@@ -12,8 +12,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import {
-  type ChangeEvent,
+import React, {
   type ChangeEventHandler,
   Children,
   type ClipboardEventHandler,
@@ -34,7 +33,6 @@ import {
   useRef,
   useState,
 } from "react";
-import React from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -60,7 +58,7 @@ import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
-  InputGroupTextarea,
+  type InputGroupTextarea,
 } from "@/components/ui/input-group";
 import {
   Select,
@@ -916,6 +914,7 @@ export const PromptInputTextarea = React.forwardRef<
     );
   },
 );
+PromptInputTextarea.displayName = "PromptInputTextarea";
 
 export type PromptInputHeaderProps = Omit<
   ComponentProps<typeof InputGroupAddon>,

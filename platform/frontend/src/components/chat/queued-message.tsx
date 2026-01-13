@@ -19,13 +19,6 @@ export function QueuedMessage({
   position,
   className,
 }: QueuedMessageProps) {
-  const positionLabel =
-    position === 0
-      ? "Queued (next)"
-      : position !== undefined && position > 0
-        ? `Queued #${position + 1}`
-        : "Queued";
-
   return (
     <div
       className={cn(

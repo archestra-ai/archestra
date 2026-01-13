@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, FileText, Globe, Plus } from "lucide-react";
+
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -24,10 +24,13 @@ import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { QueuedMessagesList } from "@/components/chat/queued-messages-list";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { WithPermissions } from "@/components/roles/with-permissions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -58,31 +61,16 @@ import {
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
-import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
-import { Badge } from "@/components/ui/badge";
 
 import {
   applyPendingActions,
   clearPendingActions,
   getPendingActions,
 } from "@/lib/pending-tool-state";
+import { usePrompt, usePrompts } from "@/lib/prompts.query";
 import ArchestraPromptInput from "./prompt-input";
-import { WithPermissions } from "@/components/roles/with-permissions";
-
-
-
+import { Eye, EyeOff, FileText, Globe, Plus } from "lucide-react";
 const CONVERSATION_QUERY_PARAM = "conversation";
-
-type McpToolsDisplayProps = {
-  agentId?: string;
-  className?: string;
-};
-
-const McpToolsDisplay = ({ agentId: _agentId, className }: McpToolsDisplayProps) => (
-  <Badge variant="outline" className={className ?? ""}>
-    MCP tools are not available.
-  </Badge>
-);
 
 export default function ChatPage() {
   const router = useRouter();
@@ -631,13 +619,7 @@ export default function ChatPage() {
     });
 
     setMessages(mergedMessages);
-  }, [
-    conversation,
-    conversationId,
-    messages,
-    setMessages,
-    status,
-  ]);
+  }, [conversation, conversationId, messages, setMessages, status]);
 
   const handleDeleteQueued = useCallback(
     (id: string) => {
@@ -1248,4 +1230,3 @@ export default function ChatPage() {
     </div>
   );
 }
-

@@ -263,7 +263,7 @@ jobs:
             -e CI=true \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=${{ matrix.projects }} ${{ matrix.shard }} --reporter='blob,outputDir=e2e-tests/blob-report' --reporter=line" \
+            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=${{ matrix.projects }} ${{ matrix.shard }}" \
             2>&1 | tee playwright-output.txt
 
       - name: Check for flaky tests
@@ -351,6 +351,12 @@ jobs:
           path: platform/e2e-tests/playwright-report/
           # Shorter retention for success, full retention for failures
           retention-days: ${{ needs.platform-e2e-tests.result == 'success' && 7 || 30 }}
+
+      - name: Write test summary
+        if: always()
+        uses: daun/playwright-report-summary@v3
+        with:
+          report-file: platform/e2e-tests/playwright-report/index.html
 
   platform-docker-image-scanning:
     name: Platform Docker Image Scanning

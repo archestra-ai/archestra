@@ -22,7 +22,7 @@ export function usePublicSsoProviders() {
     queryKey: ssoProviderKeys.public,
     queryFn: async () => {
       const { data } = await archestraApiSdk.getPublicSsoProviders();
-      return data ?? []; // Return empty array instead of undefined
+      return data;
     },
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
@@ -40,7 +40,7 @@ export function useSsoProviders() {
     queryKey: ssoProviderKeys.all,
     queryFn: async () => {
       const { data } = await archestraApiSdk.getSsoProviders();
-      return data ?? []; // Return empty array instead of undefined
+      return data;
     },
     retry: false,
     throwOnError: false,
@@ -56,7 +56,7 @@ export function useSsoProvider(id: string) {
     queryKey: [...ssoProviderKeys.details(), id],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getSsoProvider({ path: { id } });
-      return data ?? null; // Return null instead of undefined
+      return data;
     },
     retry: false,
     throwOnError: false,
@@ -141,5 +141,5 @@ export function useDeleteSsoProvider() {
     onError: (error) => {
       toast.error(`Failed to delete SSO provider: ${error.message}`);
     },
-  });
+});
 }

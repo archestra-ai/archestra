@@ -35,7 +35,7 @@ import {
 } from "@/lib/policy.query";
 import {
   getResultPolicyActionFromPolicies,
-  RESULT_POLICY_ACTION_OPTIONS,
+  RESULT_POLICY_ACTION_OPTIONS_LONG,
   type ResultPolicyAction,
 } from "@/lib/policy.utils";
 import { useTeams } from "@/lib/team.query";
@@ -279,7 +279,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
               <SelectValue placeholder="Select action" />
             </SelectTrigger>
             <SelectContent>
-              {RESULT_POLICY_ACTION_OPTIONS.map((option) => (
+              {RESULT_POLICY_ACTION_OPTIONS_LONG.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -354,7 +354,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                   <SelectValue placeholder="Action" />
                 </SelectTrigger>
                 <SelectContent>
-                  {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
+                  {RESULT_POLICY_ACTION_OPTIONS_LONG.map(({ value, label }) => (
                     <SelectItem key={value} value={value}>
                       {label}
                     </SelectItem>

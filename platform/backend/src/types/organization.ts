@@ -48,10 +48,6 @@ export const UpdateOrganizationSchema = z.object({
   compressionScope: OrganizationCompressionScopeSchema,
   autoConfigureNewTools: z.boolean(),
   globalToolPolicy: GlobalToolPolicySchema,
-  /**
-   * Whether file uploads are allowed in chat.
-   * Defaults to false because security policies currently only work on text-based content.
-   */
   allowChatFileUploads: z.boolean(),
 });
 

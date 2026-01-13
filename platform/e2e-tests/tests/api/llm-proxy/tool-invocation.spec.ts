@@ -571,10 +571,15 @@ for (const config of testConfigs) {
       createToolInvocationPolicy,
       makeApiRequest,
       waitForAgentTool,
+      updateOrganization,
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-blocks-tool-untrusted-data`;
 
-      // 1. Create a test agent
+      // 1. Set global tool policy to "restrictive" so policies are evaluated
+      // (default "permissive" skips policy evaluation - YOLO mode)
+      await updateOrganization(request, { globalToolPolicy: "restrictive" });
+
+      // 2. Create a test agent
       const createResponse = await createAgent(
         request,
         `${config.providerName} Test Agent`,
@@ -582,7 +587,7 @@ for (const config of testConfigs) {
       const agent = await createResponse.json();
       agentId = agent.id;
 
-      // 2. Send initial request to register the tool
+      // 3. Send initial request to register the tool
       const initialResponse = await makeApiRequest({
         request,
         method: "post",
@@ -600,7 +605,7 @@ for (const config of testConfigs) {
         );
       }
 
-      // 3. Get the tool ID from the agent-tool relationship
+      // 4. Get the tool ID from the agent-tool relationship
       const readFileAgentTool = await waitForAgentTool(
         request,
         agentId,
@@ -608,7 +613,7 @@ for (const config of testConfigs) {
       );
       toolId = readFileAgentTool.tool.id;
 
-      // 4. Create a trusted data policy
+      // 5. Create a trusted data policy
       const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
         toolId,
         description: "Mark messages containing UNTRUSTED_DATA as untrusted",
@@ -624,7 +629,7 @@ for (const config of testConfigs) {
       const trustedDataPolicy = await trustedDataPolicyResponse.json();
       trustedDataPolicyId = trustedDataPolicy.id;
 
-      // 5. Create a tool invocation policy that blocks read_file for /etc/
+      // 6. Create a tool invocation policy that blocks read_file for /etc/
       const toolInvocationPolicyResponse = await createToolInvocationPolicy(
         request,
         {
@@ -643,7 +648,7 @@ for (const config of testConfigs) {
       const toolInvocationPolicy = await toolInvocationPolicyResponse.json();
       toolInvocationPolicyId = toolInvocationPolicy.id;
 
-      // 6. Send a request with untrusted data
+      // 7. Send a request with untrusted data
       const response = await makeApiRequest({
         request,
         method: "post",
@@ -658,10 +663,10 @@ for (const config of testConfigs) {
       expect(response.ok()).toBeTruthy();
       const responseData = await response.json();
 
-      // 7. Verify the tool call was blocked
+      // 8. Verify the tool call was blocked
       config.assertToolCallBlocked(responseData);
 
-      // 8. Verify the interaction was persisted
+      // 9. Verify the interaction was persisted
       const interactionsResponse = await makeApiRequest({
         request,
         method: "get",
@@ -676,6 +681,9 @@ for (const config of testConfigs) {
         "UNTRUSTED_DATA",
       );
       expect(blockedInteraction).toBeDefined();
+
+      // 10. Reset global tool policy to "permissive" (cleanup)
+      await updateOrganization(request, { globalToolPolicy: "permissive" });
     });
 
     test("allows Archestra MCP server tools in untrusted context", async ({

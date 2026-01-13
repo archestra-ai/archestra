@@ -6,6 +6,7 @@ import { type APIRequestContext, test as base } from "@playwright/test";
 import type { SupportedProvider } from "@shared";
 import {
   API_BASE_URL,
+  ARCHESTRA_MCP_CATALOG_ID,
   editorAuthFile,
   memberAuthFile,
   UI_BASE_URL,
@@ -52,6 +53,7 @@ export interface TestFixtures {
   getInteractions: typeof getInteractions;
   getWiremockRequests: typeof getWiremockRequests;
   clearWiremockRequests: typeof clearWiremockRequests;
+  assignArchestraToolsToAgent: typeof assignArchestraToolsToAgent;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -668,6 +670,7 @@ const updateOrganization = async (
   updates: {
     convertToolResultsToToon?: boolean;
     compressionScope?: "organization" | "team";
+    globalToolPolicy?: "permissive" | "restrictive";
   },
 ) =>
   makeApiRequest({
@@ -770,6 +773,40 @@ const getWiremockRequests = async (
  */
 const clearWiremockRequests = async (request: APIRequestContext) => {
   await request.delete(`${WIREMOCK_BASE_URL}/__admin/requests`);
+};
+
+/**
+ * Assign all Archestra built-in tools to an agent
+ * This is needed because Archestra tools are not automatically assigned to new profiles
+ */
+const assignArchestraToolsToAgent = async (
+  request: APIRequestContext,
+  agentId: string,
+): Promise<void> => {
+  // Get Archestra tools from the catalog
+  const toolsResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/internal_mcp_catalog/${ARCHESTRA_MCP_CATALOG_ID}/tools`,
+  });
+  const tools = await toolsResponse.json();
+
+  if (!tools || tools.length === 0) {
+    throw new Error("No Archestra tools found in catalog");
+  }
+
+  // Assign all tools to the agent using bulk-assign
+  const assignments = tools.map((tool: { id: string }) => ({
+    agentId,
+    toolId: tool.id,
+  }));
+
+  await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/agents/tools/bulk-assign",
+    data: { assignments },
+  });
 };
 
 export * from "@playwright/test";
@@ -878,6 +915,9 @@ export const test = base.extend<TestFixtures>({
   },
   clearWiremockRequests: async ({}, use) => {
     await use(clearWiremockRequests);
+  },
+  assignArchestraToolsToAgent: async ({}, use) => {
+    await use(assignArchestraToolsToAgent);
   },
   /**
    * Admin request - same auth as default `request` fixture

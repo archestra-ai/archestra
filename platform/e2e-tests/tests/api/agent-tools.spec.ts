@@ -60,6 +60,7 @@ test.describe("Agent Tools API", () => {
       request,
       createAgent,
       makeApiRequest,
+      assignArchestraToolsToAgent,
     }) => {
       // Create an agent
       const agentResponse = await createAgent(
@@ -67,6 +68,9 @@ test.describe("Agent Tools API", () => {
         "Test Agent for Skip Pagination",
       );
       const agent = await agentResponse.json();
+
+      // Assign Archestra tools to the agent so we have tools to query
+      await assignArchestraToolsToAgent(request, agent.id);
 
       // Query agent tools with skipPagination=true
       const response = await makeApiRequest({
@@ -84,6 +88,8 @@ test.describe("Agent Tools API", () => {
       expect(result.pagination.hasNext).toBe(false);
       // All data should be returned
       expect(result.pagination.total).toBe(result.data.length);
+      // Should have at least the Archestra tools
+      expect(result.data.length).toBeGreaterThan(0);
     });
 
     test("skipPagination respects other filters like agentId", async ({

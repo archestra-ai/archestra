@@ -92,14 +92,19 @@ async function findInstalledServer(
 test.describe("MCP Gateway - Legacy Auth (profile ID as token)", () => {
   let profileId: string;
 
-  test.beforeAll(async ({ request, createAgent }) => {
-    const createResponse = await createAgent(
-      request,
-      "MCP Gateway Legacy Auth Test",
-    );
-    const profile = await createResponse.json();
-    profileId = profile.id;
-  });
+  test.beforeAll(
+    async ({ request, createAgent, assignArchestraToolsToAgent }) => {
+      const createResponse = await createAgent(
+        request,
+        "MCP Gateway Legacy Auth Test",
+      );
+      const profile = await createResponse.json();
+      profileId = profile.id;
+
+      // Assign Archestra tools so they appear in tools/list
+      await assignArchestraToolsToAgent(request, profileId);
+    },
+  );
 
   test.afterAll(async ({ request, deleteAgent }) => {
     await deleteAgent(request, profileId);
@@ -257,18 +262,23 @@ test.describe("MCP Gateway - New Auth (archestra token)", () => {
   let profileId: string;
   let archestraToken: string;
 
-  test.beforeAll(async ({ request, createAgent }) => {
-    // Create test profile
-    const createResponse = await createAgent(
-      request,
-      "MCP Gateway New Auth Test",
-    );
-    const profile = await createResponse.json();
-    profileId = profile.id;
+  test.beforeAll(
+    async ({ request, createAgent, assignArchestraToolsToAgent }) => {
+      // Create test profile
+      const createResponse = await createAgent(
+        request,
+        "MCP Gateway New Auth Test",
+      );
+      const profile = await createResponse.json();
+      profileId = profile.id;
 
-    // Get org token using shared utility
-    archestraToken = await getOrgTokenForProfile(request);
-  });
+      // Assign Archestra tools so they appear in tools/list
+      await assignArchestraToolsToAgent(request, profileId);
+
+      // Get org token using shared utility
+      archestraToken = await getOrgTokenForProfile(request);
+    },
+  );
 
   test.afterAll(async ({ request, deleteAgent }) => {
     await deleteAgent(request, profileId);

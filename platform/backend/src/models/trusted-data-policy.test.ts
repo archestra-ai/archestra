@@ -237,6 +237,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: "some data",
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -261,6 +263,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { source: "trusted-api", data: "some data" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -285,6 +289,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { source: "untrusted-api", data: "some data" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -321,6 +327,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           "trusted-by-default-tool",
           { value: "any data" },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -363,6 +371,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           "trusted-by-default-with-policies",
           { value: { normal: "data" } },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -403,6 +413,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           "trusted-default-with-matching-policy",
           { value: { verified: "true" } },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -424,6 +436,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { status: "verified" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -431,6 +445,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { status: "unverified" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -450,6 +466,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "trusted" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -457,6 +475,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "untrusted" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -476,6 +496,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { url: "https://api.trusted-domain.com/data" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -483,6 +505,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { url: "https://untrusted.com/data" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -502,6 +526,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { content: "This is safe content" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -509,6 +535,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { content: "This contains malicious code" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -528,6 +556,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { path: "/trusted/data/file.json" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -535,6 +565,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { path: "/untrusted/data/file.json" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -554,6 +586,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { email: "user@company.com" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -561,6 +595,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { email: "user@external.com" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -580,6 +616,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { id: "ABC-12345" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -587,6 +625,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { id: "invalid-id" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -620,6 +660,8 @@ describe("TrustedDataPolicyModel", () => {
               ],
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -635,6 +677,8 @@ describe("TrustedDataPolicyModel", () => {
               ],
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -657,6 +701,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { items: [] },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(false);
       });
@@ -679,6 +725,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { items: "not an array" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(false);
       });
@@ -715,6 +763,8 @@ describe("TrustedDataPolicyModel", () => {
               },
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -733,6 +783,8 @@ describe("TrustedDataPolicyModel", () => {
               },
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -765,6 +817,8 @@ describe("TrustedDataPolicyModel", () => {
               },
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(false);
       });
@@ -788,6 +842,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { source: "malicious", data: "some data" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -818,6 +874,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { type: "email", from: "hacker@evil.com" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -848,6 +906,8 @@ describe("TrustedDataPolicyModel", () => {
               ],
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -877,6 +937,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { source: "trusted" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -899,6 +961,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { domain: "evil.blocked.com" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(blockedResult.isBlocked).toBe(true);
 
@@ -906,6 +970,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { domain: "safe.com" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(allowedResult.isBlocked).toBe(false);
       });
@@ -942,6 +1008,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           "default-trusted-tool",
           { value: { dangerous: "true", other: "data" } },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -972,6 +1040,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "api-v1" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result1.isTrusted).toBe(true);
         expect(result1.reason).toContain("API v1 source");
@@ -981,6 +1051,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "api-v2" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result2.isTrusted).toBe(true);
         expect(result2.reason).toContain("API v2 source");
@@ -990,6 +1062,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "unknown" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result3.isTrusted).toBe(false);
       });
@@ -1015,6 +1089,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "trusted", verified: "false" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result1.isTrusted).toBe(true);
 
@@ -1023,6 +1099,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "untrusted", verified: "true" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result2.isTrusted).toBe(true);
       });
@@ -1046,6 +1124,8 @@ describe("TrustedDataPolicyModel", () => {
             status: "success",
             data: "some data",
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(true);
       });
@@ -1066,6 +1146,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { status: "success", data: "some data" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(true);
       });
@@ -1449,6 +1531,7 @@ describe("TrustedDataPolicyModel", () => {
           "no-context-tool",
           { value: { data: "any" } },
           "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -1467,6 +1550,8 @@ describe("TrustedDataPolicyModel", () => {
         {
           value: { any: "data", dangerous: "content" },
         },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.isTrusted).toBe(true);
@@ -1490,6 +1575,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { untrusted: "data", source: "malicious" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -1515,6 +1602,8 @@ describe("TrustedDataPolicyModel", () => {
         {
           value: { source: "malicious", data: "would normally be blocked" },
         },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.isTrusted).toBe(true);
@@ -1540,6 +1629,8 @@ describe("TrustedDataPolicyModel", () => {
         {
           value: { source: "trusted" },
         },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(trustedResult.isTrusted).toBe(true);
@@ -1552,6 +1643,8 @@ describe("TrustedDataPolicyModel", () => {
         {
           value: { source: "untrusted" },
         },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(untrustedResult.isTrusted).toBe(false);

@@ -241,11 +241,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Validate connection for remote servers
         if (secretId) {
-          const isValid = await McpServerModel.validateConnection(
-            serverData.name,
-            serverData.catalogId ?? undefined,
-            secretId,
-          );
+          const { isValid, errorMessage } =
+            await McpServerModel.validateConnection(
+              serverData.name,
+              serverData.catalogId ?? undefined,
+              secretId,
+            );
 
           if (!isValid) {
             // Clean up the secret we just created if validation fails
@@ -255,7 +256,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             throw new ApiError(
               400,
-              "Failed to connect to MCP server with provided credentials",
+              errorMessage ||
+                "Failed to connect to MCP server with provided credentials",
             );
           }
         }
@@ -422,9 +424,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (async () => {
               try {
                 // Wait for the deployment to be fully ready before fetching tools
-                const k8sDeployment = McpServerRuntimeManager.getDeployment(
-                  mcpServer.id,
-                );
+                const k8sDeployment =
+                  await McpServerRuntimeManager.getOrLoadDeployment(
+                    mcpServer.id,
+                  );
                 if (!k8sDeployment) {
                   throw new Error("Deployment manager not found");
                 }
@@ -608,6 +611,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
+      }
+
+      // Prevent deletion of built-in MCP servers
+      if (mcpServer.serverType === "builtin") {
+        throw new ApiError(400, "Cannot delete built-in MCP servers");
       }
 
       // For local servers, stop the server (this will delete the K8s Secret)

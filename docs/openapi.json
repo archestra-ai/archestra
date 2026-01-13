@@ -40520,7 +40520,8 @@
                         "type": "string",
                         "enum": [
                           "local",
-                          "remote"
+                          "remote",
+                          "builtin"
                         ]
                       },
                       "serverUrl": {
@@ -41040,6 +41041,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1
@@ -41105,7 +41111,8 @@
                     "type": "string",
                     "enum": [
                       "local",
-                      "remote"
+                      "remote",
+                      "builtin"
                     ]
                   },
                   "serverUrl": {
@@ -41461,7 +41468,8 @@
                       "type": "string",
                       "enum": [
                         "local",
-                        "remote"
+                        "remote",
+                        "builtin"
                       ]
                     },
                     "serverUrl": {
@@ -42066,7 +42074,8 @@
                       "type": "string",
                       "enum": [
                         "local",
-                        "remote"
+                        "remote",
+                        "builtin"
                       ]
                     },
                     "serverUrl": {
@@ -42650,7 +42659,8 @@
                     "type": "string",
                     "enum": [
                       "local",
-                      "remote"
+                      "remote",
+                      "builtin"
                     ]
                   },
                   "serverUrl": {
@@ -43013,7 +43023,8 @@
                       "type": "string",
                       "enum": [
                         "local",
-                        "remote"
+                        "remote",
+                        "builtin"
                       ]
                     },
                     "serverUrl": {
@@ -43554,6 +43565,304 @@
                     "success"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal_mcp_catalog/{id}/tools": {
+      "get": {
+        "operationId": "getInternalMcpCatalogTools",
+        "tags": [
+          "MCP Catalog"
+        ],
+        "description": "Get tools for a catalog item (including builtin Archestra tools)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "parameters": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "assignedAgentCount": {
+                        "type": "number"
+                      },
+                      "assignedAgents": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "description",
+                      "parameters",
+                      "createdAt",
+                      "assignedAgentCount",
+                      "assignedAgents"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               }
             }
@@ -50821,7 +51130,8 @@
                         "type": "string",
                         "enum": [
                           "local",
-                          "remote"
+                          "remote",
+                          "builtin"
                         ]
                       },
                       "secretId": {
@@ -51282,7 +51592,8 @@
                       "type": "string",
                       "enum": [
                         "local",
-                        "remote"
+                        "remote",
+                        "builtin"
                       ]
                     },
                     "secretId": {
@@ -51670,7 +51981,8 @@
                       "type": "string",
                       "enum": [
                         "local",
-                        "remote"
+                        "remote",
+                        "builtin"
                       ]
                     },
                     "secretId": {

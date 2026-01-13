@@ -105,6 +105,7 @@ export default function ChatPage() {
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const autoSendTriggeredRef = useRef(false);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -241,6 +242,11 @@ export default function ChatPage() {
       }
     }
   }, [searchParams, conversationId]);
+
+  // Get user_prompt from URL for auto-sending
+  const initialUserPrompt = useMemo(() => {
+    return searchParams.get("user_prompt") || undefined;
+  }, [searchParams]);
 
   // Update URL when conversation changes
   const selectConversation = useCallback(
@@ -759,6 +765,62 @@ export default function ChatPage() {
       selectConversation,
     ],
   );
+
+  // Auto-send message from URL when conditions are met (deep link support)
+  useEffect(() => {
+    // Skip if already triggered or no user_prompt in URL
+    if (autoSendTriggeredRef.current || !initialUserPrompt) return;
+
+    // Skip if conversation already exists
+    if (conversationId) return;
+
+    // Wait for agent to be ready.
+    if (!initialAgentId) return;
+
+    // Skip if mutation is already in progress
+    if (createConversationMutation.isPending) return;
+
+    // Mark as triggered to prevent duplicate sends
+    autoSendTriggeredRef.current = true;
+
+    // Store the message to send after conversation is created
+    pendingPromptRef.current = initialUserPrompt;
+
+    // Find the provider for the initial model
+    const modelInfo = chatModels.find((m) => m.id === initialModel);
+    const selectedProvider = modelInfo?.provider as
+      | SupportedChatProvider
+      | undefined;
+
+    // Create conversation and send message
+    createConversationMutation.mutate(
+      {
+        agentId: initialAgentId,
+        selectedModel: initialModel,
+        selectedProvider,
+        promptId: initialPromptId ?? undefined,
+        chatApiKeyId: initialApiKeyId,
+      },
+      {
+        onSuccess: (newConversation) => {
+          if (newConversation) {
+            newlyCreatedConversationRef.current = newConversation.id;
+            selectConversation(newConversation.id);
+          }
+        },
+      },
+    );
+  }, [
+    initialUserPrompt,
+    conversationId,
+    initialAgentId,
+    initialModel,
+    initialPromptId,
+    initialApiKeyId,
+    chatModels,
+    createConversationMutation,
+    selectConversation,
+  ]);
 
   // Determine which agent ID to use for prompt input
   const activeAgentId = conversationId

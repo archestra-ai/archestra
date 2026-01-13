@@ -66,7 +66,6 @@ export function useAllProfileTools({
           agentId: filters?.agentId,
           origin: filters?.origin,
           mcpServerOwnerId: filters?.mcpServerOwnerId,
-          excludeArchestraTools: true,
           skipPagination,
         },
       });

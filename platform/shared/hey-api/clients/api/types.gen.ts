@@ -11852,7 +11852,7 @@ export type GetInternalMcpCatalogResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote';
+        serverType: 'local' | 'remote' | 'builtin';
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -11919,6 +11919,7 @@ export type GetInternalMcpCatalogResponse = GetInternalMcpCatalogResponses[keyof
 
 export type CreateInternalMcpCatalogItemData = {
     body: {
+        id?: string;
         name: string;
         version?: string | null;
         description?: string | null;
@@ -11934,7 +11935,7 @@ export type CreateInternalMcpCatalogItemData = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote';
+        serverType: 'local' | 'remote' | 'builtin';
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -12082,7 +12083,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote';
+        serverType: 'local' | 'remote' | 'builtin';
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -12315,7 +12316,7 @@ export type GetInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote';
+        serverType: 'local' | 'remote' | 'builtin';
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -12397,7 +12398,7 @@ export type UpdateInternalMcpCatalogItemData = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType?: 'local' | 'remote';
+        serverType?: 'local' | 'remote' | 'builtin';
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -12547,7 +12548,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote';
+        serverType: 'local' | 'remote' | 'builtin';
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -12611,6 +12612,96 @@ export type UpdateInternalMcpCatalogItemResponses = {
 };
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
+
+export type GetInternalMcpCatalogToolsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}/tools';
+};
+
+export type GetInternalMcpCatalogToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetInternalMcpCatalogToolsError = GetInternalMcpCatalogToolsErrors[keyof GetInternalMcpCatalogToolsErrors];
+
+export type GetInternalMcpCatalogToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        parameters: {
+            [key: string]: unknown;
+        };
+        createdAt: string;
+        assignedAgentCount: number;
+        assignedAgents: Array<{
+            id: string;
+            name: string;
+        }>;
+    }>;
+};
+
+export type GetInternalMcpCatalogToolsResponse = GetInternalMcpCatalogToolsResponses[keyof GetInternalMcpCatalogToolsResponses];
 
 export type DeleteInternalMcpCatalogItemByNameData = {
     body?: never;
@@ -14598,7 +14689,7 @@ export type GetMcpServersResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote';
+        serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -14720,7 +14811,7 @@ export type InstallMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote';
+        serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
@@ -14903,7 +14994,7 @@ export type GetMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote';
+        serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;

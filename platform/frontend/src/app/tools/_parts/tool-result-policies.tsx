@@ -326,7 +326,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
-                        </TooltipTrigger
+                        </TooltipTrigger>
                         <TooltipContent>
                           <p>Add condition</p>
                         </TooltipContent>

@@ -5,6 +5,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import type { PolicyCondition } from "@/app/tools/_parts/tool-call-policy-condition";
 
 const {
   bulkUpsertDefaultCallPolicy,
@@ -85,28 +86,19 @@ export function useToolInvocationPolicyCreateMutation() {
 export function useToolInvocationPolicyUpdateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (updatedPolicy: {
-      id: string;
-      conditions?: Array<{ key: string; operator: string; value: string }>;
-      action?:
-        | "allow_when_context_is_untrusted"
-        | "block_when_context_is_untrusted"
-        | "block_always";
-      reason?: string | null;
-    }) => {
+    mutationFn: async (
+      updatedPolicy: {
+        id: string;
+        conditions?: PolicyCondition[];
+      } & NonNullable<archestraApiTypes.UpdateToolInvocationPolicyData["body"]>,
+    ) => {
       const { id, conditions, action, reason } = updatedPolicy;
 
       return await updateToolInvocationPolicy({
         body: {
           ...(action !== undefined && { action }),
           ...(reason !== undefined && { reason }),
-          ...(conditions !== undefined && {
-            conditions: conditions.map((c) => ({
-              key: c.key,
-              operator: c.operator as "equal",
-              value: c.value,
-            })),
-          }),
+          ...(conditions !== undefined && { conditions }),
         },
         path: { id },
       });
@@ -158,27 +150,18 @@ export function useToolResultPoliciesCreateMutation() {
 export function useToolResultPoliciesUpdateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (updatedPolicy: {
-      id: string;
-      conditions?: Array<{ key: string; operator: string; value: string }>;
-      action?:
-        | "mark_as_trusted"
-        | "mark_as_untrusted"
-        | "block_always"
-        | "sanitize_with_dual_llm";
-    }) => {
+    mutationFn: async (
+      updatedPolicy: {
+        id: string;
+        conditions?: PolicyCondition[];
+      } & NonNullable<archestraApiTypes.UpdateTrustedDataPolicyData["body"]>,
+    ) => {
       const { id, conditions, action } = updatedPolicy;
 
       return await updateTrustedDataPolicy({
         body: {
           ...(action !== undefined && { action }),
-          ...(conditions !== undefined && {
-            conditions: conditions.map((c) => ({
-              key: c.key,
-              operator: c.operator as "equal",
-              value: c.value,
-            })),
-          }),
+          ...(conditions !== undefined && { conditions }),
         },
         path: { id },
       });

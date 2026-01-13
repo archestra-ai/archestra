@@ -1,13 +1,7 @@
-import {
-  RouteId,
-  type SupportedProvider,
-  SupportedProviders,
-  TimeInMs,
-} from "@shared";
+import { RouteId, type SupportedProvider, SupportedProviders } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
@@ -23,10 +17,6 @@ import {
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
-
-/** TTL for caching chat models from provider APIs */
-const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
-const CHAT_MODELS_CACHE_TTL_HOURS = CHAT_MODELS_CACHE_TTL_MS / TimeInMs.Hour;
 
 // Response schema for models
 const ChatModelSchema = z.object({
@@ -191,6 +181,48 @@ export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
         provider: "gemini" as const,
       };
     });
+}
+
+/**
+ * Fetch models from Cerebras API (OpenAI-compatible)
+ * Note: Llama models are excluded as they are not allowed in chat
+ */
+async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.chat.cerebras.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Cerebras models",
+    );
+    throw new Error(`Failed to fetch Cerebras models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  // Filter out Llama models - they are not allowed in chat for Cerebras provider
+  return data.data
+    .filter((model) => !model.id.toLowerCase().includes("llama"))
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "cerebras" as const,
+      createdAt: new Date(model.created * 1000).toISOString(),
+    }));
 }
 
 /**
@@ -390,10 +422,12 @@ async function getProviderApiKey({
   switch (provider) {
     case "anthropic":
       return config.chat.anthropic.apiKey || null;
-    case "openai":
-      return config.chat.openai.apiKey || null;
+    case "cerebras":
+      return config.chat.cerebras.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "openai":
+      return config.chat.openai.apiKey || null;
     case "vllm":
       // vLLM typically doesn't require API keys, return empty or configured key
       return config.chat.vllm.apiKey || "";
@@ -411,8 +445,9 @@ const modelFetchers: Record<
   (apiKey: string) => Promise<ModelInfo[]>
 > = {
   anthropic: fetchAnthropicModels,
-  openai: fetchOpenAiModels,
+  cerebras: fetchCerebrasModels,
   gemini: fetchGeminiModels,
+  openai: fetchOpenAiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
 };
@@ -461,19 +496,9 @@ export async function fetchModelsForProvider({
     return [];
   }
 
-  // Cache key for Vertex AI doesn't include API key since it uses ADC
-  const cacheKey = vertexAiEnabled
-    ? (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-vertexai` as const)
-    : (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-${apiKey?.slice(0, 6)}` as const);
-  const cachedModels = await cacheManager.get<ModelInfo[]>(cacheKey);
-
-  if (cachedModels) {
-    return cachedModels;
-  }
-
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "cerebras", "openai"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }
@@ -492,12 +517,20 @@ export async function fetchModelsForProvider({
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     }
-    await cacheManager.set(cacheKey, models, CHAT_MODELS_CACHE_TTL_MS);
+    logger.info(
+      { provider, modelCount: models.length },
+      "fetchModelsForProvider:fetched models from provider",
+    );
     return models;
   } catch (error) {
     logger.error(
-      { provider, organizationId, error },
-      "Error fetching models from provider",
+      {
+        provider,
+        organizationId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      },
+      "fetchModelsForProvider:error fetching models from provider",
     );
     return [];
   }
@@ -510,7 +543,8 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetChatModels,
-        description: `Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for ${CHAT_MODELS_CACHE_TTL_HOURS} hours.`,
+        description:
+          "Get available LLM models from all configured providers. Models are fetched directly from provider APIs.",
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedChatProviderSchema.optional(),

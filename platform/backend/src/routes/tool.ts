@@ -88,6 +88,34 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(result);
     },
   );
+
+  fastify.delete(
+    "/api/tools/:id",
+    {
+      schema: {
+        operationId: RouteId.DeleteTool,
+        description:
+          "Delete an auto-discovered tool (tools without an MCP server)",
+        tags: ["Tools"],
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      const success = await ToolModel.delete(id);
+      if (!success) {
+        return reply.status(404).send({
+          error: {
+            message: "Tool not found or cannot be deleted",
+            type: "api_not_found_error",
+          },
+        });
+      }
+      return reply.send({ success: true });
+    },
+  );
 };
 
 export default toolRoutes;

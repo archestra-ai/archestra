@@ -39,6 +39,7 @@ import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeatureFlag } from "@/lib/features.hook";
+import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 import { BulkAssignProfileDialog } from "./bulk-assign-agent-dialog";
@@ -97,7 +98,7 @@ export type McpServerCardProps = {
   onCancelInstallation?: (serverId: string) => void;
 };
 
-export type McpServerCardVariant = "remote" | "local";
+export type McpServerCardVariant = "remote" | "local" | "builtin";
 
 export type McpServerCardBaseProps = McpServerCardProps & {
   variant: McpServerCardVariant;
@@ -118,9 +119,18 @@ export function McpServerCard({
   onDelete,
   onCancelInstallation,
 }: McpServerCardBaseProps) {
-  const { data: tools, isLoading: isLoadingTools } = useMcpServerTools(
-    installedServer?.id ?? null,
-  );
+  const isBuiltin = variant === "builtin";
+
+  // For builtin servers, fetch tools by catalog ID
+  // For regular MCP servers, fetch by server ID
+  const { data: mcpServerTools, isLoading: isLoadingMcpTools } =
+    useMcpServerTools(!isBuiltin ? (installedServer?.id ?? null) : null);
+  const { data: catalogTools, isLoading: isLoadingCatalogTools } =
+    useCatalogTools(isBuiltin ? item.id : null);
+
+  const tools = isBuiltin ? catalogTools : mcpServerTools;
+  const isLoadingTools = isBuiltin ? isLoadingCatalogTools : isLoadingMcpTools;
+
   const isByosEnabled = useFeatureFlag("byosEnabled");
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
@@ -225,6 +235,7 @@ export function McpServerCard({
   };
 
   const isRemoteVariant = variant === "remote";
+  const isBuiltinVariant = variant === "builtin";
 
   const requiresAuth = !!(
     (item.userConfig && Object.keys(item.userConfig).length > 0) ||
@@ -535,6 +546,21 @@ export function McpServerCard({
     </>
   );
 
+  const builtinCardContent = (
+    <>
+      <WithPermissions
+        permissions={{ tool: ["update"], profile: ["update"] }}
+        noPermissionHandle="hide"
+      >
+        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+            {toolsAssigned}
+          </div>
+        </div>
+      </WithPermissions>
+    </>
+  );
+
   const dialogs = (
     <>
       <McpToolsDialog
@@ -651,15 +677,25 @@ export function McpServerCard({
               </Tooltip>
             </TooltipProvider>
             <div className="flex items-center gap-2">
+              {isBuiltinVariant && (
+                <Badge
+                  variant="secondary"
+                  className="text-xs bg-purple-600 text-white"
+                >
+                  Built-in
+                </Badge>
+              )}
               {item.oauthConfig && (
                 <Badge variant="secondary" className="text-xs">
                   OAuth
                 </Badge>
               )}
-              <TransportBadges
-                isRemote={isRemoteVariant}
-                transportType={item.localConfig?.transportType}
-              />
+              {!isBuiltinVariant && (
+                <TransportBadges
+                  isRemote={isRemoteVariant}
+                  transportType={item.localConfig?.transportType}
+                />
+              )}
               {isRemoteVariant && !requiresAuth && (
                 <Badge
                   variant="secondary"
@@ -674,7 +710,11 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 flex-grow">
-        {isRemoteVariant ? remoteCardContent : localCardContent}
+        {isBuiltinVariant
+          ? builtinCardContent
+          : isRemoteVariant
+            ? remoteCardContent
+            : localCardContent}
       </CardContent>
       {dialogs}
     </Card>

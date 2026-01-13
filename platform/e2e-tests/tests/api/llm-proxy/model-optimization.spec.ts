@@ -168,6 +168,41 @@ const geminiConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.modelVersion,
 };
 
+const cerebrasConfig: ModelOptimizationTestConfig = {
+  providerName: "Cerebras",
+  provider: "cerebras",
+
+  endpoint: (agentId) => `/v1/cerebras/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-cerebras-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-cerebras-baseline",
+  optimizedModel: "e2e-test-cerebras-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 const vllmConfig: ModelOptimizationTestConfig = {
   providerName: "vLLM",
   provider: "vllm",
@@ -266,6 +301,7 @@ const testConfigs: ModelOptimizationTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
+  cerebrasConfig,
   vllmConfig,
   ollamaConfig,
 ];

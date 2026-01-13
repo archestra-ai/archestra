@@ -28,6 +28,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -122,6 +123,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     externalAgentId?: string,
     userId?: string,
+    sessionId?: string | null,
+    sessionSource?: string | null,
   ) => {
     const { tools, stream } = body;
 
@@ -186,6 +189,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const resolvedAgentId = resolvedAgent.id;
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
 
     logger.debug(
       {
@@ -364,6 +368,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           resolvedAgentId,
           considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
         },
         "[AnthropicProxy] Evaluating trusted data policies",
       );
@@ -374,6 +379,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           anthropicApiKey,
           "anthropic",
           resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
+          { teamIds, externalAgentId },
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -393,10 +400,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             : undefined,
           stream
-            ? (progress) => {
+            ? (progress: {
+                question: string;
+                options: string[];
+                answer: string;
+              }) => {
                 // Stream Q&A progress with options
                 const optionsText = progress.options
-                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                   .join("\n");
                 const progressEvent = {
                   type: "content_block_delta",
@@ -630,6 +641,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
               resolvedAgentId,
+              { teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,
@@ -904,6 +916,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               profileId: resolvedAgentId,
               externalAgentId,
               userId,
+              sessionId,
+              sessionSource,
               type: "anthropic:messages",
               request: body,
               processedRequest: {
@@ -974,6 +988,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
               resolvedAgentId,
+              { teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,
@@ -1030,6 +1045,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               profileId: resolvedAgentId,
               externalAgentId,
               userId,
+              sessionId,
+              sessionSource,
               type: "anthropic:messages",
               request: body,
               processedRequest: {
@@ -1085,6 +1102,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId: resolvedAgentId,
           externalAgentId,
           userId,
+          sessionId,
+          sessionSource,
           type: "anthropic:messages",
           request: body,
           processedRequest: {
@@ -1193,6 +1212,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // Extract metadata for session info - handles null/undefined difference
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        { metadata: request.body.metadata },
+      );
       return handleMessages(
         request.body,
         request.headers,
@@ -1201,6 +1225,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         undefined,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );
@@ -1233,6 +1259,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // Extract metadata for session info - handles null/undefined difference
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        { metadata: request.body.metadata },
+      );
       return handleMessages(
         request.body,
         request.headers,
@@ -1241,6 +1272,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.agentId,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );

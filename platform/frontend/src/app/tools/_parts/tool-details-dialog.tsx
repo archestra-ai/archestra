@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown, ChevronRight, User } from "lucide-react";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
+import { ChevronDown, ChevronRight, Layers, User } from "lucide-react";
 import { useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -50,11 +51,14 @@ export function ToolDetailsDialog({
     (item) => item.id === tool.catalogId,
   );
 
+  // Check if this is a built-in Archestra tool (no credentials required)
+  const isBuiltinArchestraTool = tool.catalogId === ARCHESTRA_MCP_CATALOG_ID;
+
   // Helper to get credential display text
   // Backend returns null for emails when user doesn't have access to the credential's MCP server
   const getCredentialDisplay = (assignment: (typeof tool.assignments)[0]) => {
     if (assignment.useDynamicTeamCredential) {
-      return "Team Credential";
+      return "Resolve at call time";
     }
 
     // Get the credential server ID (remote or local)
@@ -62,9 +66,9 @@ export function ToolDetailsDialog({
       assignment.credentialSourceMcpServerId ||
       assignment.executionSourceMcpServerId;
 
-    // If no credential server, no credential is set
+    // If no credential server, check if it's a built-in tool
     if (!credentialServerId) {
-      return "—";
+      return isBuiltinArchestraTool ? "Not required" : "—";
     }
 
     // Backend returns email if user has access, null if not
@@ -82,7 +86,7 @@ export function ToolDetailsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[90vw] max-w-[1600px] max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+        <DialogHeader className="shrink-0">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <DialogTitle className="text-xl font-semibold tracking-tight">
@@ -197,9 +201,10 @@ export function ToolDetailsDialog({
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <span className="font-medium text-sm">
+                                <Badge variant="secondary" className="gap-1">
+                                  <Layers className="h-3 w-3" />
                                   {assignment.agent.name}
-                                </span>
+                                </Badge>
                                 <span className="text-muted-foreground">→</span>
                                 <span className="text-sm text-muted-foreground">
                                   {getCredentialDisplay(assignment)}
@@ -232,7 +237,7 @@ export function ToolDetailsDialog({
               </div>
             </Collapsible>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <ToolCallPolicies tool={tool} />
               <ToolResultPolicies tool={tool} />
             </div>

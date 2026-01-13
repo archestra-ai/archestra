@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cerebras/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "cerebras-blocks-tool-untrusted-data"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-cerebras-test-123",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "llama-4-scout-17b-16e-instruct",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": null,
+            "refusal": null,
+            "tool_calls": [
+              {
+                "id": "call_test_123",
+                "type": "function",
+                "function": {
+                  "name": "read_file",
+                  "arguments": "{\"file_path\":\"/etc/passwd\"}"
+                }
+              }
+            ]
+          },
+          "finish_reason": "tool_calls",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "total_tokens": 120
+      }
+    }
+  }
+}

@@ -59,9 +59,14 @@ export function TokenSelect({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
-    if (shouldSetDefaultValue && !value && mcpServers.length > 0) {
-      // Default to the first credential
-      onValueChange(mcpServers[0].id);
+    if (shouldSetDefaultValue && !value) {
+      if (mcpServers.length > 0) {
+        // Default to the first credential
+        onValueChange(mcpServers[0].id);
+      } else {
+        // Default to dynamic credential when no static credentials available
+        onValueChange(DYNAMIC_CREDENTIAL_VALUE);
+      }
     }
   }, []);
 
@@ -94,26 +99,30 @@ export function TokenSelect({
         <SelectValue placeholder="Select credentials..." />
       </SelectTrigger>
       <SelectContent>
-        <div className="text-xs text-muted-foreground ml-2">
-          Static credentials
-        </div>
-        {mcpServers.map((server) => (
-          <SelectItem
-            key={server.id}
-            value={server.id}
-            className="cursor-pointer"
-            data-testid={E2eTestId.StaticCredentialToUse}
-          >
-            <div className="flex flex-col gap-1">
-              <div className="flex gap-1 flex-wrap text-xs">
-                {server.teamDetails
-                  ? server.teamDetails.name
-                  : server.ownerEmail || "Unknown"}
-              </div>
+        {mcpServers.length > 0 && (
+          <>
+            <div className="text-xs text-muted-foreground ml-2">
+              Static credentials
             </div>
-          </SelectItem>
-        ))}
-        <Divider className="my-2" />
+            {mcpServers.map((server) => (
+              <SelectItem
+                key={server.id}
+                value={server.id}
+                className="cursor-pointer"
+                data-testid={E2eTestId.StaticCredentialToUse}
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex gap-1 flex-wrap text-xs">
+                    {server.teamDetails
+                      ? server.teamDetails.name
+                      : server.ownerEmail || "Unknown"}
+                  </div>
+                </div>
+              </SelectItem>
+            ))}
+            <Divider className="my-2" />
+          </>
+        )}
         <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
           <div className="flex items-center gap-1">
             <Zap className="h-3! w-3! text-amber-500" />

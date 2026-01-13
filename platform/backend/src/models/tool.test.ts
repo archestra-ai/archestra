@@ -140,8 +140,8 @@ describe("ToolModel", () => {
       });
 
       const tools = await ToolModel.findAll(admin.id, true);
-      // Expects more than 2 tools: many Archestra built-in tools + 2 proxy-discovered tools
-      expect(tools.length).toBeGreaterThan(2);
+      // Expects exactly 2 proxy-discovered tools (Archestra tools are no longer auto-assigned)
+      expect(tools.length).toBe(2);
     });
 
     test("member only sees tools for accessible agents", async ({
@@ -652,14 +652,20 @@ describe("ToolModel", () => {
   describe("assignArchestraToolsToAgent", () => {
     test("assigns Archestra built-in tools to agent in bulk", async ({
       makeAgent,
+      seedAndAssignArchestraTools,
     }) => {
       const agent = await makeAgent();
 
-      // Agents should already have Archestra tools assigned when created
-      const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
-      expect(toolIds.length).toBeGreaterThan(0);
+      // Agents should NOT have Archestra tools auto-assigned (they must be explicitly assigned)
+      const toolIdsBeforeAssign = await AgentToolModel.findToolIdsByAgent(
+        agent.id,
+      );
+      expect(toolIdsBeforeAssign.length).toBe(0);
 
-      // Verify some of the Archestra tools are assigned
+      // Explicitly assign Archestra tools
+      await seedAndAssignArchestraTools(agent.id);
+
+      // Verify Archestra tools are assigned after explicit assignment
       const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
       const archestraToolNames = mcpTools
         .map((tool) => tool.name)
@@ -671,15 +677,16 @@ describe("ToolModel", () => {
 
     test("is idempotent - does not create duplicates", async ({
       makeAgent,
+      seedAndAssignArchestraTools,
     }) => {
       const agent = await makeAgent();
 
-      await ToolModel.assignArchestraToolsToAgent(agent.id);
+      await seedAndAssignArchestraTools(agent.id);
       const toolIdsAfterFirst = await AgentToolModel.findToolIdsByAgent(
         agent.id,
       );
 
-      await ToolModel.assignArchestraToolsToAgent(agent.id);
+      await seedAndAssignArchestraTools(agent.id);
       const toolIdsAfterSecond = await AgentToolModel.findToolIdsByAgent(
         agent.id,
       );

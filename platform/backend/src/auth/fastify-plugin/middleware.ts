@@ -15,17 +15,9 @@ const { requiredEndpointPermissionsMap } = config.enterpriseLicenseActivated
 export class Authnz {
   public handle = async (request: FastifyRequest, _reply: FastifyReply) => {
     const requestId = request.id;
-    logger.debug(
-      { requestId, method: request.method, url: request.url },
-      "[Authnz] Starting auth check",
-    );
 
     // custom logic to skip auth check
     if (await this.shouldSkipAuthCheck(request)) {
-      logger.debug(
-        { requestId, url: request.url },
-        "[Authnz] Skipping auth check for route",
-      );
       return;
     }
 
@@ -115,7 +107,6 @@ export class Authnz {
       // Allow fetching public appearance settings for login page (theme, logo, font)
       (method === "GET" && url === "/api/organization/appearance")
     ) {
-      logger.debug({ url, method }, "[Authnz] Route is in skip list");
       return true;
     }
     return false;

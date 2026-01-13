@@ -9,7 +9,6 @@ import toolsTable from "./tool";
 export type CallPolicyCondition = {
   /**
    * The argument name to check (e.g., "query", "to", "database").
-   * Could be context entity reference, e.g. context.profile.
    * In the case of context entity, value is typically entity id.
    */
   key: string;

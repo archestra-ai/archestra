@@ -218,11 +218,11 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                     {[
                       {
                         value: "allow_when_context_is_untrusted",
-                        label: "Allow when untrusted data present",
+                        label: "Allow always",
                       },
                       {
                         value: "block_when_context_is_untrusted",
-                        label: "Block when untrusted data present",
+                        label: "Allow in trusted context",
                       },
                       { value: "block_always", label: "Block always" },
                     ].map(({ value, label }) => (

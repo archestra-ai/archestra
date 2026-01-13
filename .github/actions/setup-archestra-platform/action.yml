@@ -105,13 +105,16 @@ runs:
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
       run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
 
-    - name: Deploy e2e test dependencies (WireMock, Keycloak)
+    - name: Deploy e2e test dependencies (WireMock, Keycloak) in background
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       shell: bash
       env:
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
       run: |
-        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests"
+        # Run e2e deps install in background to parallelize with platform deployment
+        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" &
+        echo $! > /tmp/e2e-helm-pid
+        echo "Started e2e-tests Helm install in background (PID: $(cat /tmp/e2e-helm-pid))"
 
     - name: Deploy Archestra Platform with Helm
       shell: bash
@@ -138,7 +141,22 @@ runs:
           ${VERSION_FLAG} \
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
-          --wait --timeout=5m
+          --atomic --timeout=4m
+
+    - name: Wait for e2e dependencies to complete
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      shell: bash
+      run: |
+        if [ -f /tmp/e2e-helm-pid ]; then
+          E2E_PID=$(cat /tmp/e2e-helm-pid)
+          echo "Waiting for e2e-tests Helm install (PID: $E2E_PID) to complete..."
+          if wait "$E2E_PID"; then
+            echo "e2e-tests Helm install completed successfully"
+          else
+            echo "e2e-tests Helm install failed"
+            exit 1
+          fi
+        fi
 
     - name: Verify deployment
       shell: bash
@@ -156,12 +174,12 @@ runs:
       shell: bash
       run: |
         echo "Waiting for platform pods to be ready..."
-        kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=120s
+        kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
         echo "Platform pods are ready"
 
         echo "Verifying services are accessible..."
-        curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
-        curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
+        curl --retry 5 --retry-delay 1 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
+        curl --retry 5 --retry-delay 1 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
         echo "All services are ready"
 
     - name: Set output URLs

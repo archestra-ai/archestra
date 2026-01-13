@@ -223,7 +223,10 @@ export function BulkAssignProfileDialog({
 
           {!isBuiltinArchestraTool && (
             <div className="mt-10">
-              <Label htmlFor="token-select" className="text-md font-medium mb-1">
+              <Label
+                htmlFor="token-select"
+                className="text-md font-medium mb-1"
+              >
                 Credential to use *
               </Label>
               <p className="text-xs text-muted-foreground mb-2">

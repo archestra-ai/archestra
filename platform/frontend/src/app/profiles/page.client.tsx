@@ -81,6 +81,7 @@ import { AssignToolsDialog } from "./assign-tools-dialog";
 // Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
 
 import type { archestraApiTypes } from "@shared";
+import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 
 type ProfilesInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
@@ -94,6 +95,7 @@ export default function ProfilesPage({
 }) {
   return (
     <div className="w-full h-full">
+      <PermissivePolicyBar />
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
           <Profiles initialData={initialData} />

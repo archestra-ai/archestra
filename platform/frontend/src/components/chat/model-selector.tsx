@@ -1,7 +1,21 @@
 "use client";
 
-import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { CheckIcon } from "lucide-react";
+import {
+  capabilityDisplayInfo,
+  getModelCapabilities,
+  type ModelCapability,
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@shared";
+import {
+  BrainIcon,
+  CheckIcon,
+  CodeIcon,
+  EyeIcon,
+  MicIcon,
+  WrenchIcon,
+  ZapIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   ModelSelectorContent,
@@ -26,7 +40,75 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useModelsByProvider } from "@/lib/chat-models.query";
+
+/** Map capability to icon component */
+const capabilityIcons: Partial<
+  Record<ModelCapability, React.ComponentType<{ className?: string }>>
+> = {
+  reasoning: BrainIcon,
+  vision: EyeIcon,
+  audio: MicIcon,
+  tools: WrenchIcon,
+  streaming: ZapIcon,
+  code: CodeIcon,
+};
+
+/** Capabilities to display (prioritized order) */
+const displayedCapabilities: ModelCapability[] = [
+  "reasoning",
+  "vision",
+  "audio",
+  "tools",
+  "code",
+];
+
+/** Capability badge component with tooltip */
+function CapabilityBadge({ capability }: { capability: ModelCapability }) {
+  const Icon = capabilityIcons[capability];
+  const info = capabilityDisplayInfo[capability];
+
+  if (!Icon) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center justify-center rounded bg-muted p-0.5">
+          <Icon className="size-3 text-muted-foreground" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-48">
+        <p className="font-medium">{info.label}</p>
+        <p className="text-muted-foreground">{info.description}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Render capability badges for a model */
+function ModelCapabilities({ modelId }: { modelId: string }) {
+  const capabilities = getModelCapabilities(modelId);
+
+  // Filter to only show displayed capabilities that the model has
+  const badges = displayedCapabilities.filter((cap) =>
+    capabilities.includes(cap),
+  );
+
+  if (badges.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {badges.map((cap) => (
+        <CapabilityBadge key={cap} capability={cap} />
+      ))}
+    </div>
+  );
+}
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -194,6 +276,7 @@ export function ModelSelector({
                       provider={providerToLogoProvider[provider]}
                     />
                     <ModelSelectorName>{model.displayName}</ModelSelectorName>
+                    <ModelCapabilities modelId={model.id} />
                     {selectedModel === model.id ? (
                       <CheckIcon className="ml-auto size-4" />
                     ) : (

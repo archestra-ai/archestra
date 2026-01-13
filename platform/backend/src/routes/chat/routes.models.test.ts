@@ -2,7 +2,7 @@ import type { GoogleGenAI } from "@google/genai";
 import { vi } from "vitest";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
-import { getModelCapabilities } from "./model-capabilities";
+
 import {
   fetchGeminiModels,
   fetchGeminiModelsViaVertexAi,
@@ -26,21 +26,11 @@ import {
 
 const mockCreateGoogleGenAIClient = vi.mocked(createGoogleGenAIClient);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
-vi.mock("./model-capabilities", () => ({
-  getModelCapabilities: vi.fn(),
-}));
-
-const mockGetModelCapabilities = vi.mocked(getModelCapabilities);
 
 describe("chat-models", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockReset();
-    // Default mock behavior - return basic capabilities
-    mockGetModelCapabilities.mockResolvedValue({
-      capabilities: ["streaming", "chat"],
-      metadata: { supportsStreaming: true },
-    });
   });
 
   describe("fetchGeminiModels (API key mode)", () => {
@@ -82,19 +72,11 @@ describe("chat-models", () => {
           id: "gemini-2.5-pro",
           displayName: "Gemini 2.5 Pro",
           provider: "gemini",
-          capabilities: {
-            capabilities: ["streaming", "chat"],
-            metadata: { supportsStreaming: true },
-          },
         },
         {
           id: "gemini-2.5-flash",
           displayName: "Gemini 2.5 Flash",
           provider: "gemini",
-          capabilities: {
-            capabilities: ["streaming", "chat"],
-            metadata: { supportsStreaming: true },
-          },
         },
       ]);
 
@@ -226,19 +208,11 @@ describe("chat-models", () => {
           id: "gemini-2.5-pro",
           displayName: "Gemini 2.5 Pro",
           provider: "gemini",
-          capabilities: {
-            capabilities: ["streaming", "chat"],
-            metadata: { supportsStreaming: true },
-          },
         },
         {
           id: "gemini-2.5-flash",
           displayName: "Gemini 2.5 Flash",
           provider: "gemini",
-          capabilities: {
-            capabilities: ["streaming", "chat"],
-            metadata: { supportsStreaming: true },
-          },
         },
       ]);
 
@@ -396,10 +370,6 @@ describe("chat-models", () => {
           displayName: "gpt-4o",
           provider: "openai",
           createdAt: new Date(1715367049 * 1000).toISOString(),
-          capabilities: {
-            capabilities: ["streaming", "chat"],
-            metadata: { supportsStreaming: true },
-          },
         });
       });
     });
@@ -416,10 +386,6 @@ describe("chat-models", () => {
           displayName: "claude-3-5-sonnet",
           provider: "anthropic",
           createdAt: undefined,
-          capabilities: {
-            capabilities: ["streaming", "chat"],
-            metadata: { supportsStreaming: true },
-          },
         });
       });
 
@@ -434,10 +400,6 @@ describe("chat-models", () => {
           displayName: "gemini-2.5-pro",
           provider: "gemini",
           createdAt: undefined,
-          capabilities: {
-            capabilities: ["streaming", "chat"],
-            metadata: { supportsStreaming: true },
-          },
         });
       });
 
@@ -452,10 +414,6 @@ describe("chat-models", () => {
           displayName: "gpt-5",
           provider: "openai",
           createdAt: undefined,
-          capabilities: {
-            capabilities: ["streaming", "chat"],
-            metadata: { supportsStreaming: true },
-          },
         });
       });
     });

@@ -1,4 +1,9 @@
-import { RouteId, type SupportedProvider, SupportedProviders } from "@shared";
+import {
+  type ModelCapabilities,
+  RouteId,
+  type SupportedProvider,
+  SupportedProviders,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
@@ -31,6 +36,7 @@ export interface ModelInfo {
   displayName: string;
   provider: SupportedProvider;
   createdAt?: string;
+  capabilities?: ModelCapabilities;
 }
 
 /**

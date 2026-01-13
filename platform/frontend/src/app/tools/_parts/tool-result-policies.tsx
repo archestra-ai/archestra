@@ -1,4 +1,8 @@
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  CONTEXT_EXTERNAL_AGENT_ID,
+  CONTEXT_TEAM_IDS,
+} from "@shared";
 import { ArrowRightIcon, Plus } from "lucide-react";
 import { CodeText } from "@/components/code-text";
 import {
@@ -35,13 +39,8 @@ import {
 } from "@/lib/policy.utils";
 import { useTeams } from "@/lib/team.query";
 import { PolicyCard } from "./policy-card";
-import {
-  type PolicyCondition,
-  ToolResultPolicyCondition,
-} from "./tool-result-policy-condition";
-
-const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
-const CONTEXT_TEAM_IDS = "context.teamIds";
+import type { PolicyCondition } from "./tool-call-policy-condition";
+import { ToolResultPolicyCondition } from "./tool-result-policy-condition";
 
 function AttributePathExamples() {
   return (

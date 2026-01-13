@@ -1,4 +1,8 @@
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  CONTEXT_EXTERNAL_AGENT_ID,
+  CONTEXT_TEAM_IDS,
+} from "@shared";
 import { ArrowRightIcon, Plus } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
@@ -32,9 +36,6 @@ import {
   type PolicyCondition,
   ToolCallPolicyCondition,
 } from "./tool-call-policy-condition";
-
-const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
-const CONTEXT_TEAM_IDS = "context.teamIds";
 
 type ToolForPolicies = {
   id: string;

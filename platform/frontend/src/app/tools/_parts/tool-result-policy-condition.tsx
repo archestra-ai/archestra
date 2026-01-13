@@ -1,3 +1,4 @@
+import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@shared";
 import { toPath } from "lodash-es";
 import { Info, X } from "lucide-react";
 import { CaseSensitiveTooltip } from "@/components/case-sensitive-tooltip";
@@ -22,8 +23,6 @@ import { useOperators } from "@/lib/policy.query";
 import { useTeams } from "@/lib/team.query";
 import type { PolicyCondition } from "./tool-call-policy-condition";
 
-const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
-const CONTEXT_TEAM_IDS = "context.teamIds";
 type KeyItem = {
   value: string;
   label: string;

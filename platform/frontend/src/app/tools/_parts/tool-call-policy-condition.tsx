@@ -1,3 +1,4 @@
+import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@shared";
 import { Info, X } from "lucide-react";
 import { CaseSensitiveTooltip } from "@/components/case-sensitive-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
@@ -18,9 +19,6 @@ import {
 import { useUniqueExternalAgentIds } from "@/lib/interaction.query";
 import { useOperators } from "@/lib/policy.query";
 import { useTeams } from "@/lib/team.query";
-
-const CONTEXT_EXTERNAL_AGENT_ID = "context.externalAgentId";
-const CONTEXT_TEAM_IDS = "context.teamIds";
 
 export type PolicyCondition = {
   key: string;

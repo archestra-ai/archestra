@@ -1,12 +1,27 @@
-import { isAgentTool, isArchestraMcpServerTool } from "@shared";
+import {
+  CONTEXT_EXTERNAL_AGENT_ID,
+  CONTEXT_TEAM_IDS,
+  isAgentTool,
+  isArchestraMcpServerTool,
+} from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
-import type { ToolInvocation } from "@/types";
+import logger from "@/logging";
+import type {
+  AutonomyPolicyOperator,
+  GlobalToolPolicy,
+  ToolInvocation,
+} from "@/types";
 
 type EvaluationResult = {
   isAllowed: boolean;
   reason: string;
+};
+
+export type PolicyEvaluationContext = {
+  teamIds: string[];
+  externalAgentId?: string;
 };
 
 class ToolInvocationPolicyModel {
@@ -99,12 +114,27 @@ class ToolInvocationPolicyModel {
   }
 
   /**
+   * Delete all tool invocation policies for a specific tool.
+   * Used primarily in tests.
+   */
+  static async deleteByToolId(toolId: string): Promise<number> {
+    const result = await db
+      .delete(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId));
+
+    return result.rowCount ?? 0;
+  }
+
+  /**
    * Bulk upsert default policies (empty conditions) for multiple tools.
    * Updates existing default policies or creates new ones in a single transaction.
    */
   static async bulkUpsertDefaultPolicy(
     toolIds: string[],
-    action: "allow_when_context_is_untrusted" | "block_always",
+    action:
+      | "allow_when_context_is_untrusted"
+      | "block_when_context_is_untrusted"
+      | "block_always",
   ): Promise<{ updated: number; created: number }> {
     if (toolIds.length === 0) {
       return { updated: 0, created: 0 };
@@ -158,6 +188,81 @@ class ToolInvocationPolicyModel {
     return { updated, created };
   }
 
+  private static evaluateContextCondition(
+    key: string,
+    value: string,
+    operator: AutonomyPolicyOperator.SupportedOperator,
+    context: PolicyEvaluationContext,
+  ): boolean {
+    // Team matching - check if value is in teamIds array
+    if (key === CONTEXT_TEAM_IDS) {
+      switch (operator) {
+        case "contains":
+          return context.teamIds.includes(value);
+        case "notContains":
+          return !context.teamIds.includes(value);
+        default:
+          return false;
+      }
+    }
+
+    // Single value matching for other context fields
+    if (key === CONTEXT_EXTERNAL_AGENT_ID) {
+      const contextValue = context.externalAgentId;
+      switch (operator) {
+        case "equal":
+          return contextValue === value;
+        case "notEqual":
+          return contextValue !== value;
+        default:
+          return false;
+      }
+    }
+
+    return false;
+  }
+
+  private static evaluateInputCondition(
+    key: string,
+    value: string,
+    operator: AutonomyPolicyOperator.SupportedOperator,
+    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+    input: Record<string, any>,
+  ): boolean {
+    const argumentValue = get(input, key);
+    if (argumentValue === undefined) return false;
+
+    switch (operator) {
+      case "endsWith":
+        return (
+          typeof argumentValue === "string" && argumentValue.endsWith(value)
+        );
+      case "startsWith":
+        return (
+          typeof argumentValue === "string" && argumentValue.startsWith(value)
+        );
+      case "contains":
+        return (
+          typeof argumentValue === "string" && argumentValue.includes(value)
+        );
+      case "notContains":
+        return (
+          typeof argumentValue === "string" && !argumentValue.includes(value)
+        );
+      case "equal":
+        return argumentValue === value;
+      case "notEqual":
+        return argumentValue !== value;
+      case "regex":
+        return (
+          typeof argumentValue === "string" &&
+          new RegExp(value).test(argumentValue)
+        );
+      default:
+        return false;
+    }
+  }
+
   /**
    * Batch evaluate tool invocation policies for multiple tool calls at once.
    * This avoids N+1 queries by fetching all policies upfront.
@@ -171,8 +276,20 @@ class ToolInvocationPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
       toolInput: Record<string, any>;
     }>,
+    context: PolicyEvaluationContext,
     isContextTrusted: boolean,
+    globalToolPolicy: GlobalToolPolicy,
   ): Promise<EvaluationResult & { toolCallName?: string }> {
+    logger.debug(
+      { globalToolPolicy },
+      "ToolInvocationPolicy.evaluateBatch: global policy",
+    );
+
+    // YOLO mode: allow all tool calls immediately, skip policy evaluation
+    if (globalToolPolicy === "permissive") {
+      return { isAllowed: true, reason: "" };
+    }
+
     // Filter out Archestra tools and agent delegation tools (always allowed)
     const externalToolCalls = toolCalls.filter(
       (tc) =>
@@ -209,6 +326,11 @@ class ToolInvocationPolicyModel {
       .from(schema.toolInvocationPoliciesTable)
       .where(inArray(schema.toolInvocationPoliciesTable.toolId, toolIds));
 
+    logger.debug(
+      { allPolicies },
+      "ToolInvocationPolicy.evaluateBatch: evaluating policies",
+    );
+
     // Group policies by tool ID
     const policiesByToolId = new Map<
       string,
@@ -237,44 +359,25 @@ class ToolInvocationPolicyModel {
 
       for (const policy of specificPolicies) {
         // Check if all conditions match (AND logic)
-        const conditionsMatch = policy.conditions.every((condition) => {
-          const argumentValue = get(toolInput, condition.key);
-          if (argumentValue === undefined) return false;
-
-          switch (condition.operator) {
-            case "endsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.endsWith(condition.value)
+        const conditionsMatch = policy.conditions.every(
+          function evaluateCondition(condition) {
+            const { key, value, operator } = condition;
+            if (key.startsWith("context.")) {
+              return ToolInvocationPolicyModel.evaluateContextCondition(
+                key,
+                value,
+                operator,
+                context,
               );
-            case "startsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.startsWith(condition.value)
-              );
-            case "contains":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.includes(condition.value)
-              );
-            case "notContains":
-              return (
-                typeof argumentValue === "string" &&
-                !argumentValue.includes(condition.value)
-              );
-            case "equal":
-              return argumentValue === condition.value;
-            case "notEqual":
-              return argumentValue !== condition.value;
-            case "regex":
-              return (
-                typeof argumentValue === "string" &&
-                new RegExp(condition.value).test(argumentValue)
-              );
-            default:
-              return false;
-          }
-        });
+            }
+            return ToolInvocationPolicyModel.evaluateInputCondition(
+              key,
+              value,
+              operator,
+              toolInput,
+            );
+          },
+        );
 
         if (!conditionsMatch) continue;
 
@@ -286,6 +389,20 @@ class ToolInvocationPolicyModel {
             reason: policy.reason || "Policy violation",
             toolCallName,
           };
+        }
+
+        if (policy.action === "block_when_context_is_untrusted") {
+          // Allow when context is trusted, block when untrusted
+          if (!isContextTrusted) {
+            return {
+              isAllowed: false,
+              reason:
+                "Tool invocation blocked: context contains untrusted data",
+              toolCallName,
+            };
+          }
+          // Context is trusted, tool is allowed - continue to next tool
+          continue;
         }
 
         if (policy.action === "allow_when_context_is_untrusted") {
@@ -305,30 +422,56 @@ class ToolInvocationPolicyModel {
         continue; // Tool is allowed, move to next tool
       }
 
-      // No specific policy matched - fall back to default policy (empty conditions)
-      let defaultAllowsUntrusted = false;
+      if (defaultPolicies.length > 0) {
+        // No specific policy matched - fall back to default policy (empty conditions)
+        let defaultAllowsUntrusted = false;
 
-      for (const policy of defaultPolicies) {
-        if (policy.action === "block_always") {
+        for (const policy of defaultPolicies) {
+          if (policy.action === "block_always") {
+            return {
+              isAllowed: false,
+              reason:
+                policy.reason ||
+                "Tool invocation blocked: context contains untrusted data",
+              toolCallName,
+            };
+          }
+
+          if (policy.action === "block_when_context_is_untrusted") {
+            // Allow when context is trusted, block when untrusted
+            if (!isContextTrusted) {
+              return {
+                isAllowed: false,
+                reason:
+                  "Tool invocation blocked: context contains untrusted data",
+                toolCallName,
+              };
+            }
+            // Context is trusted, tool is allowed
+            continue;
+          }
+
+          if (policy.action === "allow_when_context_is_untrusted") {
+            defaultAllowsUntrusted = true;
+          }
+        }
+        // Check if tool is allowed when context is untrusted
+        if (!isContextTrusted && !defaultAllowsUntrusted) {
           return {
             isAllowed: false,
-            reason:
-              policy.reason ||
-              "Tool invocation blocked: context contains untrusted data",
+            reason: "Tool invocation blocked: context contains untrusted data",
             toolCallName,
           };
         }
-
-        if (policy.action === "allow_when_context_is_untrusted") {
-          defaultAllowsUntrusted = true;
-        }
+        continue; // Tool is allowed by default policy, skip global policy check
       }
 
-      // Check if tool is allowed when context is untrusted
-      if (!isContextTrusted && !defaultAllowsUntrusted) {
+      // No policies exist - block in untrusted context (restrictive mode only reaches here)
+      if (!isContextTrusted) {
         return {
           isAllowed: false,
-          reason: "Tool invocation blocked: context contains untrusted data",
+          reason:
+            "Tool invocation blocked: forbidden in untrusted context by default",
           toolCallName,
         };
       }

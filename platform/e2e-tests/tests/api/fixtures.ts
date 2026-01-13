@@ -3,6 +3,7 @@
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
 import { type APIRequestContext, test as base } from "@playwright/test";
+import type { SupportedProvider } from "@shared";
 import {
   API_BASE_URL,
   editorAuthFile,
@@ -160,7 +161,10 @@ const createToolInvocationPolicy = async (
   policy: {
     toolId: string;
     conditions: Array<{ key: string; operator: string; value: string }>;
-    action: "allow_when_context_is_untrusted" | "block_always";
+    action:
+      | "allow_when_context_is_untrusted"
+      | "block_when_context_is_untrusted"
+      | "block_always";
     reason?: string;
   },
 ) =>
@@ -199,7 +203,11 @@ const createTrustedDataPolicy = async (
   policy: {
     toolId: string;
     conditions: Array<{ key: string; operator: string; value: string }>;
-    action: "block_always" | "mark_as_trusted" | "sanitize_with_dual_llm";
+    action:
+      | "block_always"
+      | "mark_as_trusted"
+      | "mark_as_untrusted"
+      | "sanitize_with_dual_llm";
     description?: string;
   },
 ) =>
@@ -496,7 +504,7 @@ const createOptimizationRule = async (
   rule: {
     entityType: "organization" | "team" | "agent";
     entityId: string;
-    provider: "openai" | "anthropic" | "gemini";
+    provider: SupportedProvider;
     conditions: OptimizationRuleCondition[];
     targetModel: string;
     enabled?: boolean;
@@ -607,7 +615,7 @@ const getLimits = async (
 const createTokenPrice = async (
   request: APIRequestContext,
   tokenPrice: {
-    provider: "openai" | "anthropic" | "gemini";
+    provider: SupportedProvider;
     model: string;
     pricePerMillionInput: string;
     pricePerMillionOutput: string;

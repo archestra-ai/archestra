@@ -337,26 +337,33 @@ class McpServerModel {
       return false;
     }
 
+    // Clean up agent_tools that reference this server
+    // Must be done before deletion to ensure agents do not retain unusable tool assignments
+    // FK constraint would only null out the reference, not remove the assignment
+    try {
+      let deletedAgentTools = 0;
+      if (mcpServer.serverType === "local") {
+        deletedAgentTools =
+          await AgentToolModel.deleteByExecutionSourceMcpServerId(id);
+      } else {
+        deletedAgentTools =
+          await AgentToolModel.deleteByCredentialSourceMcpServerId(id);
+      }
+      if (deletedAgentTools > 0) {
+        logger.info(
+          `Deleted ${deletedAgentTools} agent tool assignments for MCP server: ${mcpServer.name}`,
+        );
+      }
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to clean up agent tools for MCP server ${mcpServer.name}:`,
+      );
+      // Continue with deletion even if agent tool cleanup fails
+    }
+
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
-      // Clean up agent_tools that use this server as execution source
-      // Must be done before deletion to ensure agents do not retain unusable tool assignments; FK constraint would only null out the reference, not remove the assignment
-      try {
-        const deletedAgentTools =
-          await AgentToolModel.deleteByExecutionSourceMcpServerId(id);
-        if (deletedAgentTools > 0) {
-          logger.info(
-            `Deleted ${deletedAgentTools} agent tool assignments for local MCP server: ${mcpServer.name}`,
-          );
-        }
-      } catch (error) {
-        logger.error(
-          { err: error },
-          `Failed to clean up agent tools for MCP server ${mcpServer.name}:`,
-        );
-        // Continue with deletion even if agent tool cleanup fails
-      }
-
       try {
         await McpServerRuntimeManager.removeMcpServer(id);
         logger.info(
@@ -527,7 +534,7 @@ class McpServerModel {
     serverName: string,
     catalogId?: string,
     secretId?: string,
-  ): Promise<boolean> {
+  ): Promise<{ isValid: boolean; errorMessage?: string }> {
     // Load secrets if secretId is provided
     let secrets: Record<string, unknown> = {};
     if (secretId) {
@@ -549,18 +556,21 @@ class McpServerModel {
             mcpServerId: "validation",
             secrets,
           });
-          return tools.length > 0;
+          return {
+            isValid: tools.length > 0,
+            errorMessage: tools.length > 0 ? undefined : "No tools found",
+          };
         }
       } catch (error) {
         logger.error(
           { err: error },
           `Validation failed for remote MCP server ${serverName}:`,
         );
-        return false;
+        return { isValid: false, errorMessage: (error as Error).message };
       }
     }
 
-    return false;
+    return { isValid: false, errorMessage: "No catalog ID provided" };
   }
 }
 

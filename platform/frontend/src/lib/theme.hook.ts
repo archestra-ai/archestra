@@ -1,30 +1,25 @@
-import {
-  DEFAULT_THEME_ID,
-  type OrganizationCustomFont,
-  type OrganizationTheme,
-} from "@shared";
+import { DEFAULT_THEME_ID, type OrganizationTheme } from "@shared";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { fontFamilyMap } from "@/config/themes";
-import { useOrganization, useUpdateOrganization } from "./organization.query";
+import { usePublicAppearance } from "./appearance.query";
+import { useUpdateOrganization } from "./organization.query";
 
 const THEME_STORAGE_KEY = "archestra-theme";
-const FONT_STORAGE_KEY = "archestra-font";
 const DEFAULT_THEME: OrganizationTheme = DEFAULT_THEME_ID as OrganizationTheme;
-const DEFAULT_FONT: OrganizationCustomFont = "lato";
 
 export function useOrgTheme() {
   const pathname = usePathname();
 
-  // Don't load org theme on auth pages to avoid 401 errors during 2FA flow
+  // Check if we're on an auth page (login, signup, etc.)
   const isAuthPage = pathname?.startsWith("/auth/");
 
-  const { data, isLoading: isLoadingAppearance } = useOrganization(!isAuthPage);
-  const {
-    theme: themeFromBackend,
-    customFont: fontFromBackend,
-    logo,
-  } = data ?? {};
+  // Always use public appearance endpoint - it returns the same data for all pages
+  // and works without authentication
+  const { data: appearance, isLoading: isLoadingAppearance } =
+    usePublicAppearance();
+
+  const { theme: themeFromBackend, logo } = appearance ?? {};
+
   const updateThemeMutation = useUpdateOrganization(
     "Appearance settings updated",
     "Failed to update appearance settings",
@@ -35,78 +30,63 @@ export function useOrgTheme() {
       ? (localStorage.getItem(THEME_STORAGE_KEY) as OrganizationTheme | null)
       : null;
 
-  const fontFromLocalStorage =
-    typeof window !== "undefined"
-      ? (localStorage.getItem(
-          FONT_STORAGE_KEY,
-        ) as OrganizationCustomFont | null)
-      : null;
-
   const [currentUITheme, setCurrentUITheme] = useState<OrganizationTheme>(
-    themeFromLocalStorage || themeFromBackend || DEFAULT_THEME,
-  );
-
-  const [currentUIFont, setCurrentUIFont] = useState<OrganizationCustomFont>(
-    fontFromLocalStorage || fontFromBackend || DEFAULT_FONT,
+    themeFromBackend || themeFromLocalStorage || DEFAULT_THEME,
   );
 
   const saveAppearance = useCallback(
-    (themeId: OrganizationTheme, fontId: OrganizationCustomFont) => {
+    (themeId: OrganizationTheme) => {
       setCurrentUITheme(themeId);
-      setCurrentUIFont(fontId);
       updateThemeMutation.mutate({
         theme: themeId,
-        customFont: fontId,
       });
       applyThemeInLocalStorage(themeId);
-      applyFontInLocalStorage(fontId);
     },
     [updateThemeMutation],
   );
 
   // whenever currentUITheme changes, apply the theme on the UI
+  // Font is automatically applied via CSS --font-sans variable in the theme class
   useEffect(() => {
     applyThemeOnUI(currentUITheme);
   }, [currentUITheme]);
 
-  // whenever currentUIFont changes, apply the font on the UI
+  // whenever themeFromBackend is loaded and is different from themeFromLocalStorage, update local storage and UI
+  // Only sync after actual data loads (not during placeholder loading) to prevent flicker
   useEffect(() => {
-    applyFontOnUI(currentUIFont);
-  }, [currentUIFont]);
-
-  // whenever themeFromBackend is loaded and is different from themeFromLocalStorage, update local storage
-  useEffect(() => {
-    if (themeFromBackend && themeFromBackend !== themeFromLocalStorage) {
+    if (
+      !isLoadingAppearance &&
+      themeFromBackend &&
+      themeFromBackend !== themeFromLocalStorage
+    ) {
       applyThemeInLocalStorage(themeFromBackend);
+      setCurrentUITheme(themeFromBackend);
     }
-  }, [themeFromBackend, themeFromLocalStorage]);
+  }, [themeFromBackend, themeFromLocalStorage, isLoadingAppearance]);
 
-  // whenever fontFromBackend is loaded and is different from fontFromLocalStorage, update local storage
-  useEffect(() => {
-    if (fontFromBackend && fontFromBackend !== fontFromLocalStorage) {
-      applyFontInLocalStorage(fontFromBackend);
-    }
-  }, [fontFromBackend, fontFromLocalStorage]);
-
-  // Don't load org theme on auth pages to avoid 401 errors during 2FA flow
+  // For auth pages, return limited data (read-only appearance, no update functions)
   if (isAuthPage) {
-    return null;
+    return {
+      currentUITheme: currentUITheme || DEFAULT_THEME,
+      themeFromBackend,
+      setPreviewTheme: undefined,
+      saveAppearance: undefined,
+      logo,
+      DEFAULT_THEME,
+      isLoadingAppearance,
+      applyThemeOnUI,
+    };
   }
 
   return {
     currentUITheme: currentUITheme || DEFAULT_THEME,
-    currentUIFont: currentUIFont || DEFAULT_FONT,
     themeFromBackend,
-    fontFromBackend,
     setPreviewTheme: setCurrentUITheme,
-    setPreviewFont: setCurrentUIFont,
     saveAppearance,
     logo,
     DEFAULT_THEME,
-    DEFAULT_FONT,
     isLoadingAppearance,
     applyThemeOnUI,
-    applyFontOnUI,
   };
 }
 
@@ -121,18 +101,6 @@ const applyThemeOnUI = (themeId: OrganizationTheme) => {
   root.classList.add(`theme-${themeId}`);
 };
 
-const applyFontOnUI = (fontId: OrganizationCustomFont) => {
-  const root = document.documentElement;
-  const fontFamily = fontFamilyMap[fontId];
-  if (fontFamily) {
-    root.style.setProperty("--font-sans", fontFamily);
-  }
-};
-
 const applyThemeInLocalStorage = (themeId: OrganizationTheme) => {
   localStorage.setItem(THEME_STORAGE_KEY, themeId);
-};
-
-const applyFontInLocalStorage = (fontId: OrganizationCustomFont) => {
-  localStorage.setItem(FONT_STORAGE_KEY, fontId);
 };

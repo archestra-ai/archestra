@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
+  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -10,10 +11,22 @@ const {
   createInternalMcpCatalogItem,
   deleteInternalMcpCatalogItem,
   getInternalMcpCatalog,
+  getInternalMcpCatalogTools,
   updateInternalMcpCatalogItem,
 } = archestraApiSdk;
 
+/** Non-suspense version */
 export function useInternalMcpCatalog(params?: {
+  initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+}) {
+  return useQuery({
+    queryKey: ["mcp-catalog"],
+    queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
+    initialData: params?.initialData,
+  });
+}
+
+export function useInternalMcpCatalogSuspense(params?: {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
 }) {
   return useSuspenseQuery({
@@ -89,5 +102,28 @@ export function useDeleteInternalMcpCatalogItem() {
       console.error("Delete error:", error);
       toast.error("Failed to delete catalog item");
     },
+  });
+}
+
+/**
+ * Fetch tools for a catalog item by catalog ID.
+ * Used for builtin servers (like Archestra) that don't have a traditional MCP server installation.
+ */
+export function useCatalogTools(catalogId: string | null) {
+  return useQuery({
+    queryKey: ["mcp-catalog", catalogId, "tools"],
+    queryFn: async () => {
+      if (!catalogId) return [];
+      try {
+        const response = await getInternalMcpCatalogTools({
+          path: { id: catalogId },
+        });
+        return response.data ?? [];
+      } catch (error) {
+        console.error("Failed to fetch catalog tools:", error);
+        return [];
+      }
+    },
+    enabled: !!catalogId,
   });
 }

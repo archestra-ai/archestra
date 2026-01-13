@@ -11,7 +11,11 @@
  * - src/routes/proxy/adapterV2/
  *
  * This directory should be removed after full migration to v2 routes.
+ *
+ * Note: vLLM uses openai adapters since it's OpenAI-compatible
  */
 export * as anthropic from "./anthropic";
 export * as gemini from "./gemini";
 export * as openai from "./openai";
+// vLLM is OpenAI-compatible, so it uses the openai adapter
+export * as vllm from "./openai";

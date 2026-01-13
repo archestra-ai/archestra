@@ -45,14 +45,14 @@ test.describe("MCP Install", () => {
     await adminPage.getByTestId(E2eTestId.AddCatalogItemButton).first().click();
     await adminPage.waitForLoadState("networkidle");
 
-    // Wait for the connect button to appear after adding to registry
-    const connectButton = adminPage.getByTestId(
-      `connect-catalog-item-button-${CONTEXT7_CATALOG_ITEM_NAME}`,
+    // Wait for the card to appear in the registry (more robust than waiting for button directly)
+    const serverCard = adminPage.getByTestId(
+      `${E2eTestId.McpServerCard}-${CONTEXT7_CATALOG_ITEM_NAME}`,
     );
-    await connectButton.waitFor({ state: "visible", timeout: 30000 });
+    await serverCard.waitFor({ state: "visible", timeout: 30000 });
 
-    // install the server
-    await connectButton.click();
+    // Click the Connect button within the card
+    await serverCard.getByRole("button", { name: "Connect" }).click();
     await adminPage.waitForTimeout(2_000);
 
     // fill the api key (just fake value)
@@ -65,10 +65,7 @@ test.describe("MCP Install", () => {
     await adminPage.waitForLoadState("networkidle");
 
     // Check that tools are discovered
-    await adminPage
-      .getByTestId(`mcp-server-card-${CONTEXT7_CATALOG_ITEM_NAME}`)
-      .getByText("out of 2")
-      .waitFor({ state: "visible" });
+    await serverCard.getByText("out of 2").waitFor({ state: "visible" });
 
     // cleanup
     await deleteCatalogItem(
@@ -139,7 +136,7 @@ test.describe("MCP Install", () => {
       );
     });
 
-    test("PAT", async ({ adminPage, extractCookieHeaders }) => {
+    test("Bearer Token", async ({ adminPage, extractCookieHeaders }) => {
       await deleteCatalogItem(
         adminPage,
         extractCookieHeaders,
@@ -166,7 +163,7 @@ test.describe("MCP Install", () => {
         .getByRole("textbox", { name: "Server URL *" })
         .fill(HF_URL);
       await adminPage
-        .getByRole("radio", { name: "Personal Access Token (PAT)" })
+        .getByRole("radio", { name: /"Authorization: Bearer/ })
         .click();
 
       // add catalog item to the registry
@@ -180,18 +177,18 @@ test.describe("MCP Install", () => {
         .click();
       await adminPage.waitForLoadState("networkidle");
 
-      // Check that we have input for entering the PAT and fill it with fake value
+      // Check that we have input for entering the token and fill it with fake value
       await adminPage
         .getByRole("textbox", { name: "Access Token *" })
-        .fill("fake-pat");
+        .fill("fake-token");
 
       // try to install the server
       await clickButton({ page: adminPage, options: { name: "Install" } });
       await adminPage.waitForLoadState("networkidle");
 
-      // It should fail with error message because PAT is invalid and remote hf refuses to install the server
+      // It should fail with error message because token is invalid and remote hf refuses to install the server
       await adminPage
-        .getByText("Failed to install")
+        .getByText(/Failed to connect to MCP server/)
         .waitFor({ state: "visible" });
 
       // cleanup

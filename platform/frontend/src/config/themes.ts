@@ -6,13 +6,11 @@
  * Single source of truth: shared/themes/tweakcn-themes.json
  */
 
-import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
+import type { OrganizationTheme } from "@shared";
 import {
   DEFAULT_THEME_ID,
   getThemeById as getThemeByIdShared,
-  getThemeCategories as getThemeCategoriesShared,
   getThemeMetadata,
-  getThemesByCategory as getThemesByCategoryShared,
   type ThemeMetadata as ThemeMetadataShared,
 } from "@shared";
 
@@ -40,52 +38,4 @@ export function getThemeById(id: OrganizationTheme): ThemeMetadata | undefined {
     name:
       theme.id === DEFAULT_THEME_ID ? `${theme.name} (Default)` : theme.name,
   };
-}
-
-/**
- * Get themes by category
- */
-export function getThemesByCategory(
-  category: ThemeMetadata["category"],
-): ThemeMetadata[] {
-  return getThemesByCategoryShared(category).map((theme) => ({
-    ...theme,
-    name:
-      theme.id === DEFAULT_THEME_ID ? `${theme.name} (Default)` : theme.name,
-  }));
-}
-
-/**
- * Get all theme categories
- */
-export function getThemeCategories(): ReturnType<
-  typeof getThemeCategoriesShared
-> {
-  return getThemeCategoriesShared();
-}
-
-export const fontFamilyMap: Record<OrganizationCustomFont, string> = {
-  lato: '"Lato", system-ui, sans-serif',
-  inter: '"Inter", system-ui, sans-serif',
-  "open-sans": '"Open Sans", system-ui, sans-serif',
-  roboto: '"Roboto", system-ui, sans-serif',
-  "source-sans-pro": '"Source Sans Pro", system-ui, sans-serif',
-};
-
-/**
- * Available font options
- */
-export const fonts: Array<{ id: OrganizationCustomFont; name: string }> = [
-  { id: "lato", name: "Lato (Default)" },
-  { id: "inter", name: "Inter" },
-  { id: "open-sans", name: "Open Sans" },
-  { id: "roboto", name: "Roboto" },
-  { id: "source-sans-pro", name: "Source Sans Pro" },
-];
-
-/**
- * Get font by ID
- */
-export function getFontById(id: OrganizationCustomFont) {
-  return fonts.find((font) => font.id === id);
 }

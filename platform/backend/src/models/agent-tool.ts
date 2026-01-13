@@ -481,9 +481,11 @@ class AgentToolModel {
     }
 
     // Exclude Archestra built-in tools for test isolation
+    // Note: Use escape character to treat underscores literally (not as wildcards)
+    // Double backslash needed: JS consumes one level, SQL gets the other
     if (filters?.excludeArchestraTools) {
       whereConditions.push(
-        sql`${schema.toolsTable.name} NOT LIKE 'archestra__%'`,
+        sql`${schema.toolsTable.name} NOT LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
       );
     }
 
@@ -599,6 +601,21 @@ class AgentToolModel {
       .delete(schema.agentToolsTable)
       .where(
         eq(schema.agentToolsTable.executionSourceMcpServerId, mcpServerId),
+      );
+    return result.rowCount ?? 0;
+  }
+
+  /**
+   * Delete all agent-tool assignments that use a specific MCP server as their credential source.
+   * Used when a remote MCP server is deleted/uninstalled.
+   */
+  static async deleteByCredentialSourceMcpServerId(
+    mcpServerId: string,
+  ): Promise<number> {
+    const result = await db
+      .delete(schema.agentToolsTable)
+      .where(
+        eq(schema.agentToolsTable.credentialSourceMcpServerId, mcpServerId),
       );
     return result.rowCount ?? 0;
   }

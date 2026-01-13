@@ -18,6 +18,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -32,12 +33,30 @@ import {
   type ToonCompressionResult,
 } from "@/types";
 import * as utils from "./utils";
+import type { SessionSource } from "./utils/session-id";
 
 export interface Context {
   organizationId: string;
   agentId?: string;
   externalAgentId?: string;
   userId?: string;
+  sessionId?: string | null;
+  sessionSource?: SessionSource;
+}
+
+function getProviderMessagesCount(messages: unknown): number | null {
+  if (Array.isArray(messages)) {
+    return messages.length;
+  }
+
+  if (messages && typeof messages === "object") {
+    const candidate = messages as Record<string, unknown>;
+    if (Array.isArray(candidate.messages)) {
+      return candidate.messages.length;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -59,15 +78,32 @@ export async function handleLLMProxy<
   const { agentId, externalAgentId } = context;
   const providerName = provider.provider;
 
+  // Extract session info if not already provided in context
+  const sessionInfo =
+    context.sessionId !== undefined
+      ? { sessionId: context.sessionId, sessionSource: context.sessionSource }
+      : utils.sessionId.extractSessionInfo(
+          headers as Record<string, string | string[] | undefined>,
+          body as
+            | {
+                metadata?: { user_id?: string | null };
+                user?: string | null;
+              }
+            | undefined,
+        );
+  const { sessionId, sessionSource } = sessionInfo;
+
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter();
+  const providerMessages = requestAdapter.getProviderMessages();
+  const messagesCount = getProviderMessagesCount(providerMessages);
 
   logger.debug(
     {
       agentId,
       model: requestAdapter.getModel(),
       stream: requestAdapter.isStreaming(),
-      messagesCount: requestAdapter.getProviderMessages(),
+      messagesCount,
       toolsCount: requestAdapter.getTools().length,
     },
     `[${providerName}Proxy] handleLLMProxy: request received`,
@@ -212,11 +248,19 @@ export async function handleLLMProxy<
       }
     }
 
+    // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
+    const globalToolPolicy =
+      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+
+    // Fetch team IDs for policy evaluation context (needed for trusted data evaluation)
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
+
     // Evaluate trusted data policies
     logger.debug(
       {
         resolvedAgentId,
         considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+        globalToolPolicy,
       },
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
@@ -229,6 +273,8 @@ export async function handleLLMProxy<
         apiKey,
         providerName,
         resolvedAgent.considerContextUntrusted,
+        globalToolPolicy,
+        { teamIds, externalAgentId },
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {
@@ -318,6 +364,15 @@ export async function handleLLMProxy<
     // Extract enabled tool names for filtering in evaluatePolicies
     const enabledToolNames = new Set(tools.map((t) => t.name).filter(Boolean));
 
+    // Convert headers to Record<string, string> for policy evaluation context
+    const headersRecord: Record<string, string> = {};
+    const rawHeaders = headers as Record<string, unknown>;
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (typeof value === "string") {
+        headersRecord[key] = value;
+      }
+    }
+
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
@@ -332,8 +387,12 @@ export async function handleLLMProxy<
         requestAdapter.getOriginalRequest(),
         toonStats,
         enabledToolNames,
+        globalToolPolicy,
         externalAgentId,
         context.userId,
+        sessionId,
+        sessionSource,
+        teamIds,
       );
     } else {
       return handleNonStreaming(
@@ -348,8 +407,12 @@ export async function handleLLMProxy<
         requestAdapter.getOriginalRequest(),
         toonStats,
         enabledToolNames,
+        globalToolPolicy,
         externalAgentId,
         context.userId,
+        sessionId,
+        sessionSource,
+        teamIds,
       );
     }
   } catch (error) {
@@ -385,8 +448,12 @@ async function handleStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
+  globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
   userId?: string,
+  sessionId?: string | null,
+  sessionSource?: SessionSource,
+  teamIds?: string[],
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -474,8 +541,13 @@ async function handleStreaming<
       toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
         toolCallsForPolicy,
         agent.id,
+        {
+          teamIds: teamIds ?? [],
+          externalAgentId,
+        },
         contextIsTrusted,
         enabledToolNames,
+        globalToolPolicy,
       );
 
       logger.info(
@@ -574,6 +646,8 @@ async function handleStreaming<
         profileId: agent.id,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -615,8 +689,12 @@ async function handleNonStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
+  globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
   userId?: string,
+  sessionId?: string | null,
+  sessionSource?: SessionSource,
+  teamIds?: string[],
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -659,8 +737,13 @@ async function handleNonStreaming<
             : JSON.stringify(tc.arguments),
       })),
       agent.id,
+      {
+        teamIds: teamIds ?? [],
+        externalAgentId,
+      },
       contextIsTrusted,
       enabledToolNames,
+      globalToolPolicy,
     );
 
     if (toolInvocationRefusal) {
@@ -708,6 +791,8 @@ async function handleNonStreaming<
         profileId: agent.id,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -759,6 +844,8 @@ async function handleNonStreaming<
     profileId: agent.id,
     externalAgentId,
     userId,
+    sessionId,
+    sessionSource,
     type: provider.interactionType,
     // Cast generic types to interaction types - valid at runtime
     request: originalRequest as unknown as InteractionRequest,
@@ -790,10 +877,20 @@ function handleError(
 ): FastifyReply | never {
   logger.error(error);
 
-  const statusCode =
-    error instanceof Error && "status" in error
-      ? (error.status as 400 | 403 | 404 | 429 | 500)
-      : 500;
+  // Extract status code from error, checking multiple common property names
+  // and ensuring the value is a valid number (not undefined/null)
+  let statusCode: number = 500;
+  if (error instanceof Error) {
+    const errorObj = error as Error & {
+      status?: number;
+      statusCode?: number;
+    };
+    if (typeof errorObj.status === "number") {
+      statusCode = errorObj.status;
+    } else if (typeof errorObj.statusCode === "number") {
+      statusCode = errorObj.statusCode;
+    }
+  }
 
   const errorMessage = extractErrorMessage(error);
 

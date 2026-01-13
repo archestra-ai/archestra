@@ -96,7 +96,7 @@ export function useInstallMcpServer() {
           typeof error.error === "string"
             ? error.error
             : error.error?.message || "Unknown error";
-        toast.error(`Failed to install ${data.name}: ${msg}`);
+        toast.error(msg);
       }
       return { installedServer, dontShowToast: data.dontShowToast };
     },

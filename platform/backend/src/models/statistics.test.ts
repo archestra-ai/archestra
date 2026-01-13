@@ -410,6 +410,7 @@ describe("StatisticsModel", () => {
           requests: 10,
           inputTokens: 1000,
           outputTokens: 500,
+          cost: 0.05,
         },
         {
           timeBucket: sameTimestamp,
@@ -417,6 +418,7 @@ describe("StatisticsModel", () => {
           requests: 5,
           inputTokens: 800,
           outputTokens: 400,
+          cost: 0.08,
         },
       ];
 
@@ -448,6 +450,7 @@ describe("StatisticsModel", () => {
           requests: 10,
           inputTokens: 1000,
           outputTokens: 500,
+          cost: 0.05,
         },
         {
           timeBucket: slightlyLater,
@@ -455,6 +458,7 @@ describe("StatisticsModel", () => {
           requests: 5,
           inputTokens: 500,
           outputTokens: 250,
+          cost: 0.025,
         },
       ];
 
@@ -467,6 +471,7 @@ describe("StatisticsModel", () => {
       expect(result[0].requests).toBe(15);
       expect(result[0].inputTokens).toBe(1500);
       expect(result[0].outputTokens).toBe(750);
+      expect(result[0].cost).toBeCloseTo(0.075);
     });
 
     test("should preserve separate entries for different teams in same time bucket", () => {
@@ -480,6 +485,7 @@ describe("StatisticsModel", () => {
           requests: 20,
           inputTokens: 2000,
           outputTokens: 1000,
+          cost: 0.1,
         },
         {
           timeBucket: sameTimestamp,
@@ -488,6 +494,7 @@ describe("StatisticsModel", () => {
           requests: 15,
           inputTokens: 1500,
           outputTokens: 750,
+          cost: 0.075,
         },
       ];
 
@@ -515,6 +522,7 @@ describe("StatisticsModel", () => {
           requests: 100,
           inputTokens: 10000,
           outputTokens: 5000,
+          cost: 0.5,
         },
         {
           timeBucket: sameTimestamp,
@@ -524,6 +532,7 @@ describe("StatisticsModel", () => {
           requests: 50,
           inputTokens: 5000,
           outputTokens: 2500,
+          cost: 0.25,
         },
       ];
 
@@ -559,6 +568,7 @@ describe("StatisticsModel", () => {
           requests: 10,
           inputTokens: 1000,
           outputTokens: 500,
+          cost: 0.05,
         },
       ];
 
@@ -576,6 +586,7 @@ describe("StatisticsModel", () => {
           requests: 5,
           inputTokens: 500,
           outputTokens: 250,
+          cost: 0.025,
         },
         {
           timeBucket: "2024-01-15T10:00:00.000Z",
@@ -583,6 +594,7 @@ describe("StatisticsModel", () => {
           requests: 10,
           inputTokens: 1000,
           outputTokens: 500,
+          cost: 0.05,
         },
         {
           timeBucket: "2024-01-15T10:15:00.000Z",
@@ -590,6 +602,7 @@ describe("StatisticsModel", () => {
           requests: 8,
           inputTokens: 800,
           outputTokens: 400,
+          cost: 0.04,
         },
       ];
 
@@ -613,6 +626,7 @@ describe("StatisticsModel", () => {
           requests: 10,
           inputTokens: 1000,
           outputTokens: 500,
+          cost: 0.05,
         },
         {
           timeBucket: "2024-01-15T10:00:00.000Z",
@@ -620,6 +634,7 @@ describe("StatisticsModel", () => {
           requests: 5,
           inputTokens: 500,
           outputTokens: 250,
+          cost: 0.025,
         },
       ];
 
@@ -641,6 +656,7 @@ describe("StatisticsModel", () => {
           requests: 10,
           inputTokens: 1000,
           outputTokens: 500,
+          cost: 0.05,
         },
         {
           timeBucket: "2024-01-15T10:02:00.000Z", // Same bucket as above
@@ -648,6 +664,7 @@ describe("StatisticsModel", () => {
           requests: 5,
           inputTokens: 500,
           outputTokens: 250,
+          cost: 0.025,
         },
         {
           timeBucket: "2024-01-15T10:01:00.000Z",
@@ -655,6 +672,7 @@ describe("StatisticsModel", () => {
           requests: 8,
           inputTokens: 800,
           outputTokens: 400,
+          cost: 0.08,
         },
         // Second 5-minute bucket (10:10-10:15) - two models
         {
@@ -663,6 +681,7 @@ describe("StatisticsModel", () => {
           requests: 20,
           inputTokens: 2000,
           outputTokens: 1000,
+          cost: 0.1,
         },
         {
           timeBucket: "2024-01-15T10:12:00.000Z",
@@ -670,6 +689,7 @@ describe("StatisticsModel", () => {
           requests: 12,
           inputTokens: 1200,
           outputTokens: 600,
+          cost: 0.12,
         },
       ];
 
@@ -707,6 +727,33 @@ describe("StatisticsModel", () => {
           new Date(r.timeBucket).getUTCMinutes() === 10,
       );
       expect(bucket2Claude?.requests).toBe(12);
+    });
+
+    test("should aggregate cost field correctly", () => {
+      // Verify cost is aggregated correctly when grouping
+      const data = [
+        {
+          timeBucket: "2024-01-15T10:01:00.000Z",
+          model: "gpt-4",
+          requests: 10,
+          inputTokens: 1000,
+          outputTokens: 500,
+          cost: 0.05,
+        },
+        {
+          timeBucket: "2024-01-15T10:02:00.000Z",
+          model: "gpt-4",
+          requests: 5,
+          inputTokens: 500,
+          outputTokens: 250,
+          cost: 0.1, // Different cost rate
+        },
+      ];
+
+      const result = StatisticsModel.groupTimeSeries(data, "1h", "model");
+
+      expect(result).toHaveLength(1);
+      expect(result[0].cost).toBeCloseTo(0.15);
     });
   });
 });

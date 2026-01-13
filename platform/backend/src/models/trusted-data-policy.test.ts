@@ -22,6 +22,11 @@ describe("TrustedDataPolicyModel", () => {
       await makeAgentTool(agent.id, tool2.id);
       await makeAgentTool(agent.id, tool3.id);
 
+      // Delete auto-created default policies to set up our own
+      await TrustedDataPolicyModel.deleteByToolId(tool1.id);
+      await TrustedDataPolicyModel.deleteByToolId(tool2.id);
+      await TrustedDataPolicyModel.deleteByToolId(tool3.id);
+
       // Create default policies for different treatments
       await makeTrustedDataPolicy(tool1.id, {
         conditions: [],
@@ -40,12 +45,17 @@ describe("TrustedDataPolicyModel", () => {
       });
 
       // Evaluate multiple tools in bulk
-      const results = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
-        { toolName: "tool-1", toolOutput: { value: "data1" } },
-        { toolName: "tool-2", toolOutput: { status: "safe" } },
-        { toolName: "tool-3", toolOutput: { value: "data3" } },
-        { toolName: "unknown-tool", toolOutput: { value: "data4" } },
-      ]);
+      const results = await TrustedDataPolicyModel.evaluateBulk(
+        agent.id,
+        [
+          { toolName: "tool-1", toolOutput: { value: "data1" } },
+          { toolName: "tool-2", toolOutput: { status: "safe" } },
+          { toolName: "tool-3", toolOutput: { value: "data3" } },
+          { toolName: "unknown-tool", toolOutput: { value: "data4" } },
+        ],
+        "restrictive",
+        { teamIds: [] },
+      );
 
       expect(results.size).toBe(4);
 
@@ -108,10 +118,15 @@ describe("TrustedDataPolicyModel", () => {
       });
 
       // Test with spam email (should be blocked)
-      const spamResults = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
-        { toolName: "email-tool", toolOutput: { from: "user@spam.com" } },
-        { toolName: "file-tool", toolOutput: { path: "/etc/passwd" } },
-      ]);
+      const spamResults = await TrustedDataPolicyModel.evaluateBulk(
+        agent.id,
+        [
+          { toolName: "email-tool", toolOutput: { from: "user@spam.com" } },
+          { toolName: "file-tool", toolOutput: { path: "/etc/passwd" } },
+        ],
+        "restrictive",
+        { teamIds: [] },
+      );
 
       // Email with spam.com - blocked (index 0)
       const spamEmailResult = spamResults.get("0");
@@ -124,9 +139,12 @@ describe("TrustedDataPolicyModel", () => {
       expect(fileResult?.reason).toContain("Block sensitive files");
 
       // Test with safe email (should not be blocked)
-      const safeResults = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
-        { toolName: "email-tool", toolOutput: { from: "user@safe.com" } },
-      ]);
+      const safeResults = await TrustedDataPolicyModel.evaluateBulk(
+        agent.id,
+        [{ toolName: "email-tool", toolOutput: { from: "user@safe.com" } }],
+        "restrictive",
+        { teamIds: [] },
+      );
 
       const safeEmailResult = safeResults.get("0");
       expect(safeEmailResult?.isBlocked).toBe(false);
@@ -136,11 +154,16 @@ describe("TrustedDataPolicyModel", () => {
     test("handles Archestra tools in bulk", async ({ makeAgent }) => {
       const agent = await makeAgent();
 
-      const results = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
-        { toolName: "archestra__whoami", toolOutput: { user: "test" } },
-        { toolName: "regular-tool", toolOutput: { data: "test" } },
-        { toolName: "archestra__create_profile", toolOutput: { id: "123" } },
-      ]);
+      const results = await TrustedDataPolicyModel.evaluateBulk(
+        agent.id,
+        [
+          { toolName: "archestra__whoami", toolOutput: { user: "test" } },
+          { toolName: "regular-tool", toolOutput: { data: "test" } },
+          { toolName: "archestra__create_profile", toolOutput: { id: "123" } },
+        ],
+        "restrictive",
+        { teamIds: [] },
+      );
 
       // Archestra tools should be trusted (indices 0 and 2)
       const whoamiResult = results.get("0");
@@ -166,6 +189,8 @@ describe("TrustedDataPolicyModel", () => {
       const agent = await makeAgent();
       const tool = await makeTool({ name: "test-tool" });
       await makeAgentTool(agent.id, tool.id);
+      // Delete auto-created default policies to set up our own
+      await TrustedDataPolicyModel.deleteByToolId(tool.id);
       await makeTrustedDataPolicy(tool.id, {
         conditions: [],
         action: "mark_as_trusted",
@@ -176,6 +201,8 @@ describe("TrustedDataPolicyModel", () => {
         agent.id,
         "test-tool",
         { data: "test" },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.isTrusted).toBe(true);
@@ -210,6 +237,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: "some data",
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -234,6 +263,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { source: "trusted-api", data: "some data" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -258,6 +289,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { source: "untrusted-api", data: "some data" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -283,6 +316,8 @@ describe("TrustedDataPolicyModel", () => {
         );
         if (!trustedTool) throw new Error("Tool not found");
         await AgentToolModel.create(agentId, trustedTool.id, {});
+        // Delete auto-created default policies to set up our own
+        await TrustedDataPolicyModel.deleteByToolId(trustedTool.id);
         await makeTrustedDataPolicy(trustedTool.id, {
           conditions: [],
           action: "mark_as_trusted",
@@ -292,6 +327,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           "trusted-by-default-tool",
           { value: "any data" },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -314,6 +351,8 @@ describe("TrustedDataPolicyModel", () => {
         );
         if (!trustedTool) throw new Error("Tool not found");
         await AgentToolModel.create(agentId, trustedTool.id, {});
+        // Delete auto-created default policies to set up our own
+        await TrustedDataPolicyModel.deleteByToolId(trustedTool.id);
 
         // Create a default trusted policy
         await makeTrustedDataPolicy(trustedTool.id, {
@@ -332,6 +371,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           "trusted-by-default-with-policies",
           { value: { normal: "data" } },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -372,6 +413,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           "trusted-default-with-matching-policy",
           { value: { verified: "true" } },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -393,6 +436,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { status: "verified" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -400,6 +445,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { status: "unverified" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -419,6 +466,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "trusted" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -426,6 +475,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "untrusted" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -445,6 +496,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { url: "https://api.trusted-domain.com/data" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -452,6 +505,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { url: "https://untrusted.com/data" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -471,6 +526,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { content: "This is safe content" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -478,6 +535,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { content: "This contains malicious code" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -497,6 +556,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { path: "/trusted/data/file.json" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -504,6 +565,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { path: "/untrusted/data/file.json" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -523,6 +586,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { email: "user@company.com" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -530,6 +595,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { email: "user@external.com" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -549,6 +616,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { id: "ABC-12345" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -556,6 +625,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { id: "invalid-id" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -589,6 +660,8 @@ describe("TrustedDataPolicyModel", () => {
               ],
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -604,6 +677,8 @@ describe("TrustedDataPolicyModel", () => {
               ],
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -626,6 +701,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { items: [] },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(false);
       });
@@ -648,6 +725,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { items: "not an array" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(false);
       });
@@ -684,6 +763,8 @@ describe("TrustedDataPolicyModel", () => {
               },
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
@@ -702,6 +783,8 @@ describe("TrustedDataPolicyModel", () => {
               },
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(untrustedResult.isTrusted).toBe(false);
       });
@@ -734,6 +817,8 @@ describe("TrustedDataPolicyModel", () => {
               },
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(false);
       });
@@ -757,6 +842,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { source: "malicious", data: "some data" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -787,6 +874,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { type: "email", from: "hacker@evil.com" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -817,6 +906,8 @@ describe("TrustedDataPolicyModel", () => {
               ],
             },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
@@ -846,6 +937,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { source: "trusted" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -868,6 +961,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { domain: "evil.blocked.com" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(blockedResult.isBlocked).toBe(true);
 
@@ -875,6 +970,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { domain: "safe.com" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(allowedResult.isBlocked).toBe(false);
       });
@@ -911,11 +1008,93 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           "default-trusted-tool",
           { value: { dangerous: "true", other: "data" } },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(false);
         expect(result.isBlocked).toBe(true);
         expect(result.reason).toContain("Block dangerous data");
+      });
+    });
+
+    describe("multiple conditions (AND logic)", () => {
+      test("applies when all output conditions match", async ({
+        makeTrustedDataPolicy,
+      }) => {
+        await makeTrustedDataPolicy(toolId, {
+          conditions: [
+            { key: "source", operator: "equal", value: "internal" },
+            { key: "verified", operator: "equal", value: "true" },
+          ],
+          action: "mark_as_trusted",
+          description: "Internal verified data",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { source: "internal", verified: "true", data: "content" },
+          },
+          "restrictive",
+          { teamIds: [] },
+        );
+
+        expect(result.isTrusted).toBe(true);
+        expect(result.reason).toContain("Internal verified data");
+      });
+
+      test("does not apply when only some output conditions match", async ({
+        makeTrustedDataPolicy,
+      }) => {
+        await makeTrustedDataPolicy(toolId, {
+          conditions: [
+            { key: "source", operator: "equal", value: "internal" },
+            { key: "verified", operator: "equal", value: "true" },
+          ],
+          action: "mark_as_trusted",
+          description: "Internal verified data",
+        });
+
+        // Only first condition matches
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { source: "internal", verified: "false", data: "content" },
+          },
+          "restrictive",
+          { teamIds: [] },
+        );
+
+        expect(result.isTrusted).toBe(false);
+      });
+
+      test("handles mixed output and context conditions", async ({
+        makeTrustedDataPolicy,
+      }) => {
+        await makeTrustedDataPolicy(toolId, {
+          conditions: [
+            { key: "type", operator: "equal", value: "email" },
+            { key: "from", operator: "endsWith", value: "@malicious.com" },
+          ],
+          action: "block_always",
+          description: "Block malicious emails",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { type: "email", from: "hacker@malicious.com" },
+          },
+          "restrictive",
+          { teamIds: [] },
+        );
+
+        expect(result.isBlocked).toBe(true);
+        expect(result.reason).toContain("Block malicious emails");
       });
     });
 
@@ -941,6 +1120,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "api-v1" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result1.isTrusted).toBe(true);
         expect(result1.reason).toContain("API v1 source");
@@ -950,6 +1131,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "api-v2" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result2.isTrusted).toBe(true);
         expect(result2.reason).toContain("API v2 source");
@@ -959,6 +1142,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "unknown" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result3.isTrusted).toBe(false);
       });
@@ -984,6 +1169,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "trusted", verified: "false" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result1.isTrusted).toBe(true);
 
@@ -992,6 +1179,8 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           toolName,
           { value: { source: "untrusted", verified: "true" } },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result2.isTrusted).toBe(true);
       });
@@ -1015,6 +1204,8 @@ describe("TrustedDataPolicyModel", () => {
             status: "success",
             data: "some data",
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(true);
       });
@@ -1035,8 +1226,395 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { status: "success", data: "some data" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
         expect(result.isTrusted).toBe(true);
+      });
+    });
+  });
+
+  describe("context-based conditions", () => {
+    describe("context.externalAgentId", () => {
+      test("trusts data when context.externalAgentId matches with equal operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "context-tool",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "equal",
+              value: "trusted-external-agent",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Trusted external agent",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "context-tool",
+          { value: { data: "any" } },
+          "restrictive",
+          { teamIds: [], externalAgentId: "trusted-external-agent" },
+        );
+
+        expect(result.isTrusted).toBe(true);
+        expect(result.reason).toContain("Trusted external agent");
+      });
+
+      test("does not trust data when context.externalAgentId does not match with equal operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "context-tool-2",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "equal",
+              value: "trusted-external-agent",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Trusted external agent",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "context-tool-2",
+          { value: { data: "any" } },
+          "restrictive",
+          { teamIds: [], externalAgentId: "other-agent" },
+        );
+
+        expect(result.isTrusted).toBe(false);
+      });
+
+      test("trusts data when context.externalAgentId matches with notEqual operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "context-tool-3",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "notEqual",
+              value: "blocked-agent",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Not blocked agent",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "context-tool-3",
+          { value: { data: "any" } },
+          "restrictive",
+          { teamIds: [], externalAgentId: "allowed-agent" },
+        );
+
+        expect(result.isTrusted).toBe(true);
+        expect(result.reason).toContain("Not blocked agent");
+      });
+
+      test("blocks data when context.externalAgentId matches block_always policy", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "context-tool-4",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "equal",
+              value: "blocked-agent",
+            },
+          ],
+          action: "block_always",
+          description: "Blocked external agent",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "context-tool-4",
+          { value: { data: "any" } },
+          "restrictive",
+          { teamIds: [], externalAgentId: "blocked-agent" },
+        );
+
+        expect(result.isBlocked).toBe(true);
+        expect(result.reason).toContain("Blocked external agent");
+      });
+    });
+
+    describe("context.teamIds", () => {
+      test("trusts data when context.teamIds contains the specified team with contains operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "team-tool" });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.teamIds",
+              operator: "contains",
+              value: "trusted-team-id",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Trusted team",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "team-tool",
+          { value: { data: "any" } },
+          "restrictive",
+          {
+            teamIds: ["other-team", "trusted-team-id"],
+            externalAgentId: undefined,
+          },
+        );
+
+        expect(result.isTrusted).toBe(true);
+        expect(result.reason).toContain("Trusted team");
+      });
+
+      test("does not trust data when context.teamIds does not contain the specified team", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "team-tool-2" });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.teamIds",
+              operator: "contains",
+              value: "trusted-team-id",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Trusted team",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "team-tool-2",
+          { value: { data: "any" } },
+          "restrictive",
+          {
+            teamIds: ["other-team", "another-team"],
+            externalAgentId: undefined,
+          },
+        );
+
+        expect(result.isTrusted).toBe(false);
+      });
+
+      test("trusts data when context.teamIds does not contain blocked team with notContains operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "team-tool-3" });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.teamIds",
+              operator: "notContains",
+              value: "blocked-team-id",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Not from blocked team",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "team-tool-3",
+          { value: { data: "any" } },
+          "restrictive",
+          {
+            teamIds: ["allowed-team", "another-team"],
+            externalAgentId: undefined,
+          },
+        );
+
+        expect(result.isTrusted).toBe(true);
+        expect(result.reason).toContain("Not from blocked team");
+      });
+
+      test("does not trust data when context.teamIds contains blocked team with notContains operator", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "team-tool-4" });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.teamIds",
+              operator: "notContains",
+              value: "blocked-team-id",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Not from blocked team",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "team-tool-4",
+          { value: { data: "any" } },
+          "restrictive",
+          {
+            teamIds: ["allowed-team", "blocked-team-id"],
+            externalAgentId: undefined,
+          },
+        );
+
+        expect(result.isTrusted).toBe(false);
+      });
+
+      test("blocks data when context.teamIds matches block_always policy", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "team-tool-5" });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.teamIds",
+              operator: "contains",
+              value: "blocked-team-id",
+            },
+          ],
+          action: "block_always",
+          description: "Blocked team",
+        });
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "team-tool-5",
+          { value: { data: "any" } },
+          "restrictive",
+          {
+            teamIds: ["other-team", "blocked-team-id"],
+            externalAgentId: undefined,
+          },
+        );
+
+        expect(result.isBlocked).toBe(true);
+        expect(result.reason).toContain("Blocked team");
+      });
+    });
+
+    describe("context condition without context provided", () => {
+      test("does not match context condition when no context is provided", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeTrustedDataPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "no-context-tool",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+        await makeTrustedDataPolicy(tool.id, {
+          conditions: [
+            {
+              key: "context.externalAgentId",
+              operator: "equal",
+              value: "some-agent",
+            },
+          ],
+          action: "mark_as_trusted",
+          description: "Requires context",
+        });
+
+        // No context provided
+        const result = await TrustedDataPolicyModel.evaluate(
+          agent.id,
+          "no-context-tool",
+          { value: { data: "any" } },
+          "restrictive",
+          { teamIds: [] },
+        );
+
+        expect(result.isTrusted).toBe(false);
       });
     });
   });
@@ -1052,6 +1630,8 @@ describe("TrustedDataPolicyModel", () => {
         {
           value: { any: "data", dangerous: "content" },
         },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.isTrusted).toBe(true);
@@ -1075,6 +1655,8 @@ describe("TrustedDataPolicyModel", () => {
           {
             value: { untrusted: "data", source: "malicious" },
           },
+          "restrictive",
+          { teamIds: [] },
         );
 
         expect(result.isTrusted).toBe(true);
@@ -1100,6 +1682,8 @@ describe("TrustedDataPolicyModel", () => {
         {
           value: { source: "malicious", data: "would normally be blocked" },
         },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.isTrusted).toBe(true);
@@ -1125,6 +1709,8 @@ describe("TrustedDataPolicyModel", () => {
         {
           value: { source: "trusted" },
         },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(trustedResult.isTrusted).toBe(true);
@@ -1137,6 +1723,8 @@ describe("TrustedDataPolicyModel", () => {
         {
           value: { source: "untrusted" },
         },
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(untrustedResult.isTrusted).toBe(false);

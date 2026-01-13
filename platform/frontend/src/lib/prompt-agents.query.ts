@@ -74,6 +74,14 @@ export function useSyncPromptAgents() {
       queryClient.invalidateQueries({
         queryKey: promptAgentsQueryKeys.connections,
       });
+      // Delegated agents create/delete tools, so invalidate tool caches
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate prompt-specific tools (used by AgentToolsDisplay)
+      queryClient.invalidateQueries({
+        queryKey: ["prompts", variables.promptId, "tools"],
+      });
       toast.success("Agents updated successfully");
     },
     onError: (error) => {
@@ -108,6 +116,14 @@ export function useDeletePromptAgent() {
       });
       queryClient.invalidateQueries({
         queryKey: promptAgentsQueryKeys.connections,
+      });
+      // Delegated agents create/delete tools, so invalidate tool caches
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate prompt-specific tools (used by AgentToolsDisplay)
+      queryClient.invalidateQueries({
+        queryKey: ["prompts", variables.promptId, "tools"],
       });
       toast.success("Agent removed successfully");
     },

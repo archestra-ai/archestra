@@ -7,6 +7,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  GlobalToolPolicy,
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
 } from "@/types";
@@ -40,6 +41,18 @@ const organizationsTable = pgTable("organization", {
   autoConfigureNewTools: boolean("auto_configure_new_tools")
     .notNull()
     .default(false),
+  globalToolPolicy: varchar("global_tool_policy")
+    .$type<GlobalToolPolicy>()
+    .notNull()
+    .default("permissive"),
+  /**
+   * Whether file uploads are allowed in chat.
+   * Defaults to true. Security policies currently only work on text-based content,
+   * so admins may want to disable this until file-based policy support is added.
+   */
+  allowChatFileUploads: boolean("allow_chat_file_uploads")
+    .notNull()
+    .default(true),
 });
 
 export default organizationsTable;

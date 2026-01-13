@@ -1,10 +1,17 @@
 "use client";
 
 import type { ChatStatus } from "ai";
+import { PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useRef } from "react";
 import {
   PromptInput,
+  PromptInputActionAddAttachments,
+  PromptInputActionMenu,
+  PromptInputActionMenuContent,
+  PromptInputActionMenuTrigger,
+  PromptInputAttachment,
+  PromptInputAttachments,
   PromptInputBody,
   PromptInputFooter,
   PromptInputHeader,
@@ -33,6 +40,8 @@ interface ArchestraPromptInputProps {
   messageCount?: number;
   // Tools integration props
   agentId: string;
+  /** Prompt ID for tool state management */
+  promptId?: string | null;
   /** Optional - if not provided, it's initial chat mode (no conversation yet) */
   conversationId?: string;
   // API key selector props
@@ -48,8 +57,8 @@ interface ArchestraPromptInputProps {
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Callback for profile change in initial chat mode (no conversation) */
   onProfileChange?: (agentId: string) => void;
-  /** Called when user tries to interact with tools in initial state (no conversation) */
-  onCreateConversation?: () => void;
+  /** Whether file uploads are allowed (controlled by organization setting) */
+  allowFileUploads?: boolean;
 }
 
 // Inner component that has access to the controller context
@@ -60,6 +69,7 @@ const PromptInputContent = ({
   onModelChange,
   messageCount,
   agentId,
+  promptId,
   conversationId,
   currentConversationChatApiKeyId,
   currentProvider,
@@ -68,7 +78,7 @@ const PromptInputContent = ({
   onProviderChange,
   textareaRef: externalTextareaRef,
   onProfileChange,
-  onCreateConversation,
+  allowFileUploads = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -96,11 +106,15 @@ const PromptInputContent = ({
             />
             <ChatToolsDisplay
               agentId={agentId}
+              promptId={promptId}
               conversationId={conversationId}
-              onCreateConversation={onCreateConversation}
             />
           </div>
         )}
+        {/* File attachments display */}
+        <PromptInputAttachments>
+          {(attachment) => <PromptInputAttachment data={attachment} />}
+        </PromptInputAttachments>
       </PromptInputHeader>
       <PromptInputBody>
         <PromptInputTextarea
@@ -112,6 +126,17 @@ const PromptInputContent = ({
       </PromptInputBody>
       <PromptInputFooter>
         <PromptInputTools>
+          {/* File attachment button - only shown when file uploads are enabled */}
+          {allowFileUploads && (
+            <PromptInputActionMenu>
+              <PromptInputActionMenuTrigger>
+                <PaperclipIcon className="size-4" />
+              </PromptInputActionMenuTrigger>
+              <PromptInputActionMenuContent>
+                <PromptInputActionAddAttachments label="Attach files" />
+              </PromptInputActionMenuContent>
+            </PromptInputActionMenu>
+          )}
           <ModelSelector
             selectedModel={selectedModel}
             onModelChange={onModelChange}
@@ -151,6 +176,7 @@ const ArchestraPromptInput = ({
   onModelChange,
   messageCount = 0,
   agentId,
+  promptId,
   conversationId,
   currentConversationChatApiKeyId,
   currentProvider,
@@ -159,7 +185,7 @@ const ArchestraPromptInput = ({
   onProviderChange,
   textareaRef,
   onProfileChange,
-  onCreateConversation,
+  allowFileUploads = false,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -171,6 +197,7 @@ const ArchestraPromptInput = ({
           onModelChange={onModelChange}
           messageCount={messageCount}
           agentId={agentId}
+          promptId={promptId}
           conversationId={conversationId}
           currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}
@@ -179,7 +206,7 @@ const ArchestraPromptInput = ({
           onProviderChange={onProviderChange}
           textareaRef={textareaRef}
           onProfileChange={onProfileChange}
-          onCreateConversation={onCreateConversation}
+          allowFileUploads={allowFileUploads}
         />
       </PromptInputProvider>
     </div>

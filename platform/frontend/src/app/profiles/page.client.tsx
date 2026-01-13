@@ -81,6 +81,7 @@ import { AssignToolsDialog } from "./assign-tools-dialog";
 // Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
 
 import type { archestraApiTypes } from "@shared";
+import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 
 type ProfilesInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
@@ -94,6 +95,7 @@ export default function ProfilesPage({
 }) {
   return (
     <div className="w-full h-full">
+      <PermissivePolicyBar />
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
           <Profiles initialData={initialData} />
@@ -467,10 +469,9 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
       title="Profiles"
       description={
         <p className="text-sm text-muted-foreground">
-          Profiles are a way to organize access, available MCP tools, cost
-          limits, logging/o11y, etc. <br />
-          <br />A profile can be: an N8N workflow, a custom application, or a
-          team sharing an MCP gateway.{" "}
+          Profiles organize access, MCP tools, cost limits, and observability
+          for N8N workflows, custom applications, or teams sharing an MCP
+          gateway.{" "}
           <a
             href="https://archestra.ai/docs/platform-agents"
             target="_blank"

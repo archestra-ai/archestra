@@ -31,6 +31,7 @@ export const RouteId = {
   GetInternalMcpCatalog: "getInternalMcpCatalog",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
@@ -93,11 +94,14 @@ export const RouteId = {
 
   // Tool Routes
   GetTools: "getTools",
+  GetToolsWithAssignments: "getToolsWithAssignments",
   GetUnassignedTools: "getUnassignedTools",
+  DeleteTool: "deleteTool",
 
   // Interaction Routes
   GetInteractions: "getInteractions",
   GetInteraction: "getInteraction",
+  GetInteractionSessions: "getInteractionSessions",
   GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
   GetUniqueUserIds: "getUniqueUserIds",
 
@@ -141,6 +145,20 @@ export const RouteId = {
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+
+  // Proxy Routes - Cerebras
+  CerebrasChatCompletionsWithDefaultAgent:
+    "cerebrasChatCompletionsWithDefaultAgent",
+  CerebrasChatCompletionsWithAgent: "cerebrasChatCompletionsWithAgent",
+
+  // Proxy Routes - vLLM
+  VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
+  VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
+
+  // Proxy Routes - Ollama
+  OllamaChatCompletionsWithDefaultAgent:
+    "ollamaChatCompletionsWithDefaultAgent",
+  OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",
@@ -198,6 +216,9 @@ export const RouteId = {
   GetOrganization: "getOrganization",
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
+
+  // Appearance Routes (public/unauthenticated)
+  GetPublicAppearance: "getPublicAppearance",
 
   // SSO Provider Routes
   GetPublicSsoProviders: "getPublicSsoProviders",

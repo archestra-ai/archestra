@@ -15,7 +15,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useMcpRegistryServer } from "@/lib/external-mcp-catalog.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
 import {
   useDeleteMcpServer,
   useInstallMcpServer,
@@ -60,7 +60,7 @@ export function InternalMCPCatalog({
   // Get search query from URL
   const searchQueryFromUrl = searchParams.get("search") || "";
 
-  const { data: catalogItems } = useInternalMcpCatalog({ initialData });
+  const { data: catalogItems } = useInternalMcpCatalogSuspense({ initialData });
   const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
     new Set(),
   );
@@ -433,12 +433,16 @@ export function InternalMCPCatalog({
 
   const sortInstalledFirst = (items: CatalogItem[]) =>
     [...items].sort((a, b) => {
-      const aIsRemote = a.serverType === "remote";
-      const bIsRemote = b.serverType === "remote";
+      // Sort priority: builtin > remote > local
+      const getPriority = (serverType: string) => {
+        if (serverType === "builtin") return 0;
+        if (serverType === "remote") return 1;
+        return 2; // local
+      };
 
-      // First sort by server type (remote before local)
-      if (aIsRemote && !bIsRemote) return -1;
-      if (!aIsRemote && bIsRemote) return 1;
+      const priorityDiff =
+        getPriority(a.serverType) - getPriority(b.serverType);
+      if (priorityDiff !== 0) return priorityDiff;
 
       // Secondary sort by createdAt (newest first)
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -533,7 +537,13 @@ export function InternalMCPCatalog({
               const serverInfo = getInstalledServerInfo(item);
               return (
                 <McpServerCard
-                  variant={item.serverType === "remote" ? "remote" : "local"}
+                  variant={
+                    item.serverType === "builtin"
+                      ? "builtin"
+                      : item.serverType === "remote"
+                        ? "remote"
+                        : "local"
+                  }
                   key={item.id}
                   item={item}
                   installedServer={serverInfo.installedServer}

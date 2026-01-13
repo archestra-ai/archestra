@@ -25,7 +25,6 @@ import type {
 } from "@/types";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
-import ToolModel from "./tool";
 
 class AgentModel {
   static async create({
@@ -48,8 +47,8 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
 
-    // Assign Archestra built-in tools to the agent
-    await ToolModel.assignArchestraToolsToAgent(createdAgent.id);
+    // Note: Archestra tools are no longer auto-assigned. Users must manually assign them
+    // like any other MCP server tools through the UI or API.
 
     // Get team details for the created agent
     const teamDetails =
@@ -206,7 +205,10 @@ class AgentModel {
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
         )
-        .where(sql`NOT ${schema.toolsTable.name} LIKE 'archestra__%'`)
+        // Double backslash needed: JS consumes one level, SQL gets the other
+        .where(
+          sql`NOT ${schema.toolsTable.name} LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
+        )
         .groupBy(schema.agentToolsTable.agentId)
         .as("toolsCounts");
 

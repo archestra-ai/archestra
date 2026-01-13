@@ -42,3 +42,17 @@ jobs:
               // Don't fail the workflow if reviewer assignment fails
               // (e.g., if the reviewer doesn't have access to the repo)
             }
+
+            // Also assign the PR to the selected reviewer
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                assignees: [selectedReviewer]
+              });
+              console.log(`Successfully assigned ${selectedReviewer} as PR assignee`);
+            } catch (error) {
+              console.error(`Failed to assign PR assignee: ${error.message}`);
+              // Don't fail the workflow if assignee assignment fails
+            }

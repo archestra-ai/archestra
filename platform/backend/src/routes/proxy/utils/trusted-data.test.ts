@@ -39,6 +39,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -83,6 +86,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Context should be untrusted and tool result should be blocked
@@ -133,6 +139,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -176,6 +185,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Context should be untrusted when no policies match
@@ -231,6 +243,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Context should be untrusted if any tool result is blocked or untrusted
@@ -261,6 +276,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Should mark as untrusted when tool is not found
@@ -288,6 +306,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Should handle gracefully and mark as untrusted
@@ -307,6 +328,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -328,7 +352,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       // Create agent-tool relationship
       await AgentToolModel.create(agentId, trustedToolId, {});
 
-      // Create default trusted policy
+      // Delete auto-created default policy and create trusted policy
+      await TrustedDataPolicyModel.deleteByToolId(trustedToolId);
       await TrustedDataPolicyModel.create({
         toolId: trustedToolId,
         conditions: [],
@@ -355,6 +380,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -411,6 +439,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(false);
@@ -446,9 +477,113 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Both should be untrusted (no policies match)
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("YOLO mode: trusts all data when globalToolPolicy is permissive", async () => {
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_yolo",
+              name: "get_emails",
+              content: { from: "untrusted@example.com", data: "anything" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        "test-api-key",
+        "openai",
+        false,
+        "permissive", // YOLO mode
+        { teamIds: [] },
+      );
+
+      // In permissive mode, all data is trusted regardless of policies
+      expect(result.contextIsTrusted).toBe(true);
+      expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("YOLO mode: ignores block policies in permissive mode", async () => {
+      // Create a block policy - should be ignored in YOLO mode
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "from", operator: "contains", value: "hacker" }],
+        action: "block_always",
+        description: "Block hacker emails",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_allowed",
+              name: "get_emails",
+              content: { from: "hacker@evil.com" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        "test-api-key",
+        "openai",
+        false,
+        "permissive", // YOLO mode
+        { teamIds: [] },
+      );
+
+      // YOLO mode trusts everything, ignores block policies
+      expect(result.contextIsTrusted).toBe(true);
+      expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("restrictive mode: marks data as untrusted when no policies exist", async () => {
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_untrusted",
+              name: "get_emails",
+              content: { from: "user@example.com" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        "test-api-key",
+        "openai",
+        false,
+        "restrictive", // Default restrictive mode
+        { teamIds: [] },
+      );
+
+      // In restrictive mode with no policies, data should be untrusted
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({});
     });
@@ -489,6 +624,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
       const updated = applyUpdates(openAiMessages, result.toolResultUpdates);
 
@@ -534,6 +672,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "anthropic",
+        false,
+        "restrictive",
+        { teamIds: [] },
       );
       const updated = applyUpdates(anthropicMessages, result.toolResultUpdates);
 

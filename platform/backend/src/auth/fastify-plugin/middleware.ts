@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import type { RouteId } from "@shared";
+import { type RouteId, SupportedProviders } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
@@ -15,17 +15,9 @@ const { requiredEndpointPermissionsMap } = config.enterpriseLicenseActivated
 export class Authnz {
   public handle = async (request: FastifyRequest, _reply: FastifyReply) => {
     const requestId = request.id;
-    logger.debug(
-      { requestId, method: request.method, url: request.url },
-      "[Authnz] Starting auth check",
-    );
 
     // custom logic to skip auth check
     if (await this.shouldSkipAuthCheck(request)) {
-      logger.debug(
-        { requestId, url: request.url },
-        "[Authnz] Skipping auth check for route",
-      );
       return;
     }
 
@@ -93,12 +85,15 @@ export class Authnz {
       );
       return true;
     }
+    // Check if URL matches any LLM proxy route (e.g., /v1/openai, /v1/anthropic, /v1/vllm)
+    const isLlmProxyRoute = SupportedProviders.some((provider) =>
+      url.startsWith(`/v1/${provider}`),
+    );
+
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
-      url.startsWith("/v1/openai") ||
-      url.startsWith("/v1/anthropic") ||
-      url.startsWith("/v1/gemini") ||
+      isLlmProxyRoute ||
       url === "/openapi.json" ||
       url === "/health" ||
       url === "/api/features" ||
@@ -108,9 +103,10 @@ export class Authnz {
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith("/.well-known/acme-challenge/") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
-      (method === "GET" && url === "/api/sso-providers/public")
+      (method === "GET" && url === "/api/sso-providers/public") ||
+      // Allow fetching public appearance settings for login page (theme, logo, font)
+      (method === "GET" && url === "/api/organization/appearance")
     ) {
-      logger.debug({ url, method }, "[Authnz] Route is in skip list");
       return true;
     }
     return false;

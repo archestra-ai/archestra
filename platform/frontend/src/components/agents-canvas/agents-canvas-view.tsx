@@ -157,6 +157,7 @@ function AgentsCanvasViewInner() {
 
   // Track previous data for change detection
   const prevPromptsRef = useRef<typeof prompts>([]);
+  const prevConnectionsRef = useRef<typeof connections>([]);
   const initialLoadDone = useRef(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<AgentNodeData>>(
@@ -234,7 +235,31 @@ function AgentsCanvasViewInner() {
       JSON.stringify([...currentPromptIds].sort()) !==
       JSON.stringify([...prevPromptIds].sort());
 
-    if (!promptsChanged && isLayoutReady) {
+    // Check if prompt data changed (e.g., name updated)
+    const prevPromptData = new Map(
+      prevPromptsRef.current.map((p) => [p.id, p.name]),
+    );
+    const promptDataChanged = prompts.some(
+      (p) => prevPromptData.get(p.id) !== p.name,
+    );
+
+    // Check if connections changed (delegated agents added/removed)
+    const prevConnectionIds = new Set(
+      prevConnectionsRef.current.map((c) => `${c.promptId}-${c.agentPromptId}`),
+    );
+    const currentConnectionIds = new Set(
+      connections.map((c) => `${c.promptId}-${c.agentPromptId}`),
+    );
+    const connectionsChanged =
+      JSON.stringify([...currentConnectionIds].sort()) !==
+      JSON.stringify([...prevConnectionIds].sort());
+
+    if (
+      !promptsChanged &&
+      !promptDataChanged &&
+      !connectionsChanged &&
+      isLayoutReady
+    ) {
       return;
     }
 
@@ -310,6 +335,7 @@ function AgentsCanvasViewInner() {
       });
       setEdges(initialEdges);
       prevPromptsRef.current = prompts;
+      prevConnectionsRef.current = connections;
       return;
     }
 
@@ -329,6 +355,7 @@ function AgentsCanvasViewInner() {
       setEdges(initialEdges);
       setIsLayoutReady(true);
       prevPromptsRef.current = prompts;
+      prevConnectionsRef.current = connections;
       initialLoadDone.current = true;
       setTimeout(
         () =>
@@ -353,6 +380,7 @@ function AgentsCanvasViewInner() {
         setEdges(initialEdges);
         setIsLayoutReady(true);
         prevPromptsRef.current = prompts;
+        prevConnectionsRef.current = connections;
         initialLoadDone.current = true;
         setTimeout(
           () =>

@@ -23,6 +23,7 @@ import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
+  hasZodFastifySchemaValidationErrors,
   jsonSchemaTransform,
   jsonSchemaTransformObject,
   serializerCompiler,
@@ -41,8 +42,11 @@ import AgentLabelModel from "@/models/agent-label";
 import {
   Anthropic,
   ApiError,
+  Cerebras,
   Gemini,
+  Ollama,
   OpenAi,
+  Vllm,
   WebSocketMessageSchema,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -90,6 +94,24 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
     id: "AnthropicMessagesResponse",
+  });
+  z.globalRegistry.add(Cerebras.API.ChatCompletionRequestSchema, {
+    id: "CerebrasChatCompletionRequest",
+  });
+  z.globalRegistry.add(Cerebras.API.ChatCompletionResponseSchema, {
+    id: "CerebrasChatCompletionResponse",
+  });
+  z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
+    id: "VllmChatCompletionRequest",
+  });
+  z.globalRegistry.add(Vllm.API.ChatCompletionResponseSchema, {
+    id: "VllmChatCompletionResponse",
+  });
+  z.globalRegistry.add(Ollama.API.ChatCompletionRequestSchema, {
+    id: "OllamaChatCompletionRequest",
+  });
+  z.globalRegistry.add(Ollama.API.ChatCompletionResponseSchema, {
+    id: "OllamaChatCompletionResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",
@@ -174,6 +196,22 @@ export const createFastifyInstance = () =>
     .setSerializerCompiler(serializerCompiler)
     // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
     .setErrorHandler<ApiError | Error>(function (error, _request, reply) {
+      // Handle Zod validation errors (from fastify-type-provider-zod)
+      if (hasZodFastifySchemaValidationErrors(error)) {
+        const message = error.message || "Validation error";
+        this.log.info(
+          { error: message, statusCode: 400 },
+          "HTTP 400 validation error occurred",
+        );
+
+        return reply.status(400).send({
+          error: {
+            message,
+            type: "api_validation_error",
+          },
+        });
+      }
+
       // Handle ApiError objects
       if (error instanceof ApiError) {
         const { statusCode, message, type } = error;

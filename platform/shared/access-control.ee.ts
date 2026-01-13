@@ -195,6 +195,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetTools]: {
     tool: ["read"],
   },
+  [RouteId.GetToolsWithAssignments]: {
+    tool: ["read"],
+  },
+  [RouteId.DeleteTool]: {
+    tool: ["delete"],
+  },
   [RouteId.GetInteractions]: {
     interaction: ["read"],
   },
@@ -205,6 +211,9 @@ export const requiredEndpointPermissionsMap: Partial<
     interaction: ["read"],
   },
   [RouteId.GetUniqueUserIds]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetInteractionSessions]: {
     interaction: ["read"],
   },
   [RouteId.GetOperators]: {
@@ -280,6 +289,9 @@ export const requiredEndpointPermissionsMap: Partial<
     internalMcpCatalog: ["create"],
   },
   [RouteId.GetInternalMcpCatalogItem]: {
+    internalMcpCatalog: ["read"],
+  },
+  [RouteId.GetInternalMcpCatalogTools]: {
     internalMcpCatalog: ["read"],
   },
   [RouteId.UpdateInternalMcpCatalogItem]: {
@@ -559,6 +571,12 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicSsoProviders]: {},
+  /**
+   * Get public appearance settings (theme, logo, font) for login page
+   * Available to unauthenticated users
+   * Note: Auth is skipped in middleware for this route
+   */
+  [RouteId.GetPublicAppearance]: {},
   /**
    * Get all SSO providers with full config (admin only)
    * Returns sensitive data including client secrets

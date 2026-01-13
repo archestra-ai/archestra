@@ -1,12 +1,37 @@
 /**
  * Shared MCP Gateway utilities for E2E tests
  */
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, APIResponse } from "@playwright/test";
 import {
   API_BASE_URL,
   MCP_GATEWAY_URL_SUFFIX,
   UI_BASE_URL,
 } from "../../consts";
+
+/**
+ * Parse response based on content type.
+ * Handles both JSON and SSE (Server-Sent Events) responses.
+ */
+export async function parseResponse(response: APIResponse): Promise<unknown> {
+  const contentType = response.headers()["content-type"] || "";
+
+  // If it's SSE, we need to parse the event stream
+  if (contentType.includes("text/event-stream")) {
+    const text = await response.text();
+    // SSE format: "event: message\ndata: {json}\n\n"
+    const lines = text.split("\n");
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const jsonStr = line.slice(6); // Remove "data: " prefix
+        return JSON.parse(jsonStr);
+      }
+    }
+    throw new Error(`No data found in SSE response: ${text}`);
+  }
+
+  // Otherwise assume JSON
+  return response.json();
+}
 
 /**
  * Create MCP gateway request headers
@@ -271,4 +296,41 @@ export async function listMcpTools(
   }
 
   return listResult.result.tools;
+}
+
+/**
+ * Assign all Archestra tools to a profile
+ * This is required because Archestra tools are not auto-assigned to profiles.
+ * @returns Array of assigned tool IDs
+ */
+export async function assignArchestraToolsToProfile(
+  request: APIRequestContext,
+  profileId: string,
+): Promise<string[]> {
+  // 1. Get all tools
+  const toolsResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/tools",
+  });
+  const tools = await toolsResponse.json();
+
+  // 2. Filter for Archestra tools (name starts with "archestra__")
+  const archestraTools = tools.filter((t: { name: string }) =>
+    t.name.startsWith("archestra__"),
+  );
+
+  // 3. Assign each archestra tool to the profile
+  const assignedToolIds: string[] = [];
+  for (const tool of archestraTools) {
+    await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/api/agents/${profileId}/tools/${tool.id}`,
+      data: {},
+    });
+    assignedToolIds.push(tool.id);
+  }
+
+  return assignedToolIds;
 }

@@ -31,6 +31,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
+import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
 /**
  * Token authentication result
@@ -246,15 +247,13 @@ export async function createAgentServer(
           };
         }
 
+        const contentLength = estimateToolResultContentLength(result.content);
         logger.info(
           {
             agentId,
             toolName: name,
-            resultContentLength: Array.isArray(result.content)
-              ? JSON.stringify(result.content).length
-              : typeof result.content === "string"
-                ? result.content.length
-                : JSON.stringify(result.content).length,
+            resultContentLength: contentLength.length,
+            resultContentLengthEstimated: contentLength.isEstimated,
           },
           "MCP gateway tool call completed",
         );
@@ -285,17 +284,8 @@ export async function createAgentServer(
 }
 
 /**
- * Create transport with session management
- * If client provides a session ID, we'll use it; otherwise generate one
- *
- *  Note: enableJsonResponse is NOT set, allowing the gateway to support both JSON and SSE (text/event-stream)
- * responses. This is required for Cursor IDE compatibility, which falls back to SSE transport after
- * StreamableHTTP fails.
- *
- * If we set enableJsonResponse to true, the transport will only support JSON responses
- *
- * A "Backwards-compatible server (Streamable HTTP + SSE)" example is mentioned here https://github.com/modelcontextprotocol/typescript-sdk/blob/0a75810b26e24bae6b9cfb41e12ac770aeaa1da4/docs/server.md?plain=1#L55C3-L55C54
- * and documented here https://github.com/modelcontextprotocol/typescript-sdk/blob/0a75810b26e24bae6b9cfb41e12ac770aeaa1da4/examples/server/src/sseAndStreamableHttpCompatibleServer.ts
+ * Create a fresh transport for a request
+ * We use session-based mode as required by the SDK for JSON responses
  */
 export function createTransport(
   agentId: string,
@@ -304,6 +294,8 @@ export function createTransport(
 ): StreamableHTTPServerTransport {
   logger.info({ agentId, clientSessionId }, "Creating new transport instance");
 
+  // Create transport with session management
+  // If client provides a session ID, we'll use it; otherwise generate one
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => {
       const sessionId =
@@ -314,6 +306,7 @@ export function createTransport(
       );
       return sessionId;
     },
+    enableJsonResponse: true, // Use JSON responses instead of SSE
   });
 
   logger.info({ agentId }, "Transport instance created");
@@ -386,16 +379,6 @@ export async function validateTeamToken(
     );
     return null;
   }
-
-  logger.debug(
-    {
-      profileId,
-      tokenId: token.id,
-      isOrganizationToken: token.isOrganizationToken,
-      tokenTeamId: token.teamId,
-    },
-    "validateTeamToken: token found",
-  );
 
   // Check if profile is accessible via this token
   if (!token.isOrganizationToken) {
@@ -507,21 +490,9 @@ export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
-  logger.debug(
-    { profileId, tokenPrefix: tokenValue.substring(0, 14) },
-    "validateMCPGatewayToken: starting validation",
-  );
-
   // First try team/org token validation
   const teamTokenResult = await validateTeamToken(profileId, tokenValue);
   if (teamTokenResult) {
-    logger.debug(
-      {
-        profileId,
-        tokenType: teamTokenResult.isOrganizationToken ? "org" : "team",
-      },
-      "validateMCPGatewayToken: validated as team/org token",
-    );
     return teamTokenResult;
   }
 

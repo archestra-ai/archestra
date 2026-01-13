@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID, type archestraApiTypes } from "@shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -10,7 +10,7 @@ import {
   Server,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
@@ -49,10 +49,11 @@ export function AssignToolsDialog({
   open,
   onOpenChange,
 }: AssignToolsDialogProps) {
-  // Fetch all tools and filter for MCP tools
+  // Fetch all tools and filter for MCP tools (using non-suspense queries for dialog/portal)
   const { data: allTools, isLoading: isLoadingAllTools } = useTools({});
   const mcpTools = allTools?.filter((tool) => tool.catalogId !== null) || [];
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
+  const { data: internalMcpCatalogItems, isLoading: isLoadingCatalog } =
+    useInternalMcpCatalog();
 
   // Fetch currently assigned tools for this agent (use getAllProfileTools to get credentialSourceMcpServerId)
   // Use skipPagination to ensure all assigned tools are returned regardless of the default pagination limit
@@ -166,7 +167,7 @@ export function AssignToolsDialog({
   const unassignTool = useUnassignTool();
   const patchProfileTool = useProfileToolPatchMutation();
 
-  const isLoading = isLoadingAllTools;
+  const isLoading = isLoadingAllTools || isLoadingCatalog;
   const isSaving =
     assignTool.isPending ||
     unassignTool.isPending ||
@@ -515,6 +516,13 @@ export function AssignToolsDialog({
                             (t) => t.toolId === tool.id,
                           );
 
+                          // Don't show credential selector for built-in Archestra tools
+                          const isBuiltinArchestraTool =
+                            tool.catalogId === ARCHESTRA_MCP_CATALOG_ID;
+                          if (isBuiltinArchestraTool) {
+                            return null;
+                          }
+
                           // Determine value to show - use dynamic constant if useDynamicTeamCredential is true
                           const displayValue =
                             selectedTool?.useDynamicTeamCredential
@@ -528,23 +536,29 @@ export function AssignToolsDialog({
                               <span className="text-xs text-muted-foreground">
                                 Credential to use:
                               </span>
-                              <TokenSelect
-                                catalogId={catalogId}
-                                onValueChange={(credentialSourceId) =>
-                                  isLocalServer
-                                    ? handleExecutionSourceChange(
-                                        tool.id,
-                                        credentialSourceId ?? undefined,
-                                      )
-                                    : handleCredentialsSourceChange(
-                                        tool.id,
-                                        credentialSourceId ?? undefined,
-                                      )
+                              <Suspense
+                                fallback={
+                                  <Loader2 className="h-4 w-4 animate-spin" />
                                 }
-                                value={displayValue ?? undefined}
-                                className="mb-4"
-                                shouldSetDefaultValue
-                              />
+                              >
+                                <TokenSelect
+                                  catalogId={catalogId}
+                                  onValueChange={(credentialSourceId) =>
+                                    isLocalServer
+                                      ? handleExecutionSourceChange(
+                                          tool.id,
+                                          credentialSourceId ?? undefined,
+                                        )
+                                      : handleCredentialsSourceChange(
+                                          tool.id,
+                                          credentialSourceId ?? undefined,
+                                        )
+                                  }
+                                  value={displayValue ?? undefined}
+                                  className="mb-4"
+                                  shouldSetDefaultValue
+                                />
+                              </Suspense>
                             </div>
                           );
                         })()}
@@ -565,24 +579,26 @@ export function AssignToolsDialog({
           )}
         </div>
 
-        {originFilter !== "all" && filteredTools.length > 0 && (
-          <div className="pt-4 border-t">
-            <Label className="text-md font-medium mb-1">
-              Bulk assign credential
-            </Label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Select a credential to apply to all {filteredTools.length} visible
-              tool{filteredTools.length !== 1 ? "s" : ""}
-            </p>
-            <TokenSelect
-              catalogId={originFilter}
-              onValueChange={handleBulkCredentialChange}
-              value={undefined}
-              className="w-full"
-              shouldSetDefaultValue={false}
-            />
-          </div>
-        )}
+        {originFilter !== "all" &&
+          originFilter !== ARCHESTRA_MCP_CATALOG_ID &&
+          filteredTools.length > 0 && (
+            <div className="pt-4 border-t">
+              <Label className="text-md font-medium mb-1">
+                Bulk assign credential
+              </Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Select a credential to apply to all {filteredTools.length}{" "}
+                visible tool{filteredTools.length !== 1 ? "s" : ""}
+              </p>
+              <TokenSelect
+                catalogId={originFilter}
+                onValueChange={handleBulkCredentialChange}
+                value={undefined}
+                className="w-full"
+                shouldSetDefaultValue={false}
+              />
+            </div>
+          )}
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={isSaving}>
@@ -593,7 +609,7 @@ export function AssignToolsDialog({
             disabled={
               isLoading ||
               isSaving ||
-              selectedTools.some((tool) => {
+              selectedTools.some(function isMissingCredentials(tool) {
                 // If using dynamic credential, it's valid
                 if (tool.useDynamicTeamCredential) return false;
 
@@ -601,7 +617,17 @@ export function AssignToolsDialog({
                 const mcpCatalogItem = internalMcpCatalogItems?.find(
                   (item) => item.id === mcpTool?.catalogId,
                 );
-                const isLocalServer = mcpCatalogItem?.serverType === "local";
+                // Tools without a catalog item can't have credentials configured - skip validation
+                if (!mcpCatalogItem) {
+                  return false;
+                }
+
+                // Built-in Archestra tools don't require credentials
+                if (mcpTool?.catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+                  return false;
+                }
+
+                const isLocalServer = mcpCatalogItem.serverType === "local";
                 return isLocalServer
                   ? !tool.executionSourceId
                   : !tool.credentialsSourceId;

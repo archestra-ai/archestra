@@ -10,11 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  getThemeCategories,
-  getThemesByCategory,
-  type ThemeMetadata,
-} from "@/config/themes";
+import { type ThemeMetadata, themes } from "@/config/themes";
 
 interface ThemeSelectorProps {
   selectedTheme: OrganizationTheme | undefined;
@@ -25,8 +21,6 @@ export function ThemeSelector({
   selectedTheme,
   onThemeSelect,
 }: ThemeSelectorProps) {
-  const categories = getThemeCategories();
-
   return (
     <Card>
       <CardHeader>
@@ -36,27 +30,17 @@ export function ThemeSelector({
           real-time.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {categories.map((category) => {
-          const themes = getThemesByCategory(category.id);
-          return (
-            <div key={category.id} className="space-y-3">
-              <h3 className="text-sm font-medium text-foreground">
-                {category.label}
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {themes.map((theme) => (
-                  <ThemeOption
-                    key={theme.id}
-                    theme={theme}
-                    isSelected={selectedTheme === theme.id}
-                    onClick={() => onThemeSelect(theme.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {themes.map((theme) => (
+            <ThemeOption
+              key={theme.id}
+              theme={theme}
+              isSelected={selectedTheme === theme.id}
+              onClick={() => onThemeSelect(theme.id)}
+            />
+          ))}
+        </div>
       </CardContent>
     </Card>
   );

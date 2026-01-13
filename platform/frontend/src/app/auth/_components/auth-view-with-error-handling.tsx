@@ -125,10 +125,12 @@ export function AuthViewWithErrorHandling({
     title: string;
     message: string;
   } | null>(null);
-  const { data: ssoProviders = [], isLoading: isLoadingSsoProviders } =
+  const { data: ssoProvidersData, isLoading: isLoadingSsoProviders } =
     usePublicSsoProviders();
 
   const isBasicAuthDisabled = config.disableBasicAuth;
+  // Extract providers array - data can be null or an array of providers
+  const ssoProviders = Array.isArray(ssoProvidersData) ? ssoProvidersData : [];
   const hasSsoProviders = ssoProviders.length > 0;
 
   // Check for SSO error in query params

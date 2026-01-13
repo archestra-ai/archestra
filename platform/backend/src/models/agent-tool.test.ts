@@ -530,6 +530,66 @@ describe("AgentToolModel.findAll", () => {
         ),
       ).toBe(true);
     });
+
+    test("excludeArchestraTools excludes tools with archestra__ prefix", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+
+      // Create regular tools
+      const regularTool1 = await makeTool({ name: "exclude_test_regular_1" });
+      const regularTool2 = await makeTool({ name: "exclude_test_regular_2" });
+
+      // Create Archestra tools (double underscore prefix) with unique names
+      const archestraTool1 = await makeTool({
+        name: "archestra__exclude_test_tool_1",
+      });
+      const archestraTool2 = await makeTool({
+        name: "archestra__exclude_test_tool_2",
+      });
+
+      // Create tools with similar names that should NOT be excluded
+      const singleUnderscoreTool = await makeTool({
+        name: "archestra_single_underscore_test",
+      });
+      const noUnderscoreTool = await makeTool({
+        name: "archestranounderscore_test",
+      });
+
+      await makeAgentTool(agent.id, regularTool1.id);
+      await makeAgentTool(agent.id, regularTool2.id);
+      await makeAgentTool(agent.id, archestraTool1.id);
+      await makeAgentTool(agent.id, archestraTool2.id);
+      await makeAgentTool(agent.id, singleUnderscoreTool.id);
+      await makeAgentTool(agent.id, noUnderscoreTool.id);
+
+      // With excludeArchestraTools: true - should exclude archestra__ tools
+      const resultExcluded = await AgentToolModel.findAll({
+        pagination: { limit: 10, offset: 0 },
+        filters: { agentId: agent.id, excludeArchestraTools: true },
+      });
+
+      expect(resultExcluded.data).toHaveLength(4);
+      const excludedToolNames = resultExcluded.data.map((at) => at.tool.name);
+      expect(excludedToolNames).toContain("exclude_test_regular_1");
+      expect(excludedToolNames).toContain("exclude_test_regular_2");
+      expect(excludedToolNames).toContain("archestra_single_underscore_test");
+      expect(excludedToolNames).toContain("archestranounderscore_test");
+      expect(excludedToolNames).not.toContain("archestra__exclude_test_tool_1");
+      expect(excludedToolNames).not.toContain("archestra__exclude_test_tool_2");
+
+      // Without excludeArchestraTools - should include all tools including archestra__ ones
+      const resultIncluded = await AgentToolModel.findAll({
+        pagination: { limit: 10, offset: 0 },
+        filters: { agentId: agent.id },
+      });
+
+      const includedToolNames = resultIncluded.data.map((at) => at.tool.name);
+      expect(includedToolNames).toContain("archestra__exclude_test_tool_1");
+      expect(includedToolNames).toContain("archestra__exclude_test_tool_2");
+    });
   });
 
   describe("Combined Filters, Sorting, and Pagination", () => {
@@ -927,12 +987,18 @@ describe("AgentToolModel.findAll", () => {
       expect(relevantAssignments).toHaveLength(0);
     });
 
-    test("handles empty tool IDs array", async ({ makeAgent }) => {
+    test("handles empty tool IDs array", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
       const agent1 = await makeAgent({ name: "Agent 1" });
+
+      // Seed and assign Archestra tools first
+      await seedAndAssignArchestraTools(agent1.id);
 
       await AgentToolModel.bulkCreateForAgentsAndTools([agent1.id], []);
 
-      // Should not throw and should not create any relationships
+      // Should not throw and should not create any relationships beyond Archestra tools
       const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
       // Only Archestra tools should be present
       expect(agent1Tools.length).toBeGreaterThan(0);

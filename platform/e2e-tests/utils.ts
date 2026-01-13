@@ -3,6 +3,7 @@ import { type APIRequestContext, expect, type Page } from "@playwright/test";
 import { archestraApiSdk } from "@shared";
 import { testMcpServerCommand } from "@shared/test-mcp-server";
 import {
+  API_BASE_URL,
   DEFAULT_PROFILE_NAME,
   DEFAULT_TEAM_NAME,
   E2eTestId,
@@ -393,4 +394,100 @@ export async function loginViaApi(
   }
 
   return false;
+}
+
+/**
+ * Find a catalog item by name
+ */
+export async function findCatalogItem(
+  request: APIRequestContext,
+  name: string,
+): Promise<{ id: string; name: string } | undefined> {
+  const response = await request.get(
+    `${API_BASE_URL}/api/internal_mcp_catalog`,
+    {
+      headers: { Origin: UI_BASE_URL },
+    },
+  );
+
+  if (!response.ok()) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to fetch internal MCP catalog: ${response.status()} ${errorText}`,
+    );
+  }
+
+  const catalog = await response.json();
+
+  if (!Array.isArray(catalog)) {
+    throw new Error(
+      `Expected catalog to be an array, got: ${JSON.stringify(catalog)}`,
+    );
+  }
+
+  return catalog.find((item: { name: string }) => item.name === name);
+}
+
+/**
+ * Find an installed MCP server by catalog ID and optionally by team ID.
+ * When teamId is provided, only returns servers installed for that specific team.
+ */
+export async function findInstalledServer(
+  request: APIRequestContext,
+  catalogId: string,
+  teamId?: string,
+): Promise<{ id: string; catalogId: string; teamId?: string } | undefined> {
+  const response = await request.get(`${API_BASE_URL}/api/mcp_server`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+  const serversData = await response.json();
+  const servers = serversData.data || serversData;
+  return servers.find((s: { catalogId: string; teamId?: string }) => {
+    if (s.catalogId !== catalogId) return false;
+    if (teamId !== undefined && s.teamId !== teamId) return false;
+    return true;
+  });
+}
+
+/**
+ * Wait for MCP server installation to complete.
+ * Polls the server status until it becomes "success" or "error".
+ * Note: Even after status becomes "success", the K8s deployment may need
+ * additional time to be fully ready to handle requests, so we add a delay.
+ */
+export async function waitForServerInstallation(
+  request: APIRequestContext,
+  serverId: string,
+  maxAttempts = 60,
+): Promise<{
+  localInstallationStatus: string;
+  localInstallationError?: string;
+}> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await request.get(
+      `${API_BASE_URL}/api/mcp_server/${serverId}`,
+      {
+        headers: { Origin: UI_BASE_URL },
+      },
+    );
+    const server = await response.json();
+
+    if (server.localInstallationStatus === "success") {
+      // Add delay to ensure K8s deployment is fully ready
+      // The DB status may update before the deployment is accessible
+      await new Promise((r) => setTimeout(r, 3000));
+      return server;
+    }
+    if (server.localInstallationStatus === "error") {
+      throw new Error(
+        `MCP server installation failed: ${server.localInstallationError}`,
+      );
+    }
+
+    // Wait 2 seconds between checks
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(
+    `MCP server installation timed out after ${maxAttempts * 2} seconds`,
+  );
 }

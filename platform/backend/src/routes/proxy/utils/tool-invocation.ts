@@ -1,6 +1,13 @@
 import { isArchestraMcpServerTool } from "@shared";
 import logger from "@/logging";
-import { ToolInvocationPolicyModel } from "@/models";
+import {
+  AgentTeamModel,
+  OrganizationModel,
+  TeamModel,
+  ToolInvocationPolicyModel,
+} from "@/models";
+import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
+import type { GlobalToolPolicy } from "@/types";
 
 /**
  * This method will evaluate whether, based on the tool invocation policies assigned to the specified agent,
@@ -11,6 +18,7 @@ import { ToolInvocationPolicyModel } from "@/models";
  *
  * @param toolCalls - The tool calls to evaluate
  * @param agentId - The agent ID to evaluate policies for
+ * @param context - Policy evaluation context (profileId, teamId, headers)
  * @param contextIsTrusted - Whether the context is trusted
  * @param enabledToolNames - Optional set of tool names that are enabled in the request.
  *                          If provided, tool calls not in this set will be filtered and reported as disabled.
@@ -18,11 +26,18 @@ import { ToolInvocationPolicyModel } from "@/models";
 export const evaluatePolicies = async (
   toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
   agentId: string,
+  context: PolicyEvaluationContext,
   contextIsTrusted: boolean,
-  enabledToolNames?: Set<string>,
+  enabledToolNames: Set<string>,
+  globalToolPolicy: GlobalToolPolicy,
 ): Promise<null | [string, string]> => {
   logger.debug(
-    { agentId, toolCallCount: toolCalls.length, contextIsTrusted },
+    {
+      agentId,
+      toolCallCount: toolCalls.length,
+      contextIsTrusted,
+      globalToolPolicy,
+    },
     "[toolInvocation] evaluatePolicies: starting evaluation",
   );
 
@@ -89,7 +104,9 @@ export const evaluatePolicies = async (
     await ToolInvocationPolicyModel.evaluateBatch(
       agentId,
       parsedToolCalls,
+      context,
       contextIsTrusted,
+      globalToolPolicy,
     );
 
   logger.debug(
@@ -148,3 +165,66 @@ ${contentMessage}`;
   );
   return null;
 };
+
+/**
+ * Resolve the global tool policy for an agent.
+ * 1. Try to get organizationId from agent's teams
+ * 2. Fallback to first organization in database if agent has no teams
+ *
+ * @param agentId - The agent ID to resolve policy for
+ * @returns The global tool policy ("permissive" or "restrictive"), defaults to "permissive"
+ */
+export async function getGlobalToolPolicy(
+  agentId: string,
+): Promise<GlobalToolPolicy> {
+  const fallbackPolicy: GlobalToolPolicy = "permissive";
+  const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
+
+  // Agent has teams - get organization from first team
+  if (agentTeamIds.length > 0) {
+    const teams = await TeamModel.findByIds(agentTeamIds);
+    if (teams.length > 0 && teams[0].organizationId) {
+      const organizationId = teams[0].organizationId;
+      logger.debug(
+        { agentId, organizationId },
+        "GlobalToolPolicy: resolved organizationId from team",
+      );
+
+      const organization = await OrganizationModel.getById(organizationId);
+      if (!organization) {
+        logger.warn(
+          { agentId, organizationId },
+          `GlobalToolPolicy: organization not found, defaulting to ${fallbackPolicy}`,
+        );
+        return fallbackPolicy;
+      }
+
+      logger.debug(
+        { agentId, organizationId, policy: organization.globalToolPolicy },
+        "GlobalToolPolicy: resolved policy from organization",
+      );
+      return organization.globalToolPolicy;
+    }
+  }
+
+  // Agent has no teams - fallback to first organization (avoid double fetch)
+  const firstOrg = await OrganizationModel.getFirst();
+  if (!firstOrg) {
+    logger.warn(
+      { agentId },
+      `GlobalToolPolicy: could not resolve organization, defaulting to ${fallbackPolicy}`,
+    );
+    return fallbackPolicy;
+  }
+
+  logger.debug(
+    { agentId, organizationId: firstOrg.id },
+    "GlobalToolPolicy: agent has no teams - using fallback organization",
+  );
+  logger.debug(
+    { agentId, organizationId: firstOrg.id, policy: firstOrg.globalToolPolicy },
+    "GlobalToolPolicy: resolved policy from organization",
+  );
+
+  return firstOrg.globalToolPolicy;
+}

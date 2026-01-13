@@ -58,6 +58,7 @@ import {
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
+import { useOrganization } from "@/lib/organization.query";
 import {
   applyPendingActions,
   clearPendingActions,
@@ -213,6 +214,7 @@ export default function ChatPage() {
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   // vLLM/Ollama may not require an API key either
@@ -1149,6 +1151,7 @@ export default function ChatPage() {
                       ? (conversation?.promptId ?? null)
                       : initialPromptId
                   }
+                  allowFileUploads={organization?.allowChatFileUploads ?? false}
                 />
                 <div className="text-center">
                   <Version inline />

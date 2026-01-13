@@ -30,18 +30,21 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 }));
 
 // Mock McpServerRuntimeManager - use vi.hoisted to avoid initialization errors
-const { mockUsesStreamableHttp, mockGetHttpEndpointUrl, mockGetDeployment } =
-  vi.hoisted(() => ({
-    mockUsesStreamableHttp: vi.fn(),
-    mockGetHttpEndpointUrl: vi.fn(),
-    mockGetDeployment: vi.fn(),
-  }));
+const {
+  mockUsesStreamableHttp,
+  mockGetHttpEndpointUrl,
+  mockGetOrLoadDeployment,
+} = vi.hoisted(() => ({
+  mockUsesStreamableHttp: vi.fn(),
+  mockGetHttpEndpointUrl: vi.fn(),
+  mockGetOrLoadDeployment: vi.fn(),
+}));
 
 vi.mock("@/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
-    getDeployment: mockGetDeployment,
+    getOrLoadDeployment: mockGetOrLoadDeployment,
   },
 }));
 
@@ -85,7 +88,7 @@ describe("McpClient", () => {
     mockClose.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
-    mockGetDeployment.mockReset();
+    mockGetOrLoadDeployment.mockReset();
   });
 
   describe("executeToolCall", () => {
@@ -814,7 +817,7 @@ describe("McpClient", () => {
           deploymentName: "mcp-test-deployment",
           getRunningPodName: vi.fn().mockResolvedValue("mcp-test-pod-actual"),
         };
-        mockGetDeployment.mockReturnValue(mockK8sDeployment);
+        mockGetOrLoadDeployment.mockResolvedValue(mockK8sDeployment);
 
         // Mock the tool call response
         mockCallTool.mockResolvedValue({
@@ -833,7 +836,7 @@ describe("McpClient", () => {
         // Verify K8s attach transport was used (not HTTP transport)
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
         expect(mockGetHttpEndpointUrl).not.toHaveBeenCalled();
-        expect(mockGetDeployment).toHaveBeenCalledWith(localMcpServerId);
+        expect(mockGetOrLoadDeployment).toHaveBeenCalledWith(localMcpServerId);
         expect(mockK8sDeployment.getRunningPodName).toHaveBeenCalled();
 
         // Verify MCP SDK client was used
@@ -891,7 +894,7 @@ describe("McpClient", () => {
             deploymentName: "mcp-test-deployment",
             getRunningPodName: vi.fn().mockResolvedValue("mcp-test-pod-actual"),
           };
-          mockGetDeployment.mockReturnValue(mockK8sDeployment);
+          mockGetOrLoadDeployment.mockResolvedValue(mockK8sDeployment);
 
           mockCallTool.mockResolvedValue({
             content: [{ type: "text", text: "Limiter stdio" }],

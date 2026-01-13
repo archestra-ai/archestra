@@ -67,7 +67,6 @@ export const MARKETING_TEAM_NAME = "Marketing Team";
 export const DEFAULT_PROFILE_NAME = "Default Profile";
 
 export {
-  ARCHESTRA_MCP_CATALOG_ID,
   E2eTestId,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";

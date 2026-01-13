@@ -362,11 +362,11 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                       value: "mark_as_untrusted",
                       label: "Mark as untrusted",
                     },
-                    { value: "block_always", label: "Block always" },
                     {
                       value: "sanitize_with_dual_llm",
                       label: "Sanitize with Dual LLM",
                     },
+                    { value: "block_always", label: "Block" },
                   ].map(({ value, label }) => (
                     <SelectItem key={label} value={value}>
                       {label}
@@ -399,5 +399,5 @@ const TOOL_RESULT_TREATMENT_OPTIONS = [
   { value: "trusted", label: "Mark as trusted" },
   { value: "untrusted", label: "Mark as untrusted" },
   { value: "sanitize_with_dual_llm", label: "Sanitize with Dual LLM" },
-  { value: "block_always", label: "Block always" },
+  { value: "block_always", label: "Block" },
 ] as const;

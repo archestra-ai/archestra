@@ -29,58 +29,7 @@ export function CallPolicyToggle({
     `${buttonClass} ${value === action ? "bg-background hover:bg-background border border-muted-foreground/30 shadow-xs rounded-md" : "bg-secondary hover:bg-secondary/80 border-0 text-foreground/50"}`;
 
   return (
-    // <ButtonGroup >
     <div className="rounded-md bg-secondary p-[2px] flex gap-[1px]">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              size="sm"
-              variant="ghost"
-              className={getButtonClassName("block_always")}
-              disabled={disabled}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (value !== "block_always") {
-                  onChange("block_always");
-                }
-              }}
-            >
-              <Ban className="h-3.5 w-3.5" />
-              {!isSmall && "Block always"}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {isSmall ? "Block always" : "Never allow this tool to be called"}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              size="sm"
-              variant="ghost"
-              className={getButtonClassName("block_when_context_is_untrusted")}
-              disabled={disabled}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (value !== "block_when_context_is_untrusted") {
-                  onChange("block_when_context_is_untrusted");
-                }
-              }}
-            >
-              <Handshake className="h-3.5 w-3.5" />
-              {!isSmall && "Allow if trusted"}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {isSmall
-              ? "Allow if context is trusted"
-              : "Allow only when context contains no untrusted data"}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -107,7 +56,56 @@ export function CallPolicyToggle({
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-    {/*</ButtonGroup>*/}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={getButtonClassName("block_when_context_is_untrusted")}
+              disabled={disabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (value !== "block_when_context_is_untrusted") {
+                  onChange("block_when_context_is_untrusted");
+                }
+              }}
+            >
+              <Handshake className="h-3.5 w-3.5" />
+              {!isSmall && "Allow in trusted context"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isSmall
+              ? "Allow in trusted context"
+              : "Allow only when context contains no untrusted data"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={getButtonClassName("block_always")}
+              disabled={disabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (value !== "block_always") {
+                  onChange("block_always");
+                }
+              }}
+            >
+              <Ban className="h-3.5 w-3.5" />
+              {!isSmall && "Block always"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isSmall ? "Block always" : "Never allow this tool to be called"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }

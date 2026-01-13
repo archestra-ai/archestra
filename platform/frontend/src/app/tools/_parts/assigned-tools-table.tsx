@@ -813,13 +813,13 @@ export function AssignedToolsTable({
                       <SelectValue placeholder="Select action" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="block_always">Block always</SelectItem>
-                      <SelectItem value="block_when_context_is_untrusted">
-                        Allow if trusted
-                      </SelectItem>
                       <SelectItem value="allow_when_context_is_untrusted">
                         Allow always
                       </SelectItem>
+                      <SelectItem value="block_when_context_is_untrusted">
+                        Allow in trusted context
+                      </SelectItem>
+                      <SelectItem value="block_always">Block</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -840,7 +840,7 @@ export function AssignedToolsTable({
                       handleBulkAction("toolResultTreatment", value)
                     }
                   >
-                    <SelectTrigger className="h-8 w-[150px] text-sm" size="sm">
+                    <SelectTrigger className="h-8 w-[160px] text-sm" size="sm">
                       <SelectValue placeholder="Select treatment" />
                     </SelectTrigger>
                     <SelectContent>

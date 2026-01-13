@@ -43,8 +43,10 @@ const browserTestIgnore = [
  * Common dependency configurations
  */
 const dependencies = {
-  // Browser projects depend on credentials-with-vault completing first
-  browserProjects: [projectNames.credentialsWithVault],
+  // Chromium project depends on credentials-with-vault completing first
+  chromeProject: [projectNames.credentialsWithVault],
+  // Other browser tests run after Chromium tests
+  otherBrowsersProjects: [projectNames.chromium],
   // SSO tests run after all browser UI tests to avoid parallel execution issues
   ssoProject: [
     projectNames.chromium,
@@ -138,7 +140,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: dependencies.browserProjects,
+      dependencies: dependencies.chromeProject,
     },
     {
       name: projectNames.firefox,
@@ -150,7 +152,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: dependencies.browserProjects,
+      dependencies: dependencies.otherBrowsersProjects,
       grep: /@firefox/,
     },
     {
@@ -163,7 +165,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: dependencies.browserProjects,
+      dependencies: dependencies.otherBrowsersProjects,
       grep: /@webkit/,
     },
     // SSO tests run AFTER all other UI tests complete to avoid parallel execution issues

@@ -100,8 +100,8 @@ export default function SecuritySettingsPage() {
               {organization?.globalToolPolicy === "restrictive" ? (
                 <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400">
                   <ShieldCheck className="h-4 w-4" />
-                  Agents' policies apply. By default, only first tool call is
-                  allowed and its results are untrusted.
+                  Policies apply to agents' tools. By default, only the first
+                  tool call in session is allowed and its results are untrusted.
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400">

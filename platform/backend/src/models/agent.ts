@@ -48,18 +48,27 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
 
-    // Assign Archestra built-in tools to the agent
-    await ToolModel.assignArchestraToolsToAgent(createdAgent.id);
+    // Assign default Archestra tools (artifact_write, todo_write) to new profiles
+    await ToolModel.assignDefaultArchestraToolsToAgent(createdAgent.id);
 
-    // Get team details for the created agent
-    const teamDetails =
+    // Get team details and tools for the created agent
+    const [teamDetails, assignedTools] = await Promise.all([
       teams && teams.length > 0
-        ? await AgentTeamModel.getTeamDetailsForAgent(createdAgent.id)
-        : [];
+        ? AgentTeamModel.getTeamDetailsForAgent(createdAgent.id)
+        : Promise.resolve([]),
+      db
+        .select({ tool: schema.toolsTable })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(eq(schema.agentToolsTable.agentId, createdAgent.id)),
+    ]);
 
     return {
       ...createdAgent,
-      tools: [],
+      tools: assignedTools.map((row) => row.tool),
       teams: teamDetails,
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
     };
@@ -206,7 +215,10 @@ class AgentModel {
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
         )
-        .where(sql`NOT ${schema.toolsTable.name} LIKE 'archestra__%'`)
+        // Double backslash needed: JS consumes one level, SQL gets the other
+        .where(
+          sql`NOT ${schema.toolsTable.name} LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
+        )
         .groupBy(schema.agentToolsTable.agentId)
         .as("toolsCounts");
 

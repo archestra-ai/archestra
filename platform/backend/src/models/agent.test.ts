@@ -1,3 +1,7 @@
+import {
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
+} from "@shared";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import TeamModel from "./team";
@@ -63,7 +67,7 @@ describe("AgentModel", () => {
 
     test("returns empty Set when no agents exist", async () => {
       const nonExistentId1 = "00000000-0000-0000-0000-000000000000";
-      const nonExistentId2 = "00000000-0000-0000-0000-000000000001";
+      const nonExistentId2 = "00000000-0000-4000-8000-000000000099";
 
       const existingIds = await AgentModel.existsBatch([
         nonExistentId1,
@@ -1143,6 +1147,154 @@ describe("AgentModel", () => {
       // Should show 0 tools since all were Archestra tools
       expect(testAgent?.tools).toHaveLength(0);
     });
+
+    test("exclusion pattern only matches double underscore prefix", async ({
+      makeAdmin,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create an agent
+      const agent = await AgentModel.create({
+        name: "Pattern Test Agent",
+        teams: [],
+      });
+
+      // Create tools with double underscore (should be excluded)
+      const doubleUnderscoreTool = await makeTool({
+        name: "archestra__pattern_test_tool",
+        description: "Archestra tool",
+        parameters: {},
+      });
+
+      // Create tools with similar names that should NOT be excluded
+      const singleUnderscoreTool = await makeTool({
+        name: "archestra_pattern_single",
+        description: "Single underscore tool",
+        parameters: {},
+      });
+      const noUnderscoreTool = await makeTool({
+        name: "archestrapatterntest",
+        description: "No underscore tool",
+        parameters: {},
+      });
+      const regularTool = await makeTool({
+        name: "regular_pattern_tool",
+        description: "Regular tool",
+        parameters: {},
+      });
+
+      await makeAgentTool(agent.id, doubleUnderscoreTool.id);
+      await makeAgentTool(agent.id, singleUnderscoreTool.id);
+      await makeAgentTool(agent.id, noUnderscoreTool.id);
+      await makeAgentTool(agent.id, regularTool.id);
+
+      // Query the agent
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+
+      // Find our test agent
+      const testAgent = result.data.find(
+        (a) => a.name === "Pattern Test Agent",
+      );
+      expect(testAgent).toBeDefined();
+
+      // Should have 3 tools (excludes only archestra__pattern_test_tool)
+      expect(testAgent?.tools).toHaveLength(3);
+
+      const toolNames = testAgent?.tools.map((t) => t.name) ?? [];
+      expect(toolNames).toContain("archestra_pattern_single");
+      expect(toolNames).toContain("archestrapatterntest");
+      expect(toolNames).toContain("regular_pattern_tool");
+      expect(toolNames).not.toContain("archestra__pattern_test_tool");
+    });
+
+    test("sortBy toolsCount correctly excludes only double underscore prefix", async ({
+      makeAdmin,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create two agents
+      const agent1 = await AgentModel.create({
+        name: "Agent with mixed tools",
+        teams: [],
+      });
+
+      const agent2 = await AgentModel.create({
+        name: "Agent with single underscore",
+        teams: [],
+      });
+
+      // Give agent1: 1 regular + 5 archestra__ tools = 1 counted
+      const regularTool = await makeTool({
+        name: "toolscount_regular_tool",
+        description: "Regular tool",
+        parameters: {},
+      });
+      await makeAgentTool(agent1.id, regularTool.id);
+
+      for (let i = 0; i < 5; i++) {
+        const tool = await makeTool({
+          name: `archestra__toolscount_${i}`,
+          description: `Archestra tool ${i}`,
+          parameters: {},
+        });
+        await makeAgentTool(agent1.id, tool.id);
+      }
+
+      // Give agent2: 3 archestra_ (single underscore) tools = 3 counted
+      for (let i = 0; i < 3; i++) {
+        const tool = await makeTool({
+          name: `archestra_single_${i}`,
+          description: `Single underscore tool ${i}`,
+          parameters: {},
+        });
+        await makeAgentTool(agent2.id, tool.id);
+      }
+
+      // Sort by toolsCount descending
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "toolsCount", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+
+      const agent1Result = result.data.find(
+        (a) => a.name === "Agent with mixed tools",
+      );
+      const agent2Result = result.data.find(
+        (a) => a.name === "Agent with single underscore",
+      );
+
+      expect(agent1Result).toBeDefined();
+      expect(agent2Result).toBeDefined();
+
+      // agent1 should have 1 tool counted (archestra__ excluded)
+      expect(agent1Result?.tools).toHaveLength(1);
+
+      // agent2 should have 3 tools counted (archestra_ NOT excluded)
+      expect(agent2Result?.tools).toHaveLength(3);
+
+      // agent2 should come before agent1 in sort order (3 > 1)
+      const agent1Index = result.data.findIndex(
+        (a) => a.name === "Agent with mixed tools",
+      );
+      const agent2Index = result.data.findIndex(
+        (a) => a.name === "Agent with single underscore",
+      );
+
+      expect(agent2Index).toBeLessThan(agent1Index);
+    });
   });
 
   describe("findById Junction Table", () => {
@@ -1284,6 +1436,57 @@ describe("AgentModel", () => {
 
       expect(foundAgent).not.toBeNull();
       expect(foundAgent?.tools).toHaveLength(0);
+    });
+  });
+
+  describe("Default Archestra Tools Assignment", () => {
+    test("new agent has artifact_write and todo_write tools assigned by default", async ({
+      seedAndAssignArchestraTools,
+      makeAgent,
+    }) => {
+      // First seed Archestra tools (simulates app startup)
+      const existingAgent = await makeAgent();
+      await seedAndAssignArchestraTools(existingAgent.id);
+
+      // Create a new agent - should have default tools assigned
+      const agent = await AgentModel.create({
+        name: "Agent with Default Tools",
+        teams: [],
+      });
+
+      // Verify the agent has the default Archestra tools assigned
+      const toolNames = agent.tools.map((t) => t.name);
+      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+    });
+
+    test("new agent returns assigned tools without Archestra prefix filtering", async ({
+      seedAndAssignArchestraTools,
+      makeAgent,
+    }) => {
+      // First seed Archestra tools
+      const existingAgent = await makeAgent();
+      await seedAndAssignArchestraTools(existingAgent.id);
+
+      // Create a new agent
+      const agent = await AgentModel.create({
+        name: "Test Default Tools Agent",
+        teams: [],
+      });
+
+      // The create method should return the assigned tools
+      expect(agent.tools.length).toBeGreaterThanOrEqual(2);
+
+      // Verify artifact_write and todo_write are present
+      const hasArtifactWrite = agent.tools.some(
+        (t) => t.name === TOOL_ARTIFACT_WRITE_FULL_NAME,
+      );
+      const hasTodoWrite = agent.tools.some(
+        (t) => t.name === TOOL_TODO_WRITE_FULL_NAME,
+      );
+
+      expect(hasArtifactWrite).toBe(true);
+      expect(hasTodoWrite).toBe(true);
     });
   });
 

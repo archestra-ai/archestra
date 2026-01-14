@@ -7,6 +7,7 @@ import { DEFAULT_TABLE_LIMIT } from "./utils";
 const {
   getInteraction,
   getInteractions,
+  getInteractionSessions,
   getUniqueExternalAgentIds,
   getUniqueUserIds,
 } = archestraApiSdk;
@@ -15,6 +16,7 @@ export function useInteractions({
   profileId,
   externalAgentId,
   userId,
+  sessionId,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -24,6 +26,7 @@ export function useInteractions({
   profileId?: string;
   externalAgentId?: string;
   userId?: string;
+  sessionId?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -38,6 +41,7 @@ export function useInteractions({
       profileId,
       externalAgentId,
       userId,
+      sessionId,
       limit,
       offset,
       sortBy,
@@ -49,12 +53,21 @@ export function useInteractions({
           ...(profileId ? { profileId } : {}),
           ...(externalAgentId ? { externalAgentId } : {}),
           ...(userId ? { userId } : {}),
+          ...(sessionId ? { sessionId } : {}),
           limit,
           offset,
           ...(sortBy ? { sortBy } : {}),
           sortDirection,
         },
       });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch interactions",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch interactions");
+      }
       return response.data;
     },
     // Only use initialData for the first page (offset 0) with default sorting and default limit
@@ -65,7 +78,8 @@ export function useInteractions({
       sortDirection === "desc" &&
       !profileId &&
       !externalAgentId &&
-      !userId
+      !userId &&
+      !sessionId
         ? initialData
         : undefined,
     // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
@@ -85,6 +99,14 @@ export function useInteraction({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
       const response = await getInteraction({ path: { interactionId } });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch interaction",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch interaction");
+      }
       return response.data;
     },
     initialData,
@@ -97,6 +119,14 @@ export function useUniqueExternalAgentIds() {
     queryKey: ["interactions", "externalAgentIds"],
     queryFn: async () => {
       const response = await getUniqueExternalAgentIds();
+      if (response.error) {
+        const msg =
+          response.error.error?.message ?? "Failed to fetch external agent IDs";
+        throw new Error(msg);
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch external agent IDs");
+      }
       return response.data;
     },
   });
@@ -107,7 +137,71 @@ export function useUniqueUserIds() {
     queryKey: ["interactions", "userIds"],
     queryFn: async () => {
       const response = await getUniqueUserIds();
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch user IDs",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch user IDs");
+      }
       return response.data;
     },
+  });
+}
+
+export function useInteractionSessions({
+  profileId,
+  userId,
+  sessionId,
+  limit = DEFAULT_TABLE_LIMIT,
+  offset = 0,
+  initialData,
+}: {
+  profileId?: string;
+  userId?: string;
+  sessionId?: string;
+  limit?: number;
+  offset?: number;
+  initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
+} = {}) {
+  return useSuspenseQuery({
+    queryKey: [
+      "interactions",
+      "sessions",
+      profileId,
+      userId,
+      sessionId,
+      limit,
+      offset,
+    ],
+    queryFn: async () => {
+      const response = await getInteractionSessions({
+        query: {
+          ...(profileId ? { profileId } : {}),
+          ...(userId ? { userId } : {}),
+          ...(sessionId ? { sessionId } : {}),
+          limit,
+          offset,
+        },
+      });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch sessions",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch sessions");
+      }
+      return response.data;
+    },
+    initialData:
+      offset === 0 &&
+      limit === DEFAULT_TABLE_LIMIT &&
+      !profileId &&
+      !userId &&
+      !sessionId
+        ? initialData
+        : undefined,
   });
 }

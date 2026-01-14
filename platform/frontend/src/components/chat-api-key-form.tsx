@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useTeams } from "@/lib/team.query";
+import { WithPermissions } from "./roles/with-permissions";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -30,14 +31,6 @@ const InlineVaultSecretSelector = lazy(
     import("@/components/inline-vault-secret-selector.ee"),
 );
 
-const WithPermissions = lazy(() =>
-  // biome-ignore lint/style/noRestrictedImports: dynamic import
-  import("./roles/with-permissions.ee").then((mod) => ({
-    default: mod.WithPermissions,
-  })),
-);
-
-// Reuse types from generated API types
 type CreateChatApiKeyBody = archestraApiTypes.CreateChatApiKeyData["body"];
 
 // Form values type - combines create/update fields
@@ -89,6 +82,14 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://aistudio.google.com/app/apikey",
     consoleName: "Google AI Studio",
+  },
+  cerebras: {
+    name: "Cerebras",
+    icon: "/icons/cerebras.png",
+    placeholder: "csk-...",
+    enabled: true,
+    consoleUrl: "https://cloud.cerebras.ai/platform",
+    consoleName: "Cerebras Cloud",
   },
   vllm: {
     name: "vLLM",

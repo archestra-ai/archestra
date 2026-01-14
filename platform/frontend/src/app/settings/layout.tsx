@@ -31,7 +31,6 @@ export default function SettingsLayout({
     { label: "Dual LLM", href: "/settings/dual-llm" },
     { label: "LLM API Keys", href: "/settings/llm-api-keys" },
     { label: "Security", href: "/settings/security" },
-    { label: "Policy Config Subagent", href: "/settings/auto-policy" },
     ...(userCanReadOrganization
       ? [
           { label: "Members", href: "/settings/members" },

@@ -6,16 +6,24 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Loader2, Search, Wand2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Pencil,
+  Search,
+  Wand2,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
+import { PermissivePolicyOverlay } from "@/components/permissive-policy-overlay";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -27,7 +35,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -45,8 +52,11 @@ import {
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import {
-  getAllowUsageFromPolicies,
-  getResultTreatmentFromPolicies,
+  type CallPolicyAction,
+  getCallPolicyActionFromPolicies,
+  getResultPolicyActionFromPolicies,
+  RESULT_POLICY_ACTION_OPTIONS,
+  type ResultPolicyAction,
 } from "@/lib/policy.utils";
 import {
   type ToolWithAssignmentsData,
@@ -59,6 +69,7 @@ import {
   DEFAULT_TOOLS_PAGE_SIZE,
 } from "@/lib/utils";
 import type { ToolsInitialData } from "../page";
+import { CallPolicyToggle } from "./call-policy-toggle";
 
 type GetToolsWithAssignmentsQueryParams = NonNullable<
   archestraApiTypes.GetToolsWithAssignmentsData["query"]
@@ -69,10 +80,6 @@ type ToolsSortByValues = NonNullable<
 type ToolsSortDirectionValues = NonNullable<
   GetToolsWithAssignmentsQueryParams["sortDirection"]
 > | null;
-
-// These fields were moved to policies in the new schema
-// Define the type directly since it's no longer on ProfileToolData
-type ToolResultTreatment = "trusted" | "untrusted" | "sanitize_with_dual_llm";
 
 interface AssignedToolsTableProps {
   onToolClick: (tool: ToolWithAssignmentsData) => void;
@@ -260,14 +267,14 @@ export function AssignedToolsTable({
 
   const handleBulkAction = useCallback(
     async (
-      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-      value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+      field: "callPolicy" | "resultPolicyAction",
+      value: CallPolicyAction | ResultPolicyAction,
     ) => {
       // Filter out tools with custom policies (non-empty conditions)
       const toolIds = selectedTools
         .filter((tool) => {
           const policies =
-            field === "allowUsageWhenUntrustedDataIsPresent"
+            field === "callPolicy"
               ? invocationPolicies?.byProfileToolId[tool.id] || []
               : resultPolicies?.byProfileToolId[tool.id] || [];
 
@@ -285,18 +292,15 @@ export function AssignedToolsTable({
       }
       setIsBulkUpdating(true);
 
-      if (field === "allowUsageWhenUntrustedDataIsPresent") {
+      if (field === "callPolicy") {
         bulkCallPolicyMutation.mutate({
           toolIds,
-          allowUsage: value as boolean,
+          action: value as CallPolicyAction,
         });
       } else {
         bulkResultPolicyMutation.mutate({
           toolIds,
-          treatment: value as
-            | "trusted"
-            | "untrusted"
-            | "sanitize_with_dual_llm",
+          action: value as ResultPolicyAction,
         });
       }
       setIsBulkUpdating(false);
@@ -353,10 +357,7 @@ export function AssignedToolsTable({
   }, []);
 
   const isRowFieldUpdating = useCallback(
-    (
-      id: string,
-      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-    ) => {
+    (id: string, field: "callPolicy" | "resultPolicyAction") => {
       return Array.from(updatingRows).some(
         (row) => row.id === id && row.field === field,
       );
@@ -367,20 +368,20 @@ export function AssignedToolsTable({
   const handleSingleRowUpdate = useCallback(
     async (
       toolId: string,
-      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-      value: boolean | ToolResultTreatment,
+      field: "callPolicy" | "resultPolicyAction",
+      value: CallPolicyAction | ResultPolicyAction,
     ) => {
       setUpdatingRows((prev) => new Set(prev).add({ id: toolId, field }));
       try {
-        if (field === "allowUsageWhenUntrustedDataIsPresent") {
+        if (field === "callPolicy") {
           await callPolicyMutation.mutateAsync({
             toolId,
-            allowUsage: value as boolean,
+            action: value as CallPolicyAction,
           });
         } else {
           await resultPolicyMutation.mutateAsync({
             toolId,
-            treatment: value as ToolResultTreatment,
+            action: value as ResultPolicyAction,
           });
         }
       } catch (error) {
@@ -524,14 +525,14 @@ export function AssignedToolsTable({
         size: 100,
       },
       {
-        id: "allowUsageWhenUntrustedDataIsPresent",
+        id: "callPolicy",
         header: ({ column }) => (
           <Button
             variant="ghost"
             className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            In untrusted context
+            Call Policy
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
@@ -545,44 +546,49 @@ export function AssignedToolsTable({
 
           if (hasCustomPolicy) {
             return (
-              <span className="text-xs font-medium text-primary">Custom</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-[90px] text-xs"
+                onClick={() => onToolClick(row.original)}
+              >
+                Custom
+              </Button>
             );
           }
 
-          const isUpdating = isRowFieldUpdating(
-            row.original.id,
-            "allowUsageWhenUntrustedDataIsPresent",
-          );
+          const isUpdating = isRowFieldUpdating(row.original.id, "callPolicy");
 
-          const allowUsage = getAllowUsageFromPolicies(
+          const currentAction = getCallPolicyActionFromPolicies(
             row.original.id,
             invocationPolicies,
           );
 
           return (
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={allowUsage}
-                disabled={isUpdating}
-                onClick={(e) => e.stopPropagation()}
-                onCheckedChange={(checked) => {
-                  // Only update if value actually changed
-                  if (checked === allowUsage) return;
-                  handleSingleRowUpdate(
-                    row.original.id,
-                    "allowUsageWhenUntrustedDataIsPresent",
-                    checked,
-                  );
-                }}
-                aria-label={`Allow ${row.original.name} in untrusted context`}
-              />
-              <span className="text-xs text-muted-foreground">
-                {allowUsage ? "Allowed" : "Blocked"}
-              </span>
-              {isUpdating && (
-                <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
+            <WithPermissions
+              permissions={{ policy: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex items-center gap-2">
+                  <CallPolicyToggle
+                    value={currentAction}
+                    onChange={(action) =>
+                      handleSingleRowUpdate(
+                        row.original.id,
+                        "callPolicy",
+                        action,
+                      )
+                    }
+                    disabled={isUpdating || !hasPermission}
+                    size="sm"
+                  />
+                  {isUpdating && (
+                    <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
+                  )}
+                </div>
               )}
-            </div>
+            </WithPermissions>
           );
         },
         size: 140,
@@ -600,63 +606,108 @@ export function AssignedToolsTable({
 
           if (hasCustomPolicy) {
             return (
-              <span className="text-xs font-medium text-primary">Custom</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-[90px] text-xs"
+                onClick={() => onToolClick(row.original)}
+              >
+                Custom
+              </Button>
             );
           }
 
-          const treatmentLabels: Record<ToolResultTreatment, string> = {
-            trusted: "Trusted",
-            untrusted: "Untrusted",
-            sanitize_with_dual_llm: "Sanitize with Dual LLM",
-          };
-
           const isUpdating = isRowFieldUpdating(
             row.original.id,
-            "toolResultTreatment",
+            "resultPolicyAction",
           );
 
-          const treatment = getResultTreatmentFromPolicies(
+          const resultAction = getResultPolicyActionFromPolicies(
             row.original.id,
             resultPolicies,
           );
 
+          const actionLabel =
+            RESULT_POLICY_ACTION_OPTIONS.find(
+              (opt) => opt.value === resultAction,
+            )?.label ?? resultAction;
+
           return (
-            <div className="flex items-center gap-2">
-              <Select
-                value={treatment}
-                disabled={isUpdating}
-                onValueChange={(value) => {
-                  // Only update if value actually changed
-                  if (value === treatment) return;
-                  handleSingleRowUpdate(
-                    row.original.id,
-                    "toolResultTreatment",
-                    value as ToolResultTreatment,
-                  );
-                }}
-              >
-                <SelectTrigger
-                  className="h-8 w-[180px] text-xs"
-                  onClick={(e) => e.stopPropagation()}
-                  size="sm"
-                >
-                  <SelectValue>{treatmentLabels[treatment]}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(treatmentLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {isUpdating && (
-                <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
+            <WithPermissions
+              permissions={{ policy: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={resultAction}
+                    disabled={isUpdating || !hasPermission}
+                    onValueChange={(value) => {
+                      // Only update if value actually changed
+                      if (value === resultAction) return;
+                      handleSingleRowUpdate(
+                        row.original.id,
+                        "resultPolicyAction",
+                        value as ResultPolicyAction,
+                      );
+                    }}
+                  >
+                    <SelectTrigger
+                      className="h-8 w-[150px] text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                      size="sm"
+                    >
+                      <SelectValue>{actionLabel}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {isUpdating && (
+                    <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
+                  )}
+                </div>
               )}
-            </div>
+            </WithPermissions>
           );
         },
-        size: 190,
+        size: 170,
+      },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => (
+          <WithPermissions
+            permissions={{ policy: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={!hasPermission}
+                      onClick={() => onToolClick(row.original)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Edit policies</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </WithPermissions>
+        ),
+        size: 60,
       },
     ],
     [
@@ -665,6 +716,7 @@ export function AssignedToolsTable({
       internalMcpCatalogItems,
       isRowFieldUpdating,
       handleSingleRowUpdate,
+      onToolClick,
     ],
   );
 
@@ -680,235 +732,208 @@ export function AssignedToolsTable({
   }, [internalMcpCatalogItems]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap gap-4">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <DebouncedInput
-            placeholder="Search tools by name..."
-            initialValue={searchQuery}
-            onChange={handleSearchChange}
-            className="pl-9"
+    <PermissivePolicyOverlay>
+      <div className="space-y-6">
+        <div className="flex flex-wrap gap-4">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <DebouncedInput
+              placeholder="Search tools by name..."
+              initialValue={searchQuery}
+              onChange={handleSearchChange}
+              className="pl-9"
+            />
+          </div>
+
+          <SearchableSelect
+            value={originFilter}
+            onValueChange={handleOriginFilterChange}
+            placeholder="Filter by Origin"
+            items={[
+              { value: "all", label: "All Origins" },
+              { value: "llm-proxy", label: "LLM Proxy" },
+              ...uniqueOrigins.map((origin) => ({
+                value: origin.id,
+                label: origin.name,
+              })),
+            ]}
+            className="w-[200px]"
           />
         </div>
 
-        <SearchableSelect
-          value={originFilter}
-          onValueChange={handleOriginFilterChange}
-          placeholder="Filter by Origin"
-          items={[
-            { value: "all", label: "All Origins" },
-            { value: "llm-proxy", label: "LLM Proxy" },
-            ...uniqueOrigins.map((origin) => ({
-              value: origin.id,
-              label: origin.name,
-            })),
-          ]}
-          className="w-[200px]"
-        />
-      </div>
-
-      <div className="flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
-        <div className="flex items-center gap-3">
-          {hasSelection ? (
-            <>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-sm font-semibold text-primary">
-                  {selectedTools.length}
+        <div className="flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
+          <div className="flex items-center gap-3">
+            {hasSelection ? (
+              <>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-sm font-semibold text-primary">
+                    {selectedTools.length}
+                  </span>
+                </div>
+                <span className="text-sm font-medium">
+                  {selectedTools.length === 1
+                    ? "tool selected"
+                    : "tools selected"}
                 </span>
-              </div>
-              <span className="text-sm font-medium">
-                {selectedTools.length === 1
-                  ? "tool selected"
-                  : "tools selected"}
-              </span>
-              {isBulkUpdating && (
-                <LoadingSpinner className="h-4 w-4 text-muted-foreground" />
-              )}
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              Select tools to apply bulk actions
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              In untrusted context:
-            </span>
-            <ButtonGroup>
-              <PermissionButton
-                permissions={{ tool: ["update"] }}
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("allowUsageWhenUntrustedDataIsPresent", true)
-                }
-                disabled={!hasSelection || isBulkUpdating}
-              >
-                Allow
-              </PermissionButton>
-              <PermissionButton
-                permissions={{ tool: ["update"] }}
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction(
-                    "allowUsageWhenUntrustedDataIsPresent",
-                    false,
-                  )
-                }
-                disabled={!hasSelection || isBulkUpdating}
-              >
-                Block
-              </PermissionButton>
-            </ButtonGroup>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Results are:</span>
-            <ButtonGroup>
-              <PermissionButton
-                permissions={{ tool: ["update"] }}
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("toolResultTreatment", "trusted")
-                }
-                disabled={!hasSelection || isBulkUpdating}
-              >
-                Trusted
-              </PermissionButton>
-              <PermissionButton
-                permissions={{ tool: ["update"] }}
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("toolResultTreatment", "untrusted")
-                }
-                disabled={!hasSelection || isBulkUpdating}
-              >
-                Untrusted
-              </PermissionButton>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PermissionButton
-                    size="sm"
-                    variant="outline"
-                    permissions={{ tool: ["update"] }}
-                    onClick={() =>
-                      handleBulkAction(
-                        "toolResultTreatment",
-                        "sanitize_with_dual_llm",
-                      )
-                    }
-                    disabled={!hasSelection || isBulkUpdating}
-                  >
-                    Dual LLM
-                  </PermissionButton>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Sanitize with Dual LLM</p>
-                </TooltipContent>
-              </Tooltip>
-            </ButtonGroup>
-          </div>
-          <div className="ml-2 h-4 w-px bg-border" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <PermissionButton
-                permissions={{ profile: ["update"], tool: ["update"] }}
-                size="sm"
-                variant="outline"
-                onClick={handleAutoConfigurePolicies}
-                disabled={
-                  !hasSelection ||
-                  isBulkUpdating ||
-                  autoConfigureMutation.isPending
-                }
-              >
-                {autoConfigureMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Configuring...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="h-4 w-4" />
-                    Configure with Subagent
-                  </>
+                {isBulkUpdating && (
+                  <LoadingSpinner className="h-4 w-4 text-muted-foreground" />
                 )}
-              </PermissionButton>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Automatically configure security policies using AI analysis</p>
-            </TooltipContent>
-          </Tooltip>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={clearSelection}
-            disabled={!hasSelection || isBulkUpdating}
-          >
-            Clear selection
-          </Button>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <LoadingSpinner />
-        </div>
-      ) : tools.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
-          <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
-          <p className="mb-4 text-sm text-muted-foreground">
-            {searchQuery || originFilter !== DEFAULT_FILTER_ALL
-              ? "No tools match your filters. Try adjusting your search or filters."
-              : "No tools have been assigned yet."}
-          </p>
-          {(searchQuery || originFilter !== DEFAULT_FILTER_ALL) && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                handleSearchChange("");
-                handleOriginFilterChange(DEFAULT_FILTER_ALL);
-              }}
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                Select tools to apply bulk actions
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <WithPermissions
+              permissions={{ policy: ["update"] }}
+              noPermissionHandle="tooltip"
             >
-              Clear all filters
+              {({ hasPermission }) => (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    Call Policy:
+                  </span>
+                  <Select
+                    disabled={!hasSelection || isBulkUpdating || !hasPermission}
+                    onValueChange={(value: CallPolicyAction) =>
+                      handleBulkAction("callPolicy", value)
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-[180px] text-sm" size="sm">
+                      <SelectValue placeholder="Select action" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="allow_when_context_is_untrusted">
+                        Allow always
+                      </SelectItem>
+                      <SelectItem value="block_when_context_is_untrusted">
+                        Allow in trusted context
+                      </SelectItem>
+                      <SelectItem value="block_always">Block always</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </WithPermissions>
+            <WithPermissions
+              permissions={{ policy: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    Results are:
+                  </span>
+                  <Select
+                    disabled={!hasSelection || isBulkUpdating || !hasPermission}
+                    onValueChange={(value: ResultPolicyAction) =>
+                      handleBulkAction("resultPolicyAction", value)
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-[160px] text-sm" size="sm">
+                      <SelectValue placeholder="Select action" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </WithPermissions>
+            <div className="ml-2 h-4 w-px bg-border" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PermissionButton
+                  permissions={{ profile: ["update"], tool: ["update"] }}
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAutoConfigurePolicies}
+                  disabled={
+                    !hasSelection ||
+                    isBulkUpdating ||
+                    autoConfigureMutation.isPending
+                  }
+                >
+                  {autoConfigureMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Configuring...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-4 w-4" />
+                      Configure with Subagent
+                    </>
+                  )}
+                </PermissionButton>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  Automatically configure security policies using AI analysis
+                </p>
+              </TooltipContent>
+            </Tooltip>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              disabled={!hasSelection || isBulkUpdating}
+            >
+              Clear selection
             </Button>
-          )}
+          </div>
         </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={tools}
-          onRowClick={(tool, event) => {
-            const target = event.target as HTMLElement;
-            const isCheckboxClick =
-              target.closest('[data-column-id="select"]') ||
-              target.closest('input[type="checkbox"]') ||
-              target.closest('button[role="checkbox"]') ||
-              target.closest('button[role="switch"]');
-            if (!isCheckboxClick) {
-              onToolClick(tool);
-            }
-          }}
-          sorting={sorting}
-          onSortingChange={handleSortingChange}
-          manualSorting={true}
-          manualPagination={true}
-          pagination={{
-            pageIndex,
-            pageSize,
-            total: toolsData?.pagination?.total ?? 0,
-          }}
-          onPaginationChange={handlePaginationChange}
-          rowSelection={rowSelection}
-          onRowSelectionChange={handleRowSelectionChange}
-        />
-      )}
-    </div>
+
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <LoadingSpinner />
+          </div>
+        ) : tools.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
+            <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {searchQuery || originFilter !== DEFAULT_FILTER_ALL
+                ? "No tools match your filters. Try adjusting your search or filters."
+                : "No tools have been assigned yet."}
+            </p>
+            {(searchQuery || originFilter !== DEFAULT_FILTER_ALL) && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  handleSearchChange("");
+                  handleOriginFilterChange(DEFAULT_FILTER_ALL);
+                }}
+              >
+                Clear all filters
+              </Button>
+            )}
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={tools}
+            sorting={sorting}
+            onSortingChange={handleSortingChange}
+            manualSorting={true}
+            manualPagination={true}
+            pagination={{
+              pageIndex,
+              pageSize,
+              total: toolsData?.pagination?.total ?? 0,
+            }}
+            onPaginationChange={handlePaginationChange}
+            rowSelection={rowSelection}
+            onRowSelectionChange={handleRowSelectionChange}
+          />
+        )}
+      </div>
+    </PermissivePolicyOverlay>
   );
 }

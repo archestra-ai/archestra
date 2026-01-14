@@ -481,9 +481,11 @@ class AgentToolModel {
     }
 
     // Exclude Archestra built-in tools for test isolation
+    // Note: Use escape character to treat underscores literally (not as wildcards)
+    // Double backslash needed: JS consumes one level, SQL gets the other
     if (filters?.excludeArchestraTools) {
       whereConditions.push(
-        sql`${schema.toolsTable.name} NOT LIKE 'archestra__%'`,
+        sql`${schema.toolsTable.name} NOT LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
       );
     }
 

@@ -231,22 +231,6 @@ export async function createAgentServer(
           tokenAuth,
         );
 
-        if (result.isError) {
-          logger.info(
-            {
-              agentId,
-              toolName: name,
-              error: result.error,
-            },
-            "MCP gateway tool call failed",
-          );
-
-          throw {
-            code: -32603, // Internal error
-            message: result.error || "Tool execution failed",
-          };
-        }
-
         const contentLength = estimateToolResultContentLength(result.content);
         logger.info(
           {
@@ -254,16 +238,21 @@ export async function createAgentServer(
             toolName: name,
             resultContentLength: contentLength.length,
             resultContentLengthEstimated: contentLength.isEstimated,
+            isError: result.isError,
           },
-          "MCP gateway tool call completed",
+          result.isError
+            ? "MCP gateway tool call completed with error result"
+            : "MCP gateway tool call completed",
         );
 
         // Transform CommonToolResult to MCP response format
+        // When isError is true, we still return the content so the LLM can see
+        // the error message and potentially try a different approach
         return {
           content: Array.isArray(result.content)
             ? result.content
             : [{ type: "text", text: JSON.stringify(result.content) }],
-          isError: false,
+          isError: result.isError,
         };
       } catch (error) {
         if (typeof error === "object" && error !== null && "code" in error) {
@@ -380,16 +369,6 @@ export async function validateTeamToken(
     return null;
   }
 
-  logger.debug(
-    {
-      profileId,
-      tokenId: token.id,
-      isOrganizationToken: token.isOrganizationToken,
-      tokenTeamId: token.teamId,
-    },
-    "validateTeamToken: token found",
-  );
-
   // Check if profile is accessible via this token
   if (!token.isOrganizationToken) {
     // Team token: profile must be assigned to this team
@@ -500,21 +479,9 @@ export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
-  logger.debug(
-    { profileId, tokenPrefix: tokenValue.substring(0, 14) },
-    "validateMCPGatewayToken: starting validation",
-  );
-
   // First try team/org token validation
   const teamTokenResult = await validateTeamToken(profileId, tokenValue);
   if (teamTokenResult) {
-    logger.debug(
-      {
-        profileId,
-        tokenType: teamTokenResult.isOrganizationToken ? "org" : "team",
-      },
-      "validateMCPGatewayToken: validated as team/org token",
-    );
     return teamTokenResult;
   }
 

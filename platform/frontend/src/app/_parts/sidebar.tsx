@@ -1,6 +1,7 @@
 "use client";
 import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
 import { E2eTestId } from "@shared";
+import { requiredPagePermissionsMap } from "@shared/access-control";
 import {
   BookOpen,
   Bot,
@@ -24,7 +25,6 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
-import { PermissivePolicyWarning } from "@/components/permissive-policy-warning";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -51,11 +51,6 @@ interface MenuItem {
   icon: LucideIcon;
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
 }
-
-const { requiredPagePermissionsMap } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: conditional page permissions
-    await import("@shared/access-control.ee")
-  : await import("@shared/access-control");
 
 const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   if (!isAuthenticated) {
@@ -261,7 +256,6 @@ const MainSideBarSection = ({
 const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
   <SidebarFooter>
     <DefaultCredentialsWarning />
-    <PermissivePolicyWarning />
     <SignedIn>
       <SidebarGroup className="mt-auto">
         <SidebarGroupContent>

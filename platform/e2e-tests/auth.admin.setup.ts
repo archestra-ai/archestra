@@ -17,9 +17,10 @@ setup("authenticate as admin", async ({ page }) => {
   await page.goto(`${UI_BASE_URL}/chat`);
   await page.waitForLoadState("networkidle");
 
-  // Mark onboarding as complete via API
+  // Mark onboarding as complete and set restrictive policy via API
+  // Setting globalToolPolicy to "restrictive" prevents the permissive policy overlay from blocking UI interactions
   await page.request.patch(`${UI_BASE_URL}/api/organization`, {
-    data: { onboardingComplete: true },
+    data: { onboardingComplete: true, globalToolPolicy: "restrictive" },
   });
 
   // Reload page to dismiss onboarding dialog (on fresh env it renders before API call)

@@ -100,9 +100,13 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      logger.debug(
-        { url: request.url },
-        "[UnifiedProxy] Handling Anthropic request (default agent)",
+      logger.info(
+        {
+          url: request.url,
+          headers: request.headers,
+          bodyKeys: Object.keys(request.body || {}),
+        },
+        "[UnifiedProxy] Handling Anthropic request (default agent) - FULL REQUEST DEBUG",
       );
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
@@ -147,9 +151,14 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      logger.debug(
-        { url: request.url, agentId: request.params.agentId },
-        "[UnifiedProxy] Handling Anthropic request (with agent)",
+      logger.info(
+        {
+          url: request.url,
+          agentId: request.params.agentId,
+          headers: request.headers,
+          bodyKeys: Object.keys(request.body || {}),
+        },
+        "[UnifiedProxy] Handling Anthropic request (with agent) - FULL REQUEST DEBUG",
       );
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,

@@ -7,7 +7,11 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-export const InternalMcpCatalogServerTypeSchema = z.enum(["local", "remote"]);
+export const InternalMcpCatalogServerTypeSchema = z.enum([
+  "local",
+  "remote",
+  "builtin",
+]);
 
 // Define Zod schemas for complex JSONB fields
 const AuthFieldSchema = z.object({
@@ -72,6 +76,8 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
   schema.internalMcpCatalogTable,
 )
   .extend({
+    // Allow explicit ID for builtin catalog items (e.g., Archestra)
+    id: z.string().uuid().optional(),
     name: z.string().trim().min(1, "Name cannot be empty"),
     serverType: InternalMcpCatalogServerTypeSchema,
     authFields: z.array(AuthFieldSchema).nullable().optional(),
@@ -83,7 +89,6 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
     localConfig: LocalConfigSchema.nullable().optional(),
   })
   .omit({
-    id: true,
     createdAt: true,
     updatedAt: true,
   });

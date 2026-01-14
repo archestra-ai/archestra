@@ -775,8 +775,29 @@
     {
       "idx": 110,
       "version": "7",
+      "when": 1768045332938,
+      "tag": "0110_melted_grim_reaper",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1768261920318,
+      "tag": "0111_closed_blade",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1768393349866,
+      "tag": "0112_big_ben_grimm",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
       "when": 1768398638161,
-      "tag": "0110_outgoing_power_pack",
+      "tag": "0113_outgoing_power_pack",
       "breakpoints": true
     }
   ]

@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.0.14",
+  "version": "1.0.20",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -44,7 +44,9 @@
       "mdast-util-to-hast": "13.2.1",
       "express": "5.2.0",
       "jws": "4.0.1",
-      "qs": "6.14.1"
+      "qs": "6.14.1",
+      "d3-path": "3.1.0",
+      "hono": "4.11.4"
     }
   },
   "packageManager": "pnpm@10.27.0"

@@ -123,6 +123,85 @@ jobs:
         with:
           working-directory: ./platform
 
+      # Run validation checks BEFORE platform setup for faster feedback (fail fast)
+      # These checks don't need the platform running - they just need node_modules
+      - name: Run validation checks (drizzle-kit, codegen, db migrations)
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        working-directory: ./platform
+        env:
+          IS_RELEASE_PLEASE_PR: ${{ inputs.is-release-please-pr }}
+        run: |
+          set -e
+
+          # Start drizzle-kit check in background (read-only, can run in parallel)
+          echo "Starting drizzle-kit check in background..."
+          (cd backend && pnpm drizzle-kit check) &
+          DRIZZLE_PID=$!
+
+          # Run codegen and lint
+          echo "Running codegen..."
+          pnpm codegen
+          pnpm lint:fix
+
+          # Check for codegen changes
+          if ! git diff --exit-code || ! git diff --cached --exit-code; then
+            if [ "$IS_RELEASE_PLEASE_PR" == "true" ]; then
+              echo "📦 Release-please PR with codegen changes detected. Auto-committing..."
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git -C "$GITHUB_WORKSPACE" add docs/ platform/
+              git commit -m "chore: update docs/openapi.json version for release"
+              git push
+              echo "✅ Changes committed. Workflow will be re-triggered."
+              exit 0
+            else
+              echo "::error::Generated code is not up to date. Please run 'pnpm codegen && pnpm lint:fix' locally and commit the changes."
+              exit 1
+            fi
+          fi
+          echo "✅ Generated code is up to date"
+
+          # Verify no pending database migrations
+          echo "Checking for pending database migrations..."
+          set +e
+          if timeout 15s pnpm db:generate > /tmp/db_generate_output.txt 2>&1; then
+            output=$(cat /tmp/db_generate_output.txt)
+            echo "$output"
+            if echo "$output" | grep -q "❯\|Is.*table created or renamed"; then
+              echo "❌ Interactive prompt detected - pending database migrations need to be committed"
+              exit 1
+            fi
+          else
+            exit_code=$?
+            cat /tmp/db_generate_output.txt 2>/dev/null || true
+            if [ $exit_code -eq 124 ]; then
+              echo "❌ Command timed out - likely waiting for interactive input about pending migrations"
+            else
+              echo "❌ pnpm db:generate failed with exit code $exit_code"
+            fi
+            exit 1
+          fi
+          set -e
+
+          # Check for uncommitted migration files
+          if ! git diff --exit-code || ! git diff --cached --exit-code; then
+            echo "::error::Database schema has changed but migrations are missing. Run 'pnpm db:generate' locally."
+            git diff --name-only
+            exit 1
+          fi
+          echo "✅ No pending database migrations"
+
+          # Wait for drizzle-kit check to complete
+          echo "Waiting for drizzle-kit check..."
+          if wait "$DRIZZLE_PID"; then
+            echo "✅ drizzle-kit check passed"
+          else
+            echo "❌ drizzle-kit check failed"
+            exit 1
+          fi
+
+          echo "✅ All validation checks passed"
+
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/setup-archestra-platform
@@ -136,111 +215,6 @@ jobs:
           platform-context: ./platform
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      # Check migration consistency using drizzle-kit check
-      # https://orm.drizzle.team/docs/drizzle-kit-check
-      # The drizzle-kit check command lets you check consistency of your generated SQL migrations history
-      - name: Check drizzle-kit migrations consistency
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform/backend
-        run: pnpm drizzle-kit check
-
-      - name: Check for codegen'd changes
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform
-        env:
-          IS_RELEASE_PLEASE_PR: ${{ inputs.is-release-please-pr }}
-        run: |
-          pnpm codegen
-          # Ensure generated files are properly formatted and linted
-          pnpm lint:fix
-
-          # Check both unstaged and staged changes
-          if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            # For release-please PRs, auto-commit the codegen changes
-            # This is needed because release-please bumps the version in package.json,
-            # which causes generated files (like docs/openapi.json) to be out of date
-            if [ "$IS_RELEASE_PLEASE_PR" == "true" ]; then
-              echo "📦 Release-please PR with codegen changes detected. Auto-committing..."
-
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-
-              # Only add changes under docs/ and platform/ - these are the directories
-              # that may have codegen changes (e.g., docs/openapi.json version bump,
-              # docs/pages/platform-access-control.md front matter timestamp)
-              git -C "$GITHUB_WORKSPACE" add docs/ platform/
-
-              git commit -m "chore: update docs/openapi.json version for release"
-              git push
-
-              echo "✅ Changes committed. Workflow will be re-triggered."
-
-              # Exit early - the push triggers a new workflow run with the updated code
-              exit 0
-            else
-              echo "::error::Generated code is not up to date. Please run 'pnpm codegen && pnpm lint:fix' locally and commit the changes."
-              exit 1
-            fi
-          else
-            echo "Generated code is up to date"
-            echo "codegen-changes=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Verify no pending database migrations
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        id: db-migration-check
-        working-directory: ./platform
-        run: |
-          # Run db generate with timeout to prevent hanging on interactive prompts
-          set +e  # Don't exit on command failure
-
-          echo "Running pnpm db:generate -- awaiting up to 15 seconds for a potential drizzle-kit generate interactive prompt (which could indicate a pending database migration, such as a table rename)"
-
-          # Use timeout and expect no interaction - if it hangs, it means there's a pending migration which requires
-          # user input to continue
-          if timeout 15s pnpm db:generate > /tmp/db_generate_output.txt 2>&1; then
-            # Command completed successfully within timeout
-            output=$(cat /tmp/db_generate_output.txt)
-            echo "Output from pnpm db:generate:"
-            echo "$output"
-
-            # Check if there's an interactive prompt in the output (shouldn't happen if it completed)
-            if echo "$output" | grep -q "❯\|Is.*table created or renamed"; then
-              echo "❌ Interactive prompt detected - there are pending database migrations that need to be committed"
-              echo "Run 'pnpm db:generate' locally, make your choices, and commit the resulting migration files"
-              exit 1
-            fi
-          else
-            # Command timed out or failed
-            exit_code=$?
-            output=$(cat /tmp/db_generate_output.txt 2>/dev/null || echo "No output captured")
-
-            echo "Output from pnpm db:generate (before timeout/failure):"
-            echo "$output"
-
-            if [ $exit_code -eq 124 ]; then
-              # Timeout occurred - likely waiting for interactive input
-              echo "❌ Command timed out - likely waiting for interactive input about pending database migrations"
-              echo "Run 'pnpm db:generate' locally, make your choices, and commit the resulting migration files"
-            else
-              echo "❌ pnpm db:generate failed with exit code $exit_code"
-            fi
-            exit 1
-          fi
-
-          set -e  # Re-enable exit on error
-
-          # Check both unstaged and staged changes
-          # If db:generate produced new migration files, it means the PR is missing migrations
-          if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            echo "::error::Database schema has changed but migrations are missing. Please run 'pnpm db:generate' locally and commit the resulting migration files."
-            git diff --name-only
-            git diff --cached --name-only
-            exit 1
-          else
-            echo "✅ No new migration files were generated - schema is in sync with migrations"
-          fi
 
       # Resolve Playwright version for the container used to run e2e tests
       - name: Resolve Playwright version
@@ -322,13 +296,12 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
       - name: Build Docker image
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        if: ${{ github.event_name == 'merge_group' }}
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ./platform
@@ -346,7 +319,7 @@ jobs:
       # NOTE: Skipped for fork PRs because GitHub doesn't expose repository secrets
       # to workflows triggered by fork PRs. Docker Scout requires Docker Hub auth.
       - name: Docker Scout CVE Check
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
+        if: ${{ github.event_name == 'merge_group' && github.event.pull_request.head.repo.fork != true }}
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
         with:
           command: cves

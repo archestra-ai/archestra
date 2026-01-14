@@ -12,12 +12,14 @@ export function TruncatedText({
   className,
   tooltipContentProps,
   tooltipProps,
+  showTooltip = true,
 }: {
   message: string | undefined;
   maxLength?: number;
   className?: string;
   tooltipProps?: ComponentProps<typeof Tooltip>;
   tooltipContentProps?: ComponentProps<typeof TooltipContent>;
+  showTooltip?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -42,8 +44,8 @@ export function TruncatedText({
         className,
       )}
     >
-      {!isTruncated && <span>{displayText}</span>}
-      {isTruncated && (
+      {(!isTruncated || !showTooltip) && <span>{displayText}</span>}
+      {isTruncated && showTooltip && (
         <Tooltip
           open={isOpen}
           onOpenChange={handleOpenChange}

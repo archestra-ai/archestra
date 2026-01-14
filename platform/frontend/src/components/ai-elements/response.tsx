@@ -22,8 +22,8 @@ export const Response = memo(
         // Add proper paragraph spacing
         "[&_p]:my-2",
         // Add proper code block styling
-        "[&_code]:bg-secondary-foreground/5 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded",
-        "[&_pre]:bg-secondary-foreground/5 [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto",
+        "[&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded",
+        "[&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto",
         className,
       )}
       {...props}

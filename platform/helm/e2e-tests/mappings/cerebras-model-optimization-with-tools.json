@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cerebras/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "cerebras-model-optimization-with-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-cerebras-optimized"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-cerebras-model-opt-tools",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-cerebras-optimized",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "This is a response for a request with tools.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1500,
+        "completion_tokens": 15,
+        "total_tokens": 1515
+      }
+    }
+  }
+}

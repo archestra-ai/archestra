@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cerebras/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "cerebras-compression"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "files[5]{name,size,type}"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-cerebras-compression-enabled",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "llama-4-scout-17b-16e-instruct",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "I have processed the TOON-compressed tool result.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 10,
+        "total_tokens": 110
+      }
+    }
+  }
+}

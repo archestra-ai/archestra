@@ -4,11 +4,15 @@ import AgentToolModel from "./agent-tool";
 import ToolModel from "./tool";
 
 describe("Archestra Tools Dynamic Assignment", () => {
-  test("new agents automatically get Archestra tools assigned on creation", async ({
+  test("agents get Archestra tools after explicit assignment", async ({
     makeAgent,
+    seedAndAssignArchestraTools,
   }) => {
-    // Create a new agent - should get Archestra tools automatically
+    // Create a new agent
     const agent = await makeAgent({ name: "New Agent" });
+
+    // Explicitly seed and assign Archestra tools
+    await seedAndAssignArchestraTools(agent.id);
 
     // Verify agent has Archestra tools assigned
     const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
@@ -29,10 +33,14 @@ describe("Archestra Tools Dynamic Assignment", () => {
 
   test("does not duplicate Archestra tools on subsequent getMcpToolsByAgent calls", async ({
     makeAgent,
+    seedAndAssignArchestraTools,
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
-    // First call - assigns tools
+    // Seed and assign Archestra tools first
+    await seedAndAssignArchestraTools(agent.id);
+
+    // First call
     const firstCall = await ToolModel.getMcpToolsByAgent(agent.id);
     const firstCount = firstCall.length;
 
@@ -50,9 +58,13 @@ describe("Archestra Tools Dynamic Assignment", () => {
     makeInternalMcpCatalog,
     makeMcpServer,
     makeUser,
+    seedAndAssignArchestraTools,
   }) => {
     const user = await makeUser();
     const agent = await makeAgent({ name: "Test Agent" });
+
+    // Seed and assign Archestra tools first
+    await seedAndAssignArchestraTools(agent.id);
 
     // Create an MCP server tool
     const catalogItem = await makeInternalMcpCatalog({
@@ -98,8 +110,12 @@ describe("Archestra Tools Dynamic Assignment", () => {
   test("does not include proxy-discovered tools in getMcpToolsByAgent", async ({
     makeAgent,
     makeTool,
+    seedAndAssignArchestraTools,
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
+
+    // Seed and assign Archestra tools first
+    await seedAndAssignArchestraTools(agent.id);
 
     // Create a proxy-discovered tool (agentId set, catalogId null)
     await makeTool({
@@ -115,7 +131,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const proxyTool = tools.find((t) => t.name === "proxy_discovered_tool");
     expect(proxyTool).toBeUndefined();
 
-    // Should only have Archestra tools
+    // Should only have Archestra tools (proxy-discovered tools are excluded)
     const archestraToolCount = getArchestraMcpTools().length;
     expect(tools).toHaveLength(archestraToolCount);
   });

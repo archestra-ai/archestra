@@ -448,6 +448,8 @@ export async function getChatMcpTools({
   conversationId,
   promptId,
   organizationId,
+  sessionId,
+  delegationChain,
 }: {
   agentName: string;
   agentId: string;
@@ -457,6 +459,10 @@ export async function getChatMcpTools({
   conversationId?: string;
   promptId?: string;
   organizationId?: string;
+  /** Session ID for grouping related LLM requests in logs */
+  sessionId?: string;
+  /** Delegation chain of prompt IDs for tracking delegated agent calls */
+  delegationChain?: string;
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(
     agentId,
@@ -602,6 +608,7 @@ export async function getChatMcpTools({
                     userId,
                     promptId,
                     organizationId,
+                    sessionId,
                   },
                 );
 
@@ -660,7 +667,20 @@ export async function getChatMcpTools({
               // When isError is true, throw to signal AI SDK that tool execution failed
               // This allows AI SDK to create a tool-error part and continue the conversation
               if (result.isError) {
-                throw new Error(result.error || "Tool execution failed");
+                // Extract error message from content (where MCP server puts the error details)
+                // Content can be an array (from MCP server response) or null (from internal errors)
+                const extractedError = Array.isArray(result.content)
+                  ? result.content
+                      .map((item: { type: string; text?: string }) =>
+                        item.type === "text" && item.text
+                          ? item.text
+                          : JSON.stringify(item),
+                      )
+                      .join("\n")
+                  : null;
+                const errorMessage =
+                  extractedError || result.error || "Tool execution failed";
+                throw new Error(errorMessage);
               }
 
               // Convert MCP content to string for AI SDK
@@ -716,6 +736,10 @@ export async function getChatMcpTools({
           profile: { id: agentId, name: agentName },
           promptId,
           organizationId,
+          conversationId,
+          sessionId,
+          // Pass delegation chain for tracking delegated agent calls
+          delegationChain,
           tokenAuth: mcpGwToken
             ? {
                 tokenId: mcpGwToken.tokenId,

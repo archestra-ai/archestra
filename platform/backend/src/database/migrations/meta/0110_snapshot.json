@@ -1,5 +1,5 @@
 {
-  "id": "3dda3325-e8a1-407f-93cf-c91395766cf2",
+  "id": "9b1e7a38-9b97-441f-a7cd-c6c98e6aa64d",
   "prevId": "5e4e84d9-2754-499c-89d9-2a381eac19d8",
   "version": "7",
   "dialect": "postgresql",
@@ -1202,64 +1202,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.incoming_email_subscription": {
-      "name": "incoming_email_subscription",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "subscription_id": {
-          "name": "subscription_id",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "webhook_url": {
-          "name": "webhook_url",
-          "type": "varchar(1024)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.interactions": {
       "name": "interactions",
       "schema": "",
@@ -1286,6 +1228,18 @@
         "user_id": {
           "name": "user_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "session_source": {
+          "name": "session_source",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": false
         },
@@ -1405,6 +1359,21 @@
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "interactions_session_id_idx": {
+          "name": "interactions_session_id_idx",
+          "columns": [
+            {
+              "expression": "session_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

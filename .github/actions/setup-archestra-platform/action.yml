@@ -105,15 +105,52 @@ runs:
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
       run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
 
-    - name: Deploy e2e test dependencies (WireMock, Keycloak)
+    - name: Deploy e2e dependencies and platform in parallel
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       shell: bash
       env:
+        HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
+        HELM_CHART_VERSION: ${{ inputs.helm-chart-version }}
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+        HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
       run: |
-        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests"
+        # Start e2e-tests Helm install in background
+        echo "Starting e2e-tests Helm install in background..."
+        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" &
+        E2E_PID=$!
+
+        # Determine chart reference for platform
+        if [ -n "${HELM_CHART_REF}" ]; then
+          CHART_REF="${HELM_CHART_REF}"
+          VERSION_FLAG=""
+          if [ -n "${HELM_CHART_VERSION}" ]; then
+            VERSION_FLAG="--version ${HELM_CHART_VERSION}"
+          fi
+        else
+          CHART_REF="${PLATFORM_CONTEXT}/helm/archestra"
+          VERSION_FLAG=""
+        fi
+
+        # Deploy platform (this takes longer, so e2e-tests will finish during this)
+        echo "Deploying Archestra Platform..."
+        helm install archestra-platform "${CHART_REF}" \
+          ${VERSION_FLAG} \
+          --values "${HELM_VALUES_PATH}" \
+          --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
+          --atomic --timeout=4m
+
+        # Wait for e2e-tests to complete (should already be done by now)
+        echo "Waiting for e2e-tests Helm install to complete..."
+        if wait "$E2E_PID"; then
+          echo "e2e-tests Helm install completed successfully"
+        else
+          echo "e2e-tests Helm install failed"
+          exit 1
+        fi
 
     - name: Deploy Archestra Platform with Helm
+      if: ${{ inputs.deploy-e2e-dependencies != 'true' }}
       shell: bash
       env:
         HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
@@ -138,7 +175,7 @@ runs:
           ${VERSION_FLAG} \
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
-          --wait --timeout=5m
+          --atomic --timeout=4m
 
     - name: Verify deployment
       shell: bash
@@ -156,12 +193,12 @@ runs:
       shell: bash
       run: |
         echo "Waiting for platform pods to be ready..."
-        kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=120s
+        kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
         echo "Platform pods are ready"
 
         echo "Verifying services are accessible..."
-        curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
-        curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
+        curl --retry 5 --retry-delay 1 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
+        curl --retry 5 --retry-delay 1 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
         echo "All services are ready"
 
     - name: Set output URLs

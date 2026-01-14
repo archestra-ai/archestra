@@ -58,7 +58,7 @@ jobs:
     name: Platform Linting and Tests
     runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
-      contents: read
+      contents: write # Required for release-please auto-commit of codegen changes
     defaults:
       run:
         working-directory: ./platform
@@ -66,11 +66,23 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
+      # Generate GitHub App token for release-please PRs to push codegen changes
+      # (pushes made with GITHUB_TOKEN do not trigger workflows by design)
+      - name: Generate token for release-please PR
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
+        id: generate-token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
       - name: Checkout project
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: false
+          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked]
+          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
+          token: ${{ steps.generate-token.outputs.token || github.token }}
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -83,115 +95,9 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
 
-  # Build platform Docker image once for all e2e tests
-  platform-e2e-build:
-    name: Build Platform Image
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
-      - name: Login to GHCR
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: ./.github/actions/build-platform-docker-image
-        with:
-          context: ./platform
-          push: "true"
-          tags: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-  # E2E tests - runs all e2e test suites in parallel
-  # Uses matrix strategy to run API, UI (sharded), and Vault tests concurrently
-  platform-e2e-tests:
-    name: Platform E2E Tests (${{ matrix.name }})
-    needs: [platform-e2e-build]
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: write
-      packages: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # API tests - also runs validation checks (codegen, migrations)
-          - name: API
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: api
-            shard: ""
-            artifact: blob-report-api
-            run-validation: true
-          # UI tests - sharded across 3 parallel jobs
-          - name: UI 1/3
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium --project=firefox --project=webkit --project=sso
-            shard: "--shard=1/3"
-            artifact: blob-report-ui-1
-            run-validation: false
-          - name: UI 2/3
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium --project=firefox --project=webkit --project=sso
-            shard: "--shard=2/3"
-            artifact: blob-report-ui-2
-            run-validation: false
-          - name: UI 3/3
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: chromium --project=firefox --project=webkit --project=sso
-            shard: "--shard=3/3"
-            artifact: blob-report-ui-3
-            run-validation: false
-          # Vault tests - isolated to avoid race conditions with secrets manager switching
-          - name: Vault
-            runner: blacksmith-16vcpu-ubuntu-2404
-            projects: credentials-with-vault
-            shard: ""
-            artifact: blob-report-vault
-            run-validation: false
-    steps:
-      # Generate GitHub App token for release-please PRs (only needed for validation job)
-      - name: Generate token for release-please PR
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true && matrix.run-validation }}
-        id: generate-token
-        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
-        with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
-
-      - name: Checkout repository
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: ${{ inputs.is-release-please-pr && matrix.run-validation }} # zizmor: ignore[artipacked]
-          ref: ${{ (inputs.is-release-please-pr && matrix.run-validation) && github.head_ref || '' }}
-          token: ${{ steps.generate-token.outputs.token || github.token }}
-
-      - name: Setup environment
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
-      # Validation checks - only run on the API job for fast feedback
+      # Validation checks - codegen, drizzle-kit, db migrations
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && matrix.run-validation }}
-        working-directory: ./platform
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         env:
           IS_RELEASE_PLEASE_PR: ${{ inputs.is-release-please-pr }}
         run: |
@@ -265,6 +171,94 @@ jobs:
           fi
 
           echo "✅ All validation checks passed"
+
+  # Build platform Docker image once for all e2e tests
+  platform-e2e-build:
+    name: Build Platform Image
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Login to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: ./.github/actions/build-platform-docker-image
+        with:
+          context: ./platform
+          push: "true"
+          tags: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+  # E2E tests - runs all e2e test suites in parallel
+  # Uses matrix strategy to run API, UI (sharded), and Vault tests concurrently
+  platform-e2e-tests:
+    name: Platform E2E Tests (${{ matrix.name }})
+    needs: [platform-e2e-build]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: API
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: api
+            shard: ""
+            artifact: blob-report-api
+          # UI tests - sharded across 3 parallel jobs
+          - name: UI 1/3
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: chromium --project=firefox --project=webkit --project=sso
+            shard: "--shard=1/3"
+            artifact: blob-report-ui-1
+          - name: UI 2/3
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: chromium --project=firefox --project=webkit --project=sso
+            shard: "--shard=2/3"
+            artifact: blob-report-ui-2
+          - name: UI 3/3
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: chromium --project=firefox --project=webkit --project=sso
+            shard: "--shard=3/3"
+            artifact: blob-report-ui-3
+          # Vault tests - isolated to avoid race conditions with secrets manager switching
+          - name: Vault
+            runner: blacksmith-16vcpu-ubuntu-2404
+            projects: credentials-with-vault
+            shard: ""
+            artifact: blob-report-vault
+    steps:
+      - name: Checkout repository
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup environment
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
 
       - name: Login to GHCR
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

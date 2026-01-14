@@ -106,7 +106,7 @@ jobs:
 
   zizmor:
     name: Zizmor GitHub Actions static analysis
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       security-events: write
     steps:

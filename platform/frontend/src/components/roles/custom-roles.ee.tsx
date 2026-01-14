@@ -34,7 +34,11 @@ import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 
-export function RolesList() {
+/**
+ * Enterprise Edition roles list with custom role management.
+ * Shows both predefined roles (read-only) and custom roles (CRUD).
+ */
+export function CustomRolesList() {
   const { data: roles, isLoading } = useRoles();
   const createMutation = useCreateRole();
   const updateMutation = useUpdateRole();
@@ -47,7 +51,6 @@ export function RolesList() {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
 
-  // Form state
   const [roleName, setRoleName] = useState("");
   const [permission, setPermission] = useState<Permissions>({});
 
@@ -63,10 +66,7 @@ export function RolesList() {
     }
 
     createMutation.mutate(
-      {
-        name: roleName,
-        permission,
-      },
+      { name: roleName, permission },
       {
         onSuccess: () => {
           setCreateDialogOpen(false);
@@ -97,10 +97,7 @@ export function RolesList() {
     updateMutation.mutate(
       {
         roleId: selectedRole.id,
-        data: {
-          name: roleName,
-          permission,
-        },
+        data: { name: roleName, permission },
       },
       {
         onSuccess: () => {
@@ -150,7 +147,6 @@ export function RolesList() {
     );
   }
 
-  // Separate predefined and custom roles
   const predefinedRoles = roles?.filter((role) => role.predefined) || [];
   const customRoles = roles?.filter((role) => !role.predefined) || [];
 
@@ -210,13 +206,6 @@ export function RolesList() {
                             System
                           </span>
                         </div>
-                        {/* <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                          <Users className="h-3 w-3" />
-                          <span>
-                            {role.memberCount} member
-                            {role.memberCount !== 1 ? "s" : ""}
-                          </span>
-                        </div> */}
                       </div>
                     </div>
                     <span className="text-xs text-muted-foreground">
@@ -251,13 +240,6 @@ export function RolesList() {
                       <Shield className="h-5 w-5" />
                       <div>
                         <h4 className="font-semibold">{role.name}</h4>
-                        {/* <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                          <Users className="h-3 w-3" />
-                          <span>
-                            {role.memberCount} member
-                            {role.memberCount !== 1 ? "s" : ""}
-                          </span>
-                        </div> */}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -277,7 +259,6 @@ export function RolesList() {
                           setRoleToDelete(role);
                           setDeleteDialogOpen(true);
                         }}
-                        // disabled={role.memberCount > 0}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </PermissionButton>

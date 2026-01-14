@@ -3,18 +3,19 @@
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
+import { PredefinedRolesList } from "@/components/roles/predefined-roles-list";
 import { LoadingSpinner } from "@/components/loading";
 import config from "@/lib/config";
 
-const { RolesList } = config.enterpriseLicenseActivated
+const { CustomRolesList } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with roles
-    await import("@/components/roles/roles-list.ee")
+    await import("@/components/roles/custom-roles.ee")
   : {
-      RolesList: () => <EnterpriseLicenseRequired featureName="Custom Roles" />,
+    CustomRolesList: () => <EnterpriseLicenseRequired featureName="Custom Roles" />,
     };
 
 function RolesSettingsContent() {
-  return <RolesList />;
+  return <><PredefinedRolesList /><CustomRolesList /></>;
 }
 
 export default function RolesSettingsPage() {

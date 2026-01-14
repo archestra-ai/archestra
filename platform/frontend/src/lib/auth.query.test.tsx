@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useCurrentOrgMembers,
   useDefaultCredentialsEnabled,
+  useHasPermissions,
+  usePermissionMap,
   useSession,
 } from "./auth.query";
 import { authClient } from "./clients/auth/auth-client";

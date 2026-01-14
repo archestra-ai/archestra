@@ -825,6 +825,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
   vllm: parseVllmError,
   ollama: parseOllamaError,
+  bedrock: parseAnthropicError, // Bedrock Claude models use Anthropic-like error format
 };
 
 /**
@@ -839,6 +840,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
+  bedrock: mapAnthropicErrorWrapper, // Bedrock Claude models use Anthropic-like error format
 };
 
 // =============================================================================

@@ -1,3 +1,4 @@
+import { BedrockClient, ListFoundationModelsCommand } from "@aws-sdk/client-bedrock";
 import { RouteId, type SupportedProvider, SupportedProviders } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
@@ -318,6 +319,68 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Amazon Bedrock
+ * Uses AWS credentials for authentication
+ * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListFoundationModels.html
+ */
+async function fetchBedrockModels(credentials: string): Promise<ModelInfo[]> {
+  // Parse credentials: accessKeyId:secretAccessKey:sessionToken:region
+  const parts = credentials.split(":");
+  const accessKeyId = parts[0];
+  const secretAccessKey = parts[1];
+  const sessionToken = parts[2] || undefined;
+  const region = parts[3] || config.chat.bedrock.region;
+
+  const clientConfig: {
+    region: string;
+    credentials?: {
+      accessKeyId: string;
+      secretAccessKey: string;
+      sessionToken?: string;
+    };
+  } = { region };
+
+  if (accessKeyId && secretAccessKey) {
+    clientConfig.credentials = {
+      accessKeyId,
+      secretAccessKey,
+    };
+    if (sessionToken) {
+      clientConfig.credentials.sessionToken = sessionToken;
+    }
+  }
+
+  const client = new BedrockClient(clientConfig);
+  const command = new ListFoundationModelsCommand({
+    // Filter for models with text output modality (chat-capable)
+    byOutputModality: "TEXT",
+  });
+
+  const response = await client.send(command);
+
+  if (!response.modelSummaries) {
+    logger.warn("No models returned from Bedrock ListFoundationModels");
+    return [];
+  }
+
+  // Filter to only include models that support on-demand inference
+  return response.modelSummaries
+    .filter((model) =>
+      model.inferenceTypesSupported?.includes("ON_DEMAND") ?? false,
+    )
+    .map((model) => {
+      // Generate a readable display name
+      const displayName = model.modelName ?? model.modelId ?? "Unknown";
+
+      return {
+        id: model.modelId ?? "",
+        displayName,
+        provider: "bedrock" as const,
+      };
+    });
+}
+
+/**
  * Fetch models from Gemini API via Vertex AI SDK
  * Uses Application Default Credentials (ADC) for authentication
  *
@@ -434,6 +497,17 @@ async function getProviderApiKey({
     case "ollama":
       // Ollama typically doesn't require API keys, return empty or configured key
       return config.chat.ollama.apiKey || "";
+    case "bedrock": {
+      // Bedrock uses AWS credentials format: accessKeyId:secretAccessKey:sessionToken:region
+      const accessKeyId = config.chat.bedrock.accessKeyId;
+      const secretAccessKey = config.chat.bedrock.secretAccessKey;
+      const sessionToken = config.chat.bedrock.sessionToken;
+      const region = config.chat.bedrock.region;
+      if (accessKeyId && secretAccessKey) {
+        return `${accessKeyId}:${secretAccessKey}:${sessionToken}:${region}`;
+      }
+      return null;
+    }
     default:
       return null;
   }
@@ -445,6 +519,7 @@ const modelFetchers: Record<
   (apiKey: string) => Promise<ModelInfo[]>
 > = {
   anthropic: fetchAnthropicModels,
+  bedrock: fetchBedrockModels,
   cerebras: fetchCerebrasModels,
   gemini: fetchGeminiModels,
   openai: fetchOpenAiModels,
@@ -485,10 +560,14 @@ export async function fetchModelsForProvider({
   // vLLM and Ollama typically don't require API keys
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
+  // Bedrock uses AWS credentials which may come from default credential chain
+  const isBedrock = provider === "bedrock";
+  const bedrockEnabled = isBedrock && config.llm.bedrock.enabled;
 
   // For Gemini with Vertex AI, we don't need an API key - authentication is via ADC
   // For vLLM and Ollama, API key is optional
-  if (!apiKey && !vertexAiEnabled && !isVllm && !isOllama) {
+  // For Bedrock, we check if it's enabled (may use default AWS credential chain)
+  if (!apiKey && !vertexAiEnabled && !isVllm && !isOllama && !bedrockEnabled) {
     logger.debug(
       { provider, organizationId },
       "No API key available for provider",
@@ -516,6 +595,11 @@ export async function fetchModelsForProvider({
     } else if (provider === "ollama") {
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
+    } else if (provider === "bedrock") {
+      // Bedrock uses AWS credentials, may use default credential chain if no explicit credentials
+      if (apiKey || bedrockEnabled) {
+        models = await modelFetchers[provider](apiKey || ":::" + config.chat.bedrock.region);
+      }
     }
     logger.info(
       { provider, modelCount: models.length },

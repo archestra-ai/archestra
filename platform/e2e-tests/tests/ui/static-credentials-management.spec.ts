@@ -251,7 +251,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
     );
-    await connectButton.waitFor({ state: "visible" });
+    await connectButton.waitFor({ state: "visible", timeout: CONNECT_BUTTON_TIMEOUT });
     await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
     // And this time team credential type should be selected by default for everyone, install using team credential
     await clickButton({ page, options: { name: "Install" } });

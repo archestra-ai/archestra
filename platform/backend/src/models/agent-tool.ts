@@ -72,7 +72,7 @@ class AgentToolModel {
         if (organization?.autoConfigureNewTools) {
           // Use the unified method with timeout and loading state management
           await toolAutoPolicyService.configurePoliciesForToolWithTimeout(
-            agentTool.id,
+            toolId,
             organizationId,
           );
         }

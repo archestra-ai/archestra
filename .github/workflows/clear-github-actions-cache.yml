@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   clear-cache:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - name: Clear cache
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6

@@ -98,18 +98,7 @@ Examples:
    * 4. Returns structured policy configuration
    */
   async analyze(params: {
-    tool: Pick<
-      Tool,
-      | "id"
-      | "name"
-      | "description"
-      | "parameters"
-      | "catalogId"
-      | "mcpServerId"
-      | "agentId"
-      | "createdAt"
-      | "updatedAt"
-    >;
+    tool: Pick<Tool, "id" | "name" | "description" | "parameters">;
     mcpServerName: string | null;
     anthropicApiKey: string;
     organizationId: string;

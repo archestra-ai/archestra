@@ -51,9 +51,7 @@ class AgentToolModel {
 
     // Auto-configure policies if enabled (run in background)
     // Import at top of method to avoid circular dependency
-    const { agentToolAutoPolicyService } = await import(
-      "./agent-tool-auto-policy"
-    );
+    const { toolAutoPolicyService } = await import("./agent-tool-auto-policy");
     const { default: OrganizationModel } = await import("./organization");
 
     // Get agent's organization via team relationship and trigger auto-configure in background
@@ -73,8 +71,8 @@ class AgentToolModel {
 
         if (organization?.autoConfigureNewTools) {
           // Use the unified method with timeout and loading state management
-          await agentToolAutoPolicyService.configurePoliciesForAgentToolWithTimeout(
-            agentTool.id,
+          await toolAutoPolicyService.configurePoliciesForToolWithTimeout(
+            toolId,
             organizationId,
           );
         }
@@ -372,9 +370,6 @@ class AgentToolModel {
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
         | "useDynamicTeamCredential"
-        | "policiesAutoConfiguredAt"
-        | "policiesAutoConfiguringStartedAt"
-        | "policiesAutoConfiguredReasoning"
       >
     >,
   ) {

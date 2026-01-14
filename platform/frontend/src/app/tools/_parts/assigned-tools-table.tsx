@@ -155,6 +155,9 @@ export function AssignedToolsTable({
     Set<{ id: string; field: string }>
   >(new Set());
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [bulkCallPolicyValue, setBulkCallPolicyValue] = useState<string>("");
+  const [bulkResultPolicyValue, setBulkResultPolicyValue] =
+    useState<string>("");
 
   // Fetch tools with assignments with server-side pagination, filtering, and sorting
   // Only use initialData for first page with default sorting and no filters
@@ -315,18 +318,16 @@ export function AssignedToolsTable({
   );
 
   const handleAutoConfigurePolicies = useCallback(async () => {
-    // Get the first agentToolId from each selected tool's assignments for auto-configure
-    const agentToolIds = selectedTools
-      .flatMap((tool) => tool.assignments.map((a) => a.agentToolId))
-      .filter(Boolean);
+    // Get tool IDs from selected tools (policies are per tool)
+    const toolIds = selectedTools.map((tool) => tool.id);
 
-    if (agentToolIds.length === 0) {
-      toast.error("No tool assignments found to configure");
+    if (toolIds.length === 0) {
+      toast.error("No tools selected to configure");
       return;
     }
 
     try {
-      const result = await autoConfigureMutation.mutateAsync(agentToolIds);
+      const result = await autoConfigureMutation.mutateAsync(toolIds);
 
       const successCount = result.results.filter(
         (r: { success: boolean }) => r.success,
@@ -336,12 +337,18 @@ export function AssignedToolsTable({
       ).length;
 
       if (failureCount === 0) {
-        toast.success(`Policies configured for ${successCount} tool(s)`);
+        toast.success(
+          `Default policies configured for ${successCount} tool(s). Custom policies are preserved.`,
+        );
       } else {
         toast.warning(
-          `Configured ${successCount} tool(s), failed ${failureCount}`,
+          `Default policies configured for ${successCount} tool(s), failed ${failureCount}. Custom policies are preserved.`,
         );
       }
+
+      // Reset bulk action dropdowns to placeholder
+      setBulkCallPolicyValue("");
+      setBulkResultPolicyValue("");
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -679,7 +686,7 @@ export function AssignedToolsTable({
       },
       {
         id: "actions",
-        header: "",
+        header: "Actions",
         cell: ({ row }) => (
           <WithPermissions
             permissions={{ policy: ["update"] }}
@@ -797,9 +804,11 @@ export function AssignedToolsTable({
                   </span>
                   <Select
                     disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                    onValueChange={(value: CallPolicyAction) =>
-                      handleBulkAction("callPolicy", value)
-                    }
+                    value={bulkCallPolicyValue}
+                    onValueChange={(value: CallPolicyAction) => {
+                      setBulkCallPolicyValue(value);
+                      handleBulkAction("callPolicy", value);
+                    }}
                   >
                     <SelectTrigger className="h-8 w-[180px] text-sm" size="sm">
                       <SelectValue placeholder="Select action" />
@@ -828,9 +837,11 @@ export function AssignedToolsTable({
                   </span>
                   <Select
                     disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                    onValueChange={(value: ResultPolicyAction) =>
-                      handleBulkAction("resultPolicyAction", value)
-                    }
+                    value={bulkResultPolicyValue}
+                    onValueChange={(value: ResultPolicyAction) => {
+                      setBulkResultPolicyValue(value);
+                      handleBulkAction("resultPolicyAction", value);
+                    }}
                   >
                     <SelectTrigger className="h-8 w-[160px] text-sm" size="sm">
                       <SelectValue placeholder="Select action" />
@@ -875,7 +886,7 @@ export function AssignedToolsTable({
               </TooltipTrigger>
               <TooltipContent>
                 <p>
-                  Automatically configure security policies using AI analysis
+                  Automatically configure default policies using AI analysis
                 </p>
               </TooltipContent>
             </Tooltip>

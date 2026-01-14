@@ -179,6 +179,7 @@ export function useBulkAssignTools() {
       // Invalidate global queries (only once, exact match to prevent nested invalidation)
       queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
 
@@ -258,25 +259,35 @@ export function useAutoConfigurePolicies() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (agentToolIds: string[]) => {
+    mutationFn: async (toolIds: string[]) => {
       const result = await autoConfigureAgentToolPolicies({
-        body: { agentToolIds },
+        body: { toolIds },
       });
 
       if (!result.data) {
         const errorMessage =
-          result.error && "message" in result.error
-            ? String(result.error.message)
-            : "Failed to auto-configure policies";
+          typeof result.error?.error === "string"
+            ? result.error.error
+            : (result.error?.error as { message?: string })?.message ||
+              "Failed to auto-configure policies";
         throw new Error(errorMessage);
       }
 
       return result.data;
     },
     onSuccess: () => {
-      // Invalidate agent-tools queries to refetch with new policies
+      // Invalidate queries to refetch with new policies
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["tools"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["tool-invocation-policies"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["tool-result-policies"],
       });
     },
   });

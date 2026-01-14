@@ -329,7 +329,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
       },
     );
 
-    test("should install local MCP server via Docker and discover its tools", async ({
+    test("should install a local MCP server via Docker and discover its tools", async ({
       request,
       makeApiRequest,
     }) => {

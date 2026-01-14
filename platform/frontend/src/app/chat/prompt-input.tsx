@@ -140,6 +140,13 @@ const PromptInputContent = ({
             selectedModel={selectedModel}
             onModelChange={onModelChange}
             messageCount={messageCount}
+            onOpenChange={(open) => {
+              if (!open) {
+                setTimeout(() => {
+                  textareaRef.current?.focus();
+                }, 100);
+              }
+            }}
           />
           {(conversationId || onApiKeyChange) && (
             <ChatApiKeySelector
@@ -153,6 +160,13 @@ const PromptInputContent = ({
               messageCount={messageCount}
               onApiKeyChange={onApiKeyChange}
               onProviderChange={onProviderChange}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setTimeout(() => {
+                    textareaRef.current?.focus();
+                  }, 100);
+                }
+              }}
             />
           )}
         </PromptInputTools>

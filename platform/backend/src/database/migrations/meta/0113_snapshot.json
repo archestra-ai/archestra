@@ -1,5 +1,5 @@
 {
-  "id": "c8dd6549-a9fb-4375-97c8-8ae662698efe",
+  "id": "b48a7948-ff3c-4f40-bc4e-e5e532b1410d",
   "prevId": "5ec62d0c-81bc-4fcc-909e-a36fb11d009d",
   "version": "7",
   "dialect": "postgresql",
@@ -310,24 +310,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "policies_auto_configured_at": {
-          "name": "policies_auto_configured_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "policies_auto_configuring_started_at": {
-          "name": "policies_auto_configuring_started_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "policies_auto_configured_reasoning": {
-          "name": "policies_auto_configured_reasoning",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1196,64 +1178,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.incoming_email_subscription": {
-      "name": "incoming_email_subscription",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "subscription_id": {
-          "name": "subscription_id",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "webhook_url": {
-          "name": "webhook_url",
-          "type": "varchar(1024)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -4077,6 +4001,24 @@
         },
         "description": {
           "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "policies_auto_configured_at": {
+          "name": "policies_auto_configured_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "policies_auto_configuring_started_at": {
+          "name": "policies_auto_configuring_started_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "policies_auto_configured_reasoning": {
+          "name": "policies_auto_configured_reasoning",
           "type": "text",
           "primaryKey": false,
           "notNull": false

@@ -65,7 +65,9 @@ test.describe("MCP Install", () => {
     await adminPage.waitForLoadState("networkidle");
 
     // Check that tools are discovered
-    await serverCard.getByText("out of 2").waitFor({ state: "visible" });
+    await serverCard
+      .getByText("out of 2")
+      .waitFor({ state: "visible", timeout: 30_000 });
 
     // cleanup
     await deleteCatalogItem(

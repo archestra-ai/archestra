@@ -14,6 +14,7 @@ jobs:
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write
       pull-requests: write
@@ -32,7 +33,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@28f83620103c48a57093dcc2837eec89e036bb9f # v0.0.63
+        uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
         with:
           # Dynamically set the secret based on the user who triggered the workflow
           # use their oauth token, since otherwise Anthropic will ban accounts for abuse :(
@@ -43,35 +44,10 @@ jobs:
           additional_permissions: |
             actions: read
 
-          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
-          model: "claude-opus-4-20250514"
-          fallback_model: "claude-sonnet-4-20250514"
-
-          # Optional: Customize the trigger phrase (default: @claude)
-          # trigger_phrase: "/claude"
-
-          # Optional: Trigger when specific user is assigned to an issue
+          # Trigger when specific user is assigned to an issue
           assignee_trigger: "claude-bot"
 
-          # Optional: Allow Claude to run specific commands
-          allowed_tools: |
-            Bash(pnpm install)
-            Bash(pnpm add:*)
-            Bash(pnpm test)
-            Bash(pnpm typecheck)
-            Bash(pnpm codegen:*)
-            Bash(pnpm prettier:*)
-
-          # Optional: Add custom instructions for Claude to customize its behavior for your project
-          # Additional context added to Claude's system prompt while still respecting normal triggers.
-          # These instructions modify Claude's behavior but don't replace the triggering comment.
-          custom_instructions: |
-            Respond to $TRIGGER_USERNAME's comment: "$TRIGGER_COMMENT"
-
-            Keep responses concise and to the point. Avoid lengthy explanations unless specifically requested.
-
-            Context: PR #$PR_NUMBER in $REPOSITORY
-
-          # Optional: Custom environment variables for Claude
-          # claude_env: |
-          #   NODE_ENV: test
+          claude_args: |
+            --model claude-opus-4-5-20251101
+            --allowedTools Bash(pnpm install),Bash(pnpm add:*),Bash(pnpm test),Bash(pnpm typecheck),Bash(pnpm codegen:*),Bash(pnpm prettier:*)
+            --system-prompt "Keep responses concise and to the point. Avoid lengthy explanations unless specifically requested."

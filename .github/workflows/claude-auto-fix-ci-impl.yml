@@ -1,0 +1,115 @@
+# Reusable workflow for Claude auto-fix CI implementation.
+# Called by claude-auto-fix-ci.yml with user-specific OAuth tokens.
+name: Claude Auto Fix CI (Implementation)
+
+on:
+  workflow_call:
+    inputs:
+      head_branch:
+        required: true
+        type: string
+      workflow_run_id:
+        required: true
+        type: number
+      pr_number:
+        required: true
+        type: number
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: true
+
+jobs:
+  auto-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.head_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Setup git identity
+        run: |
+          git config --global user.email "claude[bot]@users.noreply.github.com"
+          git config --global user.name "claude[bot]"
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Get CI failure details
+        id: failure_details
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const runId = ${{ inputs.workflow_run_id }};
+
+            const run = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId
+            });
+
+            const jobs = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId
+            });
+
+            const failedJobs = jobs.data.jobs.filter(job => job.conclusion === 'failure');
+
+            let errorLogs = [];
+            for (const job of failedJobs) {
+              try {
+                const logs = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  job_id: job.id
+                });
+                errorLogs.push({
+                  jobName: job.name,
+                  logs: logs.data.substring(0, 10000) // Limit log size
+                });
+              } catch (e) {
+                console.log(`Could not fetch logs for job ${job.name}: ${e.message}`);
+              }
+            }
+
+            return {
+              runUrl: run.data.html_url,
+              failedJobs: failedJobs.map(j => j.name),
+              errorLogs: errorLogs
+            };
+
+      - name: Fix CI failures with Claude
+        uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            A CI workflow has failed. Please analyze the errors and fix them.
+
+            Failed CI Run: ${{ fromJSON(steps.failure_details.outputs.result).runUrl }}
+            Failed Jobs: ${{ join(fromJSON(steps.failure_details.outputs.result).failedJobs, ', ') }}
+            PR Number: ${{ inputs.pr_number }}
+            Branch Name: ${{ inputs.head_branch }}
+            Repository: ${{ github.repository }}
+
+            Error logs:
+            ${{ toJSON(fromJSON(steps.failure_details.outputs.result).errorLogs) }}
+
+            Instructions:
+            1. Analyze the error logs to understand what failed
+            2. Make the necessary code changes to fix the issues
+            3. Commit the fixes directly to the branch
+            4. Keep changes minimal and focused on fixing the CI failures
+          claude_args: |
+            --model claude-opus-4-5-20251101
+            --allowedTools Edit,MultiEdit,Write,Read,Glob,Grep,Bash(git:*),Bash(pnpm:*),Bash(npm:*),Bash(npx:*)

@@ -408,24 +408,26 @@ jobs:
 
   platform-docker-image-scanning:
     name: Platform Docker Image Scanning
+    needs: [platform-e2e-build]
+    # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-
-      - name: Build Docker image
+      - name: Login to GHCR
         if: ${{ github.event_name == 'merge_group' }}
-        uses: ./.github/actions/build-platform-docker-image
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          context: ./platform
-          load: "true"
-          tags: archestra/platform:ci-test
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull platform image from GHCR
+        if: ${{ github.event_name == 'merge_group' }}
+        run: |
+          docker pull ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
 
       # Scan Docker image for CVEs using Docker Scout
       # https://github.com/docker/scout-action
@@ -440,7 +442,7 @@ jobs:
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
         with:
           command: cves
-          image: archestra/platform:ci-test
+          image: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           only-severities: critical,high

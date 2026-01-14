@@ -250,6 +250,30 @@ const zhipuaiConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const groqConfig: ToolPersistenceTestConfig = {
+  providerName: "Groq",
+
+  endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "llama-3.3-70b-versatile",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 const cohereConfig: ToolPersistenceTestConfig = {
   providerName: "Cohere",
 
@@ -274,6 +298,7 @@ const cohereConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -288,6 +313,7 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  groqConfig,
 ];
 
 for (const config of testConfigs) {

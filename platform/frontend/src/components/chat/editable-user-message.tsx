@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Paperclip } from "lucide-react";
 import {
   type KeyboardEventHandler,
   useEffect,
@@ -14,6 +14,12 @@ import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
+export interface FileAttachment {
+  url: string;
+  mediaType: string;
+  filename?: string;
+}
+
 interface EditableUserMessageProps {
   messageId: string;
   partIndex: number;
@@ -21,6 +27,7 @@ interface EditableUserMessageProps {
   text: string;
   isEditing: boolean;
   editDisabled?: boolean;
+  attachments?: FileAttachment[];
   onStartEdit: (partKey: string, messageId: string) => void;
   onCancelEdit: () => void;
   onSave: (
@@ -37,6 +44,7 @@ export function EditableUserMessage({
   text,
   isEditing,
   editDisabled = false,
+  attachments = [],
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -159,20 +167,57 @@ export function EditableUserMessage({
     );
   }
 
+  const imageAttachments = attachments.filter((a) =>
+    a.mediaType?.startsWith("image/"),
+  );
+  const otherAttachments = attachments.filter(
+    (a) => !a.mediaType?.startsWith("image/"),
+  );
+
   return (
-    <Message
-      from="user"
-      className="relative pb-4 group/message flex-col items-end pr-4 mr-[-1rem]"
-    >
-      <MessageContent>
-        <Response>{text}</Response>
-      </MessageContent>
-      <MessageActions
-        textToCopy={text}
-        onEditClick={handleStartEdit}
-        editDisabled={editDisabled}
-        className="opacity-0 group-hover/message:opacity-100 transition-opacity"
-      />
+    <Message from="user" className="group/message">
+      <div className="relative flex flex-col items-end pb-8 w-full">
+        {/* Image attachments above the message bubble */}
+        {imageAttachments.length > 0 && (
+          <div className="flex flex-wrap gap-1 justify-end mb-2">
+            {imageAttachments.map((attachment) => (
+              <img
+                key={attachment.url}
+                src={attachment.url}
+                alt={attachment.filename || "Attached image"}
+                className="max-h-32 rounded-lg object-cover"
+              />
+            ))}
+          </div>
+        )}
+        {/* Other file attachments above the message bubble */}
+        {otherAttachments.length > 0 && (
+          <div className="flex flex-wrap gap-1 justify-end mb-2">
+            {otherAttachments.map((attachment) => (
+              <div
+                key={attachment.url}
+                className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2"
+              >
+                <Paperclip className="h-4 w-4 text-muted-foreground" />
+                <span className="truncate max-w-[200px]">
+                  {attachment.filename || "Attached file"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Text message bubble */}
+        <MessageContent>
+          <Response>{text}</Response>
+        </MessageContent>
+        {/* Actions below the message */}
+        <MessageActions
+          textToCopy={text}
+          onEditClick={handleStartEdit}
+          editDisabled={editDisabled}
+          className="absolute -bottom-1 right-0 opacity-0 group-hover/message:opacity-100 transition-opacity"
+        />
+      </div>
     </Message>
   );
 }

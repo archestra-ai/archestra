@@ -34,8 +34,9 @@ import {
   useToolResultPoliciesUpdateMutation,
 } from "@/lib/policy.query";
 import {
-  getResultTreatmentFromPolicies,
-  type ToolResultTreatment,
+  getResultPolicyActionFromPolicies,
+  RESULT_POLICY_ACTION_OPTIONS_LONG,
+  type ResultPolicyAction,
 } from "@/lib/policy.utils";
 import { useTeams } from "@/lib/team.query";
 import { PolicyCard } from "./policy-card";
@@ -196,8 +197,8 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
     useToolResultPoliciesDeleteMutation();
   const resultPolicyMutation = useResultPolicyMutation();
 
-  // Derive treatment from policies (default policy with empty conditions)
-  const toolResultTreatment = getResultTreatmentFromPolicies(
+  // Derive action from policies (default policy with empty conditions)
+  const resultPolicyAction = getResultPolicyActionFromPolicies(
     tool.id,
     resultPolicies,
   );
@@ -264,21 +265,21 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
             DEFAULT
           </div>
           <Select
-            value={toolResultTreatment}
+            value={resultPolicyAction}
             disabled={resultPolicyMutation.isPending}
             onValueChange={(value) => {
-              if (value === toolResultTreatment) return;
+              if (value === resultPolicyAction) return;
               resultPolicyMutation.mutate({
                 toolId: tool.id,
-                treatment: value as ToolResultTreatment,
+                action: value as ResultPolicyAction,
               });
             }}
           >
             <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Select treatment" />
+              <SelectValue placeholder="Select action" />
             </SelectTrigger>
             <SelectContent>
-              {TOOL_RESULT_TREATMENT_OPTIONS.map((option) => (
+              {RESULT_POLICY_ACTION_OPTIONS_LONG.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -353,22 +354,8 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                   <SelectValue placeholder="Action" />
                 </SelectTrigger>
                 <SelectContent>
-                  {[
-                    {
-                      value: "mark_as_trusted",
-                      label: "Mark as trusted",
-                    },
-                    {
-                      value: "mark_as_untrusted",
-                      label: "Mark as untrusted",
-                    },
-                    { value: "block_always", label: "Block always" },
-                    {
-                      value: "sanitize_with_dual_llm",
-                      label: "Sanitize with Dual LLM",
-                    },
-                  ].map(({ value, label }) => (
-                    <SelectItem key={label} value={value}>
+                  {RESULT_POLICY_ACTION_OPTIONS_LONG.map(({ value, label }) => (
+                    <SelectItem key={value} value={value}>
                       {label}
                     </SelectItem>
                   ))}
@@ -394,9 +381,3 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
     </div>
   );
 }
-
-const TOOL_RESULT_TREATMENT_OPTIONS = [
-  { value: "trusted", label: "Mark as trusted" },
-  { value: "untrusted", label: "Mark as untrusted" },
-  { value: "sanitize_with_dual_llm", label: "Sanitize with Dual LLM" },
-] as const;

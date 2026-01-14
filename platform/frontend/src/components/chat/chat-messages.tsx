@@ -353,6 +353,23 @@ export function ChatMessages({
 
                       // Use editable component for user messages
                       if (message.role === "user") {
+                        // Collect all file attachments from this message
+                        const fileAttachments = message.parts
+                          ?.filter((p) => p.type === "file")
+                          .map((p) => {
+                            const filePart = p as {
+                              type: "file";
+                              url: string;
+                              mediaType: string;
+                              filename?: string;
+                            };
+                            return {
+                              url: filePart.url,
+                              mediaType: filePart.mediaType,
+                              filename: filePart.filename,
+                            };
+                          });
+
                         return (
                           <Fragment key={partKey}>
                             <EditableUserMessage
@@ -362,6 +379,7 @@ export function ChatMessages({
                               text={part.text}
                               isEditing={editingPartKey === partKey}
                               editDisabled={isResponseInProgress}
+                              attachments={fileAttachments}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveUserMessage}
@@ -399,7 +417,12 @@ export function ChatMessages({
                       );
 
                     case "file": {
-                      // Render file attachments
+                      // User file attachments are rendered inside EditableUserMessage
+                      if (message.role === "user") {
+                        return null;
+                      }
+
+                      // Render file attachments for assistant/system messages
                       const filePart = part as {
                         type: "file";
                         url: string;
@@ -411,69 +434,65 @@ export function ChatMessages({
                       const isPdf = filePart.mediaType === "application/pdf";
 
                       return (
-                        <Message from={message.role} key={`${message.id}-${i}`}>
-                          <MessageContent>
-                            <div className="rounded-lg border bg-muted/50 p-3 max-w-sm">
-                              {isImage && (
-                                <img
-                                  src={filePart.url}
-                                  alt={filePart.filename || "Attached image"}
-                                  className="max-w-full max-h-64 rounded object-contain"
-                                />
-                              )}
-                              {isVideo && (
-                                <video
-                                  src={filePart.url}
-                                  controls
-                                  className="max-w-full max-h-64 rounded"
+                        <div
+                          key={`${message.id}-${i}`}
+                          className="py-1 -mt-2 flex justify-start"
+                        >
+                          <div className="max-w-sm">
+                            {isImage && (
+                              <img
+                                src={filePart.url}
+                                alt={filePart.filename || "Attached image"}
+                                className="max-w-full max-h-64 rounded-lg object-contain"
+                              />
+                            )}
+                            {isVideo && (
+                              <video
+                                src={filePart.url}
+                                controls
+                                className="max-w-full max-h-64 rounded-lg"
+                              >
+                                <track kind="captions" />
+                              </video>
+                            )}
+                            {isPdf && (
+                              <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                                <svg
+                                  className="h-6 w-6 text-red-500"
+                                  fill="currentColor"
+                                  viewBox="0 0 24 24"
                                 >
-                                  <track kind="captions" />
-                                </video>
-                              )}
-                              {isPdf && (
-                                <div className="flex items-center gap-2 text-sm">
-                                  <svg
-                                    className="h-8 w-8 text-red-500"
-                                    fill="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <title>PDF Document</title>
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zm-3 9h2v2H10v-2zm0 3h2v2H10v-2zm-3-3h2v2H7v-2zm0 3h2v2H7v-2z" />
-                                  </svg>
-                                  <span className="font-medium">
-                                    {filePart.filename || "PDF Document"}
-                                  </span>
-                                </div>
-                              )}
-                              {!isImage && !isVideo && !isPdf && (
-                                <div className="flex items-center gap-2 text-sm">
-                                  <svg
-                                    className="h-6 w-6 text-muted-foreground"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <title>File Attachment</title>
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                                    />
-                                  </svg>
-                                  <span>
-                                    {filePart.filename || "Attached file"}
-                                  </span>
-                                </div>
-                              )}
-                              {filePart.filename && (isImage || isVideo) && (
-                                <p className="mt-2 text-xs text-muted-foreground truncate">
-                                  {filePart.filename}
-                                </p>
-                              )}
-                            </div>
-                          </MessageContent>
-                        </Message>
+                                  <title>PDF Document</title>
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zm-3 9h2v2H10v-2zm0 3h2v2H10v-2zm-3-3h2v2H7v-2zm0 3h2v2H7v-2z" />
+                                </svg>
+                                <span className="font-medium truncate">
+                                  {filePart.filename || "PDF Document"}
+                                </span>
+                              </div>
+                            )}
+                            {!isImage && !isVideo && !isPdf && (
+                              <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                                <svg
+                                  className="h-5 w-5 text-muted-foreground"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <title>File Attachment</title>
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                                  />
+                                </svg>
+                                <span className="truncate">
+                                  {filePart.filename || "Attached file"}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       );
                     }
 

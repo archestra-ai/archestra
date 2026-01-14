@@ -424,9 +424,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (async () => {
               try {
                 // Wait for the deployment to be fully ready before fetching tools
-                const k8sDeployment = McpServerRuntimeManager.getDeployment(
-                  mcpServer.id,
-                );
+                const k8sDeployment =
+                  await McpServerRuntimeManager.getOrLoadDeployment(
+                    mcpServer.id,
+                  );
                 if (!k8sDeployment) {
                   throw new Error("Deployment manager not found");
                 }

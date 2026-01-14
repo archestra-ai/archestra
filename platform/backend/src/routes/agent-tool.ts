@@ -327,7 +327,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         throw new ApiError(
           503,
-          "Auto-policy requires an organization-wide Anthropic API key to be configured in Chat API Keys settings",
+          "Auto-policy requires an organization-wide Anthropic API key to be configured in LLM API Keys settings",
         );
       }
 

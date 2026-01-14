@@ -265,9 +265,10 @@ export function useAutoConfigurePolicies() {
 
       if (!result.data) {
         const errorMessage =
-          result.error && "message" in result.error
-            ? String(result.error.message)
-            : "Failed to auto-configure policies";
+          typeof result.error?.error === "string"
+            ? result.error.error
+            : (result.error?.error as { message?: string })?.message ||
+              "Failed to auto-configure policies";
         throw new Error(errorMessage);
       }
 

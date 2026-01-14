@@ -166,7 +166,7 @@ export class ToolAutoPolicyService {
       return {
         success: false,
         error:
-          "Organization-wide Anthropic API key not configured in Chat API Keys settings",
+          "Organization-wide Anthropic API key not configured in LLM API Keys settings",
       };
     }
 
@@ -403,7 +403,7 @@ export class ToolAutoPolicyService {
           toolId: id,
           success: false,
           error:
-            "Organization-wide Anthropic API key not configured in Chat API Keys settings",
+            "Organization-wide Anthropic API key not configured in LLM API Keys settings",
         })),
       };
     }

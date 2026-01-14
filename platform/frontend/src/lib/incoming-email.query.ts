@@ -7,11 +7,14 @@ const {
   setupIncomingEmailWebhook,
   renewIncomingEmailSubscription,
   deleteIncomingEmailSubscription,
+  getPromptEmailAddress,
 } = archestraApiSdk;
 
 export const incomingEmailKeys = {
   all: ["incoming-email"] as const,
   status: () => [...incomingEmailKeys.all, "status"] as const,
+  promptEmailAddress: (promptId: string) =>
+    [...incomingEmailKeys.all, "prompt-email", promptId] as const,
 };
 
 export function useIncomingEmailStatus() {
@@ -97,5 +100,28 @@ export function useDeleteIncomingEmailSubscription() {
     onError: (error: Error) => {
       toast.error(error.message || "Failed to delete subscription");
     },
+  });
+}
+
+/**
+ * Hook to fetch the email address for a specific prompt
+ * Pass null to disable the query
+ */
+export function usePromptEmailAddress(promptId: string | null) {
+  return useQuery({
+    queryKey: incomingEmailKeys.promptEmailAddress(promptId ?? ""),
+    queryFn: async () => {
+      if (!promptId) return null;
+      const { data, error } = await getPromptEmailAddress({
+        path: { promptId },
+      });
+      if (error) {
+        throw new Error(
+          error?.error?.message || "Failed to fetch prompt email address",
+        );
+      }
+      return data as archestraApiTypes.GetPromptEmailAddressResponses["200"];
+    },
+    enabled: !!promptId,
   });
 }

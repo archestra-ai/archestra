@@ -231,7 +231,7 @@ export default function IncomingEmailSettingsPage() {
                 <div className="flex gap-2">
                   <Input
                     id="webhookUrl"
-                    placeholder="https://your-domain.com/api/webhooks/incoming-email"
+                    placeholder="https://your-public-domain.com/api/webhooks/incoming-email"
                     value={webhookUrl}
                     onChange={(e) => setWebhookUrl(e.target.value)}
                   />
@@ -246,8 +246,14 @@ export default function IncomingEmailSettingsPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  The webhook URL must be publicly accessible. Microsoft Graph
-                  will send POST requests to this URL when new emails arrive.
+                  Enter the publicly accessible URL for this Archestra
+                  instance&apos;s webhook endpoint. For local development, use a
+                  tunnel service like ngrok (e.g.,{" "}
+                  <code className="bg-muted px-1 py-0.5 rounded">
+                    https://xxx.ngrok-free.app/api/webhooks/incoming-email
+                  </code>
+                  ). Microsoft Graph will send POST requests to this URL when
+                  new emails arrive.
                 </p>
               </div>
             </>

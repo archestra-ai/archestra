@@ -11109,7 +11109,7 @@ export type PostApiWebhooksIncomingEmailResponses = {
 
 export type PostApiWebhooksIncomingEmailResponse = PostApiWebhooksIncomingEmailResponses[keyof PostApiWebhooksIncomingEmailResponses];
 
-export type GetApiPromptsByPromptIdEmailAddressData = {
+export type GetPromptEmailAddressData = {
     body?: never;
     path: {
         promptId: string;
@@ -11118,18 +11118,66 @@ export type GetApiPromptsByPromptIdEmailAddressData = {
     url: '/api/prompts/{promptId}/email-address';
 };
 
-export type GetApiPromptsByPromptIdEmailAddressErrors = {
+export type GetPromptEmailAddressErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
     /**
      * Default Response
      */
     404: {
-        error: string;
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
     };
 };
 
-export type GetApiPromptsByPromptIdEmailAddressError = GetApiPromptsByPromptIdEmailAddressErrors[keyof GetApiPromptsByPromptIdEmailAddressErrors];
+export type GetPromptEmailAddressError = GetPromptEmailAddressErrors[keyof GetPromptEmailAddressErrors];
 
-export type GetApiPromptsByPromptIdEmailAddressResponses = {
+export type GetPromptEmailAddressResponses = {
     /**
      * Default Response
      */
@@ -11139,7 +11187,7 @@ export type GetApiPromptsByPromptIdEmailAddressResponses = {
     };
 };
 
-export type GetApiPromptsByPromptIdEmailAddressResponse = GetApiPromptsByPromptIdEmailAddressResponses[keyof GetApiPromptsByPromptIdEmailAddressResponses];
+export type GetPromptEmailAddressResponse = GetPromptEmailAddressResponses[keyof GetPromptEmailAddressResponses];
 
 export type GetIncomingEmailStatusData = {
     body?: never;

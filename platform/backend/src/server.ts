@@ -32,6 +32,7 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
+  cleanupEmailProvider,
   initializeEmailProvider,
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
@@ -466,7 +467,7 @@ const start = async () => {
     // Background job to renew email subscriptions before they expire
     // Microsoft Graph subscriptions expire after 3 days, so we check every 6 hours
     const EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
-    setInterval(() => {
+    const emailRenewalIntervalId = setInterval(() => {
       renewEmailSubscriptionIfNeeded().catch((error) => {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
@@ -528,6 +529,14 @@ const start = async () => {
       fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
       try {
+        // Clear email subscription renewal interval
+        clearInterval(emailRenewalIntervalId);
+        fastify.log.info("Email subscription renewal interval cleared");
+
+        // Cleanup email provider (unsubscribe from Graph API if needed)
+        await cleanupEmailProvider();
+        fastify.log.info("Email provider cleanup completed");
+
         // Close WebSocket server
         websocketService.stop();
 

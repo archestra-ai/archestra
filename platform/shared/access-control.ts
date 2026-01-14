@@ -657,7 +657,7 @@ export const requiredEndpointPermissionsMap: Partial<
     organization: ["read"],
   },
 
-  // Incoming Email Routes (admin-only)
+  // Incoming Email Routes (admin-only for management, read for email addresses)
   [RouteId.GetIncomingEmailStatus]: {
     organization: ["read"],
   },
@@ -670,6 +670,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteIncomingEmailSubscription]: {
     organization: ["update"],
   },
+  [RouteId.GetPromptEmailAddress]: {}, // Any authenticated user can view prompt email addresses
 };
 
 /**

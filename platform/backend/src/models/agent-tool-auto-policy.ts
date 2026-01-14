@@ -1,7 +1,6 @@
+import { policyConfigSubagent } from "@/agents/subagents";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import { policyConfigSubagent } from "@/subagents";
-import AgentToolModel from "./agent-tool";
 import ChatApiKeyModel from "./chat-api-key";
 import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";

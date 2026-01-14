@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { ClientSecretCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
@@ -167,10 +168,10 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
   async validateWebhookRequest(
     payload: unknown,
-    headers: Record<string, string | string[] | undefined>,
+    _headers: Record<string, string | string[] | undefined>,
   ): Promise<boolean> {
     // Microsoft Graph uses client state for validation
-    // The client state is set when creating the subscription
+    // The client state is set when creating the subscription and stored in DB
     if (typeof payload === "object" && payload !== null && "value" in payload) {
       const notifications = (payload as { value: unknown[] }).value;
       if (Array.isArray(notifications) && notifications.length > 0) {
@@ -178,26 +179,52 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           clientState?: string;
         };
 
-        // Verify client state matches our expected value
-        // In production, this should be a cryptographically secure random string
-        // stored during subscription creation
-        if (notification.clientState === this.getClientState()) {
+        if (!notification.clientState) {
+          logger.warn(
+            "[OutlookEmailProvider] Webhook request missing clientState",
+          );
+          return false;
+        }
+
+        // Fetch the active subscription from database to get the expected clientState
+        const activeSubscription =
+          await IncomingEmailSubscriptionModel.getActiveSubscription();
+        if (!activeSubscription) {
+          logger.warn(
+            "[OutlookEmailProvider] No active subscription found for validation",
+          );
+          return false;
+        }
+
+        // Use constant-time comparison to prevent timing attacks
+        const expectedBuffer = Buffer.from(activeSubscription.clientState);
+        const receivedBuffer = Buffer.from(notification.clientState);
+
+        if (
+          expectedBuffer.length === receivedBuffer.length &&
+          crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+        ) {
           return true;
         }
+
+        logger.warn(
+          "[OutlookEmailProvider] Invalid webhook request - client state mismatch",
+        );
+        return false;
       }
     }
 
     logger.warn(
-      { headers },
-      "[OutlookEmailProvider] Invalid webhook request - client state mismatch",
+      "[OutlookEmailProvider] Invalid webhook request - unexpected payload format",
     );
     return false;
   }
 
-  private getClientState(): string {
-    // In production, this should be stored securely when the subscription is created
-    // For now, derive from the configuration
-    return `archestra-${this.config.clientId.substring(0, 8)}`;
+  /**
+   * Generate a cryptographically secure client state for webhook validation
+   */
+  private generateClientState(): string {
+    return crypto.randomBytes(32).toString("base64url");
   }
 
   async parseWebhookNotification(
@@ -314,6 +341,9 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
   async createSubscription(webhookUrl: string): Promise<SubscriptionInfo> {
     const client = this.getGraphClient();
 
+    // Generate cryptographically secure client state for webhook validation
+    const clientState = this.generateClientState();
+
     // Subscription expires after 3 days (maximum for mail resources)
     const expirationDateTime = new Date();
     expirationDateTime.setDate(expirationDateTime.getDate() + 3);
@@ -324,17 +354,18 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         notificationUrl: webhookUrl,
         resource: `/users/${this.config.mailboxAddress}/mailFolders/inbox/messages`,
         expirationDateTime: expirationDateTime.toISOString(),
-        clientState: this.getClientState(),
+        clientState,
       });
 
       this.subscriptionId = subscription.id;
 
-      // Persist subscription to database
+      // Persist subscription to database with the clientState for later validation
       const expiresAt = new Date(subscription.expirationDateTime);
       const dbRecord = await IncomingEmailSubscriptionModel.create({
         subscriptionId: subscription.id,
         provider: this.providerId,
         webhookUrl,
+        clientState,
         expiresAt,
       });
 
@@ -353,6 +384,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         subscriptionId: subscription.id,
         provider: this.providerId,
         webhookUrl,
+        clientState,
         expiresAt,
         isActive: true,
       };
@@ -431,6 +463,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       subscriptionId: subscription.subscriptionId,
       provider: subscription.provider,
       webhookUrl: subscription.webhookUrl,
+      clientState: subscription.clientState,
       expiresAt: subscription.expiresAt,
       isActive: subscription.expiresAt > now,
     };
@@ -472,23 +505,8 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
   async cleanup(): Promise<void> {
     if (this.subscriptionId) {
-      try {
-        const client = this.getGraphClient();
-        await client.api(`/subscriptions/${this.subscriptionId}`).delete();
-
-        logger.info(
-          { subscriptionId: this.subscriptionId },
-          "[OutlookEmailProvider] Deleted subscription",
-        );
-      } catch (error) {
-        logger.warn(
-          {
-            subscriptionId: this.subscriptionId,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          "[OutlookEmailProvider] Failed to delete subscription on cleanup",
-        );
-      }
+      // Use deleteSubscription which handles both Graph API and database cleanup
+      await this.deleteSubscription(this.subscriptionId);
     }
 
     this.graphClient = null;

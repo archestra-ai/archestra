@@ -5,6 +5,7 @@ describe("IncomingEmailSubscriptionModel", () => {
   const createTestSubscription = async (overrides?: {
     expiresAt?: Date;
     subscriptionId?: string;
+    clientState?: string;
   }) => {
     const defaultExpiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
     return IncomingEmailSubscriptionModel.create({
@@ -12,6 +13,7 @@ describe("IncomingEmailSubscriptionModel", () => {
         overrides?.subscriptionId ?? `test-sub-${Date.now()}-${Math.random()}`,
       provider: "outlook",
       webhookUrl: "https://example.com/api/webhooks/incoming-email",
+      clientState: overrides?.clientState ?? `test-client-state-${Date.now()}`,
       expiresAt: overrides?.expiresAt ?? defaultExpiresAt,
     });
   };
@@ -19,10 +21,12 @@ describe("IncomingEmailSubscriptionModel", () => {
   describe("create", () => {
     test("can create a subscription", async () => {
       const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+      const clientState = "test-client-state-secure-token";
       const subscription = await IncomingEmailSubscriptionModel.create({
         subscriptionId: "graph-subscription-123",
         provider: "outlook",
         webhookUrl: "https://example.com/api/webhooks/incoming-email",
+        clientState,
         expiresAt,
       });
 
@@ -32,6 +36,7 @@ describe("IncomingEmailSubscriptionModel", () => {
       expect(subscription.webhookUrl).toBe(
         "https://example.com/api/webhooks/incoming-email",
       );
+      expect(subscription.clientState).toBe(clientState);
       expect(subscription.expiresAt.getTime()).toBe(expiresAt.getTime());
       expect(subscription.createdAt).toBeDefined();
       expect(subscription.updatedAt).toBeDefined();

@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
+import { usePromptEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
@@ -58,16 +59,13 @@ export function A2AConnectionInstructions({
 
   // Email invocation info
   const emailEnabled = features?.incomingEmail?.enabled ?? false;
-  const emailDomain = features?.incomingEmail?.emailDomain;
   const emailProvider = features?.incomingEmail?.displayName;
 
-  // Generate the agent email address (using the same pattern as backend)
-  const agentEmailAddress = useMemo(() => {
-    if (!emailEnabled || !emailDomain) return null;
-    // Email format: agents+agent-{promptIdWithoutDashes}@{domain}
-    const encodedPromptId = prompt.id.replace(/-/g, "");
-    return `agents+agent-${encodedPromptId}@${emailDomain}`;
-  }, [emailEnabled, emailDomain, prompt.id]);
+  // Fetch the email address from the backend (uses correct mailbox local part)
+  const { data: emailAddressData } = usePromptEmailAddress(
+    emailEnabled ? prompt.id : null,
+  );
+  const agentEmailAddress = emailAddressData?.emailAddress ?? null;
 
   const handleCopyEmail = useCallback(async () => {
     if (!agentEmailAddress) return;

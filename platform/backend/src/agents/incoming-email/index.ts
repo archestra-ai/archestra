@@ -65,33 +65,50 @@ export function createEmailProvider(
 }
 
 /**
+ * Flag to track if we've already attempted initialization
+ * Prevents repeated initialization attempts for unconfigured providers
+ */
+let providerInitializationAttempted = false;
+
+/**
  * Get the configured email provider instance (singleton)
  * Returns null if no provider is configured
  */
 export function getEmailProvider(): AgentIncomingEmailProvider | null {
+  // Return cached instance if available
   if (emailProviderInstance) {
     return emailProviderInstance;
   }
 
+  // If we've already tried and failed, don't retry
+  if (providerInitializationAttempted) {
+    return null;
+  }
+
   const providerConfig = getEmailProviderConfig();
   if (!providerConfig.provider) {
+    providerInitializationAttempted = true;
     return null;
   }
 
   try {
-    emailProviderInstance = createEmailProvider(
+    const provider = createEmailProvider(
       providerConfig.provider,
       providerConfig,
     );
 
-    if (!emailProviderInstance.isConfigured()) {
+    if (!provider.isConfigured()) {
       logger.warn(
         { provider: providerConfig.provider },
         "[IncomingEmail] Provider is not fully configured",
       );
+      providerInitializationAttempted = true;
       return null;
     }
 
+    // Only cache if successfully configured
+    emailProviderInstance = provider;
+    providerInitializationAttempted = true;
     return emailProviderInstance;
   } catch (error) {
     logger.error(
@@ -101,8 +118,95 @@ export function getEmailProvider(): AgentIncomingEmailProvider | null {
       },
       "[IncomingEmail] Failed to create email provider",
     );
+    providerInitializationAttempted = true;
     return null;
   }
+}
+
+/**
+ * Auto-setup subscription with retry logic
+ * Retries with exponential backoff if webhook validation fails (e.g., tunnel not ready)
+ */
+async function autoSetupSubscriptionWithRetry(
+  provider: OutlookEmailProvider,
+  webhookUrl: string,
+  maxRetries = 5,
+  initialDelayMs = 5000,
+): Promise<void> {
+  let attempt = 0;
+  let delayMs = initialDelayMs;
+
+  while (attempt < maxRetries) {
+    attempt++;
+
+    // Check if there's already an active subscription (might have been created manually)
+    const existingSubscription =
+      await IncomingEmailSubscriptionModel.getActiveSubscription();
+
+    if (existingSubscription) {
+      logger.info(
+        {
+          subscriptionId: existingSubscription.subscriptionId,
+          expiresAt: existingSubscription.expiresAt,
+        },
+        "[IncomingEmail] Active subscription already exists, stopping auto-setup retries",
+      );
+      return;
+    }
+
+    try {
+      logger.info(
+        { webhookUrl, attempt, maxRetries },
+        "[IncomingEmail] Auto-creating subscription from env var config",
+      );
+      const subscription = await provider.createSubscription(webhookUrl);
+      logger.info(
+        {
+          subscriptionId: subscription.subscriptionId,
+          expiresAt: subscription.expiresAt,
+        },
+        "[IncomingEmail] Auto-setup subscription created successfully",
+      );
+      return; // Success!
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const isValidationError =
+        errorMessage.includes("validation request failed") ||
+        errorMessage.includes("BadGateway") ||
+        errorMessage.includes("502");
+
+      if (isValidationError && attempt < maxRetries) {
+        logger.warn(
+          {
+            webhookUrl,
+            attempt,
+            maxRetries,
+            nextRetryInMs: delayMs,
+            error: errorMessage,
+          },
+          "[IncomingEmail] Webhook validation failed, will retry (tunnel may not be ready yet)",
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs = Math.min(delayMs * 2, 60000); // Exponential backoff, max 1 minute
+      } else {
+        logger.error(
+          {
+            webhookUrl,
+            attempt,
+            error: errorMessage,
+          },
+          "[IncomingEmail] Auto-setup subscription failed",
+        );
+        return; // Give up on non-validation errors or max retries reached
+      }
+    }
+  }
+
+  logger.error(
+    { webhookUrl, maxRetries },
+    "[IncomingEmail] Auto-setup subscription failed after all retries",
+  );
 }
 
 /**
@@ -124,39 +228,6 @@ export async function initializeEmailProvider(): Promise<void> {
       { provider: provider.providerId },
       "[IncomingEmail] Email provider initialized successfully",
     );
-
-    // Auto-setup subscription if webhookUrl is configured
-    const providerConfig = getEmailProviderConfig();
-    const webhookUrl = providerConfig.outlook?.webhookUrl;
-
-    if (webhookUrl && provider instanceof OutlookEmailProvider) {
-      // Check if there's already an active subscription
-      const existingSubscription =
-        await IncomingEmailSubscriptionModel.getActiveSubscription();
-
-      if (existingSubscription) {
-        logger.info(
-          {
-            subscriptionId: existingSubscription.subscriptionId,
-            expiresAt: existingSubscription.expiresAt,
-          },
-          "[IncomingEmail] Active subscription already exists, skipping auto-setup",
-        );
-      } else {
-        logger.info(
-          { webhookUrl },
-          "[IncomingEmail] Auto-creating subscription from env var config",
-        );
-        const subscription = await provider.createSubscription(webhookUrl);
-        logger.info(
-          {
-            subscriptionId: subscription.subscriptionId,
-            expiresAt: subscription.expiresAt,
-          },
-          "[IncomingEmail] Auto-setup subscription created successfully",
-        );
-      }
-    }
   } catch (error) {
     logger.error(
       {
@@ -166,6 +237,24 @@ export async function initializeEmailProvider(): Promise<void> {
       "[IncomingEmail] Failed to initialize email provider",
     );
     // Don't throw - allow server to start even if email provider fails
+    return;
+  }
+
+  // Auto-setup subscription if webhookUrl is configured
+  // Run in background with retries to handle tunnel not being ready
+  const providerConfig = getEmailProviderConfig();
+  const webhookUrl = providerConfig.outlook?.webhookUrl;
+
+  if (webhookUrl && provider instanceof OutlookEmailProvider) {
+    // Fire and forget - don't block server startup
+    autoSetupSubscriptionWithRetry(provider, webhookUrl).catch((error) => {
+      logger.error(
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[IncomingEmail] Unexpected error in auto-setup background task",
+      );
+    });
   }
 }
 
@@ -258,6 +347,8 @@ export async function cleanupEmailProvider(): Promise<void> {
     }
     emailProviderInstance = null;
   }
+  // Reset the initialization flag to allow reinitialization after cleanup
+  providerInitializationAttempted = false;
 }
 
 /**

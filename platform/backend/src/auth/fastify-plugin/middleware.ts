@@ -103,7 +103,9 @@ export class Authnz {
       // Allow fetching public appearance settings for login page (theme, logo, font)
       (method === "GET" && url === "/api/organization/appearance") ||
       // Incoming email webhooks - Microsoft Graph calls these directly
-      url.startsWith("/api/webhooks/incoming-email")
+      // Only allow the exact webhook path (with optional query params), not sub-paths like /setup
+      url === "/api/webhooks/incoming-email" ||
+      url.startsWith("/api/webhooks/incoming-email?")
     ) {
       return true;
     }

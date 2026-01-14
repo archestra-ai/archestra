@@ -191,20 +191,18 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/prompts/:promptId/email-address",
     {
       schema: {
+        operationId: RouteId.GetPromptEmailAddress,
         description: "Get the email address for invoking an agent",
         tags: ["Prompts"],
         params: z.object({
           promptId: z.string().uuid(),
         }),
-        response: {
-          200: z.object({
+        response: constructResponseSchema(
+          z.object({
             enabled: z.boolean(),
             emailAddress: z.string().nullable(),
           }),
-          404: z.object({
-            error: z.string(),
-          }),
-        },
+        ),
       },
     },
     async (request, reply) => {
@@ -213,9 +211,7 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Verify prompt exists
       const prompt = await PromptModel.findById(promptId);
       if (!prompt) {
-        return reply.status(404).send({
-          error: "Prompt not found",
-        });
+        throw new ApiError(404, "Prompt not found");
       }
 
       const provider = getEmailProvider();
@@ -302,6 +298,23 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // For Outlook provider, create/renew subscription
       if (provider.providerId === "outlook") {
         const outlookProvider = provider as OutlookEmailProvider;
+
+        // Check for existing active subscription to prevent duplicates
+        const existingStatus = await outlookProvider.getSubscriptionStatus();
+        if (existingStatus?.isActive) {
+          // Delete the old subscription before creating a new one
+          logger.info(
+            {
+              existingSubscriptionId: existingStatus.subscriptionId,
+              newWebhookUrl: webhookUrl,
+            },
+            "[IncomingEmail] Deleting existing subscription before creating new one",
+          );
+          await outlookProvider.deleteSubscription(
+            existingStatus.subscriptionId,
+          );
+        }
+
         const subscription =
           await outlookProvider.createSubscription(webhookUrl);
 
@@ -449,6 +462,23 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // For Outlook provider, create/renew subscription
         if (provider.providerId === "outlook") {
           const outlookProvider = provider as OutlookEmailProvider;
+
+          // Check for existing active subscription to prevent duplicates
+          const existingStatus = await outlookProvider.getSubscriptionStatus();
+          if (existingStatus?.isActive) {
+            // Delete the old subscription before creating a new one
+            logger.info(
+              {
+                existingSubscriptionId: existingStatus.subscriptionId,
+                newWebhookUrl: webhookUrl,
+              },
+              "[IncomingEmail] Legacy setup: Deleting existing subscription before creating new one",
+            );
+            await outlookProvider.deleteSubscription(
+              existingStatus.subscriptionId,
+            );
+          }
+
           const subscription =
             await outlookProvider.createSubscription(webhookUrl);
 

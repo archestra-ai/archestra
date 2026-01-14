@@ -1,5 +1,29 @@
-import { makeHasPermissionsRequest } from "./auth-permissions.spec";
-import { expect, test } from "./fixtures";
+import type { Permissions } from "@shared";
+import {
+  type APIRequestContext,
+  expect,
+  type TestFixtures,
+  test,
+} from "./fixtures";
+
+export const makeHasPermissionsRequest = async ({
+  request,
+  makeApiRequest,
+  data,
+}: {
+  request: APIRequestContext;
+  makeApiRequest: TestFixtures["makeApiRequest"];
+  data: {
+    permissions: Permissions;
+  };
+}) => {
+  return await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/auth/organization/has-permission",
+    data,
+  });
+};
 
 test.describe("Auth Permissions API - Custom Roles", () => {
   test("should work with custom roles", async ({

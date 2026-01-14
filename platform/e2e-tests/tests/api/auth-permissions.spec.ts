@@ -7,7 +7,7 @@ import {
   test,
 } from "./fixtures";
 
-export const makeHasPermissionsRequest = async ({
+const makeHasPermissionsRequest = async ({
   request,
   makeApiRequest,
   data,

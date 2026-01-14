@@ -67,7 +67,10 @@ test("Verify tool calling using dynamic credentials", async ({
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
     );
-    await connectButton.waitFor({ state: "visible", timeout: CONNECT_BUTTON_TIMEOUT });
+    await connectButton.waitFor({
+      state: "visible",
+      timeout: CONNECT_BUTTON_TIMEOUT,
+    });
     await connectButton.click();
     // Fill ARCHESTRA_TEST environment variable to mark team credential
     await page

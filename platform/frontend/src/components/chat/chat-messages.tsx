@@ -23,6 +23,7 @@ import {
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import { UIResourceRenderer } from "@mcp-ui/client";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
@@ -68,6 +69,26 @@ function isToolPart(part: any): part is {
     part !== null &&
     "type" in part &&
     (part.type?.startsWith("tool-") || part.type === "dynamic-tool")
+  );
+}
+
+// Helper to check if output is a UI resource
+// biome-ignore lint/suspicious/noExplicitAny: Tool outputs have dynamic structure
+function isUIResource(output: any): output is {
+  type: "resource";
+  resource: {
+    uri: string;
+    mimeType: string;
+    text?: string;
+    blob?: string;
+  };
+} {
+  return (
+    typeof output === "object" &&
+    output !== null &&
+    output.type === "resource" &&
+    typeof output.resource === "object" &&
+    output.resource.uri?.startsWith("ui://")
   );
 }
 
@@ -307,10 +328,10 @@ export function ChatMessages({
                                 const isLastParsedTextPart =
                                   parsedIdx ===
                                   parsedParts.length -
-                                    1 -
-                                    [...parsedParts]
-                                      .reverse()
-                                      .findIndex((p) => p.type === "text");
+                                  1 -
+                                  [...parsedParts]
+                                    .reverse()
+                                    .findIndex((p) => p.type === "text");
                                 return (
                                   <EditableAssistantMessage
                                     key={parsedKey}
@@ -566,16 +587,16 @@ export function ChatMessages({
           {error && <InlineChatError error={error} />}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
-            <Message from="assistant">
-              <Image
-                src={"/logo.png"}
-                alt="Loading logo"
-                width={40}
-                height={40}
-                className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
-              />
-            </Message>
-          )}
+              <Message from="assistant">
+                <Image
+                  src={"/logo.png"}
+                  alt="Loading logo"
+                  width={40}
+                  height={40}
+                  className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
+                />
+              </Message>
+            )}
         </div>
       </ConversationContent>
       <ConversationScrollButton />
@@ -669,8 +690,8 @@ function MessageTool({
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
+    (toolResultPart && Boolean(toolResultPart.output)) ||
+    (!toolResultPart && Boolean(part.output)),
   );
 
   return (
@@ -688,18 +709,47 @@ function MessageTool({
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
         {toolResultPart && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
+          <>
+            {isUIResource(toolResultPart.output) ? (
+              <div className="my-4">
+                <UIResourceRenderer
+                  resource={toolResultPart.output.resource}
+                  onUIAction={(action) => {
+                    // Handle UI actions from the resource
+                    console.log("UI Action:", action);
+                    // TODO: Implement action handlers (tool calls, prompts, etc.)
+                  }}
+                />
+              </div>
+            ) : (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={toolResultPart.output}
+                errorText={errorText}
+              />
+            )}
+          </>
         )}
         {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
+          <>
+            {isUIResource(part.output) ? (
+              <div className="my-4">
+                <UIResourceRenderer
+                  resource={part.output.resource}
+                  onUIAction={(action) => {
+                    console.log("UI Action:", action);
+                    // TODO: Implement action handlers
+                  }}
+                />
+              </div>
+            ) : (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={part.output}
+                errorText={errorText}
+              />
+            )}
+          </>
         )}
       </ToolContent>
     </Tool>

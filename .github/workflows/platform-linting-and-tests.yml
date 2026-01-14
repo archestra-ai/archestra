@@ -381,11 +381,14 @@ jobs:
 
       - name: Merge reports
         working-directory: ./platform/e2e-tests
+        env:
+          PLAYWRIGHT_HTML_REPORT: playwright-report
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
         run: |
           echo "=== Contents of blob-reports directory ==="
           ls -la ./blob-reports/ || echo "blob-reports directory not found"
           echo "=== Merging reports ==="
-          PLAYWRIGHT_JSON_OUTPUT_NAME=results.json npx playwright merge-reports --reporter=html --reporter=json ./blob-reports
+          npx playwright merge-reports --reporter=html --reporter=json ./blob-reports
           echo "=== Files created after merge ==="
           ls -la
           ls -la ./playwright-report/ || echo "playwright-report directory not created"

@@ -90,6 +90,7 @@ jobs:
     if: ${{ inputs.should-skip-running-and-always-succeed != true }}
     permissions:
       contents: read
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -101,25 +102,21 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Build Docker image
+      - name: Login to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ./platform
-          load: "true"
-          tags: archestra/platform:ci-test
+          push: "true"
+          tags: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Save Docker image as artifact
-        run: |
-          docker save archestra/platform:ci-test | gzip > platform-image.tar.gz
-
-      - name: Upload image artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: platform-image
-          path: platform-image.tar.gz
-          retention-days: 1
 
   # E2E tests - runs all e2e test suites in parallel
   # Uses matrix strategy to run API, UI (sharded), and Vault tests concurrently
@@ -268,16 +265,10 @@ jobs:
 
           echo "✅ All validation checks passed"
 
-      - name: Download platform image
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-        with:
-          name: platform-image
-
-      - name: Load platform image
+      - name: Pull platform image from GHCR
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          gunzip -c platform-image.tar.gz | docker load
+          docker pull ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -288,7 +279,7 @@ jobs:
           helm-values-path: .github/values-ci.yaml
           deploy-e2e-dependencies: "true"
           build-platform-image: "false"
-          platform-image-tag: archestra/platform:ci-test
+          platform-image-tag: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
           platform-context: ./platform
 
       - name: Resolve Playwright version

@@ -179,6 +179,7 @@ export function useBulkAssignTools() {
       // Invalidate global queries (only once, exact match to prevent nested invalidation)
       queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
 

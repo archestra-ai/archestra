@@ -367,10 +367,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
         with:
-          node-version: "22"
+          working-directory: ./platform
 
       - name: Download all blob reports
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
@@ -388,13 +388,9 @@ jobs:
           echo "=== Contents of blob-reports directory ==="
           ls -la ./blob-reports/ || echo "blob-reports directory not found"
           echo "=== Merging reports ==="
-          npx playwright merge-reports --reporter=html --reporter=json ./blob-reports
+          pnpm exec playwright merge-reports --reporter=html --reporter=json ./blob-reports
           echo "=== Files created after merge ==="
           ls -la
-          echo "=== Looking for index.html anywhere ==="
-          find . -name "index.html" -type f 2>/dev/null || echo "No index.html found"
-          echo "=== Looking for any new directories ==="
-          find . -type d -name "*report*" 2>/dev/null || echo "No report directories found"
           ls -la ./playwright-report/ || echo "playwright-report directory not created"
 
       - name: Upload merged Playwright report

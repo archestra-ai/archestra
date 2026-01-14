@@ -174,7 +174,6 @@ jobs:
     if: github.event_name == 'pull_request'
     permissions:
       contents: write
-      packages: write # Required for pushing platform image to GHCR
       security-events: write
       id-token: write # Required for Workload Identity Federation
       pull-requests: write # Required for Docker Scout to write a comment to a PR
@@ -200,7 +199,6 @@ jobs:
     name: Platform Linting and Tests (Required)
     permissions:
       contents: write
-      packages: write # Required for pushing platform image to GHCR
       security-events: write
       id-token: write # Required for Workload Identity Federation
       pull-requests: write # Required for Docker Scout to write a comment to a PR

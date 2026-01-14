@@ -1,4 +1,7 @@
-import { BedrockClient, ListFoundationModelsCommand } from "@aws-sdk/client-bedrock";
+import {
+  BedrockClient,
+  ListFoundationModelsCommand,
+} from "@aws-sdk/client-bedrock";
 import { RouteId, type SupportedProvider, SupportedProviders } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
@@ -365,8 +368,8 @@ async function fetchBedrockModels(credentials: string): Promise<ModelInfo[]> {
 
   // Filter to only include models that support on-demand inference
   return response.modelSummaries
-    .filter((model) =>
-      model.inferenceTypesSupported?.includes("ON_DEMAND") ?? false,
+    .filter(
+      (model) => model.inferenceTypesSupported?.includes("ON_DEMAND") ?? false,
     )
     .map((model) => {
       // Generate a readable display name
@@ -598,7 +601,9 @@ export async function fetchModelsForProvider({
     } else if (provider === "bedrock") {
       // Bedrock uses AWS credentials, may use default credential chain if no explicit credentials
       if (apiKey || bedrockEnabled) {
-        models = await modelFetchers[provider](apiKey || ":::" + config.chat.bedrock.region);
+        models = await modelFetchers[provider](
+          apiKey || ":::" + config.chat.bedrock.region,
+        );
       }
     }
     logger.info(

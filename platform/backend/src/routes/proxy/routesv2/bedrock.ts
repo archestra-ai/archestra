@@ -41,7 +41,9 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           headers: {
             ...request.headers,
             // Mask sensitive credentials in logs
-            "x-amz-secret-access-key": request.headers["x-amz-secret-access-key"]
+            "x-amz-secret-access-key": request.headers[
+              "x-amz-secret-access-key"
+            ]
               ? "***"
               : undefined,
             "x-amz-session-token": request.headers["x-amz-session-token"]
@@ -83,8 +85,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.BedrockConverseWithAgent,
-        description:
-          "Send a message to Amazon Bedrock using a specific agent",
+        description: "Send a message to Amazon Bedrock using a specific agent",
         tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -102,7 +103,9 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           headers: {
             ...request.headers,
             // Mask sensitive credentials in logs
-            "x-amz-secret-access-key": request.headers["x-amz-secret-access-key"]
+            "x-amz-secret-access-key": request.headers[
+              "x-amz-secret-access-key"
+            ]
               ? "***"
               : undefined,
             "x-amz-session-token": request.headers["x-amz-session-token"]
@@ -145,8 +148,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.BedrockConverseWithDefaultAgent + "_model",
-        description:
-          "Send a message to Amazon Bedrock with model ID in path",
+        description: "Send a message to Amazon Bedrock with model ID in path",
         tags: ["llm-proxy"],
         params: z.object({
           modelId: z.string(),
@@ -163,7 +165,9 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           modelId: request.params.modelId,
           headers: {
             ...request.headers,
-            "x-amz-secret-access-key": request.headers["x-amz-secret-access-key"]
+            "x-amz-secret-access-key": request.headers[
+              "x-amz-secret-access-key"
+            ]
               ? "***"
               : undefined,
             "x-amz-session-token": request.headers["x-amz-session-token"]

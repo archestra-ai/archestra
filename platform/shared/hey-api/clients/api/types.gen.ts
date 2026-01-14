@@ -2399,6 +2399,156 @@ export type OllamaChatCompletionResponseInput = {
     };
 };
 
+export type BedrockConverseRequestInput = {
+    modelId: string;
+    messages: Array<{
+        role: 'user' | 'assistant';
+        content: Array<{
+            text: string;
+        } | {
+            image: {
+                format: 'png' | 'jpeg' | 'gif' | 'webp';
+                source: {
+                    bytes: string;
+                };
+            };
+        } | {
+            document: {
+                format: 'pdf' | 'csv' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'html' | 'txt' | 'md';
+                name: string;
+                source: {
+                    bytes: string;
+                };
+            };
+        } | {
+            toolUse: {
+                toolUseId: string;
+                name: string;
+                input: {
+                    [key: string]: unknown;
+                };
+            };
+        } | {
+            toolResult: {
+                toolUseId: string;
+                content: Array<{
+                    text: string;
+                } | {
+                    image: {
+                        format: 'png' | 'jpeg' | 'gif' | 'webp';
+                        source: {
+                            bytes: string;
+                        };
+                    };
+                } | {
+                    json: {
+                        [key: string]: unknown;
+                    };
+                } | {
+                    document: {
+                        format: 'pdf' | 'csv' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'html' | 'txt' | 'md';
+                        name: string;
+                        source: {
+                            bytes: string;
+                        };
+                    };
+                }>;
+                status?: 'success' | 'error';
+            };
+        }>;
+    }>;
+    system?: Array<{
+        text: string;
+    } | {
+        guardContent: {
+            text: {
+                text: string;
+                qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
+            };
+        };
+    }>;
+    inferenceConfig?: {
+        maxTokens?: number;
+        temperature?: number;
+        topP?: number;
+        stopSequences?: Array<string>;
+    };
+    toolConfig?: {
+        tools: Array<{
+            toolSpec: {
+                name: string;
+                description?: string;
+                inputSchema: {
+                    json: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        }>;
+        toolChoice?: {
+            auto?: {
+                [key: string]: unknown;
+            };
+        } | {
+            any?: {
+                [key: string]: unknown;
+            };
+        } | {
+            tool: {
+                name: string;
+            };
+        };
+    };
+    guardrailConfig?: {
+        guardrailIdentifier: string;
+        guardrailVersion: string;
+        trace?: 'enabled' | 'disabled';
+    };
+    additionalModelRequestFields?: {
+        [key: string]: unknown;
+    };
+    additionalModelResponseFieldPaths?: Array<string>;
+    stream?: boolean;
+};
+
+export type BedrockConverseResponseInput = {
+    $metadata?: {
+        httpStatusCode?: number;
+        requestId?: string;
+        attempts?: number;
+        totalRetryDelay?: number;
+    };
+    output: {
+        message?: {
+            role: string;
+            content: Array<{
+                text: string;
+            } | {
+                toolUse: {
+                    toolUseId: string;
+                    name: string;
+                    input: {
+                        [key: string]: unknown;
+                    };
+                };
+            }>;
+        };
+    };
+    stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered';
+    usage: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens?: number;
+    };
+    metrics?: {
+        latencyMs?: number;
+    };
+    additionalModelResponseFields?: {
+        [key: string]: unknown;
+    };
+    trace?: unknown;
+};
+
 export type WebSocketMessageInput = {
     type: string;
     payload: {
@@ -4853,6 +5003,156 @@ export type OllamaChatCompletionResponse = {
         completion_tokens_details?: unknown;
         prompt_tokens_details?: unknown;
     };
+};
+
+export type BedrockConverseRequest = {
+    modelId: string;
+    messages: Array<{
+        role: 'user' | 'assistant';
+        content: Array<{
+            text: string;
+        } | {
+            image: {
+                format: 'png' | 'jpeg' | 'gif' | 'webp';
+                source: {
+                    bytes: string;
+                };
+            };
+        } | {
+            document: {
+                format: 'pdf' | 'csv' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'html' | 'txt' | 'md';
+                name: string;
+                source: {
+                    bytes: string;
+                };
+            };
+        } | {
+            toolUse: {
+                toolUseId: string;
+                name: string;
+                input: {
+                    [key: string]: unknown;
+                };
+            };
+        } | {
+            toolResult: {
+                toolUseId: string;
+                content: Array<{
+                    text: string;
+                } | {
+                    image: {
+                        format: 'png' | 'jpeg' | 'gif' | 'webp';
+                        source: {
+                            bytes: string;
+                        };
+                    };
+                } | {
+                    json: {
+                        [key: string]: unknown;
+                    };
+                } | {
+                    document: {
+                        format: 'pdf' | 'csv' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'html' | 'txt' | 'md';
+                        name: string;
+                        source: {
+                            bytes: string;
+                        };
+                    };
+                }>;
+                status?: 'success' | 'error';
+            };
+        }>;
+    }>;
+    system?: Array<{
+        text: string;
+    } | {
+        guardContent: {
+            text: {
+                text: string;
+                qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
+            };
+        };
+    }>;
+    inferenceConfig?: {
+        maxTokens?: number;
+        temperature?: number;
+        topP?: number;
+        stopSequences?: Array<string>;
+    };
+    toolConfig?: {
+        tools: Array<{
+            toolSpec: {
+                name: string;
+                description?: string;
+                inputSchema: {
+                    json: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        }>;
+        toolChoice?: {
+            auto?: {
+                [key: string]: never;
+            };
+        } | {
+            any?: {
+                [key: string]: never;
+            };
+        } | {
+            tool: {
+                name: string;
+            };
+        };
+    };
+    guardrailConfig?: {
+        guardrailIdentifier: string;
+        guardrailVersion: string;
+        trace?: 'enabled' | 'disabled';
+    };
+    additionalModelRequestFields?: {
+        [key: string]: unknown;
+    };
+    additionalModelResponseFieldPaths?: Array<string>;
+    stream?: boolean;
+};
+
+export type BedrockConverseResponse = {
+    $metadata?: {
+        httpStatusCode?: number;
+        requestId?: string;
+        attempts?: number;
+        totalRetryDelay?: number;
+    };
+    output: {
+        message?: {
+            role: string;
+            content: Array<{
+                text: string;
+            } | {
+                toolUse: {
+                    toolUseId: string;
+                    name: string;
+                    input: {
+                        [key: string]: unknown;
+                    };
+                };
+            }>;
+        };
+    };
+    stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered';
+    usage: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens?: number;
+    };
+    metrics?: {
+        latencyMs?: number;
+    };
+    additionalModelResponseFields?: {
+        [key: string]: unknown;
+    };
+    trace?: unknown;
 };
 
 export type WebSocketMessage = {
@@ -8125,6 +8425,422 @@ export type BulkUpsertDefaultResultPolicyResponses = {
 
 export type BulkUpsertDefaultResultPolicyResponse = BulkUpsertDefaultResultPolicyResponses[keyof BulkUpsertDefaultResultPolicyResponses];
 
+export type BedrockConverseWithDefaultAgentData = {
+    body?: BedrockConverseRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * AWS Access Key ID
+         */
+        'x-amz-access-key-id'?: string;
+        /**
+         * AWS Secret Access Key
+         */
+        'x-amz-secret-access-key'?: string;
+        /**
+         * AWS Session Token
+         */
+        'x-amz-session-token'?: string;
+        /**
+         * AWS Region
+         */
+        'x-amz-region'?: string;
+        /**
+         * Authorization header
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/bedrock/converse';
+};
+
+export type BedrockConverseWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BedrockConverseWithDefaultAgentError = BedrockConverseWithDefaultAgentErrors[keyof BedrockConverseWithDefaultAgentErrors];
+
+export type BedrockConverseWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: BedrockConverseResponse;
+};
+
+export type BedrockConverseWithDefaultAgentResponse = BedrockConverseWithDefaultAgentResponses[keyof BedrockConverseWithDefaultAgentResponses];
+
+export type BedrockConverseWithAgentData = {
+    body?: BedrockConverseRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * AWS Access Key ID
+         */
+        'x-amz-access-key-id'?: string;
+        /**
+         * AWS Secret Access Key
+         */
+        'x-amz-secret-access-key'?: string;
+        /**
+         * AWS Session Token
+         */
+        'x-amz-session-token'?: string;
+        /**
+         * AWS Region
+         */
+        'x-amz-region'?: string;
+        /**
+         * Authorization header
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/{agentId}/converse';
+};
+
+export type BedrockConverseWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BedrockConverseWithAgentError = BedrockConverseWithAgentErrors[keyof BedrockConverseWithAgentErrors];
+
+export type BedrockConverseWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: BedrockConverseResponse;
+};
+
+export type BedrockConverseWithAgentResponse = BedrockConverseWithAgentResponses[keyof BedrockConverseWithAgentResponses];
+
+export type BedrockConverseWithDefaultAgentModelData = {
+    body: {
+        messages: Array<{
+            role: 'user' | 'assistant';
+            content: Array<{
+                text: string;
+            } | {
+                image: {
+                    format: 'png' | 'jpeg' | 'gif' | 'webp';
+                    source: {
+                        bytes: string;
+                    };
+                };
+            } | {
+                document: {
+                    format: 'pdf' | 'csv' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'html' | 'txt' | 'md';
+                    name: string;
+                    source: {
+                        bytes: string;
+                    };
+                };
+            } | {
+                toolUse: {
+                    toolUseId: string;
+                    name: string;
+                    input: {
+                        [key: string]: unknown;
+                    };
+                };
+            } | {
+                toolResult: {
+                    toolUseId: string;
+                    content: Array<{
+                        text: string;
+                    } | {
+                        image: {
+                            format: 'png' | 'jpeg' | 'gif' | 'webp';
+                            source: {
+                                bytes: string;
+                            };
+                        };
+                    } | {
+                        json: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        document: {
+                            format: 'pdf' | 'csv' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'html' | 'txt' | 'md';
+                            name: string;
+                            source: {
+                                bytes: string;
+                            };
+                        };
+                    }>;
+                    status?: 'success' | 'error';
+                };
+            }>;
+        }>;
+        system?: Array<{
+            text: string;
+        } | {
+            guardContent: {
+                text: {
+                    text: string;
+                    qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
+                };
+            };
+        }>;
+        inferenceConfig?: {
+            maxTokens?: number;
+            temperature?: number;
+            topP?: number;
+            stopSequences?: Array<string>;
+        };
+        toolConfig?: {
+            tools: Array<{
+                toolSpec: {
+                    name: string;
+                    description?: string;
+                    inputSchema: {
+                        json: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            }>;
+            toolChoice?: {
+                auto?: {
+                    [key: string]: unknown;
+                };
+            } | {
+                any?: {
+                    [key: string]: unknown;
+                };
+            } | {
+                tool: {
+                    name: string;
+                };
+            };
+        };
+        guardrailConfig?: {
+            guardrailIdentifier: string;
+            guardrailVersion: string;
+            trace?: 'enabled' | 'disabled';
+        };
+        additionalModelRequestFields?: {
+            [key: string]: unknown;
+        };
+        additionalModelResponseFieldPaths?: Array<string>;
+        stream?: boolean;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * AWS Access Key ID
+         */
+        'x-amz-access-key-id'?: string;
+        /**
+         * AWS Secret Access Key
+         */
+        'x-amz-secret-access-key'?: string;
+        /**
+         * AWS Session Token
+         */
+        'x-amz-session-token'?: string;
+        /**
+         * AWS Region
+         */
+        'x-amz-region'?: string;
+        /**
+         * Authorization header
+         */
+        authorization?: string;
+    };
+    path: {
+        modelId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/model/{modelId}/converse';
+};
+
+export type BedrockConverseWithDefaultAgentModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BedrockConverseWithDefaultAgentModelError = BedrockConverseWithDefaultAgentModelErrors[keyof BedrockConverseWithDefaultAgentModelErrors];
+
+export type BedrockConverseWithDefaultAgentModelResponses = {
+    /**
+     * Default Response
+     */
+    200: BedrockConverseResponse;
+};
+
+export type BedrockConverseWithDefaultAgentModelResponse = BedrockConverseWithDefaultAgentModelResponses[keyof BedrockConverseWithDefaultAgentModelResponses];
+
 export type CerebrasChatCompletionsWithDefaultAgentData = {
     body?: CerebrasChatCompletionRequestInput;
     headers: {
@@ -8371,7 +9087,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8391,7 +9107,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -8470,7 +9186,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8486,7 +9202,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -8558,7 +9274,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8730,7 +9446,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8830,7 +9546,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8846,7 +9562,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
     };
     url: '/api/chat/models';
 };
@@ -8917,7 +9633,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
         createdAt?: string;
     }>;
 };
@@ -9097,7 +9813,7 @@ export type CreateChatConversationData = {
         promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        selectedProvider?: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -9377,7 +10093,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        selectedProvider?: 'anthropic' | 'bedrock' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -16353,7 +17069,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -16373,7 +17089,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -16456,7 +17172,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -16555,7 +17271,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -16640,7 +17356,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -20386,7 +21102,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -20399,7 +21115,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -20474,7 +21190,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -20638,7 +21354,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -20651,7 +21367,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -20728,7 +21444,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'bedrock';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

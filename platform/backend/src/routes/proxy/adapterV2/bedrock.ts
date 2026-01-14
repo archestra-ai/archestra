@@ -1,9 +1,9 @@
 import {
   BedrockRuntimeClient,
+  type ContentBlock,
   ConverseCommand,
   ConverseStreamCommand,
   type ConverseStreamOutput,
-  type ContentBlock,
   type Message,
   type ToolResultContentBlock,
 } from "@aws-sdk/client-bedrock-runtime";
@@ -56,14 +56,18 @@ function isTextBlock(block: ContentBlock): block is ContentBlock.TextMember {
 /**
  * Check if a content block is a tool use block
  */
-function isToolUseBlock(block: ContentBlock): block is ContentBlock.ToolUseMember {
+function isToolUseBlock(
+  block: ContentBlock,
+): block is ContentBlock.ToolUseMember {
   return "toolUse" in block && block.toolUse !== undefined;
 }
 
 /**
  * Check if a content block is a tool result block
  */
-function isToolResultBlock(block: ContentBlock): block is ContentBlock.ToolResultMember {
+function isToolResultBlock(
+  block: ContentBlock,
+): block is ContentBlock.ToolResultMember {
   return "toolResult" in block && block.toolResult !== undefined;
 }
 
@@ -155,7 +159,10 @@ class BedrockRequestAdapter
     return this.request.toolConfig.tools.map((tool) => ({
       name: tool.toolSpec?.name ?? "",
       description: tool.toolSpec?.description,
-      inputSchema: (tool.toolSpec?.inputSchema?.json ?? {}) as Record<string, unknown>,
+      inputSchema: (tool.toolSpec?.inputSchema?.json ?? {}) as Record<
+        string,
+        unknown
+      >,
     }));
   }
 
@@ -235,7 +242,10 @@ class BedrockRequestAdapter
       const message = this.request.messages[i];
       if (message.role === "assistant" && Array.isArray(message.content)) {
         for (const content of message.content) {
-          if ("toolUse" in content && content.toolUse?.toolUseId === toolUseId) {
+          if (
+            "toolUse" in content &&
+            content.toolUse?.toolUseId === toolUseId
+          ) {
             return content.toolUse.name ?? null;
           }
         }
@@ -330,7 +340,10 @@ class BedrockRequestAdapter
       const message = messages[i];
       if (message.role === "assistant" && Array.isArray(message.content)) {
         for (const content of message.content) {
-          if ("toolUse" in content && content.toolUse?.toolUseId === toolUseId) {
+          if (
+            "toolUse" in content &&
+            content.toolUse?.toolUseId === toolUseId
+          ) {
             return content.toolUse.name ?? null;
           }
         }
@@ -404,9 +417,7 @@ class BedrockRequestAdapter
 // RESPONSE ADAPTER
 // =============================================================================
 
-class BedrockResponseAdapter
-  implements LLMResponseAdapter<BedrockResponse>
-{
+class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
   readonly provider = "bedrock" as const;
   private response: BedrockResponse;
   private messageId: string;
@@ -431,7 +442,8 @@ class BedrockResponseAdapter
     if (!outputMessage?.content) return "";
 
     const textBlocks = outputMessage.content.filter(
-      (block): block is { text: string } => "text" in block && typeof block.text === "string",
+      (block): block is { text: string } =>
+        "text" in block && typeof block.text === "string",
     );
     return textBlocks.map((block) => block.text).join("");
   }
@@ -443,7 +455,11 @@ class BedrockResponseAdapter
     const toolCalls: CommonToolCall[] = [];
     for (const block of outputMessage.content) {
       if ("toolUse" in block && block.toolUse) {
-        const toolUse = block.toolUse as { toolUseId?: string; name?: string; input?: Record<string, unknown> };
+        const toolUse = block.toolUse as {
+          toolUseId?: string;
+          name?: string;
+          input?: Record<string, unknown>;
+        };
         toolCalls.push({
           id: toolUse.toolUseId ?? "",
           name: toolUse.name ?? "",
@@ -539,7 +555,11 @@ class BedrockStreamAdapter
       })}\n\n`;
     } else if ("contentBlockStart" in chunk && chunk.contentBlockStart) {
       const blockStart = chunk.contentBlockStart;
-      if (blockStart.start && "toolUse" in blockStart.start && blockStart.start.toolUse) {
+      if (
+        blockStart.start &&
+        "toolUse" in blockStart.start &&
+        blockStart.start.toolUse
+      ) {
         // Tool use block started
         const toolUse = blockStart.start.toolUse;
         this.currentToolCallIndex = this.state.toolCalls.length;
@@ -560,7 +580,11 @@ class BedrockStreamAdapter
       }
     } else if ("contentBlockDelta" in chunk && chunk.contentBlockDelta) {
       const blockDelta = chunk.contentBlockDelta;
-      if (blockDelta.delta && "text" in blockDelta.delta && blockDelta.delta.text) {
+      if (
+        blockDelta.delta &&
+        "text" in blockDelta.delta &&
+        blockDelta.delta.text
+      ) {
         // Text delta
         this.state.text += blockDelta.delta.text;
         sseData = `event: content_block_delta\ndata: ${JSON.stringify({
@@ -571,7 +595,11 @@ class BedrockStreamAdapter
             text: blockDelta.delta.text,
           },
         })}\n\n`;
-      } else if (blockDelta.delta && "toolUse" in blockDelta.delta && blockDelta.delta.toolUse) {
+      } else if (
+        blockDelta.delta &&
+        "toolUse" in blockDelta.delta &&
+        blockDelta.delta.toolUse
+      ) {
         // Tool use delta (input JSON)
         const toolUseDelta = blockDelta.delta.toolUse;
         if (this.currentToolCallIndex >= 0 && toolUseDelta.input) {
@@ -583,7 +611,8 @@ class BedrockStreamAdapter
       }
     } else if ("contentBlockStop" in chunk && chunk.contentBlockStop) {
       // Content block ended
-      const isToolBlock = this.state.toolCalls.length > 0 &&
+      const isToolBlock =
+        this.state.toolCalls.length > 0 &&
         this.currentToolCallIndex === this.state.toolCalls.length - 1;
 
       if (isToolBlock) {
@@ -637,7 +666,11 @@ class BedrockStreamAdapter
     return this.state.rawToolCallEvents.map((event) => {
       const typedEvent = event as BedrockStreamEvent;
       // Convert Bedrock events to Anthropic-like SSE format
-      if ("contentBlockStart" in typedEvent && typedEvent.contentBlockStart?.start && "toolUse" in typedEvent.contentBlockStart.start) {
+      if (
+        "contentBlockStart" in typedEvent &&
+        typedEvent.contentBlockStart?.start &&
+        "toolUse" in typedEvent.contentBlockStart.start
+      ) {
         const toolUse = typedEvent.contentBlockStart.start.toolUse;
         return `event: content_block_start\ndata: ${JSON.stringify({
           type: "content_block_start",
@@ -650,13 +683,18 @@ class BedrockStreamAdapter
           },
         })}\n\n`;
       }
-      if ("contentBlockDelta" in typedEvent && typedEvent.contentBlockDelta?.delta && "toolUse" in typedEvent.contentBlockDelta.delta) {
+      if (
+        "contentBlockDelta" in typedEvent &&
+        typedEvent.contentBlockDelta?.delta &&
+        "toolUse" in typedEvent.contentBlockDelta.delta
+      ) {
         return `event: content_block_delta\ndata: ${JSON.stringify({
           type: "content_block_delta",
           index: typedEvent.contentBlockDelta.contentBlockIndex ?? 0,
           delta: {
             type: "input_json_delta",
-            partial_json: typedEvent.contentBlockDelta.delta.toolUse?.input ?? "",
+            partial_json:
+              typedEvent.contentBlockDelta.delta.toolUse?.input ?? "",
           },
         })}\n\n`;
       }
@@ -717,7 +755,16 @@ class BedrockStreamAdapter
   }
 
   toProviderResponse(): BedrockResponse {
-    const content: Array<{ text: string } | { toolUse: { toolUseId: string; name: string; input: Record<string, unknown> } }> = [];
+    const content: Array<
+      | { text: string }
+      | {
+          toolUse: {
+            toolUseId: string;
+            name: string;
+            input: Record<string, unknown>;
+          };
+        }
+    > = [];
 
     // Add text block if we have text
     if (this.state.text) {
@@ -752,7 +799,8 @@ class BedrockStreamAdapter
           content,
         },
       },
-      stopReason: (this.state.stopReason as BedrockResponse["stopReason"]) ?? "end_turn",
+      stopReason:
+        (this.state.stopReason as BedrockResponse["stopReason"]) ?? "end_turn",
       usage: {
         inputTokens: this.state.usage?.inputTokens ?? 0,
         outputTokens: this.state.usage?.outputTokens ?? 0,
@@ -798,7 +846,10 @@ export async function convertToolResultsToToon(
           if (toolResult.content && toolResult.content.length > 0) {
             const firstContent = toolResult.content[0];
 
-            if ("text" in firstContent && typeof firstContent.text === "string") {
+            if (
+              "text" in firstContent &&
+              typeof firstContent.text === "string"
+            ) {
               try {
                 const parsed = JSON.parse(firstContent.text);
                 const noncompressed = firstContent.text;
@@ -1048,27 +1099,42 @@ export const bedrockAdapterFactory: LLMProvider<
         return s;
       }),
       inferenceConfig: request.inferenceConfig,
-      toolConfig: request.toolConfig ? {
-        tools: request.toolConfig.tools?.map((t) => ({
-          toolSpec: t.toolSpec ? {
-            name: t.toolSpec.name,
-            description: t.toolSpec.description,
-            inputSchema: t.toolSpec.inputSchema ? {
-              json: t.toolSpec.inputSchema.json,
-            } : undefined,
-          } : undefined,
-        })),
-        toolChoice: request.toolConfig.toolChoice,
-      } : undefined,
+      toolConfig: request.toolConfig
+        ? {
+            tools: request.toolConfig.tools?.map((t) => ({
+              toolSpec: t.toolSpec
+                ? {
+                    name: t.toolSpec.name,
+                    description: t.toolSpec.description,
+                    inputSchema: t.toolSpec.inputSchema
+                      ? {
+                          json: t.toolSpec.inputSchema.json,
+                        }
+                      : undefined,
+                  }
+                : undefined,
+            })),
+            toolChoice: request.toolConfig.toolChoice,
+          }
+        : undefined,
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: AWS SDK types are complex, casting to any for flexibility
     const command = new ConverseCommand(commandInput as any);
 
     const response = await bedrockClient.send(command);
 
     // Convert response to our internal format
-    const outputContent: Array<{ text: string } | { toolUse: { toolUseId: string; name: string; input: Record<string, unknown> } }> = [];
+    const outputContent: Array<
+      | { text: string }
+      | {
+          toolUse: {
+            toolUseId: string;
+            name: string;
+            input: Record<string, unknown>;
+          };
+        }
+    > = [];
     if (response.output?.message?.content) {
       for (const c of response.output.message.content) {
         if ("text" in c && c.text) {
@@ -1088,10 +1154,12 @@ export const bedrockAdapterFactory: LLMProvider<
     return {
       $metadata: response.$metadata,
       output: {
-        message: response.output?.message ? {
-          role: "assistant",
-          content: outputContent,
-        } : undefined,
+        message: response.output?.message
+          ? {
+              role: "assistant",
+              content: outputContent,
+            }
+          : undefined,
       },
       stopReason: response.stopReason as BedrockResponse["stopReason"],
       usage: {
@@ -1099,7 +1167,9 @@ export const bedrockAdapterFactory: LLMProvider<
         outputTokens: response.usage?.outputTokens ?? 0,
       },
       metrics: response.metrics,
-      additionalModelResponseFields: response.additionalModelResponseFields as Record<string, unknown> | undefined,
+      additionalModelResponseFields: response.additionalModelResponseFields as
+        | Record<string, unknown>
+        | undefined,
       trace: response.trace,
     };
   },
@@ -1120,21 +1190,27 @@ export const bedrockAdapterFactory: LLMProvider<
         return s;
       }),
       inferenceConfig: request.inferenceConfig,
-      toolConfig: request.toolConfig ? {
-        tools: request.toolConfig.tools?.map((t) => ({
-          toolSpec: t.toolSpec ? {
-            name: t.toolSpec.name,
-            description: t.toolSpec.description,
-            inputSchema: t.toolSpec.inputSchema ? {
-              json: t.toolSpec.inputSchema.json,
-            } : undefined,
-          } : undefined,
-        })),
-        toolChoice: request.toolConfig.toolChoice,
-      } : undefined,
+      toolConfig: request.toolConfig
+        ? {
+            tools: request.toolConfig.tools?.map((t) => ({
+              toolSpec: t.toolSpec
+                ? {
+                    name: t.toolSpec.name,
+                    description: t.toolSpec.description,
+                    inputSchema: t.toolSpec.inputSchema
+                      ? {
+                          json: t.toolSpec.inputSchema.json,
+                        }
+                      : undefined,
+                  }
+                : undefined,
+            })),
+            toolChoice: request.toolConfig.toolChoice,
+          }
+        : undefined,
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: AWS SDK types are complex, casting to any for flexibility
     const command = new ConverseStreamCommand(commandInput as any);
 
     const response = await bedrockClient.send(command);
@@ -1154,7 +1230,11 @@ export const bedrockAdapterFactory: LLMProvider<
   extractErrorMessage(error: unknown): string {
     // Handle AWS SDK error format
     if (error && typeof error === "object") {
-      const awsError = error as { message?: string; $metadata?: { httpStatusCode?: number }; name?: string };
+      const awsError = error as {
+        message?: string;
+        $metadata?: { httpStatusCode?: number };
+        name?: string;
+      };
       if (awsError.message) {
         return awsError.message;
       }

@@ -25,7 +25,17 @@ const ImageContentBlockSchema = z.object({
 // Document content block (for PDFs, etc.)
 const DocumentContentBlockSchema = z.object({
   document: z.object({
-    format: z.enum(["pdf", "csv", "doc", "docx", "xls", "xlsx", "html", "txt", "md"]),
+    format: z.enum([
+      "pdf",
+      "csv",
+      "doc",
+      "docx",
+      "xls",
+      "xlsx",
+      "html",
+      "txt",
+      "md",
+    ]),
     name: z.string(),
     source: z.object({
       bytes: z.string(), // Base64 encoded
@@ -60,7 +70,17 @@ const ToolResultContentBlockSchema = z.object({
         z.object({ json: z.record(z.string(), z.unknown()) }),
         z.object({
           document: z.object({
-            format: z.enum(["pdf", "csv", "doc", "docx", "xls", "xlsx", "html", "txt", "md"]),
+            format: z.enum([
+              "pdf",
+              "csv",
+              "doc",
+              "docx",
+              "xls",
+              "xlsx",
+              "html",
+              "txt",
+              "md",
+            ]),
             name: z.string(),
             source: z.object({
               bytes: z.string(),
@@ -109,7 +129,9 @@ const SystemContentBlockSchema = z.union([
     guardContent: z.object({
       text: z.object({
         text: z.string(),
-        qualifiers: z.array(z.enum(["grounding_source", "query", "guard_content"])).optional(),
+        qualifiers: z
+          .array(z.enum(["grounding_source", "query", "guard_content"]))
+          .optional(),
       }),
     }),
   }),

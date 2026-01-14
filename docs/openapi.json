@@ -7770,6 +7770,637 @@
           "object"
         ]
       },
+      "BedrockConverseRequestInput": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "assistant"
+                  ]
+                },
+                "content": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "image": {
+                            "type": "object",
+                            "properties": {
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "png",
+                                  "jpeg",
+                                  "gif",
+                                  "webp"
+                                ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "bytes": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "bytes"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "format",
+                              "source"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "image"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "document": {
+                            "type": "object",
+                            "properties": {
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "pdf",
+                                  "csv",
+                                  "doc",
+                                  "docx",
+                                  "xls",
+                                  "xlsx",
+                                  "html",
+                                  "txt",
+                                  "md"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "bytes": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "bytes"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "format",
+                              "name",
+                              "source"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "document"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "toolUse": {
+                            "type": "object",
+                            "properties": {
+                              "toolUseId": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "input": {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "toolUseId",
+                              "name",
+                              "input"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "toolUse"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "toolResult": {
+                            "type": "object",
+                            "properties": {
+                              "toolUseId": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "text"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "image": {
+                                          "type": "object",
+                                          "properties": {
+                                            "format": {
+                                              "type": "string",
+                                              "enum": [
+                                                "png",
+                                                "jpeg",
+                                                "gif",
+                                                "webp"
+                                              ]
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "bytes": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "bytes"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "format",
+                                            "source"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "image"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "json": {
+                                          "type": "object",
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "json"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "document": {
+                                          "type": "object",
+                                          "properties": {
+                                            "format": {
+                                              "type": "string",
+                                              "enum": [
+                                                "pdf",
+                                                "csv",
+                                                "doc",
+                                                "docx",
+                                                "xls",
+                                                "xlsx",
+                                                "html",
+                                                "txt",
+                                                "md"
+                                              ]
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "bytes": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "bytes"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "format",
+                                            "name",
+                                            "source"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "document"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "success",
+                                  "error"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "toolUseId",
+                              "content"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "toolResult"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "role",
+                "content"
+              ]
+            }
+          },
+          "system": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "guardContent": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "qualifiers": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "grounding_source",
+                                  "query",
+                                  "guard_content"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "guardContent"
+                  ]
+                }
+              ]
+            }
+          },
+          "inferenceConfig": {
+            "type": "object",
+            "properties": {
+              "maxTokens": {
+                "type": "number"
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "topP": {
+                "type": "number"
+              },
+              "stopSequences": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "toolConfig": {
+            "type": "object",
+            "properties": {
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "toolSpec": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "inputSchema": {
+                          "type": "object",
+                          "properties": {
+                            "json": {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "json"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "inputSchema"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "toolSpec"
+                  ]
+                }
+              },
+              "toolChoice": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "auto": {
+                        "type": "object",
+                        "properties": {}
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "any": {
+                        "type": "object",
+                        "properties": {}
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "tool"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "tools"
+            ]
+          },
+          "guardrailConfig": {
+            "type": "object",
+            "properties": {
+              "guardrailIdentifier": {
+                "type": "string"
+              },
+              "guardrailVersion": {
+                "type": "string"
+              },
+              "trace": {
+                "type": "string",
+                "enum": [
+                  "enabled",
+                  "disabled"
+                ]
+              }
+            },
+            "required": [
+              "guardrailIdentifier",
+              "guardrailVersion"
+            ]
+          },
+          "additionalModelRequestFields": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "additionalModelResponseFieldPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stream": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "modelId",
+          "messages"
+        ]
+      },
+      "BedrockConverseResponseInput": {
+        "type": "object",
+        "properties": {
+          "$metadata": {
+            "type": "object",
+            "properties": {
+              "httpStatusCode": {
+                "type": "number"
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "totalRetryDelay": {
+                "type": "number"
+              }
+            }
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "const": "assistant"
+                  },
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "toolUse": {
+                              "type": "object",
+                              "properties": {
+                                "toolUseId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "type": "object",
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "required": [
+                                "toolUseId",
+                                "name",
+                                "input"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "toolUse"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "role",
+                  "content"
+                ]
+              }
+            }
+          },
+          "stopReason": {
+            "type": "string",
+            "enum": [
+              "end_turn",
+              "tool_use",
+              "max_tokens",
+              "stop_sequence",
+              "guardrail_intervened",
+              "content_filtered"
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "inputTokens": {
+                "type": "number"
+              },
+              "outputTokens": {
+                "type": "number"
+              },
+              "totalTokens": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "inputTokens",
+              "outputTokens"
+            ]
+          },
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "latencyMs": {
+                "type": "number"
+              }
+            }
+          },
+          "additionalModelResponseFields": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "trace": {}
+        },
+        "required": [
+          "output",
+          "stopReason",
+          "usage"
+        ]
+      },
       "WebSocketMessageInput": {
         "oneOf": [
           {
@@ -16146,6 +16777,683 @@
           "created",
           "model",
           "object"
+        ],
+        "additionalProperties": false
+      },
+      "BedrockConverseRequest": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "assistant"
+                  ]
+                },
+                "content": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "image": {
+                            "type": "object",
+                            "properties": {
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "png",
+                                  "jpeg",
+                                  "gif",
+                                  "webp"
+                                ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "bytes": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "bytes"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "format",
+                              "source"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "image"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "document": {
+                            "type": "object",
+                            "properties": {
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "pdf",
+                                  "csv",
+                                  "doc",
+                                  "docx",
+                                  "xls",
+                                  "xlsx",
+                                  "html",
+                                  "txt",
+                                  "md"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "bytes": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "bytes"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "format",
+                              "name",
+                              "source"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "document"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "toolUse": {
+                            "type": "object",
+                            "properties": {
+                              "toolUseId": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "input": {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": [
+                              "toolUseId",
+                              "name",
+                              "input"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "toolUse"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "toolResult": {
+                            "type": "object",
+                            "properties": {
+                              "toolUseId": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "image": {
+                                          "type": "object",
+                                          "properties": {
+                                            "format": {
+                                              "type": "string",
+                                              "enum": [
+                                                "png",
+                                                "jpeg",
+                                                "gif",
+                                                "webp"
+                                              ]
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "bytes": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "bytes"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "format",
+                                            "source"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "image"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "json": {
+                                          "type": "object",
+                                          "additionalProperties": {}
+                                        }
+                                      },
+                                      "required": [
+                                        "json"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "document": {
+                                          "type": "object",
+                                          "properties": {
+                                            "format": {
+                                              "type": "string",
+                                              "enum": [
+                                                "pdf",
+                                                "csv",
+                                                "doc",
+                                                "docx",
+                                                "xls",
+                                                "xlsx",
+                                                "html",
+                                                "txt",
+                                                "md"
+                                              ]
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "bytes": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "bytes"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "format",
+                                            "name",
+                                            "source"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "document"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "success",
+                                  "error"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "toolUseId",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "toolResult"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "role",
+                "content"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "system": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "guardContent": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "qualifiers": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "grounding_source",
+                                  "query",
+                                  "guard_content"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "guardContent"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "inferenceConfig": {
+            "type": "object",
+            "properties": {
+              "maxTokens": {
+                "type": "number"
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "topP": {
+                "type": "number"
+              },
+              "stopSequences": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "toolConfig": {
+            "type": "object",
+            "properties": {
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "toolSpec": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "inputSchema": {
+                          "type": "object",
+                          "properties": {
+                            "json": {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "json"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "inputSchema"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "toolSpec"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "toolChoice": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "auto": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "any": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "tool"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "tools"
+            ],
+            "additionalProperties": false
+          },
+          "guardrailConfig": {
+            "type": "object",
+            "properties": {
+              "guardrailIdentifier": {
+                "type": "string"
+              },
+              "guardrailVersion": {
+                "type": "string"
+              },
+              "trace": {
+                "type": "string",
+                "enum": [
+                  "enabled",
+                  "disabled"
+                ]
+              }
+            },
+            "required": [
+              "guardrailIdentifier",
+              "guardrailVersion"
+            ],
+            "additionalProperties": false
+          },
+          "additionalModelRequestFields": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "additionalModelResponseFieldPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stream": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "modelId",
+          "messages"
+        ],
+        "additionalProperties": false
+      },
+      "BedrockConverseResponse": {
+        "type": "object",
+        "properties": {
+          "$metadata": {
+            "type": "object",
+            "properties": {
+              "httpStatusCode": {
+                "type": "number"
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "totalRetryDelay": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "const": "assistant"
+                  },
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "toolUse": {
+                              "type": "object",
+                              "properties": {
+                                "toolUseId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "type": "object",
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "required": [
+                                "toolUseId",
+                                "name",
+                                "input"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "toolUse"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "role",
+                  "content"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "stopReason": {
+            "type": "string",
+            "enum": [
+              "end_turn",
+              "tool_use",
+              "max_tokens",
+              "stop_sequence",
+              "guardrail_intervened",
+              "content_filtered"
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "inputTokens": {
+                "type": "number"
+              },
+              "outputTokens": {
+                "type": "number"
+              },
+              "totalTokens": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "inputTokens",
+              "outputTokens"
+            ],
+            "additionalProperties": false
+          },
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "latencyMs": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false
+          },
+          "additionalModelResponseFields": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "trace": {}
+        },
+        "required": [
+          "output",
+          "stopReason",
+          "usage"
         ],
         "additionalProperties": false
       },
@@ -27370,6 +28678,1404 @@
         }
       }
     },
+    "/v1/bedrock/converse": {
+      "post": {
+        "operationId": "bedrockConverseWithDefaultAgent",
+        "tags": [
+          "llm-proxy"
+        ],
+        "description": "Send a message to Amazon Bedrock using the default agent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BedrockConverseRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-access-key-id",
+            "required": false,
+            "description": "AWS Access Key ID"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-secret-access-key",
+            "required": false,
+            "description": "AWS Secret Access Key"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-session-token",
+            "required": false,
+            "description": "AWS Session Token"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-region",
+            "required": false,
+            "description": "AWS Region"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Authorization header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BedrockConverseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/bedrock/{agentId}/converse": {
+      "post": {
+        "operationId": "bedrockConverseWithAgent",
+        "tags": [
+          "llm-proxy"
+        ],
+        "description": "Send a message to Amazon Bedrock using a specific agent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BedrockConverseRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-access-key-id",
+            "required": false,
+            "description": "AWS Access Key ID"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-secret-access-key",
+            "required": false,
+            "description": "AWS Secret Access Key"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-session-token",
+            "required": false,
+            "description": "AWS Session Token"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-region",
+            "required": false,
+            "description": "AWS Region"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Authorization header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BedrockConverseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/bedrock/model/{modelId}/converse": {
+      "post": {
+        "operationId": "bedrockConverseWithDefaultAgent_model",
+        "tags": [
+          "llm-proxy"
+        ],
+        "description": "Send a message to Amazon Bedrock with model ID in path",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant"
+                          ]
+                        },
+                        "content": {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "text"
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "image": {
+                                    "type": "object",
+                                    "properties": {
+                                      "format": {
+                                        "type": "string",
+                                        "enum": [
+                                          "png",
+                                          "jpeg",
+                                          "gif",
+                                          "webp"
+                                        ]
+                                      },
+                                      "source": {
+                                        "type": "object",
+                                        "properties": {
+                                          "bytes": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "bytes"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "format",
+                                      "source"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "image"
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "document": {
+                                    "type": "object",
+                                    "properties": {
+                                      "format": {
+                                        "type": "string",
+                                        "enum": [
+                                          "pdf",
+                                          "csv",
+                                          "doc",
+                                          "docx",
+                                          "xls",
+                                          "xlsx",
+                                          "html",
+                                          "txt",
+                                          "md"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "type": "object",
+                                        "properties": {
+                                          "bytes": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "bytes"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "format",
+                                      "name",
+                                      "source"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "document"
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "toolUse": {
+                                    "type": "object",
+                                    "properties": {
+                                      "toolUseId": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "input": {
+                                        "type": "object",
+                                        "additionalProperties": {}
+                                      }
+                                    },
+                                    "required": [
+                                      "toolUseId",
+                                      "name",
+                                      "input"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "toolUse"
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "toolResult": {
+                                    "type": "object",
+                                    "properties": {
+                                      "toolUseId": {
+                                        "type": "string"
+                                      },
+                                      "content": {
+                                        "type": "array",
+                                        "items": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "text": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "text"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "image": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "format": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "png",
+                                                        "jpeg",
+                                                        "gif",
+                                                        "webp"
+                                                      ]
+                                                    },
+                                                    "source": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "bytes": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "bytes"
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "format",
+                                                    "source"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "image"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "json": {
+                                                  "type": "object",
+                                                  "additionalProperties": {}
+                                                }
+                                              },
+                                              "required": [
+                                                "json"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "document": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "format": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "pdf",
+                                                        "csv",
+                                                        "doc",
+                                                        "docx",
+                                                        "xls",
+                                                        "xlsx",
+                                                        "html",
+                                                        "txt",
+                                                        "md"
+                                                      ]
+                                                    },
+                                                    "name": {
+                                                      "type": "string"
+                                                    },
+                                                    "source": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "bytes": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "bytes"
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "format",
+                                                    "name",
+                                                    "source"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "document"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": [
+                                          "success",
+                                          "error"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "toolUseId",
+                                      "content"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "toolResult"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "content"
+                      ]
+                    }
+                  },
+                  "system": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "guardContent": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "object",
+                                  "properties": {
+                                    "text": {
+                                      "type": "string"
+                                    },
+                                    "qualifiers": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": [
+                                          "grounding_source",
+                                          "query",
+                                          "guard_content"
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "text"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "guardContent"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "inferenceConfig": {
+                    "type": "object",
+                    "properties": {
+                      "maxTokens": {
+                        "type": "number"
+                      },
+                      "temperature": {
+                        "type": "number"
+                      },
+                      "topP": {
+                        "type": "number"
+                      },
+                      "stopSequences": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "toolConfig": {
+                    "type": "object",
+                    "properties": {
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "toolSpec": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "description": {
+                                  "type": "string"
+                                },
+                                "inputSchema": {
+                                  "type": "object",
+                                  "properties": {
+                                    "json": {
+                                      "type": "object",
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "required": [
+                                    "json"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "inputSchema"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "toolSpec"
+                          ]
+                        }
+                      },
+                      "toolChoice": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "auto": {
+                                "type": "object",
+                                "properties": {}
+                              }
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "any": {
+                                "type": "object",
+                                "properties": {}
+                              }
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "tool": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "tool"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "tools"
+                    ]
+                  },
+                  "guardrailConfig": {
+                    "type": "object",
+                    "properties": {
+                      "guardrailIdentifier": {
+                        "type": "string"
+                      },
+                      "guardrailVersion": {
+                        "type": "string"
+                      },
+                      "trace": {
+                        "type": "string",
+                        "enum": [
+                          "enabled",
+                          "disabled"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "guardrailIdentifier",
+                      "guardrailVersion"
+                    ]
+                  },
+                  "additionalModelRequestFields": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  "additionalModelResponseFieldPaths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "messages"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "modelId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-access-key-id",
+            "required": false,
+            "description": "AWS Access Key ID"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-secret-access-key",
+            "required": false,
+            "description": "AWS Secret Access Key"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-session-token",
+            "required": false,
+            "description": "AWS Session Token"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-amz-region",
+            "required": false,
+            "description": "AWS Region"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Authorization header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BedrockConverseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/cerebras/chat/completions": {
       "post": {
         "operationId": "cerebrasChatCompletionsWithDefaultAgent",
@@ -27932,6 +30638,7 @@
                         "type": "string",
                         "enum": [
                           "anthropic",
+                          "bedrock",
                           "cerebras",
                           "gemini",
                           "openai",
@@ -28245,6 +30952,7 @@
                     "type": "string",
                     "enum": [
                       "anthropic",
+                      "bedrock",
                       "cerebras",
                       "gemini",
                       "openai",
@@ -28309,6 +31017,7 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
+                        "bedrock",
                         "cerebras",
                         "gemini",
                         "openai",
@@ -28590,6 +31299,7 @@
               "type": "string",
               "enum": [
                 "anthropic",
+                "bedrock",
                 "cerebras",
                 "gemini",
                 "openai",
@@ -28627,6 +31337,7 @@
                         "type": "string",
                         "enum": [
                           "anthropic",
+                          "bedrock",
                           "cerebras",
                           "gemini",
                           "openai",
@@ -28963,6 +31674,7 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
+                        "bedrock",
                         "cerebras",
                         "gemini",
                         "openai",
@@ -29337,6 +32049,7 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
+                        "bedrock",
                         "cerebras",
                         "gemini",
                         "openai",
@@ -29868,6 +32581,7 @@
               "type": "string",
               "enum": [
                 "anthropic",
+                "bedrock",
                 "cerebras",
                 "gemini",
                 "openai",
@@ -29900,6 +32614,7 @@
                         "type": "string",
                         "enum": [
                           "anthropic",
+                          "bedrock",
                           "cerebras",
                           "gemini",
                           "openai",
@@ -30784,6 +33499,7 @@
                     "type": "string",
                     "enum": [
                       "anthropic",
+                      "bedrock",
                       "cerebras",
                       "gemini",
                       "openai",
@@ -31552,6 +34268,7 @@
                     "type": "string",
                     "enum": [
                       "anthropic",
+                      "bedrock",
                       "cerebras",
                       "gemini",
                       "openai",
@@ -56678,7 +59395,8 @@
                           "anthropic",
                           "cerebras",
                           "vllm",
-                          "ollama"
+                          "ollama",
+                          "bedrock"
                         ]
                       },
                       "targetModel": {
@@ -56992,7 +59710,8 @@
                       "anthropic",
                       "cerebras",
                       "vllm",
-                      "ollama"
+                      "ollama",
+                      "bedrock"
                     ]
                   },
                   "targetModel": {
@@ -57081,7 +59800,8 @@
                         "anthropic",
                         "cerebras",
                         "vllm",
-                        "ollama"
+                        "ollama",
+                        "bedrock"
                       ]
                     },
                     "targetModel": {
@@ -57396,7 +60116,8 @@
                       "anthropic",
                       "cerebras",
                       "vllm",
-                      "ollama"
+                      "ollama",
+                      "bedrock"
                     ]
                   },
                   "targetModel": {
@@ -57489,7 +60210,8 @@
                         "anthropic",
                         "cerebras",
                         "vllm",
-                        "ollama"
+                        "ollama",
+                        "bedrock"
                       ]
                     },
                     "targetModel": {
@@ -70606,7 +73328,8 @@
                           "anthropic",
                           "cerebras",
                           "vllm",
-                          "ollama"
+                          "ollama",
+                          "bedrock"
                         ]
                       },
                       "model": {
@@ -70875,7 +73598,8 @@
                       "anthropic",
                       "cerebras",
                       "vllm",
-                      "ollama"
+                      "ollama",
+                      "bedrock"
                     ]
                   },
                   "model": {
@@ -70921,7 +73645,8 @@
                         "anthropic",
                         "cerebras",
                         "vllm",
-                        "ollama"
+                        "ollama",
+                        "bedrock"
                       ]
                     },
                     "model": {
@@ -71210,7 +73935,8 @@
                         "anthropic",
                         "cerebras",
                         "vllm",
-                        "ollama"
+                        "ollama",
+                        "bedrock"
                       ]
                     },
                     "model": {
@@ -71478,7 +74204,8 @@
                       "anthropic",
                       "cerebras",
                       "vllm",
-                      "ollama"
+                      "ollama",
+                      "bedrock"
                     ]
                   },
                   "model": {
@@ -71529,7 +74256,8 @@
                         "anthropic",
                         "cerebras",
                         "vllm",
-                        "ollama"
+                        "ollama",
+                        "bedrock"
                       ]
                     },
                     "model": {

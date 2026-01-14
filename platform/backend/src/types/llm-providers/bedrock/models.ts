@@ -16,9 +16,11 @@ export const FoundationModelSchema = z.object({
   responseStreamingSupported: z.boolean().optional(),
   customizationsSupported: z.array(z.string()).optional(),
   inferenceTypesSupported: z.array(z.string()).optional(),
-  modelLifecycle: z.object({
-    status: z.enum(["ACTIVE", "LEGACY"]).optional(),
-  }).optional(),
+  modelLifecycle: z
+    .object({
+      status: z.enum(["ACTIVE", "LEGACY"]).optional(),
+    })
+    .optional(),
 });
 
 export type FoundationModel = z.infer<typeof FoundationModelSchema>;

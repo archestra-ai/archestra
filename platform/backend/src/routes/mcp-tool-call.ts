@@ -51,7 +51,15 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { agentId, startDate, endDate, limit, offset, sortBy, sortDirection },
+        query: {
+          agentId,
+          startDate,
+          endDate,
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+        },
         user,
         headers,
       },

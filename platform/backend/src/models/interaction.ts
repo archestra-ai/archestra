@@ -274,7 +274,9 @@ class InteractionModel {
 
     // Date range filter
     if (filters?.startDate) {
-      conditions.push(gte(schema.interactionsTable.createdAt, filters.startDate));
+      conditions.push(
+        gte(schema.interactionsTable.createdAt, filters.startDate),
+      );
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
@@ -734,7 +736,9 @@ class InteractionModel {
 
     // Date range filter
     if (filters?.startDate) {
-      conditions.push(gte(schema.interactionsTable.createdAt, filters.startDate));
+      conditions.push(
+        gte(schema.interactionsTable.createdAt, filters.startDate),
+      );
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));

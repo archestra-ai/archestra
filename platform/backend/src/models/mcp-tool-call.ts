@@ -1,4 +1,14 @@
-import { and, asc, count, desc, eq, gte, inArray, lte, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  lte,
+  type SQL,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -59,7 +69,9 @@ class McpToolCallModel {
 
     // Date range filter
     if (filters?.startDate) {
-      conditions.push(gte(schema.mcpToolCallsTable.createdAt, filters.startDate));
+      conditions.push(
+        gte(schema.mcpToolCallsTable.createdAt, filters.startDate),
+      );
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
@@ -177,7 +189,9 @@ class McpToolCallModel {
 
     // Date range filter
     if (filters?.startDate) {
-      conditions.push(gte(schema.mcpToolCallsTable.createdAt, filters.startDate));
+      conditions.push(
+        gte(schema.mcpToolCallsTable.createdAt, filters.startDate),
+      );
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));

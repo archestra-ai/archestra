@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import McpToolCallModel from "./mcp-tool-call";
-import TeamModel from "./team";
 
 describe("McpToolCallModel", () => {
   let agentId: string;
@@ -174,13 +173,14 @@ describe("McpToolCallModel", () => {
       const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-      const toolCalls = await McpToolCallModel.getAllMcpToolCallsForAgentPaginated(
-        agent.id,
-        { limit: 100, offset: 0 },
-        undefined,
-        undefined,
-        { startDate, endDate },
-      );
+      const toolCalls =
+        await McpToolCallModel.getAllMcpToolCallsForAgentPaginated(
+          agent.id,
+          { limit: 100, offset: 0 },
+          undefined,
+          undefined,
+          { startDate, endDate },
+        );
 
       expect(toolCalls.data.length).toBeGreaterThanOrEqual(1);
       expect(toolCalls.data.every((tc) => tc.agentId === agent.id)).toBe(true);

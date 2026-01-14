@@ -200,7 +200,15 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { profileId, userId, sessionId, startDate, endDate, limit, offset },
+        query: {
+          profileId,
+          userId,
+          sessionId,
+          startDate,
+          endDate,
+          limit,
+          offset,
+        },
         user,
         headers,
       },

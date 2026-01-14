@@ -19,9 +19,7 @@ import {
 } from "@/components/ui/popover";
 import { useProfiles } from "@/lib/agent.query";
 import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
-import { cn } from "@/lib/utils";
-
-import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+import { cn, DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 type McpToolCallData =
@@ -144,7 +142,9 @@ function McpToolCallsTable({
   }, [updateUrlParams]);
 
   // Build date params for API call
-  const startDateParam = dateRange?.from ? dateRange.from.toISOString() : undefined;
+  const startDateParam = dateRange?.from
+    ? dateRange.from.toISOString()
+    : undefined;
   const endDateParam = dateRange?.to
     ? new Date(new Date(dateRange.to).setHours(23, 59, 59, 999)).toISOString()
     : undefined;

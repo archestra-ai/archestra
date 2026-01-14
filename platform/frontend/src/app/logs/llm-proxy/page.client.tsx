@@ -32,9 +32,7 @@ import {
   useUniqueUserIds,
 } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
-import { cn } from "@/lib/utils";
-
-import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+import { cn, DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 function formatDuration(start: Date | string, end: Date | string): string {
@@ -436,7 +434,9 @@ function SessionsTable({
   }, [updateUrlParams]);
 
   // Build date params for API call
-  const startDateParam = dateRange?.from ? dateRange.from.toISOString() : undefined;
+  const startDateParam = dateRange?.from
+    ? dateRange.from.toISOString()
+    : undefined;
   const endDateParam = dateRange?.to
     ? new Date(new Date(dateRange.to).setHours(23, 59, 59, 999)).toISOString()
     : undefined;

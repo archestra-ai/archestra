@@ -12,6 +12,9 @@ on:
     types:
       - completed
 
+# Restrict default permissions - each job declares what it needs
+permissions: {}
+
 jobs:
   # Determine which user opened the PR and set the appropriate token
   determine-token:
@@ -20,6 +23,8 @@ jobs:
       github.event.workflow_run.pull_requests[0] &&
       !startsWith(github.event.workflow_run.head_branch, 'claude-auto-fix-ci-')
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
     outputs:
       pr_author: ${{ steps.get-pr-author.outputs.author }}
       should_run: ${{ steps.check-user.outputs.should_run }}
@@ -41,8 +46,9 @@ jobs:
 
       - name: Check if user has configured token
         id: check-user
+        env:
+          AUTHOR: ${{ steps.get-pr-author.outputs.author }}
         run: |
-          AUTHOR="${{ steps.get-pr-author.outputs.author }}"
           # Add users here as they configure their OAuth tokens
           if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"

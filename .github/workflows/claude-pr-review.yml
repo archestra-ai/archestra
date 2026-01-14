@@ -9,6 +9,9 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
 
+# Restrict default permissions - each job declares what it needs
+permissions: {}
+
 jobs:
   # Determine which user opened the PR and set the appropriate token
   determine-token:
@@ -16,14 +19,16 @@ jobs:
       !contains(github.event.pull_request.title, '[WIP]') &&
       !github.event.pull_request.draft
     runs-on: ubuntu-latest
+    permissions: {}
     outputs:
       pr_author: ${{ github.event.pull_request.user.login }}
       should_run: ${{ steps.check-user.outputs.should_run }}
     steps:
       - name: Check if user has configured token
         id: check-user
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          AUTHOR="${{ github.event.pull_request.user.login }}"
           # Add users here as they configure their OAuth tokens
           if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"

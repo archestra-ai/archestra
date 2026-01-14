@@ -35,6 +35,7 @@ jobs:
           ref: ${{ inputs.head_branch }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Setup git identity
         run: |

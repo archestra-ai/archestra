@@ -275,14 +275,6 @@ jobs:
             echo "has_flaky_tests=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Debug blob report directory
-        if: ${{ !cancelled() }}
-        run: |
-          echo "=== Checking blob report directory ==="
-          ls -la platform/e2e-tests/blob-report/ 2>/dev/null || echo "Directory does not exist or is empty"
-          echo "=== e2e-tests directory contents ==="
-          ls -la platform/e2e-tests/ | head -20
-
       - name: Upload blob report
         if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -343,9 +335,9 @@ jobs:
         working-directory: ./platform/e2e-tests
         run: |
           PLAYWRIGHT_JSON_OUTPUT_NAME=results.json npx playwright merge-reports --reporter=html --reporter=json ./blob-reports
-          ls -la  # Debug: show what files were created
 
       - name: Upload merged Playwright report
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
@@ -358,6 +350,7 @@ jobs:
         uses: daun/playwright-report-summary@be9e270edd5ad86038604d3caa84a819a6ff6fed # v3.10.0
         with:
           report-file: platform/e2e-tests/results.json
+          job-summary: true
 
   platform-docker-image-scanning:
     name: Platform Docker Image Scanning

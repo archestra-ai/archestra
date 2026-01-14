@@ -66,6 +66,35 @@ vi.mock("drizzle-orm", () => ({
   eq: vi.fn((a, b) => ({ field: a, value: b })),
 }));
 
+const mockChatApiKey = {
+  id: "key-1",
+  name: "Test Key",
+  secretId: "secret-1",
+  organizationId: "org-1",
+  provider: "anthropic" as const,
+  scope: "org_wide" as const,
+  teamId: null,
+  userId: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+const mockTool = {
+  id: "tool-1",
+  name: "test-tool",
+  description: "A test tool",
+  parameters: { type: "object", properties: {} },
+  catalogId: null,
+  promptAgentId: null,
+  policiesAutoConfiguredAt: null,
+  policiesAutoConfiguringStartedAt: null,
+  policiesAutoConfiguredReasoning: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  agent: null,
+  mcpServer: { id: "server-1", name: "test-server" },
+};
+
 describe("ToolAutoPolicyService", () => {
   let service: ToolAutoPolicyService;
 
@@ -79,22 +108,13 @@ describe("ToolAutoPolicyService", () => {
       const { default: ChatApiKeyModel } = await import("./chat-api-key");
       const { secretManager } = await import("@/secrets-manager");
 
-      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue({
-        id: "key-1",
-        secretId: "secret-1",
-        organizationId: "org-1",
-        provider: "anthropic",
-        scope: "org_wide",
-        teamId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue(mockChatApiKey);
 
       vi.mocked(secretManager).mockReturnValue({
         getSecret: vi.fn().mockResolvedValue({
           secret: { apiKey: "sk-ant-xxx" },
         }),
-      } as ReturnType<typeof secretManager>);
+      } as unknown as ReturnType<typeof secretManager>);
 
       const result = await service.isAvailable("org-1");
 
@@ -120,20 +140,11 @@ describe("ToolAutoPolicyService", () => {
       const { default: ChatApiKeyModel } = await import("./chat-api-key");
       const { secretManager } = await import("@/secrets-manager");
 
-      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue({
-        id: "key-1",
-        secretId: "secret-1",
-        organizationId: "org-1",
-        provider: "anthropic",
-        scope: "org_wide",
-        teamId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue(mockChatApiKey);
 
       vi.mocked(secretManager).mockReturnValue({
         getSecret: vi.fn().mockResolvedValue(null),
-      } as ReturnType<typeof secretManager>);
+      } as unknown as ReturnType<typeof secretManager>);
 
       const result = await service.isAvailable("org-1");
 
@@ -142,14 +153,6 @@ describe("ToolAutoPolicyService", () => {
   });
 
   describe("configurePoliciesForTool", () => {
-    const mockTool = {
-      id: "tool-1",
-      name: "test-tool",
-      description: "A test tool",
-      parameters: { type: "object", properties: {} },
-      mcpServer: { name: "test-server" },
-    };
-
     it("returns error when no API key available", async () => {
       const { default: ChatApiKeyModel } = await import("./chat-api-key");
 
@@ -168,22 +171,13 @@ describe("ToolAutoPolicyService", () => {
       const { default: ToolModel } = await import("./tool");
       const { secretManager } = await import("@/secrets-manager");
 
-      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue({
-        id: "key-1",
-        secretId: "secret-1",
-        organizationId: "org-1",
-        provider: "anthropic",
-        scope: "org_wide",
-        teamId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue(mockChatApiKey);
 
       vi.mocked(secretManager).mockReturnValue({
         getSecret: vi.fn().mockResolvedValue({
           secret: { apiKey: "sk-ant-xxx" },
         }),
-      } as ReturnType<typeof secretManager>);
+      } as unknown as ReturnType<typeof secretManager>);
 
       vi.mocked(ToolModel.findAll).mockResolvedValue([]);
 
@@ -208,22 +202,13 @@ describe("ToolAutoPolicyService", () => {
       const { secretManager } = await import("@/secrets-manager");
       const { policyConfigSubagent } = await import("@/subagents");
 
-      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue({
-        id: "key-1",
-        secretId: "secret-1",
-        organizationId: "org-1",
-        provider: "anthropic",
-        scope: "org_wide",
-        teamId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue(mockChatApiKey);
 
       vi.mocked(secretManager).mockReturnValue({
         getSecret: vi.fn().mockResolvedValue({
           secret: { apiKey: "sk-ant-xxx" },
         }),
-      } as ReturnType<typeof secretManager>);
+      } as unknown as ReturnType<typeof secretManager>);
 
       vi.mocked(ToolModel.findAll).mockResolvedValue([mockTool] as Awaited<
         ReturnType<typeof ToolModel.findAll>
@@ -239,10 +224,10 @@ describe("ToolAutoPolicyService", () => {
 
       vi.mocked(
         ToolInvocationPolicyModel.bulkUpsertDefaultPolicy,
-      ).mockResolvedValue(undefined);
+      ).mockResolvedValue({ updated: 0, created: 1 });
       vi.mocked(
         TrustedDataPolicyModel.bulkUpsertDefaultPolicy,
-      ).mockResolvedValue(undefined);
+      ).mockResolvedValue({ updated: 0, created: 1 });
 
       const result = await service.configurePoliciesForTool("tool-1", "org-1");
 
@@ -274,22 +259,13 @@ describe("ToolAutoPolicyService", () => {
       const { secretManager } = await import("@/secrets-manager");
       const { policyConfigSubagent } = await import("@/subagents");
 
-      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue({
-        id: "key-1",
-        secretId: "secret-1",
-        organizationId: "org-1",
-        provider: "anthropic",
-        scope: "org_wide",
-        teamId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue(mockChatApiKey);
 
       vi.mocked(secretManager).mockReturnValue({
         getSecret: vi.fn().mockResolvedValue({
           secret: { apiKey: "sk-ant-xxx" },
         }),
-      } as ReturnType<typeof secretManager>);
+      } as unknown as ReturnType<typeof secretManager>);
 
       vi.mocked(ToolModel.findAll).mockResolvedValue([mockTool] as Awaited<
         ReturnType<typeof ToolModel.findAll>
@@ -306,10 +282,10 @@ describe("ToolAutoPolicyService", () => {
 
       vi.mocked(
         ToolInvocationPolicyModel.bulkUpsertDefaultPolicy,
-      ).mockResolvedValue(undefined);
+      ).mockResolvedValue({ updated: 0, created: 1 });
       vi.mocked(
         TrustedDataPolicyModel.bulkUpsertDefaultPolicy,
-      ).mockResolvedValue(undefined);
+      ).mockResolvedValue({ updated: 0, created: 1 });
 
       await service.configurePoliciesForTool("tool-1", "org-1");
 
@@ -328,25 +304,19 @@ describe("ToolAutoPolicyService", () => {
       const { default: TrustedDataPolicyModel } = await import(
         "./trusted-data-policy"
       );
+      const { default: ToolInvocationPolicyModel } = await import(
+        "./tool-invocation-policy"
+      );
       const { secretManager } = await import("@/secrets-manager");
       const { policyConfigSubagent } = await import("@/subagents");
 
-      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue({
-        id: "key-1",
-        secretId: "secret-1",
-        organizationId: "org-1",
-        provider: "anthropic",
-        scope: "org_wide",
-        teamId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue(mockChatApiKey);
 
       vi.mocked(secretManager).mockReturnValue({
         getSecret: vi.fn().mockResolvedValue({
           secret: { apiKey: "sk-ant-xxx" },
         }),
-      } as ReturnType<typeof secretManager>);
+      } as unknown as ReturnType<typeof secretManager>);
 
       vi.mocked(ToolModel.findAll).mockResolvedValue([mockTool] as Awaited<
         ReturnType<typeof ToolModel.findAll>
@@ -359,6 +329,13 @@ describe("ToolAutoPolicyService", () => {
         toolResultTreatment: "sanitize_with_dual_llm",
         reasoning: "This tool needs sanitization",
       });
+
+      vi.mocked(
+        ToolInvocationPolicyModel.bulkUpsertDefaultPolicy,
+      ).mockResolvedValue({ updated: 0, created: 1 });
+      vi.mocked(
+        TrustedDataPolicyModel.bulkUpsertDefaultPolicy,
+      ).mockResolvedValue({ updated: 0, created: 1 });
 
       await service.configurePoliciesForTool("tool-1", "org-1");
 

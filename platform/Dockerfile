@@ -79,8 +79,8 @@ ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
 RUN apk --no-cache upgrade && \
-    # Install PostgreSQL 17, supervisord, and wget (needed for KinD download and health checks)
-    apk add --no-cache postgresql17 postgresql17-contrib su-exec wget && \
+    # Install PostgreSQL 17, supervisord, wget (needed for KinD download and health checks), and curl
+    apk add --no-cache postgresql17 postgresql17-contrib su-exec wget curl && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625
     rm -rf /usr/local/lib/node_modules/npm && \

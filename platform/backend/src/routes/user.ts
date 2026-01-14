@@ -1,7 +1,7 @@
 import { PermissionsSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { MemberModel } from "@/models";
-import OrganizationRoleModel from "@/models/organization-role.ee";
+import OrganizationRoleModel from "@/models/organization-role";
 import { ApiError, constructResponseSchema } from "@/types";
 
 const userRoutes: FastifyPluginAsyncZod = async (fastify) => {

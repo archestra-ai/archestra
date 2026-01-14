@@ -974,6 +974,45 @@ export const updateOptimizationRule = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
+ * Get all roles in the organization
+ */
+export const getRoles = <ThrowOnError extends boolean = false>(options?: Options<GetRolesData, ThrowOnError>) => (options?.client ?? client).get<GetRolesResponses, GetRolesErrors, ThrowOnError>({ url: '/api/roles', ...options });
+
+/**
+ * Create a new custom role
+ */
+export const createRole = <ThrowOnError extends boolean = false>(options: Options<CreateRoleData, ThrowOnError>) => (options.client ?? client).post<CreateRoleResponses, CreateRoleErrors, ThrowOnError>({
+    url: '/api/roles',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete a custom role
+ */
+export const deleteRole = <ThrowOnError extends boolean = false>(options: Options<DeleteRoleData, ThrowOnError>) => (options.client ?? client).delete<DeleteRoleResponses, DeleteRoleErrors, ThrowOnError>({ url: '/api/roles/{roleId}', ...options });
+
+/**
+ * Get a specific role by ID
+ */
+export const getRole = <ThrowOnError extends boolean = false>(options: Options<GetRoleData, ThrowOnError>) => (options.client ?? client).get<GetRoleResponses, GetRoleErrors, ThrowOnError>({ url: '/api/roles/{roleId}', ...options });
+
+/**
+ * Update a custom role
+ */
+export const updateRole = <ThrowOnError extends boolean = false>(options: Options<UpdateRoleData, ThrowOnError>) => (options.client ?? client).put<UpdateRoleResponses, UpdateRoleErrors, ThrowOnError>({
+    url: '/api/roles/{roleId}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Get organization details
  */
 export const getOrganization = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationData, ThrowOnError>) => (options?.client ?? client).get<GetOrganizationResponses, GetOrganizationErrors, ThrowOnError>({ url: '/api/organization', ...options });
@@ -1300,6 +1339,11 @@ export const getToolsWithAssignments = <ThrowOnError extends boolean = false>(op
 export const deleteTool = <ThrowOnError extends boolean = false>(options: Options<DeleteToolData, ThrowOnError>) => (options.client ?? client).delete<DeleteToolResponses, DeleteToolErrors, ThrowOnError>({ url: '/api/tools/{id}', ...options });
 
 /**
+ * Get current user's permissions
+ */
+export const getUserPermissions = <ThrowOnError extends boolean = false>(options?: Options<GetUserPermissionsData, ThrowOnError>) => (options?.client ?? client).get<GetUserPermissionsResponses, GetUserPermissionsErrors, ThrowOnError>({ url: '/api/user/permissions', ...options });
+
+/**
  * Get current user's personal token
  */
 export const getUserToken = <ThrowOnError extends boolean = false>(options?: Options<GetUserTokenData, ThrowOnError>) => (options?.client ?? client).get<GetUserTokenResponses, GetUserTokenErrors, ThrowOnError>({ url: '/api/user-tokens/me', ...options });
@@ -1331,45 +1375,6 @@ export const vllmChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean
  */
 export const vllmChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<VllmChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<VllmChatCompletionsWithAgentResponses, VllmChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/vllm/{agentId}/chat/completions',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Get all roles in the organization
- */
-export const getRoles = <ThrowOnError extends boolean = false>(options?: Options<GetRolesData, ThrowOnError>) => (options?.client ?? client).get<GetRolesResponses, GetRolesErrors, ThrowOnError>({ url: '/api/roles', ...options });
-
-/**
- * Create a new custom role
- */
-export const createRole = <ThrowOnError extends boolean = false>(options: Options<CreateRoleData, ThrowOnError>) => (options.client ?? client).post<CreateRoleResponses, CreateRoleErrors, ThrowOnError>({
-    url: '/api/roles',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Delete a custom role
- */
-export const deleteRole = <ThrowOnError extends boolean = false>(options: Options<DeleteRoleData, ThrowOnError>) => (options.client ?? client).delete<DeleteRoleResponses, DeleteRoleErrors, ThrowOnError>({ url: '/api/roles/{roleId}', ...options });
-
-/**
- * Get a specific role by ID
- */
-export const getRole = <ThrowOnError extends boolean = false>(options: Options<GetRoleData, ThrowOnError>) => (options.client ?? client).get<GetRoleResponses, GetRoleErrors, ThrowOnError>({ url: '/api/roles/{roleId}', ...options });
-
-/**
- * Update a custom role
- */
-export const updateRole = <ThrowOnError extends boolean = false>(options: Options<UpdateRoleData, ThrowOnError>) => (options.client ?? client).put<UpdateRoleResponses, UpdateRoleErrors, ThrowOnError>({
-    url: '/api/roles/{roleId}',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -1471,8 +1476,3 @@ export const getTeamVaultSecretKeys = <ThrowOnError extends boolean = false>(opt
         ...options.headers
     }
 });
-
-/**
- * Get current user's permissions
- */
-export const getUserPermissions = <ThrowOnError extends boolean = false>(options?: Options<GetUserPermissionsData, ThrowOnError>) => (options?.client ?? client).get<GetUserPermissionsResponses, GetUserPermissionsErrors, ThrowOnError>({ url: '/api/user/permissions', ...options });

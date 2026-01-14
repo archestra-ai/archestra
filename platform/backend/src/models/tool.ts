@@ -2,6 +2,8 @@ import {
   AGENT_TOOL_PREFIX,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   slugify,
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import {
   and,
@@ -567,6 +569,35 @@ class ToolModel {
     const toolIds = archestraTools.map((t) => t.id);
 
     // Assign all tools to agent in bulk to avoid N+1
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
+  /**
+   * Assign default Archestra tools (artifact_write, todo_write) to an agent.
+   * These tools are automatically assigned to new profiles for task tracking and artifact management.
+   */
+  static async assignDefaultArchestraToolsToAgent(
+    agentId: string,
+  ): Promise<void> {
+    // Find the default tools by name
+    const defaultToolNames = [
+      TOOL_ARTIFACT_WRITE_FULL_NAME,
+      TOOL_TODO_WRITE_FULL_NAME,
+    ];
+
+    const defaultTools = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.name, defaultToolNames));
+
+    if (defaultTools.length === 0) {
+      // Tools not yet seeded, skip assignment
+      return;
+    }
+
+    const toolIds = defaultTools.map((t) => t.id);
+
+    // Assign tools to agent in bulk
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
   }
 

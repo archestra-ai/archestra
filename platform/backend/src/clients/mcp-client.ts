@@ -631,6 +631,8 @@ class McpClient {
         const headers: Record<string, string> = {};
         if (secrets.access_token) {
           headers.Authorization = `Bearer ${secrets.access_token}`;
+        } else if (secrets.raw_access_token) {
+          headers.Authorization = String(secrets.raw_access_token);
         }
 
         return new StreamableHTTPClientTransport(
@@ -648,7 +650,9 @@ class McpClient {
       }
 
       // Stdio transport - use K8s attach!
-      const k8sDeployment = McpServerRuntimeManager.getDeployment(
+      // Use getOrLoadDeployment to handle multi-replica scenarios where the deployment
+      // may have been created by a different replica
+      const k8sDeployment = await McpServerRuntimeManager.getOrLoadDeployment(
         targetLocalMcpServerId,
       );
       if (!k8sDeployment) {

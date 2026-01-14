@@ -7,6 +7,7 @@ export * as archestraCatalogSdk from "./hey-api/clients/archestra-catalog/sdk.ge
 export * as archestraCatalogTypes from "./hey-api/clients/archestra-catalog/types.gen";
 export * from "./model-constants";
 export * from "./permission.types";
+export * from "./policy-conditions";
 export * from "./roles";
 export * from "./routes";
 export * from "./test-mcp-server";

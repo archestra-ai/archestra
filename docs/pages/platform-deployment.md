@@ -492,6 +492,12 @@ The following environment variables can be used to configure Archestra Platform:
   - Example: `http://localhost:9001` or `https://api.example.com`
   - Note: This configures both the port where the backend API server listens (parsed from the URL) and the base URL that the frontend uses to connect to the backend
 
+- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
+
+  - Default: `50MB` (52428800 bytes)
+  - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
+  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
+
 - **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
 
   - Example: `https://frontend.example.com`

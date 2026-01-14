@@ -136,7 +136,7 @@ test.describe("MCP Install", () => {
       );
     });
 
-    test("PAT", async ({ adminPage, extractCookieHeaders }) => {
+    test("Bearer Token", async ({ adminPage, extractCookieHeaders }) => {
       await deleteCatalogItem(
         adminPage,
         extractCookieHeaders,
@@ -163,7 +163,7 @@ test.describe("MCP Install", () => {
         .getByRole("textbox", { name: "Server URL *" })
         .fill(HF_URL);
       await adminPage
-        .getByRole("radio", { name: "Personal Access Token (PAT)" })
+        .getByRole("radio", { name: /"Authorization: Bearer/ })
         .click();
 
       // add catalog item to the registry
@@ -177,18 +177,18 @@ test.describe("MCP Install", () => {
         .click();
       await adminPage.waitForLoadState("networkidle");
 
-      // Check that we have input for entering the PAT and fill it with fake value
+      // Check that we have input for entering the token and fill it with fake value
       await adminPage
         .getByRole("textbox", { name: "Access Token *" })
-        .fill("fake-pat");
+        .fill("fake-token");
 
       // try to install the server
       await clickButton({ page: adminPage, options: { name: "Install" } });
       await adminPage.waitForLoadState("networkidle");
 
-      // It should fail with error message because PAT is invalid and remote hf refuses to install the server
+      // It should fail with error message because token is invalid and remote hf refuses to install the server
       await adminPage
-        .getByText("Failed to install")
+        .getByText(/Failed to connect to MCP server/)
         .waitFor({ state: "visible" });
 
       // cleanup

@@ -201,6 +201,46 @@ export const getAdditionalTrustedSsoProviderIds = (): string[] => {
     .filter((id) => id.length > 0);
 };
 
+/**
+ * Parse body limit from environment variable.
+ * Supports numeric bytes (e.g., "52428800") or human-readable format (e.g., "50MB", "100KB").
+ */
+export const parseBodyLimit = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue) {
+    return defaultValue;
+  }
+
+  const trimmed = envValue.trim();
+
+  // Try parsing human-readable format first (e.g., "50MB", "100KB")
+  // This must come first because parseInt("50MB") would return 50
+  const match = trimmed.match(/^(\d+)(KB|MB|GB)$/i);
+  if (match) {
+    const value = Number.parseInt(match[1], 10);
+    const unit = match[2].toUpperCase();
+    switch (unit) {
+      case "KB":
+        return value * 1024;
+      case "MB":
+        return value * 1024 * 1024;
+      case "GB":
+        return value * 1024 * 1024 * 1024;
+    }
+  }
+
+  // Try parsing as plain number (bytes) - must be all digits
+  if (/^\d+$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10);
+  }
+
+  return defaultValue;
+};
+
+const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
+
 export default {
   frontendBaseUrl,
   api: {
@@ -210,6 +250,16 @@ export default {
     version: process.env.ARCHESTRA_VERSION || packageJson.version,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
+    /**
+     * Maximum request body size for LLM proxy and chat routes.
+     * Default Fastify limit is 1MB, which is too small for long conversations
+     * with large context windows (100k+ tokens) or file attachments.
+     * Configurable via ARCHESTRA_API_BODY_LIMIT environment variable.
+     */
+    bodyLimit: parseBodyLimit(
+      process.env.ARCHESTRA_API_BODY_LIMIT,
+      DEFAULT_BODY_LIMIT,
+    ),
   },
   websocket: {
     path: "/ws",

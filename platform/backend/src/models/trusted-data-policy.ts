@@ -1,4 +1,8 @@
-import { isArchestraMcpServerTool } from "@shared";
+import {
+  CONTEXT_EXTERNAL_AGENT_ID,
+  CONTEXT_TEAM_IDS,
+  isArchestraMcpServerTool,
+} from "@shared";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
@@ -211,13 +215,13 @@ class TrustedDataPolicyModel {
    * Match a context-based condition (e.g., context.teamIds, context.externalAgentId)
    */
   private static evaluateContextCondition(
-    path: string,
+    key: string,
     value: string,
     operator: AutonomyPolicyOperator.SupportedOperator,
     context: PolicyEvaluationContext,
   ): boolean {
     // Team matching - check if value is in teamIds array
-    if (path === "teamIds") {
+    if (key === CONTEXT_TEAM_IDS) {
       switch (operator) {
         case "contains":
           return context.teamIds.includes(value);
@@ -229,7 +233,7 @@ class TrustedDataPolicyModel {
     }
 
     // Single value matching for externalAgentId
-    if (path === "externalAgentId") {
+    if (key === CONTEXT_EXTERNAL_AGENT_ID) {
       const contextValue = context.externalAgentId;
       switch (operator) {
         case "equal":
@@ -290,13 +294,12 @@ class TrustedDataPolicyModel {
     // All conditions must match (AND logic)
     for (const condition of conditions) {
       const { key, value, operator } = condition;
-      const [scope, ...pathParts] = key.split(".");
 
       // Check if this is a context condition
-      if (scope === "context") {
+      if (key.startsWith("context.")) {
         if (
           !TrustedDataPolicyModel.evaluateContextCondition(
-            pathParts.join("."),
+            key,
             value,
             operator,
             context,

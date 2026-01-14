@@ -391,6 +391,10 @@ jobs:
           npx playwright merge-reports --reporter=html --reporter=json ./blob-reports
           echo "=== Files created after merge ==="
           ls -la
+          echo "=== Looking for index.html anywhere ==="
+          find . -name "index.html" -type f 2>/dev/null || echo "No index.html found"
+          echo "=== Looking for any new directories ==="
+          find . -type d -name "*report*" 2>/dev/null || echo "No report directories found"
           ls -la ./playwright-report/ || echo "playwright-report directory not created"
 
       - name: Upload merged Playwright report

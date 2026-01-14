@@ -1,10 +1,12 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type Permissions } from "@shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useCurrentOrgMembers,
   useDefaultCredentialsEnabled,
+  useHasPermissions,
+  usePermissionMap,
   useSession,
 } from "./auth.query";
 import { authClient } from "./clients/auth/auth-client";
@@ -124,5 +126,243 @@ describe("useDefaultCredentialsEnabled", () => {
     });
 
     expect(result.current.data).toBe(true);
+  });
+});
+
+describe("useHasPermissions", () => {
+  it("should return true when user has all required permissions", async () => {
+    const userPermissions: Permissions = {
+      organization: ["read", "create", "update"],
+      profile: ["read", "create"],
+    };
+
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const permissionsToCheck: Permissions = {
+      organization: ["read", "create"],
+      profile: ["read"],
+    };
+
+    const { result } = renderHook(() => useHasPermissions(permissionsToCheck), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toBe(true);
+  });
+
+  it("should return false when user is missing required permissions", async () => {
+    const userPermissions: Permissions = {
+      organization: ["read"],
+      profile: ["read"],
+    };
+
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const permissionsToCheck: Permissions = {
+      organization: ["read", "delete"], // User doesn't have "delete"
+    };
+
+    const { result } = renderHook(() => useHasPermissions(permissionsToCheck), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toBe(false);
+  });
+
+  it("should return false when user is missing entire resource", async () => {
+    const userPermissions: Permissions = {
+      organization: ["read"],
+    };
+
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const permissionsToCheck: Permissions = {
+      profile: ["read"], // User doesn't have profile resource at all
+    };
+
+    const { result } = renderHook(() => useHasPermissions(permissionsToCheck), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toBe(false);
+  });
+
+  it("should return true when no permissions are required", async () => {
+    const userPermissions: Permissions = {
+      organization: ["read"],
+    };
+
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const { result } = renderHook(() => useHasPermissions({}), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toBe(true);
+  });
+
+  it("should return false when permissions are not loaded yet", async () => {
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: {},
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const permissionsToCheck: Permissions = {
+      organization: ["read"],
+    };
+
+    const { result } = renderHook(() => useHasPermissions(permissionsToCheck), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toBe(false);
+  });
+
+  it("should share the same query across multiple hook calls", async () => {
+    const userPermissions: Permissions = {
+      organization: ["read", "create"],
+    };
+
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const wrapper = createWrapper();
+
+    // Render two hooks with different permission checks
+    const { result: result1 } = renderHook(
+      () => useHasPermissions({ organization: ["read"] }),
+      { wrapper },
+    );
+
+    const { result: result2 } = renderHook(
+      () => useHasPermissions({ organization: ["create"] }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result1.current.isSuccess).toBe(true);
+      expect(result2.current.isSuccess).toBe(true);
+    });
+
+    // Both should have evaluated to true
+    expect(result1.current.data).toBe(true);
+    expect(result2.current.data).toBe(true);
+
+    // But getUserPermissions should only have been called once
+    expect(archestraApiSdk.getUserPermissions).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("usePermissionMap", () => {
+  it("should check multiple permission sets and return a map of results", async () => {
+    const userPermissions: Permissions = {
+      organization: ["read", "create"],
+      profile: ["read"],
+    };
+
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const permissionMap: Record<string, Permissions> = {
+      canReadOrg: { organization: ["read"] },
+      canCreateOrg: { organization: ["create"] },
+      canDeleteOrg: { organization: ["delete"] }, // User doesn't have this
+      canReadProfile: { profile: ["read"] },
+      canCreateProfile: { profile: ["create"] }, // User doesn't have this
+    };
+
+    const { result } = renderHook(() => usePermissionMap(permissionMap), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current?.canReadOrg).toBe(true);
+    });
+
+    expect(result.current).toEqual({
+      canReadOrg: true,
+      canCreateOrg: true,
+      canDeleteOrg: false,
+      canReadProfile: true,
+      canCreateProfile: false,
+    });
+  });
+
+  it("should return true for keys with no required permissions", async () => {
+    const userPermissions: Permissions = {
+      organization: ["read"],
+    };
+
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const permissionMap: Record<string, Permissions> = {
+      noPermissionsRequired: {},
+      hasPermissions: { organization: ["read"] },
+    };
+
+    const { result } = renderHook(() => usePermissionMap(permissionMap), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current?.hasPermissions).toBe(true);
+    });
+
+    expect(result.current?.noPermissionsRequired).toBe(true);
+    expect(result.current?.hasPermissions).toBe(true);
+  });
+
+  it("should return false for all keys when permissions are not loaded", async () => {
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: {},
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+
+    const permissionMap: Record<string, Permissions> = {
+      canRead: { organization: ["read"] },
+      canCreate: { organization: ["create"] },
+    };
+
+    const { result } = renderHook(() => usePermissionMap(permissionMap), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      // Wait for query to settle
+      expect(result.current?.canRead).toBeDefined();
+    });
+
+    expect(result.current?.canRead).toBe(false);
+    expect(result.current?.canCreate).toBe(false);
   });
 });

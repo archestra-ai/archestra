@@ -3,8 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
 import logger from "@/logging";
-import OrganizationRoleModel from "@/models/organization-role.ee";
-import { getUserPermissions } from "@/models/user.ee";
+import { OrganizationRoleModel, UserModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -35,25 +34,11 @@ const generateRoleIdentifier = (title: string): string => {
     .replace(/^_+|_+$/g, ""); // Remove leading/trailing underscores
 };
 
-const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  fastify.get(
-    "/api/roles",
-    {
-      schema: {
-        operationId: RouteId.GetRoles,
-        description: "Get all roles in the organization",
-        tags: ["Roles"],
-        response: constructResponseSchema(
-          z.array(SelectOrganizationRoleSchema),
-        ),
-      },
-    },
-    async ({ organizationId }, reply) => {
-      // Get all roles including predefined ones
-      return reply.send(await OrganizationRoleModel.getAll(organizationId));
-    },
-  );
-
+/**
+ * Custom role CRUD routes (Enterprise Edition only)
+ * GET routes are in organization-role.ts (open-source)
+ */
+const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/roles",
     {
@@ -73,7 +58,10 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { organizationId, user } = request;
 
       // Get user's permissions to validate they can grant these permissions
-      const userPermissions = await getUserPermissions(user.id, organizationId);
+      const userPermissions = await UserModel.getUserPermissions(
+        user.id,
+        organizationId,
+      );
 
       const validation = OrganizationRoleModel.validateRolePermissions(
         userPermissions,
@@ -138,33 +126,6 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.get(
-    "/api/roles/:roleId",
-    {
-      schema: {
-        operationId: RouteId.GetRole,
-        description: "Get a specific role by ID",
-        tags: ["Roles"],
-        params: z.object({
-          roleId: PredefinedRoleNameOrCustomRoleIdSchema,
-        }),
-        response: constructResponseSchema(SelectOrganizationRoleSchema),
-      },
-    },
-    async ({ params: { roleId }, organizationId }, reply) => {
-      const result = await OrganizationRoleModel.getById(
-        roleId,
-        organizationId,
-      );
-
-      if (!result) {
-        throw new ApiError(404, "Role not found");
-      }
-
-      return reply.send(result);
-    },
-  );
-
   fastify.put(
     "/api/roles/:roleId",
     {
@@ -209,7 +170,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate permissions if being changed
       if (permission) {
-        const userPermissions = await getUserPermissions(
+        const userPermissions = await UserModel.getUserPermissions(
           user.id,
           organizationId,
         );
@@ -296,4 +257,4 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default organizationRoleRoutes;
+export default customRoleRoutes;

@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   turbopack: {
     resolveAlias: {
-      "@shared/access-control.ee": "../shared/access-control.ee.ts",
       "@shared/access-control": "../shared/access-control.ts",
     },
   },

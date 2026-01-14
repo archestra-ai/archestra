@@ -155,6 +155,8 @@ export function AssignedToolsTable({
     Set<{ id: string; field: string }>
   >(new Set());
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [bulkCallPolicyValue, setBulkCallPolicyValue] = useState<string>("");
+  const [bulkResultPolicyValue, setBulkResultPolicyValue] = useState<string>("");
 
   // Fetch tools with assignments with server-side pagination, filtering, and sorting
   // Only use initialData for first page with default sorting and no filters
@@ -340,6 +342,10 @@ export function AssignedToolsTable({
           `Configured ${successCount} tool(s), failed ${failureCount}`,
         );
       }
+
+      // Reset bulk action dropdowns to placeholder
+      setBulkCallPolicyValue("");
+      setBulkResultPolicyValue("");
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -795,9 +801,11 @@ export function AssignedToolsTable({
                   </span>
                   <Select
                     disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                    onValueChange={(value: CallPolicyAction) =>
-                      handleBulkAction("callPolicy", value)
-                    }
+                    value={bulkCallPolicyValue}
+                    onValueChange={(value: CallPolicyAction) => {
+                      setBulkCallPolicyValue(value);
+                      handleBulkAction("callPolicy", value);
+                    }}
                   >
                     <SelectTrigger className="h-8 w-[180px] text-sm" size="sm">
                       <SelectValue placeholder="Select action" />
@@ -826,9 +834,11 @@ export function AssignedToolsTable({
                   </span>
                   <Select
                     disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                    onValueChange={(value: ResultPolicyAction) =>
-                      handleBulkAction("resultPolicyAction", value)
-                    }
+                    value={bulkResultPolicyValue}
+                    onValueChange={(value: ResultPolicyAction) => {
+                      setBulkResultPolicyValue(value);
+                      handleBulkAction("resultPolicyAction", value);
+                    }}
                   >
                     <SelectTrigger className="h-8 w-[160px] text-sm" size="sm">
                       <SelectValue placeholder="Select action" />

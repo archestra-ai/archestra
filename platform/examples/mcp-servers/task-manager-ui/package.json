@@ -1,0 +1,20 @@
+{
+    "name": "task-manager-ui-mcp-server",
+    "version": "1.0.0",
+    "description": "Example MCP server with task manager UI using RemoteDOM",
+    "type": "module",
+    "main": "index.ts",
+    "scripts": {
+        "dev": "tsx watch index.ts",
+        "build": "tsc"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.0.0",
+        "@mcp-ui/server": "latest"
+    },
+    "devDependencies": {
+        "tsx": "^4.7.0",
+        "typescript": "^5.3.3",
+        "@types/node": "^20.10.0"
+    }
+}

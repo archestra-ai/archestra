@@ -52,7 +52,7 @@ test.describe("MCP Install", () => {
     await serverCard.waitFor({ state: "visible", timeout: 30000 });
 
     // Click the Connect button within the card
-    await serverCard.getByRole("button", { name: "Connect" }).click();
+    await serverCard.getByRole("button", { name: "Connectsssssss" }).click();
     await adminPage.waitForTimeout(2_000);
 
     // fill the api key (just fake value)

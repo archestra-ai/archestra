@@ -241,10 +241,9 @@ describe("ToolAutoPolicyService", () => {
       expect(
         ToolInvocationPolicyModel.bulkUpsertDefaultPolicy,
       ).toHaveBeenCalledWith(["tool-1"], "allow_when_context_is_untrusted");
-      expect(TrustedDataPolicyModel.bulkUpsertDefaultPolicy).toHaveBeenCalledWith(
-        ["tool-1"],
-        "mark_as_trusted",
-      );
+      expect(
+        TrustedDataPolicyModel.bulkUpsertDefaultPolicy,
+      ).toHaveBeenCalledWith(["tool-1"], "mark_as_trusted");
     });
 
     it("maps policy config to correct actions", async () => {
@@ -292,10 +291,9 @@ describe("ToolAutoPolicyService", () => {
       expect(
         ToolInvocationPolicyModel.bulkUpsertDefaultPolicy,
       ).toHaveBeenCalledWith(["tool-1"], "block_always");
-      expect(TrustedDataPolicyModel.bulkUpsertDefaultPolicy).toHaveBeenCalledWith(
-        ["tool-1"],
-        "block_always",
-      );
+      expect(
+        TrustedDataPolicyModel.bulkUpsertDefaultPolicy,
+      ).toHaveBeenCalledWith(["tool-1"], "block_always");
     });
 
     it("handles sanitize_with_dual_llm result treatment", async () => {
@@ -339,10 +337,9 @@ describe("ToolAutoPolicyService", () => {
 
       await service.configurePoliciesForTool("tool-1", "org-1");
 
-      expect(TrustedDataPolicyModel.bulkUpsertDefaultPolicy).toHaveBeenCalledWith(
-        ["tool-1"],
-        "sanitize_with_dual_llm",
-      );
+      expect(
+        TrustedDataPolicyModel.bulkUpsertDefaultPolicy,
+      ).toHaveBeenCalledWith(["tool-1"], "sanitize_with_dual_llm");
     });
   });
 

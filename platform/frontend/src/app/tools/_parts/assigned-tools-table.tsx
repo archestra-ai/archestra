@@ -156,7 +156,8 @@ export function AssignedToolsTable({
   >(new Set());
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [bulkCallPolicyValue, setBulkCallPolicyValue] = useState<string>("");
-  const [bulkResultPolicyValue, setBulkResultPolicyValue] = useState<string>("");
+  const [bulkResultPolicyValue, setBulkResultPolicyValue] =
+    useState<string>("");
 
   // Fetch tools with assignments with server-side pagination, filtering, and sorting
   // Only use initialData for first page with default sorting and no filters
@@ -336,10 +337,12 @@ export function AssignedToolsTable({
       ).length;
 
       if (failureCount === 0) {
-        toast.success(`Policies configured for ${successCount} tool(s)`);
+        toast.success(
+          `Default policies configured for ${successCount} tool(s). Custom policies are preserved.`,
+        );
       } else {
         toast.warning(
-          `Configured ${successCount} tool(s), failed ${failureCount}`,
+          `Default policies configured for ${successCount} tool(s), failed ${failureCount}. Custom policies are preserved.`,
         );
       }
 
@@ -883,7 +886,7 @@ export function AssignedToolsTable({
               </TooltipTrigger>
               <TooltipContent>
                 <p>
-                  Automatically configure security policies using AI analysis
+                  Automatically configure default policies using AI analysis
                 </p>
               </TooltipContent>
             </Tooltip>

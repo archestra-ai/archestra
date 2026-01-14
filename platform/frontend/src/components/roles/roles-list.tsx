@@ -1,6 +1,7 @@
 "use client";
 
-import { Shield } from "lucide-react";
+import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
+import { PredefinedRoles } from "@/components/roles/predefined-roles";
 import {
   Card,
   CardContent,
@@ -10,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { useRoles } from "@/lib/role.query";
 
-export function PredefinedRolesList() {
+export function RolesList() {
   const { data: roles, isLoading } = useRoles();
 
   if (isLoading) {
@@ -48,29 +49,13 @@ export function PredefinedRolesList() {
         </div>
       </CardHeader>
       <CardContent>
-        <div>
+        <PredefinedRoles predefinedRoles={predefinedRoles} />
+        <div className="mt-6">
           <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
-            Predefined Roles
+            Custom Roles
           </h3>
-          <div className="space-y-3">
-            {predefinedRoles.map((role) => (
-              <div
-                key={role.id}
-                className="flex items-center justify-between rounded-lg border bg-muted/30 p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <Shield className="h-5 w-5 text-primary" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold capitalize">{role.name}</h4>
-                      <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                        System
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
+            <EnterpriseLicenseRequired featureName="Custom Roles" />
           </div>
         </div>
       </CardContent>

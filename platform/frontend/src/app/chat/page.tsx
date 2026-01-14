@@ -960,26 +960,33 @@ export default function ChatPage() {
           <StreamTimeoutWarning status={status} messages={messages} />
           <PermissivePolicyBar />
 
-          <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {/* Agent/Profile selector */}
-              {conversationId ? (
-                <AgentSelector
-                  currentPromptId={conversation?.promptId ?? null}
-                  currentAgentId={conversation?.agentId ?? ""}
-                  currentModel={conversation?.selectedModel ?? ""}
-                />
-              ) : (
-                <InitialAgentSelector
-                  currentPromptId={initialPromptId}
-                  onPromptChange={handleInitialPromptChange}
-                  defaultAgentId={initialAgentId ?? allProfiles[0]?.id ?? ""}
-                />
-              )}
+          <div className="sticky top-0 z-10 bg-background border-b p-2">
+            <div className="flex items-start justify-between gap-2">
+              {/* Left side - agent selector stays fixed, tools wrap internally */}
+              <div className="flex items-start gap-2 min-w-0 flex-1">
+                {/* Agent/Profile selector - fixed width */}
+                <div className="flex-shrink-0">
+                  {conversationId ? (
+                    <AgentSelector
+                      currentPromptId={conversation?.promptId ?? null}
+                      currentAgentId={conversation?.agentId ?? ""}
+                      currentModel={conversation?.selectedModel ?? ""}
+                    />
+                  ) : (
+                    <InitialAgentSelector
+                      currentPromptId={initialPromptId}
+                      onPromptChange={handleInitialPromptChange}
+                      defaultAgentId={
+                        initialAgentId ?? allProfiles[0]?.id ?? ""
+                      }
+                    />
+                  )}
+                </div>
 
-              {/* Agent tools display - pending actions stored in localStorage until first message */}
-              {(conversationId ? conversation?.promptId : initialPromptId) && (
-                <>
+                {/* Agent tools display - wraps internally, takes remaining space */}
+                {(conversationId
+                  ? conversation?.promptId
+                  : initialPromptId) && (
                   <AgentToolsDisplay
                     agentId={
                       conversationId
@@ -992,68 +999,71 @@ export default function ChatPage() {
                         : initialPromptId
                     }
                     conversationId={conversationId}
+                    addAgentsButton={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 gap-1.5 text-xs border-dashed"
+                        onClick={() => {
+                          const promptIdToEdit = conversationId
+                            ? conversation?.promptId
+                            : initialPromptId;
+                          if (promptIdToEdit) {
+                            setEditingPromptId(promptIdToEdit);
+                            setIsPromptDialogOpen(true);
+                          }
+                        }}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add agents
+                      </Button>
+                    }
                   />
+                )}
+              </div>
+              {/* Right side - controls stay fixed in first row */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {hasPlaywrightMcp && isBrowserStreamingEnabled && (
                   <Button
-                    variant="outline"
+                    variant={isBrowserPanelOpen ? "secondary" : "ghost"}
                     size="sm"
-                    className="h-7 px-2 gap-1.5 text-xs border-dashed"
-                    onClick={() => {
-                      const promptIdToEdit = conversationId
-                        ? conversation?.promptId
-                        : initialPromptId;
-                      if (promptIdToEdit) {
-                        setEditingPromptId(promptIdToEdit);
-                        setIsPromptDialogOpen(true);
-                      }
-                    }}
+                    onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
+                    className="text-xs"
                   >
-                    <Plus className="h-3 w-3" />
-                    Add agents
+                    <Globe className="h-3 w-3 mr-1" />
+                    Browser
                   </Button>
-                </>
-              )}
-            </div>
-            <div className="flex-1 flex justify-end gap-2 items-center">
-              {hasPlaywrightMcp && isBrowserStreamingEnabled && (
-                <Button
-                  variant={isBrowserPanelOpen ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
-                  className="text-xs"
-                >
-                  <Globe className="h-3 w-3 mr-1" />
-                  Browser
-                </Button>
-              )}
-              {!isArtifactOpen && (
+                )}
+                {!isArtifactOpen && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleArtifactPanel}
+                    className="text-xs"
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    Show Artifact
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={toggleArtifactPanel}
+                  onClick={toggleHideToolCalls}
                   className="text-xs"
                 >
-                  <FileText className="h-3 w-3 mr-1" />
-                  Show Artifact
+                  {hideToolCalls ? (
+                    <>
+                      <Eye className="h-3 w-3 mr-1" />
+                      Show tool calls
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      Hide tool calls
+                    </>
+                  )}
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleHideToolCalls}
-                className="text-xs"
-              >
-                {hideToolCalls ? (
-                  <>
-                    <Eye className="h-3 w-3 mr-1" />
-                    Show tool calls
-                  </>
-                ) : (
-                  <>
-                    <EyeOff className="h-3 w-3 mr-1" />
-                    Hide tool calls
-                  </>
-                )}
-              </Button>
+              </div>
             </div>
           </div>
 

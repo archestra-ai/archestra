@@ -56,7 +56,7 @@ jobs:
 
   platform-linting-and-tests:
     name: Platform Linting and Tests
-    runs-on: ubuntu-latest-16-cores
+    runs-on: ubuntu-latest
     permissions:
       contents: write # Required for release-please auto-commit of codegen changes
     defaults:

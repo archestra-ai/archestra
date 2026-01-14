@@ -131,7 +131,7 @@ export const bulkAssignTools = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
- * Automatically configure security policies for agent-tool assignments using Anthropic LLM analysis
+ * Automatically configure security policies for tools using Anthropic LLM analysis
  */
 export const autoConfigureAgentToolPolicies = <ThrowOnError extends boolean = false>(options: Options<AutoConfigureAgentToolPoliciesData, ThrowOnError>) => (options.client ?? client).post<AutoConfigureAgentToolPoliciesResponses, AutoConfigureAgentToolPoliciesErrors, ThrowOnError>({
     url: '/api/agent-tools/auto-configure-policies',

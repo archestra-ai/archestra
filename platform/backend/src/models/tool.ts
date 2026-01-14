@@ -35,6 +35,7 @@ import type {
   ToolSortBy,
   ToolSortDirection,
   ToolWithAssignments,
+  UpdateTool,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
@@ -70,6 +71,28 @@ class ToolModel {
       .values(tool)
       .returning();
     return createdTool;
+  }
+
+  static async update(
+    id: string,
+    data: Partial<
+      Pick<
+        UpdateTool,
+        | "policiesAutoConfiguredAt"
+        | "policiesAutoConfiguringStartedAt"
+        | "policiesAutoConfiguredReasoning"
+      >
+    >,
+  ): Promise<Tool | null> {
+    const [updatedTool] = await db
+      .update(schema.toolsTable)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.toolsTable.id, id))
+      .returning();
+    return updatedTool || null;
   }
 
   static async createToolIfNotExists(tool: InsertTool): Promise<Tool> {
@@ -235,6 +258,11 @@ class ToolModel {
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
         promptAgentId: schema.toolsTable.promptAgentId,
+        policiesAutoConfiguredAt: schema.toolsTable.policiesAutoConfiguredAt,
+        policiesAutoConfiguringStartedAt:
+          schema.toolsTable.policiesAutoConfiguringStartedAt,
+        policiesAutoConfiguredReasoning:
+          schema.toolsTable.policiesAutoConfiguredReasoning,
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,

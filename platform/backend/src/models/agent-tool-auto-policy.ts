@@ -1,9 +1,8 @@
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { policyConfigSubagent } from "@/subagents";
-import ToolModel from "./agent-tool";
 import ChatApiKeyModel from "./chat-api-key";
-import McpServerModel from "./mcp-server";
+import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -172,28 +171,20 @@ export class ToolAutoPolicyService {
     }
 
     try {
-      const tools = await ToolModel.findAll({ skipPagination: true });
-      const tool = tools.data.find((tool) => tool.id === toolId);
+      // Get all tools as admin to bypass access control
+      const tools = await ToolModel.findAll(undefined, true);
+      const tool = tools.find((t) => t.id === toolId);
 
       if (!tool) {
-        logger.warn(
-          { toolId },
-          "configurePoliciesForTool: assignment not found",
-        );
+        logger.warn({ toolId }, "configurePoliciesForTool: tool not found");
         return {
           success: false,
           error: "Tool not found",
         };
       }
 
-      // Get MCP server name if available
-      let mcpServerName: string | null = null;
-      if (tool.mcpServerId) {
-        const mcpServer = await McpServerModel.findById(
-          tool.mcpServerId,
-        );
-        mcpServerName = mcpServer?.name || null;
-      }
+      // Get MCP server name from joined data
+      const mcpServerName = tool.mcpServer?.name || null;
 
       logger.debug(
         { toolId, toolName: tool.name, mcpServerName },
@@ -207,8 +198,6 @@ export class ToolAutoPolicyService {
         anthropicApiKey,
         organizationId,
       );
-
-      const toolId = tool.tool.id;
 
       // Create/upsert call policy (tool invocation policy)
       const callPolicyAction = policyConfig.allowUsageWhenUntrustedDataIsPresent
@@ -239,7 +228,7 @@ export class ToolAutoPolicyService {
       });
 
       logger.info(
-        { toolId, toolId, policyConfig },
+        { toolId, policyConfig },
         "configurePoliciesForTool: policies created successfully",
       );
 
@@ -308,9 +297,10 @@ export class ToolAutoPolicyService {
 
       // Race between auto-configure and timeout
       const result = await Promise.race([
-        this.configurePoliciesForTool(toolId, organizationId).then(
-          (res) => ({ ...res, timedOut: false }),
-        ),
+        this.configurePoliciesForTool(toolId, organizationId).then((res) => ({
+          ...res,
+          timedOut: false,
+        })),
         timeoutPromise,
       ]);
 

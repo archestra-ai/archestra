@@ -5135,6 +5135,9 @@ export type GetAgentsResponses = {
                     [key: string]: unknown;
                 };
                 description: string | null;
+                policiesAutoConfiguredAt: string | null;
+                policiesAutoConfiguringStartedAt: string | null;
+                policiesAutoConfiguredReasoning: string | null;
                 createdAt: string;
                 updatedAt: string;
             }>;
@@ -5275,6 +5278,9 @@ export type CreateAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -5394,6 +5400,9 @@ export type GetAllAgentsResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -5513,6 +5522,9 @@ export type GetDefaultAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -5713,6 +5725,9 @@ export type GetAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -5846,6 +5861,9 @@ export type UpdateAgentResponses = {
                 [key: string]: unknown;
             };
             description: string | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -6116,9 +6134,6 @@ export type GetAllAgentToolsResponses = {
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
             useDynamicTeamCredential: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -6428,7 +6443,7 @@ export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignT
 
 export type AutoConfigureAgentToolPoliciesData = {
     body: {
-        agentToolIds: Array<string>;
+        toolIds: Array<string>;
     };
     path?: never;
     query?: never;
@@ -6501,7 +6516,7 @@ export type AutoConfigureAgentToolPoliciesResponses = {
     200: {
         success: boolean;
         results: Array<{
-            agentToolId: string;
+            toolId: string;
             success: boolean;
             config?: {
                 toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
@@ -6611,6 +6626,9 @@ export type GetAgentToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
+        policiesAutoConfiguredAt: string | null;
+        policiesAutoConfiguringStartedAt: string | null;
+        policiesAutoConfiguredReasoning: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -6624,7 +6642,6 @@ export type UpdateAgentToolData = {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         useDynamicTeamCredential?: boolean;
-        policiesAutoConfiguredAt?: unknown;
     };
     path: {
         id: string;
@@ -6704,9 +6721,6 @@ export type UpdateAgentToolResponses = {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         useDynamicTeamCredential?: boolean;
-        policiesAutoConfiguredAt?: string | null;
-        policiesAutoConfiguringStartedAt?: string | null;
-        policiesAutoConfiguredReasoning?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };
@@ -18475,6 +18489,9 @@ export type GetPromptToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
+        policiesAutoConfiguredAt: string | null;
+        policiesAutoConfiguringStartedAt: string | null;
+        policiesAutoConfiguredReasoning: string | null;
         createdAt: string;
         updatedAt: string;
         agentPromptId: string;
@@ -21078,6 +21095,9 @@ export type GetToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
+        policiesAutoConfiguredAt: string | null;
+        policiesAutoConfiguringStartedAt: string | null;
+        policiesAutoConfiguredReasoning: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {

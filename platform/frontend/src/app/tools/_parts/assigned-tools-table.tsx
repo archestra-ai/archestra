@@ -315,18 +315,16 @@ export function AssignedToolsTable({
   );
 
   const handleAutoConfigurePolicies = useCallback(async () => {
-    // Get one agentToolId per unique tool (policies are per tool, not per assignment)
-    const agentToolIds = selectedTools
-      .map((tool) => tool.assignments[0]?.agentToolId)
-      .filter(Boolean);
+    // Get tool IDs from selected tools (policies are per tool)
+    const toolIds = selectedTools.map((tool) => tool.id);
 
-    if (agentToolIds.length === 0) {
-      toast.error("No tool assignments found to configure");
+    if (toolIds.length === 0) {
+      toast.error("No tools selected to configure");
       return;
     }
 
     try {
-      const result = await autoConfigureMutation.mutateAsync(agentToolIds);
+      const result = await autoConfigureMutation.mutateAsync(toolIds);
 
       const successCount = result.results.filter(
         (r: { success: boolean }) => r.success,

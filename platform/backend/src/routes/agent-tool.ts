@@ -281,17 +281,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.AutoConfigureAgentToolPolicies,
         description:
-          "Automatically configure security policies for agent-tool assignments using Anthropic LLM analysis",
+          "Automatically configure security policies for tools using Anthropic LLM analysis",
         tags: ["Agent Tools"],
         body: z.object({
-          agentToolIds: z.array(z.string().uuid()).min(1),
+          toolIds: z.array(z.string().uuid()).min(1),
         }),
         response: constructResponseSchema(
           z.object({
             success: z.boolean(),
             results: z.array(
               z.object({
-                agentToolId: z.string().uuid(),
+                toolId: z.string().uuid(),
                 success: z.boolean(),
                 config: z
                   .object({
@@ -311,16 +311,15 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
-      const { agentToolIds } = body;
+      const { toolIds } = body;
 
       logger.info(
-        { organizationId, userId: user.id, count: agentToolIds.length },
+        { organizationId, userId: user.id, count: toolIds.length },
         "POST /api/agent-tools/auto-configure-policies: request received",
       );
 
       // Check if service is available for this organization
-      const available =
-        await toolAutoPolicyService.isAvailable(organizationId);
+      const available = await toolAutoPolicyService.isAvailable(organizationId);
       if (!available) {
         logger.warn(
           { organizationId, userId: user.id },
@@ -332,11 +331,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const result =
-        await toolAutoPolicyService.configurePoliciesForTools(
-          agentToolIds,
-          organizationId,
-        );
+      const result = await toolAutoPolicyService.configurePoliciesForTools(
+        toolIds,
+        organizationId,
+      );
 
       logger.info(
         {
@@ -427,7 +425,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
           useDynamicTeamCredential: true,
-          policiesAutoConfiguredAt: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },

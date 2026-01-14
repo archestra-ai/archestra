@@ -258,9 +258,9 @@ export function useAutoConfigurePolicies() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (agentToolIds: string[]) => {
+    mutationFn: async (toolIds: string[]) => {
       const result = await autoConfigureAgentToolPolicies({
-        body: { agentToolIds },
+        body: { toolIds },
       });
 
       if (!result.data) {
@@ -274,9 +274,12 @@ export function useAutoConfigurePolicies() {
       return result.data;
     },
     onSuccess: () => {
-      // Invalidate agent-tools queries to refetch with new policies
+      // Invalidate queries to refetch with new policies
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["tools"],
       });
     },
   });

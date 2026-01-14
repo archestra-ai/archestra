@@ -16978,6 +16978,20 @@
                                   "nullable": true,
                                   "type": "string"
                                 },
+                                "policiesAutoConfiguredAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "policiesAutoConfiguringStartedAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "policiesAutoConfiguredReasoning": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
                                 "createdAt": {
                                   "type": "string",
                                   "format": "date-time"
@@ -16995,6 +17009,9 @@
                                 "promptAgentId",
                                 "name",
                                 "description",
+                                "policiesAutoConfiguredAt",
+                                "policiesAutoConfiguringStartedAt",
+                                "policiesAutoConfiguredReasoning",
                                 "createdAt",
                                 "updatedAt"
                               ],
@@ -17478,6 +17495,20 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguringStartedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguredReasoning": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -17495,6 +17526,9 @@
                           "promptAgentId",
                           "name",
                           "description",
+                          "policiesAutoConfiguredAt",
+                          "policiesAutoConfiguringStartedAt",
+                          "policiesAutoConfiguredReasoning",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -17872,6 +17906,20 @@
                               "nullable": true,
                               "type": "string"
                             },
+                            "policiesAutoConfiguredAt": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "policiesAutoConfiguringStartedAt": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "policiesAutoConfiguredReasoning": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "createdAt": {
                               "type": "string",
                               "format": "date-time"
@@ -17889,6 +17937,9 @@
                             "promptAgentId",
                             "name",
                             "description",
+                            "policiesAutoConfiguredAt",
+                            "policiesAutoConfiguringStartedAt",
+                            "policiesAutoConfiguredReasoning",
                             "createdAt",
                             "updatedAt"
                           ],
@@ -18265,6 +18316,20 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguringStartedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguredReasoning": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -18282,6 +18347,9 @@
                           "promptAgentId",
                           "name",
                           "description",
+                          "policiesAutoConfiguredAt",
+                          "policiesAutoConfiguringStartedAt",
+                          "policiesAutoConfiguredReasoning",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -18669,6 +18737,20 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguringStartedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguredReasoning": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -18686,6 +18768,9 @@
                           "promptAgentId",
                           "name",
                           "description",
+                          "policiesAutoConfiguredAt",
+                          "policiesAutoConfiguringStartedAt",
+                          "policiesAutoConfiguredReasoning",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -19128,6 +19213,20 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "policiesAutoConfiguredAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguringStartedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguredReasoning": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -19145,6 +19244,9 @@
                           "promptAgentId",
                           "name",
                           "description",
+                          "policiesAutoConfiguredAt",
+                          "policiesAutoConfiguringStartedAt",
+                          "policiesAutoConfiguredReasoning",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -20306,20 +20408,6 @@
                           "useDynamicTeamCredential": {
                             "type": "boolean"
                           },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -20411,9 +20499,6 @@
                           "credentialSourceMcpServerId",
                           "executionSourceMcpServerId",
                           "useDynamicTeamCredential",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
                           "createdAt",
                           "updatedAt",
                           "agent",
@@ -21592,14 +21677,14 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Automatically configure security policies for agent-tool assignments using Anthropic LLM analysis",
+        "description": "Automatically configure security policies for tools using Anthropic LLM analysis",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "agentToolIds": {
+                  "toolIds": {
                     "minItems": 1,
                     "type": "array",
                     "items": {
@@ -21610,7 +21695,7 @@
                   }
                 },
                 "required": [
-                  "agentToolIds"
+                  "toolIds"
                 ]
               }
             }
@@ -21633,7 +21718,7 @@
                       "items": {
                         "type": "object",
                         "properties": {
-                          "agentToolId": {
+                          "toolId": {
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -21667,7 +21752,7 @@
                           }
                         },
                         "required": [
-                          "agentToolId",
+                          "toolId",
                           "success"
                         ],
                         "additionalProperties": false
@@ -21979,6 +22064,20 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "policiesAutoConfiguredAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "policiesAutoConfiguringStartedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "policiesAutoConfiguredReasoning": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -21996,6 +22095,9 @@
                       "promptAgentId",
                       "name",
                       "description",
+                      "policiesAutoConfiguredAt",
+                      "policiesAutoConfiguringStartedAt",
+                      "policiesAutoConfiguredReasoning",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -22249,9 +22351,6 @@
                   },
                   "useDynamicTeamCredential": {
                     "type": "boolean"
-                  },
-                  "policiesAutoConfiguredAt": {
-                    "nullable": true
                   }
                 }
               }
@@ -22311,20 +22410,6 @@
                     },
                     "useDynamicTeamCredential": {
                       "type": "boolean"
-                    },
-                    "policiesAutoConfiguredAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "policiesAutoConfiguringStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "policiesAutoConfiguredReasoning": {
-                      "nullable": true,
-                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -64099,6 +64184,20 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "policiesAutoConfiguredAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "policiesAutoConfiguringStartedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "policiesAutoConfiguredReasoning": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -64121,6 +64220,9 @@
                       "promptAgentId",
                       "name",
                       "description",
+                      "policiesAutoConfiguredAt",
+                      "policiesAutoConfiguringStartedAt",
+                      "policiesAutoConfiguredReasoning",
                       "createdAt",
                       "updatedAt",
                       "agentPromptId"
@@ -72852,6 +72954,20 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "policiesAutoConfiguredAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "policiesAutoConfiguringStartedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "policiesAutoConfiguredReasoning": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -72901,6 +73017,9 @@
                       "promptAgentId",
                       "name",
                       "description",
+                      "policiesAutoConfiguredAt",
+                      "policiesAutoConfiguringStartedAt",
+                      "policiesAutoConfiguredReasoning",
                       "createdAt",
                       "updatedAt",
                       "agent",

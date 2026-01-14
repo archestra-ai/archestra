@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { format } from "date-fns";
-import { CalendarIcon, Layers, MessageSquare, User, X } from "lucide-react";
+import { CalendarIcon, Clock, Layers, MessageSquare, User, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -12,10 +12,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table,
@@ -353,6 +358,24 @@ function SessionsTable({
     return undefined;
   });
 
+  // Datetime picker dialog state
+  const [isDateDialogOpen, setIsDateDialogOpen] = useState(false);
+  const [tempDateRange, setTempDateRange] = useState<DateRange | undefined>(dateRange);
+  const [fromTime, setFromTime] = useState(() => {
+    if (startDateFromUrl) {
+      const date = new Date(startDateFromUrl);
+      return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    }
+    return "00:00";
+  });
+  const [toTime, setToTime] = useState(() => {
+    if (endDateFromUrl) {
+      const date = new Date(endDateFromUrl);
+      return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    }
+    return "23:59";
+  });
+
   // Helper to update URL params
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -401,31 +424,49 @@ function SessionsTable({
     [updateUrlParams],
   );
 
-  const handleDateRangeChange = useCallback(
-    (range: DateRange | undefined) => {
-      setDateRange(range);
-      if (range?.from && range?.to) {
-        // Set end date to end of day
-        const endOfDay = new Date(range.to);
-        endOfDay.setHours(23, 59, 59, 999);
-        updateUrlParams({
-          startDate: range.from.toISOString(),
-          endDate: endOfDay.toISOString(),
-          page: "1", // Reset to first page
-        });
-      } else {
-        updateUrlParams({
-          startDate: null,
-          endDate: null,
-          page: "1", // Reset to first page
-        });
-      }
-    },
-    [updateUrlParams],
-  );
+  const openDateDialog = useCallback(() => {
+    setTempDateRange(dateRange);
+    if (dateRange?.from) {
+      setFromTime(`${String(dateRange.from.getHours()).padStart(2, "0")}:${String(dateRange.from.getMinutes()).padStart(2, "0")}`);
+    } else {
+      setFromTime("00:00");
+    }
+    if (dateRange?.to) {
+      setToTime(`${String(dateRange.to.getHours()).padStart(2, "0")}:${String(dateRange.to.getMinutes()).padStart(2, "0")}`);
+    } else {
+      setToTime("23:59");
+    }
+    setIsDateDialogOpen(true);
+  }, [dateRange]);
+
+  const handleApplyDateRange = useCallback(() => {
+    if (!tempDateRange?.from || !tempDateRange?.to) {
+      return;
+    }
+
+    const fromDateTime = new Date(tempDateRange.from);
+    const toDateTime = new Date(tempDateRange.to);
+
+    const [fromHours, fromMinutes] = fromTime.split(":").map(Number);
+    fromDateTime.setHours(fromHours, fromMinutes, 0, 0);
+
+    const [toHours, toMinutes] = toTime.split(":").map(Number);
+    toDateTime.setHours(toHours, toMinutes, 59, 999);
+
+    setDateRange({ from: fromDateTime, to: toDateTime });
+    updateUrlParams({
+      startDate: fromDateTime.toISOString(),
+      endDate: toDateTime.toISOString(),
+      page: "1", // Reset to first page
+    });
+    setIsDateDialogOpen(false);
+  }, [tempDateRange, fromTime, toTime, updateUrlParams]);
 
   const clearDateRange = useCallback(() => {
     setDateRange(undefined);
+    setTempDateRange(undefined);
+    setFromTime("00:00");
+    setToTime("23:59");
     updateUrlParams({
       startDate: null,
       endDate: null,
@@ -437,9 +478,24 @@ function SessionsTable({
   const startDateParam = dateRange?.from
     ? dateRange.from.toISOString()
     : undefined;
-  const endDateParam = dateRange?.to
-    ? new Date(new Date(dateRange.to).setHours(23, 59, 59, 999)).toISOString()
-    : undefined;
+  const endDateParam = dateRange?.to ? dateRange.to.toISOString() : undefined;
+
+  // Helper to format date range display
+  const getDateRangeDisplay = useCallback(() => {
+    if (!dateRange?.from || !dateRange?.to) {
+      return null;
+    }
+    const hasCustomTime =
+      dateRange.from.getHours() !== 0 ||
+      dateRange.from.getMinutes() !== 0 ||
+      dateRange.to.getHours() !== 23 ||
+      dateRange.to.getMinutes() !== 59;
+
+    if (hasCustomTime) {
+      return `${format(dateRange.from, "LLL dd, HH:mm")} - ${format(dateRange.to, "LLL dd, HH:mm")}`;
+    }
+    return `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`;
+  }, [dateRange]);
 
   const { data: sessionsResponse } = useInteractionSessions({
     limit: pageSize,
@@ -493,41 +549,28 @@ function SessionsTable({
           className="w-[200px]"
         />
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "w-[280px] justify-start text-left font-normal",
-                !dateRange && "text-muted-foreground",
-              )}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {dateRange?.from ? (
-                dateRange.to ? (
-                  <>
-                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                    {format(dateRange.to, "LLL dd, y")}
-                  </>
-                ) : (
-                  format(dateRange.from, "LLL dd, y")
-                )
-              ) : (
-                <span>Pick a date range</span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              initialFocus
-              mode="range"
-              defaultMonth={dateRange?.from}
-              selected={dateRange}
-              onSelect={handleDateRangeChange}
-              numberOfMonths={2}
-            />
-          </PopoverContent>
-        </Popover>
+        <Button
+          variant="outline"
+          onClick={openDateDialog}
+          className={cn(
+            "w-[320px] justify-start text-left font-normal",
+            !dateRange && "text-muted-foreground",
+          )}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {getDateRangeDisplay() || <span>Pick a date and time range</span>}
+        </Button>
+
+        {dateRange && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={openDateDialog}
+            className="h-10 w-10"
+          >
+            <Clock className="h-4 w-4" />
+          </Button>
+        )}
 
         {dateRange && (
           <Button
@@ -539,6 +582,73 @@ function SessionsTable({
             <X className="h-4 w-4" />
           </Button>
         )}
+
+        <Dialog open={isDateDialogOpen} onOpenChange={setIsDateDialogOpen}>
+          <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Select Date and Time Range</DialogTitle>
+              <DialogDescription>
+                Choose a date range and optionally specify start and end times.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Date Range</Label>
+                <div className="flex justify-center">
+                  <Calendar
+                    mode="range"
+                    defaultMonth={tempDateRange?.from}
+                    selected={tempDateRange}
+                    onSelect={setTempDateRange}
+                    numberOfMonths={2}
+                    className="rounded-md border"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="from-time" className="text-sm font-medium">
+                    From Time
+                  </Label>
+                  <Input
+                    id="from-time"
+                    type="time"
+                    value={fromTime}
+                    onChange={(e) => setFromTime(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="to-time" className="text-sm font-medium">
+                    To Time
+                  </Label>
+                  <Input
+                    id="to-time"
+                    type="time"
+                    value={toTime}
+                    onChange={(e) => setToTime(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsDateDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleApplyDateRange}
+                disabled={!tempDateRange?.from || !tempDateRange?.to}
+              >
+                Apply
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {hasFilters && (
           <Button

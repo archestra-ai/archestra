@@ -212,6 +212,8 @@ jobs:
   platform-e2e-tests:
     name: Platform E2E Tests (${{ matrix.name }})
     needs: [platform-e2e-build]
+    # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read

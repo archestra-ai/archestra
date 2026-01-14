@@ -315,9 +315,9 @@ export function AssignedToolsTable({
   );
 
   const handleAutoConfigurePolicies = useCallback(async () => {
-    // Get the first agentToolId from each selected tool's assignments for auto-configure
+    // Get one agentToolId per unique tool (policies are per tool, not per assignment)
     const agentToolIds = selectedTools
-      .flatMap((tool) => tool.assignments.map((a) => a.agentToolId))
+      .map((tool) => tool.assignments[0]?.agentToolId)
       .filter(Boolean);
 
     if (agentToolIds.length === 0) {
@@ -679,7 +679,7 @@ export function AssignedToolsTable({
       },
       {
         id: "actions",
-        header: "",
+        header: "Actions",
         cell: ({ row }) => (
           <WithPermissions
             permissions={{ policy: ["update"] }}

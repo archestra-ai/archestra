@@ -51,7 +51,7 @@ class AgentToolModel {
 
     // Auto-configure policies if enabled (run in background)
     // Import at top of method to avoid circular dependency
-    const { agentToolAutoPolicyService } = await import(
+    const { toolAutoPolicyService } = await import(
       "./agent-tool-auto-policy"
     );
     const { default: OrganizationModel } = await import("./organization");
@@ -73,7 +73,7 @@ class AgentToolModel {
 
         if (organization?.autoConfigureNewTools) {
           // Use the unified method with timeout and loading state management
-          await agentToolAutoPolicyService.configurePoliciesForAgentToolWithTimeout(
+          await toolAutoPolicyService.configurePoliciesForToolWithTimeout(
             agentTool.id,
             organizationId,
           );

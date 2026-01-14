@@ -13,7 +13,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
-import { agentToolAutoPolicyService } from "@/models/agent-tool-auto-policy";
+import { toolAutoPolicyService } from "@/models/agent-tool-auto-policy";
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
@@ -320,7 +320,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check if service is available for this organization
       const available =
-        await agentToolAutoPolicyService.isAvailable(organizationId);
+        await toolAutoPolicyService.isAvailable(organizationId);
       if (!available) {
         logger.warn(
           { organizationId, userId: user.id },
@@ -328,12 +328,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         throw new ApiError(
           503,
-          "Auto-policy requires a default Anthropic chat API key to be configured",
+          "Auto-policy requires an organization-wide Anthropic API key to be configured in Chat API Keys settings",
         );
       }
 
       const result =
-        await agentToolAutoPolicyService.configurePoliciesForAgentTools(
+        await toolAutoPolicyService.configurePoliciesForTools(
           agentToolIds,
           organizationId,
         );

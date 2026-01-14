@@ -417,7 +417,7 @@ jobs:
       packages: read
     steps:
       - name: Login to GHCR
-        if: ${{ github.event_name == 'pull_request' }} # REVERT!
+        if: ${{ github.event_name == 'merge_group' }}
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
@@ -425,7 +425,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull platform image from GHCR
-        if: ${{ github.event_name == 'pull_request' }} # REVERT!
+        if: ${{ github.event_name == 'merge_group' }}
         run: |
           docker pull ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
 
@@ -438,7 +438,7 @@ jobs:
       # NOTE: Skipped for fork PRs because GitHub doesn't expose repository secrets
       # to workflows triggered by fork PRs. Docker Scout requires Docker Hub auth.
       - name: Docker Scout CVE Check
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork != true }} # REVERT!
+        if: ${{ github.event_name == 'merge_group' && github.event.pull_request.head.repo.fork != true }}
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
         with:
           command: cves

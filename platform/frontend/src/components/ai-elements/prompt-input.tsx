@@ -825,9 +825,7 @@ export const PromptInputBody = ({
 
 export type PromptInputTextareaProps = ComponentProps<
   typeof InputGroupTextarea
-> & {
-  disableEnterSubmit?: boolean;
-};
+>;
 
 export const PromptInputTextarea = React.forwardRef<
   HTMLTextAreaElement,
@@ -846,6 +844,18 @@ export const PromptInputTextarea = React.forwardRef<
     const attachments = usePromptInputAttachments();
 
     const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
+      // Remove last attachment when Backspace is pressed on empty input
+      if (e.key === "Backspace") {
+        // Don't act during IME composition
+        if (e.nativeEvent.isComposing) return;
+        const textEmpty = !controller?.textInput.value;
+        if (textEmpty && attachments.files.length > 0) {
+          e.preventDefault();
+          const last = attachments.files[attachments.files.length - 1];
+          if (last) attachments.remove(last.id);
+          return;
+        }
+      }
       if (e.key === "Enter") {
         // Don't submit if IME composition is in progress
         if (e.nativeEvent.isComposing) {

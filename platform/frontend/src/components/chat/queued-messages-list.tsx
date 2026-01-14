@@ -137,9 +137,30 @@ function QueuedMessageItem({
     (part) => part.type === "text" && "text" in part,
   );
 
+  const fileParts = msg.parts.filter((part) => part.type === "file");
+
+  // Build a preview: use text when available, but always indicate attachments
+  // when present (either by filename for file-only messages or a count).
+  let preview = "";
+  if (textPart && "text" in textPart) {
+    preview = textPart.text;
+    if (fileParts.length > 0) {
+      const count = fileParts.length;
+      preview = `${preview} • ${count} attachment${count > 1 ? "s" : ""}`;
+    }
+  } else if (fileParts.length > 0) {
+    // Prefer filename for single file, otherwise show count
+    if (fileParts.length === 1) {
+      preview =
+        fileParts[0].filename || fileParts[0].url || "[File attachment]";
+    } else {
+      preview = `${fileParts.length} attachments`;
+    }
+  }
+
   return (
     <QueuedMessage
-      message={textPart && "text" in textPart ? textPart.text : ""}
+      message={preview}
       position={index}
       onDelete={() => onDelete(msg.id)}
       onSendNow={() => onSendNow(msg.id)}

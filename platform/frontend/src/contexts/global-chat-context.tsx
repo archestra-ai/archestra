@@ -48,6 +48,8 @@ interface ChatSession {
   clearQueuedMessages: () => void;
   removeMessagesUpTo: (id: string) => void;
   isManuallySendingRef: React.MutableRefObject<boolean>;
+  isManuallySending?: boolean;
+  setIsManuallySending?: (v: boolean) => void;
 }
 
 interface ChatContextValue {
@@ -223,7 +225,15 @@ function ChatSessionHook({
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  const [isManuallySending, setIsManuallySending] = useState(false);
   const isManuallySendingRef = useRef(false);
+
+  // Keep the ref in sync for backwards compatibility with callers that
+  // read the ref directly. Prefer using `setIsManuallySending` so the
+  // component re-renders and effects react to changes.
+  useEffect(() => {
+    isManuallySendingRef.current = isManuallySending;
+  }, [isManuallySending]);
 
   const addQueuedMessage = useCallback((message: QueuedMessage) => {
     setQueuedMessages((prev) => [...prev, message]);
@@ -306,14 +316,14 @@ function ChatSessionHook({
   // Auto-send queued message when stream finishes
   useEffect(() => {
     // If a manual send is in-flight, schedule a retry after the manual window ends
-    if (isManuallySendingRef.current) {
+    if (isManuallySending) {
       if (retryQueuedSendTimeoutRef.current) {
         clearTimeout(retryQueuedSendTimeoutRef.current);
       }
       retryQueuedSendTimeoutRef.current = window.setTimeout(() => {
         retryQueuedSendTimeoutRef.current = null;
         if (
-          !isManuallySendingRef.current &&
+          !isManuallySending &&
           status === "ready" &&
           sendMessage &&
           queuedMessages.length > 0
@@ -344,7 +354,7 @@ function ChatSessionHook({
         retryQueuedSendTimeoutRef.current = null;
       }
     };
-  }, [status, queuedMessages, sendMessage]);
+  }, [status, queuedMessages, sendMessage, isManuallySending]);
 
   // Auto-generate title after first assistant response
   useEffect(() => {
@@ -398,6 +408,8 @@ function ChatSessionHook({
       clearQueuedMessages,
       removeMessagesUpTo,
       isManuallySendingRef,
+      isManuallySending,
+      setIsManuallySending,
     };
 
     sessionsRef.current.set(conversationId, session);
@@ -420,6 +432,7 @@ function ChatSessionHook({
     removeMessagesUpTo,
     sessionsRef,
     notifySessionUpdate,
+    isManuallySending,
   ]);
 
   return null;

@@ -30,7 +30,7 @@ export function QueuedMessage({
         <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground/70 whitespace-nowrap shrink-0">
           {position === 0 ? "Next" : `#${(position || 0) + 1}`}
         </span>
-        <p className="text-xs text-foreground line-clamp-1 break-words leading-tight">
+        <p className="text-xs text-foreground line-clamp-1 break-word leading-tight">
           {message}
         </p>
       </div>

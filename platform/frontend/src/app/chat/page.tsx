@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-
+import { Eye, EyeOff, FileText, Globe, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -29,9 +29,9 @@ import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { QueuedMessagesList } from "@/components/chat/queued-messages-list";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
-import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -70,7 +70,7 @@ import {
 } from "@/lib/pending-tool-state";
 import { usePrompt, usePrompts } from "@/lib/prompts.query";
 import ArchestraPromptInput from "./prompt-input";
-import { Eye, EyeOff, FileText, Globe, Plus } from "lucide-react";
+
 const CONVERSATION_QUERY_PARAM = "conversation";
 
 export default function ChatPage() {
@@ -707,7 +707,7 @@ export default function ChatPage() {
       }
 
       // Mark that we're manually sending to prevent auto-send from interfering
-      chatSession.isManuallySendingRef.current = true;
+      chatSession.setIsManuallySending?.(true);
 
       // Stop the current stream if one is running - this cancels the ongoing response immediately
       if (status === "streaming" || status === "submitted") {
@@ -723,7 +723,7 @@ export default function ChatPage() {
 
       // Reset the manual send flag after a brief delay so the status can settle
       setTimeout(() => {
-        chatSession.isManuallySendingRef.current = false;
+        chatSession.setIsManuallySending?.(false);
       }, 400);
 
       focusTextarea();
@@ -1066,7 +1066,7 @@ export default function ChatPage() {
                                 const userPrompt = selectedPrompt.userPrompt;
                                 if (!userPrompt) return;
                                 const syntheticEvent = {
-                                  preventDefault: () => { },
+                                  preventDefault: () => {},
                                 } as React.FormEvent<HTMLFormElement>;
                                 handleInitialSubmit(
                                   { text: userPrompt, files: [] },
@@ -1163,11 +1163,11 @@ export default function ChatPage() {
                     {({ hasPermission }) => {
                       return hasPermission ===
                         undefined ? null : hasPermission ? (
-                          <McpToolsDisplay
-                            agentId={currentProfileId}
-                            className="text-xs text-muted-foreground"
-                          />
-                        ) : (
+                        <McpToolsDisplay
+                          agentId={currentProfileId}
+                          className="text-xs text-muted-foreground"
+                        />
+                      ) : (
                         <Badge variant="outline" className="text-xs my-2">
                           Unable to show the list of tools
                         </Badge>

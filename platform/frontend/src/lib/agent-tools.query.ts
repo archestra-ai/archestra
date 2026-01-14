@@ -281,6 +281,12 @@ export function useAutoConfigurePolicies() {
       queryClient.invalidateQueries({
         queryKey: ["tools"],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["tool-invocation-policies"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["tool-result-policies"],
+      });
     },
   });
 }

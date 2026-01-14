@@ -64,6 +64,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["create", "read", "update", "delete"],
   prompt: ["create", "read", "update", "delete"],
+  // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
   invitation: [],
   ssoProvider: [],
@@ -88,6 +89,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   tokenPrice: ["read"],
   chatSettings: ["read"],
   prompt: ["read"],
+  // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
   invitation: [],
   ssoProvider: [],

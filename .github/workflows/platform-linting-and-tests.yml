@@ -342,7 +342,7 @@ jobs:
       - name: Merge reports
         working-directory: ./platform/e2e-tests
         run: |
-          npx playwright merge-reports --reporter=html --reporter='json,outputFile=results.json' ./blob-reports
+          PLAYWRIGHT_JSON_OUTPUT_NAME=results.json npx playwright merge-reports --reporter=html --reporter=json ./blob-reports
           ls -la  # Debug: show what files were created
 
       - name: Upload merged Playwright report

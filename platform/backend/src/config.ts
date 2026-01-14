@@ -12,6 +12,10 @@ import {
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import {
+  type EmailProviderType,
+  EmailProviderTypeSchema,
+} from "@/types/email-provider";
 import packageJson from "../../package.json";
 
 /**
@@ -204,13 +208,11 @@ export const getAdditionalTrustedSsoProviderIds = (): string[] => {
 /**
  * Parse incoming email provider from environment variable
  */
-const parseIncomingEmailProvider = (): "outlook" | undefined => {
+const parseIncomingEmailProvider = (): EmailProviderType | undefined => {
   const provider =
     process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER?.toLowerCase();
-  if (provider === "outlook") {
-    return "outlook";
-  }
-  return undefined;
+  const result = EmailProviderTypeSchema.safeParse(provider);
+  return result.success ? result.data : undefined;
 };
 
 /**

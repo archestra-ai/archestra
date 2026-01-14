@@ -1,5 +1,5 @@
 import { pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
-import type { EmailProviderType } from "@/types/incoming-email";
+import type { EmailProviderType } from "@/types/email-provider";
 
 const incomingEmailSubscriptionsTable = pgTable("incoming_email_subscription", {
   id: uuid("id").primaryKey().defaultRandom(),

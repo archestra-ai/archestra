@@ -3,11 +3,13 @@
 import {
   AlertCircle,
   CheckCircle2,
+  ExternalLink,
   Mail,
   RefreshCw,
   Trash2,
   XCircle,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -50,8 +52,10 @@ export default function IncomingEmailSettingsPage() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Incoming Email Not Configured</AlertTitle>
           <AlertDescription>
-            Incoming email is not enabled. Configure the following environment
-            variables to enable this feature:
+            <p>
+              Incoming email is not enabled. Configure the following environment
+              variables to enable this feature:
+            </p>
             <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
               <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook</li>
               <li>ARCHESTRA_AGENTS_OUTLOOK_TENANT_ID</li>
@@ -59,6 +63,17 @@ export default function IncomingEmailSettingsPage() {
               <li>ARCHESTRA_AGENTS_OUTLOOK_CLIENT_SECRET</li>
               <li>ARCHESTRA_AGENTS_OUTLOOK_MAILBOX_ADDRESS</li>
             </ul>
+            <p className="mt-3">
+              <Link
+                href="https://archestra.ai/docs/platform-agents#incoming-email"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                View setup guide
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            </p>
           </AlertDescription>
         </Alert>
       </div>
@@ -262,6 +277,17 @@ export default function IncomingEmailSettingsPage() {
               ARCHESTRA_AGENTS_OUTLOOK_WEBHOOK_URL
             </code>{" "}
             to automatically create a subscription on server startup.
+          </p>
+          <p className="mt-2">
+            <Link
+              href="https://archestra.ai/docs/platform-agents#incoming-email"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              Learn more in the documentation
+              <ExternalLink className="h-3 w-3" />
+            </Link>
           </p>
         </CardContent>
       </Card>

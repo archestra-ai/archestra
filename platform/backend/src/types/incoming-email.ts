@@ -3,14 +3,14 @@ import {
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
-import { z } from "zod";
+import type { z } from "zod";
 import { schema } from "@/database";
-
-/**
- * Supported email provider types
- */
-export const EmailProviderTypeSchema = z.enum(["outlook"]);
-export type EmailProviderType = z.infer<typeof EmailProviderTypeSchema>;
+import {
+  type EmailProviderType,
+  EmailProviderTypeSchema,
+} from "./email-provider";
+// Re-export from email-provider.ts to avoid circular dependency with config.ts
+export { type EmailProviderType, EmailProviderTypeSchema };
 
 /**
  * Database schemas for incoming email subscriptions

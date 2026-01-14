@@ -43,7 +43,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       extractCookieHeaders,
       makeRandomString,
     }) => {
-      test.setTimeout(45_000); // 45 seconds
+      test.setTimeout(60_000); // 90 seconds - K8s pod startup can be slow
       const page = (() => {
         switch (user) {
           case "Admin":

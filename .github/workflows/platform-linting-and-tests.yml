@@ -196,6 +196,7 @@ jobs:
         with:
           context: ./platform
           push: "false"
+          load: "true"
           tags: archestra-platform:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}

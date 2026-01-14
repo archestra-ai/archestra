@@ -1,3 +1,69 @@
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-zod";
+import { z } from "zod";
+import { schema } from "@/database";
+
+/**
+ * Supported email provider types
+ */
+export const EmailProviderTypeSchema = z.enum(["outlook"]);
+export type EmailProviderType = z.infer<typeof EmailProviderTypeSchema>;
+
+/**
+ * Database schemas for incoming email subscriptions
+ */
+export const SelectIncomingEmailSubscriptionSchema = createSelectSchema(
+  schema.incomingEmailSubscriptionsTable,
+  {
+    provider: EmailProviderTypeSchema,
+  },
+);
+export const InsertIncomingEmailSubscriptionSchema = createInsertSchema(
+  schema.incomingEmailSubscriptionsTable,
+  {
+    provider: EmailProviderTypeSchema,
+  },
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const UpdateIncomingEmailSubscriptionSchema = createUpdateSchema(
+  schema.incomingEmailSubscriptionsTable,
+  {
+    provider: EmailProviderTypeSchema,
+  },
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type SelectIncomingEmailSubscription = z.infer<
+  typeof SelectIncomingEmailSubscriptionSchema
+>;
+export type InsertIncomingEmailSubscription = z.infer<
+  typeof InsertIncomingEmailSubscriptionSchema
+>;
+export type UpdateIncomingEmailSubscription = z.infer<
+  typeof UpdateIncomingEmailSubscriptionSchema
+>;
+
+/**
+ * Information about the current webhook subscription
+ * Same as database record but with computed isActive field
+ */
+export type SubscriptionInfo = Omit<
+  SelectIncomingEmailSubscription,
+  "createdAt" | "updatedAt"
+> & {
+  /** Whether the subscription is currently active (not expired) */
+  isActive: boolean;
+};
+
 /**
  * Represents an incoming email that will invoke an agent
  */
@@ -122,11 +188,6 @@ export interface AgentIncomingEmailProvider {
 }
 
 /**
- * Supported email provider types
- */
-export type EmailProviderType = "outlook";
-
-/**
  * Email provider configuration from environment variables
  */
 export interface EmailProviderConfig {
@@ -148,22 +209,4 @@ export interface EmailProviderConfig {
      */
     webhookUrl?: string;
   };
-}
-
-/**
- * Information about the current webhook subscription
- */
-export interface SubscriptionInfo {
-  /** Internal database record ID */
-  id: string;
-  /** Microsoft Graph subscription ID */
-  subscriptionId: string;
-  /** Email provider type */
-  provider: string;
-  /** Webhook URL receiving notifications */
-  webhookUrl: string;
-  /** When the subscription expires */
-  expiresAt: Date;
-  /** Whether the subscription is currently active (not expired) */
-  isActive: boolean;
 }

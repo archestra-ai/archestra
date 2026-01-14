@@ -9,7 +9,7 @@ class IncomingEmailSubscriptionModel {
   /**
    * Get the currently active (non-expired) subscription
    */
-  static async getActiveSubscription(): Promise<SelectIncomingEmailSubscription | null> {
+  static async getActiveSubscription(): Promise<SelectIncomingEmailSubscription> {
     const [subscription] = await db
       .select()
       .from(schema.incomingEmailSubscriptionsTable)
@@ -17,20 +17,20 @@ class IncomingEmailSubscriptionModel {
       .orderBy(desc(schema.incomingEmailSubscriptionsTable.createdAt))
       .limit(1);
 
-    return subscription ?? null;
+    return subscription;
   }
 
   /**
    * Get the most recent subscription regardless of expiration
    */
-  static async getMostRecent(): Promise<SelectIncomingEmailSubscription | null> {
+  static async getMostRecent(): Promise<SelectIncomingEmailSubscription> {
     const [subscription] = await db
       .select()
       .from(schema.incomingEmailSubscriptionsTable)
       .orderBy(desc(schema.incomingEmailSubscriptionsTable.createdAt))
       .limit(1);
 
-    return subscription ?? null;
+    return subscription;
   }
 
   /**
@@ -53,14 +53,14 @@ class IncomingEmailSubscriptionModel {
   static async updateExpiry(params: {
     id: string;
     expiresAt: Date;
-  }): Promise<SelectIncomingEmailSubscription | null> {
+  }): Promise<SelectIncomingEmailSubscription> {
     const [updated] = await db
       .update(schema.incomingEmailSubscriptionsTable)
       .set({ expiresAt: params.expiresAt })
       .where(eq(schema.incomingEmailSubscriptionsTable.id, params.id))
       .returning();
 
-    return updated ?? null;
+    return updated;
   }
 
   /**
@@ -97,7 +97,7 @@ class IncomingEmailSubscriptionModel {
    */
   static async findBySubscriptionId(
     subscriptionId: string,
-  ): Promise<SelectIncomingEmailSubscription | null> {
+  ): Promise<SelectIncomingEmailSubscription> {
     const [subscription] = await db
       .select()
       .from(schema.incomingEmailSubscriptionsTable)
@@ -108,7 +108,7 @@ class IncomingEmailSubscriptionModel {
         ),
       );
 
-    return subscription ?? null;
+    return subscription;
   }
 }
 

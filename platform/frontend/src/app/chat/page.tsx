@@ -24,10 +24,14 @@ import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
+import { QueuedMessagesList } from "@/components/chat/queued-messages-list";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
+import { WithPermissions } from "@/components/roles/with-permissions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -103,8 +107,8 @@ export default function ChatPage() {
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
-  const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const userMessageJustEdited = useRef(false);
   const autoSendTriggeredRef = useRef(false);
 
   // Dialog management for MCP installation
@@ -477,6 +481,17 @@ export default function ChatPage() {
     openDialog,
   ]);
 
+  // Auto-focus textarea when status becomes ready (message sent or stream finished)
+  // Also focus when queued messages change (to handle auto-sent messages)
+  useEffect(() => {
+    if (status === "ready") {
+      // Use requestAnimationFrame for more reliable focusing
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    }
+  }, [status]);
+
   // Sync messages when conversation loads or changes
   useEffect(() => {
     if (!setMessages || !sendMessage) {
@@ -552,6 +567,69 @@ export default function ChatPage() {
     messages.length,
   ]);
 
+  const focusTextarea = useCallback(() => {
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }, []);
+
+  const handleSubmit = useCallback(
+    (
+      // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
+      message: { text?: string; files?: any[] },
+      e: React.FormEvent<HTMLFormElement>,
+    ) => {
+      e.preventDefault();
+      if (!sendMessage) return;
+
+      const hasText = message.text?.trim();
+      const hasFiles = message.files && message.files.length > 0;
+
+      if (!hasText && !hasFiles) return;
+
+      // Build message parts: text first, then file attachments
+      const parts: Array<
+        | { type: "text"; text: string }
+        | { type: "file"; url: string; mediaType: string; filename?: string }
+      > = [];
+
+      if (hasText) {
+        parts.push({ type: "text", text: hasText });
+      }
+
+      if (hasFiles) {
+        for (const file of message.files ?? []) {
+          parts.push({
+            type: "file",
+            url: file.url,
+            mediaType: file.mediaType,
+            filename: file.filename,
+          });
+        }
+      }
+
+      // If a message is currently being generated, queue this message instead
+      if (status === "submitted" || status === "streaming") {
+        chatSession?.addQueuedMessage?.({
+          id: crypto.randomUUID(),
+          role: "user",
+          parts,
+        });
+        focusTextarea();
+        return;
+      }
+
+      // Otherwise, send immediately
+      sendMessage({
+        role: "user",
+        parts,
+      });
+
+      focusTextarea();
+    },
+    [sendMessage, status, chatSession, focusTextarea],
+  );
+
   // Merge database UUIDs from backend into local message state
   // This runs after streaming completes and backend query has fetched
   useEffect(() => {
@@ -599,16 +677,17 @@ export default function ChatPage() {
       return localMsg;
     });
 
-    setMessages(mergedMessages as UIMessage[]);
-  }, [
-    conversationId,
-    conversation?.messages,
-    conversation?.id,
-    messages,
-    setMessages,
-    status,
-  ]);
+    setMessages(mergedMessages);
+  }, [conversation, conversationId, messages, setMessages, status]);
 
+  const handleDeleteQueued = useCallback(
+    (id: string) => {
+      if (chatSession?.removeQueuedMessage) {
+        chatSession.removeQueuedMessage(id);
+      }
+    },
+    [chatSession],
+  );
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
   // or when conversation loads (e.g., new chat created, hard refresh)
   useLayoutEffect(() => {
@@ -617,51 +696,46 @@ export default function ChatPage() {
     }
   }, [status, conversation?.id]);
 
-  const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
-    e.preventDefault();
-    if (status === "submitted" || status === "streaming") {
-      stop?.();
-    }
-
-    const hasText = message.text?.trim();
-    const hasFiles = message.files && message.files.length > 0;
-
-    if (
-      !sendMessage ||
-      (!hasText && !hasFiles) ||
-      status === "submitted" ||
-      status === "streaming"
-    ) {
-      return;
-    }
-
-    // Build message parts: text first, then file attachments
-    const parts: Array<
-      | { type: "text"; text: string }
-      | { type: "file"; url: string; mediaType: string; filename?: string }
-    > = [];
-
-    if (hasText) {
-      parts.push({ type: "text", text: message.text as string });
-    }
-
-    // Add file parts
-    if (hasFiles) {
-      for (const file of message.files) {
-        parts.push({
-          type: "file",
-          url: file.url,
-          mediaType: file.mediaType,
-          filename: file.filename,
-        });
+  const handleSendNow = useCallback(
+    (id: string) => {
+      if (
+        !chatSession?.queuedMessages ||
+        !sendMessage ||
+        !chatSession.removeMessagesUpTo
+      ) {
+        return;
       }
-    }
 
-    sendMessage?.({
-      role: "user",
-      parts,
-    });
-  };
+      // Find the message in the queue
+      const queued = chatSession.queuedMessages.find((msg) => msg.id === id);
+      if (!queued) {
+        return;
+      }
+
+      // Mark that we're manually sending to prevent auto-send from interfering
+      chatSession.setIsManuallySending?.(true);
+
+      // Stop the current stream if one is running - this cancels the ongoing response immediately
+      if (status === "streaming" || status === "submitted") {
+        stop?.();
+      }
+
+      // Remove all messages up to and including the selected one from the queue
+      // This keeps only messages that come after the selected one
+      chatSession.removeMessagesUpTo(id);
+
+      // Send the selected message immediately
+      sendMessage(queued);
+
+      // Reset the manual send flag after a brief delay so the status can settle
+      setTimeout(() => {
+        chatSession.setIsManuallySending?.(false);
+      }, 400);
+
+      focusTextarea();
+    },
+    [chatSession, sendMessage, status, stop, focusTextarea],
+  );
 
   // Handle initial prompt change (when no conversation exists)
   const handleInitialPromptChange = useCallback(
@@ -1142,7 +1216,37 @@ export default function ChatPage() {
 
           {activeAgentId && (
             <div className="sticky bottom-0 bg-background border-t p-4">
-              <div className="max-w-4xl mx-auto space-y-3">
+              <div className="max-w-3xl mx-auto space-y-3">
+                {currentProfileId && (
+                  <WithPermissions
+                    permissions={{ profile: ["read"] }}
+                    noPermissionHandle="tooltip"
+                  >
+                    {({ hasPermission }) => {
+                      return hasPermission ===
+                        undefined ? null : hasPermission ? (
+                        <McpToolsDisplay
+                          agentId={currentProfileId}
+                          className="text-xs text-muted-foreground"
+                        />
+                      ) : (
+                        <Badge variant="outline" className="text-xs my-2">
+                          Unable to show the list of tools
+                        </Badge>
+                      );
+                    }}
+                  </WithPermissions>
+                )}
+                {chatSession?.queuedMessages &&
+                  chatSession.queuedMessages.length > 0 && (
+                    <div className="mb-2">
+                      <QueuedMessagesList
+                        messages={chatSession.queuedMessages}
+                        onDelete={handleDeleteQueued}
+                        onSendNow={handleSendNow}
+                      />
+                    </div>
+                  )}
                 <ArchestraPromptInput
                   onSubmit={
                     conversationId && conversation?.agent.id

@@ -22,6 +22,8 @@ import { useGenerateConversationTitle } from "@/lib/chat.query";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 
+type QueuedMessage = UIMessage & { id: string };
+
 interface ChatSession {
   conversationId: string;
   messages: UIMessage[];
@@ -40,6 +42,14 @@ interface ChatSession {
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
+  queuedMessages: QueuedMessage[];
+  addQueuedMessage: (message: QueuedMessage) => void;
+  removeQueuedMessage: (id: string) => void;
+  clearQueuedMessages: () => void;
+  removeMessagesUpTo: (id: string) => void;
+  isManuallySendingRef: React.MutableRefObject<boolean>;
+  isManuallySending?: boolean;
+  setIsManuallySending?: (v: boolean) => void;
 }
 
 interface ChatContextValue {
@@ -214,6 +224,37 @@ function ChatSessionHook({
   const queryClient = useQueryClient();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  const [isManuallySending, setIsManuallySending] = useState(false);
+  const isManuallySendingRef = useRef(false);
+
+  // Keep the ref in sync for backwards compatibility with callers that
+  // read the ref directly. Prefer using `setIsManuallySending` so the
+  // component re-renders and effects react to changes.
+  useEffect(() => {
+    isManuallySendingRef.current = isManuallySending;
+  }, [isManuallySending]);
+
+  const addQueuedMessage = useCallback((message: QueuedMessage) => {
+    setQueuedMessages((prev) => [...prev, message]);
+  }, []);
+
+  const removeQueuedMessage = useCallback((id: string) => {
+    setQueuedMessages((prev) => prev.filter((msg) => msg.id !== id));
+  }, []);
+
+  const clearQueuedMessages = useCallback(() => {
+    setQueuedMessages([]);
+  }, []);
+
+  const removeMessagesUpTo = useCallback((id: string) => {
+    setQueuedMessages((prev) => {
+      const messageIndex = prev.findIndex((msg) => msg.id === id);
+      if (messageIndex === -1) return prev;
+      // Remove all messages up to and including the specified one
+      return prev.slice(messageIndex + 1);
+    });
+  }, []);
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
@@ -270,6 +311,51 @@ function ChatSessionHook({
     },
   } as Parameters<typeof useChat>[0]);
 
+  const retryQueuedSendTimeoutRef = useRef<number | null>(null);
+
+  // Auto-send queued message when stream finishes
+  useEffect(() => {
+    // If a manual send is in-flight, schedule a retry after the manual window ends
+    if (isManuallySending) {
+      if (retryQueuedSendTimeoutRef.current) {
+        clearTimeout(retryQueuedSendTimeoutRef.current);
+      }
+      retryQueuedSendTimeoutRef.current = window.setTimeout(() => {
+        retryQueuedSendTimeoutRef.current = null;
+        if (
+          !isManuallySending &&
+          status === "ready" &&
+          sendMessage &&
+          queuedMessages.length > 0
+        ) {
+          const queued = queuedMessages[0];
+          setQueuedMessages((prev) => prev.slice(1));
+          sendMessage(queued);
+        }
+      }, 450);
+      return () => {
+        if (retryQueuedSendTimeoutRef.current) {
+          clearTimeout(retryQueuedSendTimeoutRef.current);
+          retryQueuedSendTimeoutRef.current = null;
+        }
+      };
+    }
+
+    if (status !== "ready" || !sendMessage || queuedMessages.length === 0)
+      return;
+
+    const queued = queuedMessages[0];
+    setQueuedMessages((prev) => prev.slice(1));
+    sendMessage(queued);
+
+    return () => {
+      if (retryQueuedSendTimeoutRef.current) {
+        clearTimeout(retryQueuedSendTimeoutRef.current);
+        retryQueuedSendTimeoutRef.current = null;
+      }
+    };
+  }, [status, queuedMessages, sendMessage, isManuallySending]);
+
   // Auto-generate title after first assistant response
   useEffect(() => {
     // Skip if already attempted or currently generating
@@ -316,6 +402,14 @@ function ChatSessionHook({
       addToolResult,
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
+      queuedMessages,
+      addQueuedMessage,
+      removeQueuedMessage,
+      clearQueuedMessages,
+      removeMessagesUpTo,
+      isManuallySendingRef,
+      isManuallySending,
+      setIsManuallySending,
     };
 
     sessionsRef.current.set(conversationId, session);
@@ -331,8 +425,14 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     pendingCustomServerToolCall,
+    queuedMessages,
+    addQueuedMessage,
+    removeQueuedMessage,
+    clearQueuedMessages,
+    removeMessagesUpTo,
     sessionsRef,
     notifySessionUpdate,
+    isManuallySending,
   ]);
 
   return null;

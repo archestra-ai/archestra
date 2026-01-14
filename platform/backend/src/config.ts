@@ -243,6 +243,8 @@ export default {
           process.env.ARCHESTRA_AGENTS_OUTLOOK_MAILBOX_ADDRESS || "",
         emailDomain:
           process.env.ARCHESTRA_AGENTS_OUTLOOK_EMAIL_DOMAIN || undefined,
+        webhookUrl:
+          process.env.ARCHESTRA_AGENTS_OUTLOOK_WEBHOOK_URL || undefined,
       },
     },
   },

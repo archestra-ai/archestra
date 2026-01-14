@@ -113,7 +113,9 @@ export class Authnz {
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/sso-providers/public") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
-      (method === "GET" && url === "/api/organization/appearance")
+      (method === "GET" && url === "/api/organization/appearance") ||
+      // Incoming email webhooks - Microsoft Graph calls these directly
+      url.startsWith("/api/webhooks/incoming-email")
     ) {
       logger.debug({ url, method }, "[Authnz] Route is in skip list");
       return true;

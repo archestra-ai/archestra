@@ -31,6 +31,10 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  initializeEmailProvider,
+  renewEmailSubscriptionIfNeeded,
+} from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
 import config from "@/config";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -447,6 +451,22 @@ const start = async () => {
     );
 
     startMcpServerRuntime(fastify);
+
+    // Initialize incoming email provider (if configured)
+    // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_OUTLOOK_WEBHOOK_URL is set
+    await initializeEmailProvider();
+
+    // Background job to renew email subscriptions before they expire
+    // Microsoft Graph subscriptions expire after 3 days, so we check every 6 hours
+    const EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
+    setInterval(() => {
+      renewEmailSubscriptionIfNeeded().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to run email subscription renewal check",
+        );
+      });
+    }, EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL);
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics

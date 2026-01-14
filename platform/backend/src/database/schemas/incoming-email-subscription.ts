@@ -1,0 +1,20 @@
+import { pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+
+const incomingEmailSubscriptionsTable = pgTable("incoming_email_subscription", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Microsoft Graph subscription ID */
+  subscriptionId: varchar("subscription_id", { length: 256 }).notNull(),
+  /** Email provider type (e.g., "outlook") */
+  provider: varchar("provider", { length: 64 }).notNull(),
+  /** Webhook URL that receives notifications */
+  webhookUrl: varchar("webhook_url", { length: 1024 }).notNull(),
+  /** When the subscription expires (Graph subscriptions max 3 days) */
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export default incomingEmailSubscriptionsTable;

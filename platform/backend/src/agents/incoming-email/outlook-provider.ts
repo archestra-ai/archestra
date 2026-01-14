@@ -1,12 +1,14 @@
 import { ClientSecretCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
-import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials";
+import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import logger from "@/logging";
+import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
   IncomingEmail,
-} from "./types";
+  SubscriptionInfo,
+} from "@/types";
 
 /**
  * Microsoft Outlook/Exchange email provider using Microsoft Graph API
@@ -307,8 +309,9 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
   /**
    * Create a webhook subscription for new emails
+   * @returns SubscriptionInfo with database record and expiration details
    */
-  async createSubscription(webhookUrl: string): Promise<string> {
+  async createSubscription(webhookUrl: string): Promise<SubscriptionInfo> {
     const client = this.getGraphClient();
 
     // Subscription expires after 3 days (maximum for mail resources)
@@ -326,16 +329,33 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
       this.subscriptionId = subscription.id;
 
+      // Persist subscription to database
+      const expiresAt = new Date(subscription.expirationDateTime);
+      const dbRecord = await IncomingEmailSubscriptionModel.create({
+        subscriptionId: subscription.id,
+        provider: this.providerId,
+        webhookUrl,
+        expiresAt,
+      });
+
       logger.info(
         {
           subscriptionId: subscription.id,
+          dbRecordId: dbRecord.id,
           expiresAt: subscription.expirationDateTime,
           webhookUrl,
         },
         "[OutlookEmailProvider] Created webhook subscription",
       );
 
-      return subscription.id;
+      return {
+        id: dbRecord.id,
+        subscriptionId: subscription.id,
+        provider: this.providerId,
+        webhookUrl,
+        expiresAt,
+        isActive: true,
+      };
     } catch (error) {
       logger.error(
         {
@@ -350,8 +370,9 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
   /**
    * Renew an existing subscription
+   * @returns The new expiration date
    */
-  async renewSubscription(subscriptionId: string): Promise<void> {
+  async renewSubscription(subscriptionId: string): Promise<Date> {
     const client = this.getGraphClient();
 
     const expirationDateTime = new Date();
@@ -362,6 +383,18 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         expirationDateTime: expirationDateTime.toISOString(),
       });
 
+      // Update expiration in database
+      const dbRecord =
+        await IncomingEmailSubscriptionModel.findBySubscriptionId(
+          subscriptionId,
+        );
+      if (dbRecord) {
+        await IncomingEmailSubscriptionModel.updateExpiry({
+          id: dbRecord.id,
+          expiresAt: expirationDateTime,
+        });
+      }
+
       logger.info(
         {
           subscriptionId,
@@ -369,6 +402,8 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         },
         "[OutlookEmailProvider] Renewed subscription",
       );
+
+      return expirationDateTime;
     } catch (error) {
       logger.error(
         {
@@ -378,6 +413,60 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         "[OutlookEmailProvider] Failed to renew subscription",
       );
       throw error;
+    }
+  }
+
+  /**
+   * Get the current subscription status from database
+   */
+  async getSubscriptionStatus(): Promise<SubscriptionInfo | null> {
+    const subscription = await IncomingEmailSubscriptionModel.getMostRecent();
+    if (!subscription) {
+      return null;
+    }
+
+    const now = new Date();
+    return {
+      id: subscription.id,
+      subscriptionId: subscription.subscriptionId,
+      provider: subscription.provider,
+      webhookUrl: subscription.webhookUrl,
+      expiresAt: subscription.expiresAt,
+      isActive: subscription.expiresAt > now,
+    };
+  }
+
+  /**
+   * Delete a subscription from Graph API and database
+   */
+  async deleteSubscription(subscriptionId: string): Promise<void> {
+    const client = this.getGraphClient();
+
+    try {
+      await client.api(`/subscriptions/${subscriptionId}`).delete();
+      logger.info(
+        { subscriptionId },
+        "[OutlookEmailProvider] Deleted subscription from Graph API",
+      );
+    } catch (error) {
+      logger.warn(
+        {
+          subscriptionId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[OutlookEmailProvider] Failed to delete subscription from Graph API (may already be expired)",
+      );
+    }
+
+    // Always remove from database
+    await IncomingEmailSubscriptionModel.deleteBySubscriptionId(subscriptionId);
+    logger.info(
+      { subscriptionId },
+      "[OutlookEmailProvider] Removed subscription from database",
+    );
+
+    if (this.subscriptionId === subscriptionId) {
+      this.subscriptionId = null;
     }
   }
 

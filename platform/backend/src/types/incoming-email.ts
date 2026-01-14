@@ -142,5 +142,28 @@ export interface EmailProviderConfig {
      * If not set, extracts domain from mailboxAddress
      */
     emailDomain?: string;
+    /**
+     * Webhook URL for auto-setup on startup
+     * If set, subscription will be created automatically during initialization
+     */
+    webhookUrl?: string;
   };
+}
+
+/**
+ * Information about the current webhook subscription
+ */
+export interface SubscriptionInfo {
+  /** Internal database record ID */
+  id: string;
+  /** Microsoft Graph subscription ID */
+  subscriptionId: string;
+  /** Email provider type */
+  provider: string;
+  /** Webhook URL receiving notifications */
+  webhookUrl: string;
+  /** When the subscription expires */
+  expiresAt: Date;
+  /** Whether the subscription is currently active (not expired) */
+  isActive: boolean;
 }

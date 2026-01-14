@@ -1,14 +1,22 @@
 import config from "@/config";
 import logger from "@/logging";
-import { OutlookEmailProvider } from "./outlook-provider";
+import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
   EmailProviderType,
-} from "./types";
+  SubscriptionInfo,
+} from "@/types";
+import { OutlookEmailProvider } from "./outlook-provider";
 
+export type {
+  AgentIncomingEmailProvider,
+  EmailProviderConfig,
+  EmailProviderType,
+  IncomingEmail,
+  SubscriptionInfo,
+} from "@/types";
 export { OutlookEmailProvider } from "./outlook-provider";
-export * from "./types";
 
 /**
  * Singleton instance of the configured email provider
@@ -99,6 +107,7 @@ export function getEmailProvider(): AgentIncomingEmailProvider | null {
 
 /**
  * Initialize the email provider (call on server startup)
+ * If webhookUrl is configured, automatically creates subscription
  */
 export async function initializeEmailProvider(): Promise<void> {
   const provider = getEmailProvider();
@@ -115,6 +124,39 @@ export async function initializeEmailProvider(): Promise<void> {
       { provider: provider.providerId },
       "[IncomingEmail] Email provider initialized successfully",
     );
+
+    // Auto-setup subscription if webhookUrl is configured
+    const providerConfig = getEmailProviderConfig();
+    const webhookUrl = providerConfig.outlook?.webhookUrl;
+
+    if (webhookUrl && provider instanceof OutlookEmailProvider) {
+      // Check if there's already an active subscription
+      const existingSubscription =
+        await IncomingEmailSubscriptionModel.getActiveSubscription();
+
+      if (existingSubscription) {
+        logger.info(
+          {
+            subscriptionId: existingSubscription.subscriptionId,
+            expiresAt: existingSubscription.expiresAt,
+          },
+          "[IncomingEmail] Active subscription already exists, skipping auto-setup",
+        );
+      } else {
+        logger.info(
+          { webhookUrl },
+          "[IncomingEmail] Auto-creating subscription from env var config",
+        );
+        const subscription = await provider.createSubscription(webhookUrl);
+        logger.info(
+          {
+            subscriptionId: subscription.subscriptionId,
+            expiresAt: subscription.expiresAt,
+          },
+          "[IncomingEmail] Auto-setup subscription created successfully",
+        );
+      }
+    }
   } catch (error) {
     logger.error(
       {
@@ -125,6 +167,73 @@ export async function initializeEmailProvider(): Promise<void> {
     );
     // Don't throw - allow server to start even if email provider fails
   }
+}
+
+/**
+ * Renew subscription if it's about to expire (within 24 hours)
+ * Called periodically by background job
+ */
+export async function renewEmailSubscriptionIfNeeded(): Promise<void> {
+  const provider = getEmailProvider();
+  if (!provider || !(provider instanceof OutlookEmailProvider)) {
+    return;
+  }
+
+  const subscription =
+    await IncomingEmailSubscriptionModel.getActiveSubscription();
+  if (!subscription) {
+    logger.debug("[IncomingEmail] No active subscription to renew");
+    return;
+  }
+
+  // Check if subscription expires within 24 hours
+  const now = new Date();
+  const expiresAt = subscription.expiresAt;
+  const hoursUntilExpiry =
+    (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+  if (hoursUntilExpiry <= 24) {
+    logger.info(
+      {
+        subscriptionId: subscription.subscriptionId,
+        hoursUntilExpiry: hoursUntilExpiry.toFixed(1),
+      },
+      "[IncomingEmail] Subscription expiring soon, renewing",
+    );
+
+    try {
+      const newExpiresAt = await provider.renewSubscription(
+        subscription.subscriptionId,
+      );
+      logger.info(
+        {
+          subscriptionId: subscription.subscriptionId,
+          newExpiresAt,
+        },
+        "[IncomingEmail] Subscription renewed successfully",
+      );
+    } catch (error) {
+      logger.error(
+        {
+          subscriptionId: subscription.subscriptionId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[IncomingEmail] Failed to renew subscription",
+      );
+    }
+  }
+}
+
+/**
+ * Get the current subscription status
+ */
+export async function getSubscriptionStatus(): Promise<SubscriptionInfo | null> {
+  const provider = getEmailProvider();
+  if (!provider || !(provider instanceof OutlookEmailProvider)) {
+    return null;
+  }
+
+  return provider.getSubscriptionStatus();
 }
 
 /**

@@ -1,18 +1,51 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
   getEmailProvider,
+  getSubscriptionStatus,
   type IncomingEmail,
   type OutlookEmailProvider,
 } from "@/agents/incoming-email";
 import logger from "@/logging";
 import { AgentTeamModel, PromptModel, TeamModel } from "@/models";
 import { executeA2AMessage } from "@/services/a2a-executor";
+import {
+  ApiError,
+  constructResponseSchema,
+  DeleteObjectResponseSchema,
+} from "@/types";
 
 /**
  * Incoming Email webhook routes
  * Handles email notifications from providers and invokes agents
  */
+
+/**
+ * Schema for subscription status response
+ */
+const SubscriptionStatusSchema = z.object({
+  isActive: z.boolean(),
+  subscription: z
+    .object({
+      id: z.string(),
+      subscriptionId: z.string(),
+      provider: z.string(),
+      webhookUrl: z.string(),
+      expiresAt: z.string().datetime(),
+    })
+    .nullable(),
+});
+
+/**
+ * Schema for setup response
+ */
+const SetupResponseSchema = z.object({
+  success: z.boolean(),
+  subscriptionId: z.string().optional(),
+  expiresAt: z.string().datetime().optional(),
+  message: z.string().optional(),
+});
 
 const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -64,11 +97,23 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Handle validation challenge (initial webhook setup)
+      // Microsoft Graph sends validationToken as query parameter
+      const query = request.query as { validationToken?: string };
+      if (query.validationToken) {
+        logger.info(
+          "[IncomingEmail] Responding to validation challenge from query param",
+        );
+        return reply.type("text/plain").send(query.validationToken);
+      }
+
+      // Also check body for validation token (fallback)
       const validationResponse = provider.handleValidationChallenge(
         request.body,
       );
       if (validationResponse !== null) {
-        logger.info("[IncomingEmail] Responding to validation challenge");
+        logger.info(
+          "[IncomingEmail] Responding to validation challenge from body",
+        );
         // Microsoft Graph expects plain text response for validation
         return reply.type("text/plain").send(validationResponse);
       }
@@ -192,14 +237,181 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Get the current subscription status
+   */
+  fastify.get(
+    "/api/incoming-email/status",
+    {
+      schema: {
+        operationId: RouteId.GetIncomingEmailStatus,
+        description:
+          "Get the current incoming email webhook subscription status",
+        tags: ["Incoming Email"],
+        response: constructResponseSchema(SubscriptionStatusSchema),
+      },
+    },
+    async (_, reply) => {
+      const status = await getSubscriptionStatus();
+
+      if (!status) {
+        return reply.send({
+          isActive: false,
+          subscription: null,
+        });
+      }
+
+      return reply.send({
+        isActive: status.isActive,
+        subscription: {
+          id: status.id,
+          subscriptionId: status.subscriptionId,
+          provider: status.provider,
+          webhookUrl: status.webhookUrl,
+          expiresAt: status.expiresAt.toISOString(),
+        },
+      });
+    },
+  );
+
+  /**
    * Endpoint to manually setup/renew webhook subscription
    * Used for initial setup and periodic renewal
+   */
+  fastify.post(
+    "/api/incoming-email/setup",
+    {
+      schema: {
+        operationId: RouteId.SetupIncomingEmailWebhook,
+        description: "Setup or renew incoming email webhook subscription",
+        tags: ["Incoming Email"],
+        body: z.object({
+          webhookUrl: z.string().url(),
+        }),
+        response: constructResponseSchema(SetupResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const provider = getEmailProvider();
+
+      if (!provider) {
+        throw new ApiError(400, "Incoming email provider not configured");
+      }
+
+      const { webhookUrl } = request.body;
+
+      // For Outlook provider, create/renew subscription
+      if (provider.providerId === "outlook") {
+        const outlookProvider = provider as OutlookEmailProvider;
+        const subscription =
+          await outlookProvider.createSubscription(webhookUrl);
+
+        return reply.send({
+          success: true,
+          subscriptionId: subscription.subscriptionId,
+          expiresAt: subscription.expiresAt.toISOString(),
+          message: "Webhook subscription created successfully",
+        });
+      }
+
+      return reply.send({
+        success: true,
+        message: "Webhook setup completed",
+      });
+    },
+  );
+
+  /**
+   * Renew the current subscription
+   */
+  fastify.post(
+    "/api/incoming-email/renew",
+    {
+      schema: {
+        operationId: RouteId.RenewIncomingEmailSubscription,
+        description: "Renew the incoming email webhook subscription",
+        tags: ["Incoming Email"],
+        response: constructResponseSchema(SetupResponseSchema),
+      },
+    },
+    async (_, reply) => {
+      const provider = getEmailProvider();
+
+      if (!provider) {
+        throw new ApiError(400, "Incoming email provider not configured");
+      }
+
+      const status = await getSubscriptionStatus();
+      if (!status) {
+        throw new ApiError(404, "No subscription found to renew");
+      }
+
+      // For Outlook provider, renew subscription
+      if (provider.providerId === "outlook") {
+        const outlookProvider = provider as OutlookEmailProvider;
+        const newExpiresAt = await outlookProvider.renewSubscription(
+          status.subscriptionId,
+        );
+
+        return reply.send({
+          success: true,
+          subscriptionId: status.subscriptionId,
+          expiresAt: newExpiresAt.toISOString(),
+          message: "Webhook subscription renewed successfully",
+        });
+      }
+
+      return reply.send({
+        success: true,
+        message: "Subscription renewed",
+      });
+    },
+  );
+
+  /**
+   * Delete the current subscription
+   */
+  fastify.delete(
+    "/api/incoming-email/subscription",
+    {
+      schema: {
+        operationId: RouteId.DeleteIncomingEmailSubscription,
+        description: "Delete the incoming email webhook subscription",
+        tags: ["Incoming Email"],
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (_, reply) => {
+      const provider = getEmailProvider();
+
+      if (!provider) {
+        throw new ApiError(400, "Incoming email provider not configured");
+      }
+
+      const status = await getSubscriptionStatus();
+      if (!status) {
+        throw new ApiError(404, "No subscription found to delete");
+      }
+
+      // For Outlook provider, delete subscription
+      if (provider.providerId === "outlook") {
+        const outlookProvider = provider as OutlookEmailProvider;
+        await outlookProvider.deleteSubscription(status.subscriptionId);
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Legacy endpoint - redirect to new path
+   * Keep for backwards compatibility
    */
   fastify.post(
     "/api/webhooks/incoming-email/setup",
     {
       schema: {
-        description: "Setup or renew incoming email webhook subscription",
+        description:
+          "Setup or renew incoming email webhook subscription (deprecated - use /api/incoming-email/setup)",
         tags: ["Webhooks"],
         body: z.object({
           webhookUrl: z.string().url().optional(),
@@ -237,12 +449,12 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // For Outlook provider, create/renew subscription
         if (provider.providerId === "outlook") {
           const outlookProvider = provider as OutlookEmailProvider;
-          const subscriptionId =
+          const subscription =
             await outlookProvider.createSubscription(webhookUrl);
 
           return reply.send({
             success: true,
-            subscriptionId,
+            subscriptionId: subscription.subscriptionId,
             message: "Webhook subscription created successfully",
           });
         }

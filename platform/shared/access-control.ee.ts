@@ -651,6 +651,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSecret]: {
     organization: ["read"],
   },
+
+  // Incoming Email Routes (admin-only)
+  [RouteId.GetIncomingEmailStatus]: {
+    organization: ["read"],
+  },
+  [RouteId.SetupIncomingEmailWebhook]: {
+    organization: ["update"],
+  },
+  [RouteId.RenewIncomingEmailSubscription]: {
+    organization: ["update"],
+  },
+  [RouteId.DeleteIncomingEmailSubscription]: {
+    organization: ["update"],
+  },
 };
 
 /**
@@ -721,6 +735,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     ssoProvider: ["read"],
   },
   "/settings/secrets": {
+    organization: ["update"],
+  },
+  "/settings/incoming-email": {
     organization: ["update"],
   },
 

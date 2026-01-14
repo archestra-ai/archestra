@@ -311,7 +311,7 @@ jobs:
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
     needs: [platform-e2e-tests]
-    if: ${{ !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
+    if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -334,7 +334,13 @@ jobs:
       - name: Merge reports
         working-directory: ./platform/e2e-tests
         run: |
+          echo "=== Contents of blob-reports directory ==="
+          ls -la ./blob-reports/ || echo "blob-reports directory not found"
+          echo "=== Merging reports ==="
           PLAYWRIGHT_JSON_OUTPUT_NAME=results.json npx playwright merge-reports --reporter=html --reporter=json ./blob-reports
+          echo "=== Files created after merge ==="
+          ls -la
+          ls -la ./playwright-report/ || echo "playwright-report directory not created"
 
       - name: Upload merged Playwright report
         if: always()

@@ -141,8 +141,14 @@ export default function IncomingEmailSettingsPage() {
           <div className="text-sm text-muted-foreground">
             <p className="font-medium mb-1">Agent Email Format:</p>
             <code className="bg-muted px-2 py-1 rounded">
-              {`<mailbox>+agent-<promptId>@${emailInfo.emailDomain}`}
+              {`{configured-mailbox}+agent-{promptId}@${emailInfo.emailDomain}`}
             </code>
+            <p className="text-xs mt-1">
+              The mailbox portion is the local part of{" "}
+              <code className="bg-muted px-1 rounded">
+                ARCHESTRA_AGENTS_OUTLOOK_MAILBOX_ADDRESS
+              </code>
+            </p>
           </div>
         </CardContent>
       </Card>

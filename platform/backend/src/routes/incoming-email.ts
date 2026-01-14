@@ -164,6 +164,7 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
               messageId: email.messageId,
               fromAddress: email.fromAddress,
               error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
             },
             "[IncomingEmail] Failed to process email",
           );

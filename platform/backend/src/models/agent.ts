@@ -91,11 +91,23 @@ class AgentModel {
         false,
       );
 
-      if (accessibleAgentIds.length === 0) {
+      // Also get the default agent ID(s)
+      const defaultAgents = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.isDefault, true));
+      const defaultAgentIds = defaultAgents.map((a) => a.id);
+
+      // Combine accessible IDs with default agent IDs
+      const allAccessibleIds = [
+        ...new Set([...accessibleAgentIds, ...defaultAgentIds]),
+      ];
+
+      if (allAccessibleIds.length === 0) {
         return [];
       }
 
-      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
+      whereConditions.push(inArray(schema.agentsTable.id, allAccessibleIds));
     }
 
     // Apply all where conditions if any exist
@@ -173,11 +185,23 @@ class AgentModel {
         false,
       );
 
-      if (accessibleAgentIds.length === 0) {
+      // Also get the default agent ID(s)
+      const defaultAgents = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.isDefault, true));
+      const defaultAgentIds = defaultAgents.map((a) => a.id);
+
+      // Combine accessible IDs with default agent IDs
+      const allAccessibleIds = [
+        ...new Set([...accessibleAgentIds, ...defaultAgentIds]),
+      ];
+
+      if (allAccessibleIds.length === 0) {
         return createPaginatedResult([], 0, pagination);
       }
 
-      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
+      whereConditions.push(inArray(schema.agentsTable.id, allAccessibleIds));
     }
 
     const whereClause =
@@ -381,13 +405,22 @@ class AgentModel {
   ): Promise<Agent | null> {
     // Check access control for non-agent admins
     if (userId && !isAgentAdmin) {
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        id,
-        false,
-      );
-      if (!hasAccess) {
-        return null;
+      // Check if agent is default first (default agents are public)
+      const [agentRecord] = await db
+        .select({ isDefault: schema.agentsTable.isDefault })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, id))
+        .limit(1);
+
+      if (!agentRecord?.isDefault) {
+        const hasAccess = await AgentTeamModel.userHasAgentAccess(
+          userId,
+          id,
+          false,
+        );
+        if (!hasAccess) {
+          return null;
+        }
       }
     }
 

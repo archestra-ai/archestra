@@ -2,7 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { AgentTeamModel, PromptModel, ToolModel } from "@/models";
+import { AgentModel, AgentTeamModel, PromptModel, ToolModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -40,10 +40,16 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isAgentAdmin,
       );
 
+      // Also get the default agent ID(s) since they are public
+      const defaultAgents = await AgentModel.getAgentOrCreateDefault();
+      const allAccessibleIds = [
+        ...new Set([...accessibleAgentIds, defaultAgents.id]),
+      ];
+
       // Filter prompts to only those assigned to accessible agents
       const prompts = await PromptModel.findByOrganizationIdAndAccessibleAgents(
         organizationId,
-        accessibleAgentIds,
+        allAccessibleIds,
       );
 
       return reply.send(prompts);

@@ -68,6 +68,17 @@ const interactionsTable = pgTable(
     ),
     userIdIdx: index("interactions_user_id_idx").on(table.userId),
     sessionIdIdx: index("interactions_session_id_idx").on(table.sessionId),
+    createdAtIdx: index("interactions_created_at_idx").on(
+      table.createdAt.desc(),
+    ),
+    profileCreatedAtIdx: index("interactions_profile_created_at_idx").on(
+      table.profileId,
+      table.createdAt.desc(),
+    ),
+    sessionCreatedAtIdx: index("interactions_session_created_at_idx").on(
+      table.sessionId,
+      table.createdAt.desc(),
+    ),
   }),
 );
 

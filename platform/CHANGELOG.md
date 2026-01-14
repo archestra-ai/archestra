@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.20](https://github.com/archestra-ai/archestra/compare/platform-v1.0.19...platform-v1.0.20) (2026-01-13)
+
+
+### Features
+
+* "and" policy conditions ([#2093](https://github.com/archestra-ai/archestra/issues/2093)) ([6e9f36e](https://github.com/archestra-ai/archestra/commit/6e9f36e0d5bfbde836cb08bdb604b66fd4e31573))
+* chat file upload ([#2077](https://github.com/archestra-ai/archestra/issues/2077)) ([31fdd09](https://github.com/archestra-ai/archestra/commit/31fdd0956007efe1f54ae65117ad96faedd9f755))
+* policy context conditions ([#2073](https://github.com/archestra-ai/archestra/issues/2073)) ([c182d34](https://github.com/archestra-ai/archestra/commit/c182d3454853495d1c7437aad67cecebd3fc2b0f))
+
+
+### Bug Fixes
+
+* add archestra mcp server ([#2075](https://github.com/archestra-ai/archestra/issues/2075)) ([be35481](https://github.com/archestra-ai/archestra/commit/be354814dfd7fe919de0779c321524a1b008e18e))
+* don't allow deleting builtin servers ([#2092](https://github.com/archestra-ai/archestra/issues/2092)) ([2fd16d0](https://github.com/archestra-ai/archestra/commit/2fd16d05e5ebb3e0d62c78de0cdfdee6b2efa6e7))
+* fix lightrag-seed tiltfile integration ([#2086](https://github.com/archestra-ai/archestra/issues/2086)) ([2a83877](https://github.com/archestra-ai/archestra/commit/2a838774d76c02f0fa3b5307ad690b3f18fef351))
+* lazy-load MCP deployment for multi-replica environments ([#2100](https://github.com/archestra-ai/archestra/issues/2100)) ([35c7e58](https://github.com/archestra-ai/archestra/commit/35c7e58ac87ea79c1ada213c1ae1906f1ad01101))
+* return mcp call error context to LLM ([#2103](https://github.com/archestra-ai/archestra/issues/2103)) ([222d1c4](https://github.com/archestra-ai/archestra/commit/222d1c4cdc6a47ac657a35f75d8897eed23d34fa))
+* yolo mode styling & wording ([#2082](https://github.com/archestra-ai/archestra/issues/2082)) ([9529348](https://github.com/archestra-ai/archestra/commit/95293482da4f237f0a7d068e3066075854a5b2f6))
+
+
+### Miscellaneous Chores
+
+* allow chat deeplink with no model selected ([#2106](https://github.com/archestra-ai/archestra/issues/2106)) ([4b8bb4b](https://github.com/archestra-ai/archestra/commit/4b8bb4b2b0e4815deec48ed6f0316ae30e108471))
+* dev to main ([#2099](https://github.com/archestra-ai/archestra/issues/2099)) ([597be0e](https://github.com/archestra-ai/archestra/commit/597be0ec30814c96249b04c6098323324518d984))
+* improve auth methods for remote mcp servers ([#2094](https://github.com/archestra-ai/archestra/issues/2094)) ([59123c8](https://github.com/archestra-ai/archestra/commit/59123c801b3b9a31d1385fd0ef27093f12fce274))
+* improve e2e stability and ci speed ([#2067](https://github.com/archestra-ai/archestra/issues/2067)) ([00bb0a3](https://github.com/archestra-ai/archestra/commit/00bb0a30e586e5ffb5aba4d4b1a4abe42ce6b545))
+
 ## [1.0.19](https://github.com/archestra-ai/archestra/compare/platform-v1.0.18...platform-v1.0.19) (2026-01-12)
 
 

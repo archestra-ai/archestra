@@ -1,13 +1,12 @@
 {
   "name": "@shared",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "",
   "type": "module",
   "private": true,
   "exports": {
     ".": "./index.ts",
-    "./access-control": "./access-control.ts",
-    "./access-control.ee": "./access-control.ee.ts"
+    "./access-control": "./access-control.ts"
   },
   "scripts": {
     "lint": "biome check",

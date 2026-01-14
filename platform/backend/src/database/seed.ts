@@ -32,10 +32,7 @@ export async function seedDefaultUserAndOrg(
     name?: string;
   } = {},
 ) {
-  const user = await UserModel.createOrGetExistingDefaultAdminUser(
-    auth,
-    config,
-  );
+  const user = await UserModel.createOrGetExistingDefaultAdminUser(config);
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   if (!user || !org) {
     throw new Error("Failed to seed admin user and default organization");

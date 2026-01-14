@@ -1,13 +1,21 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Layers, MessageSquare, User } from "lucide-react";
+import { format } from "date-fns";
+import { CalendarIcon, Layers, MessageSquare, User, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import type { DateRange } from "react-day-picker";
 import { Savings } from "@/components/savings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table,
@@ -24,6 +32,7 @@ import {
   useUniqueUserIds,
 } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
+import { cn } from "@/lib/utils";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
@@ -326,12 +335,25 @@ function SessionsTable({
   const pageSizeFromUrl = searchParams.get("pageSize");
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
+  const startDateFromUrl = searchParams.get("startDate");
+  const endDateFromUrl = searchParams.get("endDate");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const [userFilter, setUserFilter] = useState(userIdFromUrl || "all");
+
+  // Date range state
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    if (startDateFromUrl && endDateFromUrl) {
+      return {
+        from: new Date(startDateFromUrl),
+        to: new Date(endDateFromUrl),
+      };
+    }
+    return undefined;
+  });
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -381,11 +403,51 @@ function SessionsTable({
     [updateUrlParams],
   );
 
+  const handleDateRangeChange = useCallback(
+    (range: DateRange | undefined) => {
+      setDateRange(range);
+      if (range?.from && range?.to) {
+        // Set end date to end of day
+        const endOfDay = new Date(range.to);
+        endOfDay.setHours(23, 59, 59, 999);
+        updateUrlParams({
+          startDate: range.from.toISOString(),
+          endDate: endOfDay.toISOString(),
+          page: "1", // Reset to first page
+        });
+      } else {
+        updateUrlParams({
+          startDate: null,
+          endDate: null,
+          page: "1", // Reset to first page
+        });
+      }
+    },
+    [updateUrlParams],
+  );
+
+  const clearDateRange = useCallback(() => {
+    setDateRange(undefined);
+    updateUrlParams({
+      startDate: null,
+      endDate: null,
+      page: "1", // Reset to first page
+    });
+  }, [updateUrlParams]);
+
+  // Build date params for API call
+  const startDateParam = dateRange?.from ? dateRange.from.toISOString() : undefined;
+  const endDateParam = dateRange?.to
+    ? new Date(new Date(dateRange.to).setHours(23, 59, 59, 999)).toISOString()
+    : undefined;
+
   const { data: sessionsResponse } = useInteractionSessions({
     limit: pageSize,
     offset: pageIndex * pageSize,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     userId: userFilter !== "all" ? userFilter : undefined,
+    startDate: startDateParam,
+    endDate: endDateParam,
   });
 
   const { data: agents } = useProfiles({
@@ -397,7 +459,8 @@ function SessionsTable({
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;
 
-  const hasFilters = profileFilter !== "all" || userFilter !== "all";
+  const hasFilters =
+    profileFilter !== "all" || userFilter !== "all" || dateRange !== undefined;
 
   return (
     <div className="space-y-4">
@@ -430,6 +493,53 @@ function SessionsTable({
           className="w-[200px]"
         />
 
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-[280px] justify-start text-left font-normal",
+                !dateRange && "text-muted-foreground",
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dateRange?.from ? (
+                dateRange.to ? (
+                  <>
+                    {format(dateRange.from, "LLL dd, y")} -{" "}
+                    {format(dateRange.to, "LLL dd, y")}
+                  </>
+                ) : (
+                  format(dateRange.from, "LLL dd, y")
+                )
+              ) : (
+                <span>Pick a date range</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange?.from}
+              selected={dateRange}
+              onSelect={handleDateRangeChange}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
+
+        {dateRange && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={clearDateRange}
+            className="h-10 w-10"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+
         {hasFilters && (
           <Button
             variant="ghost"
@@ -437,9 +547,10 @@ function SessionsTable({
             onClick={() => {
               handleProfileFilterChange("all");
               handleUserFilterChange("all");
+              clearDateRange();
             }}
           >
-            Clear filters
+            Clear all filters
           </Button>
         )}
       </div>

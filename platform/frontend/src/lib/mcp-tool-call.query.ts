@@ -8,6 +8,8 @@ const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 
 export function useMcpToolCalls({
   agentId,
+  startDate,
+  endDate,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -15,6 +17,8 @@ export function useMcpToolCalls({
   initialData,
 }: {
   agentId?: string;
+  startDate?: string;
+  endDate?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -24,11 +28,22 @@ export function useMcpToolCalls({
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
 } = {}) {
   return useSuspenseQuery({
-    queryKey: ["mcpToolCalls", agentId, limit, offset, sortBy, sortDirection],
+    queryKey: [
+      "mcpToolCalls",
+      agentId,
+      startDate,
+      endDate,
+      limit,
+      offset,
+      sortBy,
+      sortDirection,
+    ],
     queryFn: async () => {
       const response = await getMcpToolCalls({
         query: {
           ...(agentId ? { agentId } : {}),
+          ...(startDate ? { startDate } : {}),
+          ...(endDate ? { endDate } : {}),
           limit,
           offset,
           ...(sortBy ? { sortBy } : {}),
@@ -42,7 +57,9 @@ export function useMcpToolCalls({
       offset === 0 &&
       limit === DEFAULT_TABLE_LIMIT &&
       sortBy === "createdAt" &&
-      sortDirection === "desc"
+      sortDirection === "desc" &&
+      !startDate &&
+      !endDate
         ? initialData
         : undefined,
   });

@@ -2,14 +2,24 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { format } from "date-fns";
+import { CalendarIcon, ChevronDown, ChevronUp, X } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
+import type { DateRange } from "react-day-picker";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useProfiles } from "@/lib/agent.query";
 import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
+import { cn } from "@/lib/utils";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
@@ -59,6 +69,14 @@ function McpToolCallsTable({
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
+  // Get URL params for date range
+  const startDateFromUrl = searchParams.get("startDate");
+  const endDateFromUrl = searchParams.get("endDate");
+
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: DEFAULT_TABLE_LIMIT,
@@ -66,6 +84,70 @@ function McpToolCallsTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
   ]);
+
+  // Date range state
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    if (startDateFromUrl && endDateFromUrl) {
+      return {
+        from: new Date(startDateFromUrl),
+        to: new Date(endDateFromUrl),
+      };
+    }
+    return undefined;
+  });
+
+  // Helper to update URL params
+  const updateUrlParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === "") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      });
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  const handleDateRangeChange = useCallback(
+    (range: DateRange | undefined) => {
+      setDateRange(range);
+      setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
+      if (range?.from && range?.to) {
+        // Set end date to end of day
+        const endOfDay = new Date(range.to);
+        endOfDay.setHours(23, 59, 59, 999);
+        updateUrlParams({
+          startDate: range.from.toISOString(),
+          endDate: endOfDay.toISOString(),
+        });
+      } else {
+        updateUrlParams({
+          startDate: null,
+          endDate: null,
+        });
+      }
+    },
+    [updateUrlParams],
+  );
+
+  const clearDateRange = useCallback(() => {
+    setDateRange(undefined);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
+    updateUrlParams({
+      startDate: null,
+      endDate: null,
+    });
+  }, [updateUrlParams]);
+
+  // Build date params for API call
+  const startDateParam = dateRange?.from ? dateRange.from.toISOString() : undefined;
+  const endDateParam = dateRange?.to
+    ? new Date(new Date(dateRange.to).setHours(23, 59, 59, 999)).toISOString()
+    : undefined;
 
   // Convert TanStack sorting to API format
   const sortBy = sorting[0]?.id;
@@ -89,6 +171,8 @@ function McpToolCallsTable({
     offset: pagination.pageIndex * pagination.pageSize,
     sortBy: apiSortBy,
     sortDirection,
+    startDate: startDateParam,
+    endDate: endDateParam,
     initialData: initialData?.mcpToolCalls,
   });
 
@@ -306,37 +390,148 @@ function McpToolCallsTable({
     },
   ];
 
+  const hasFilters = dateRange !== undefined;
+
   if (!mcpToolCalls || mcpToolCalls.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground text-sm">
-          No MCP tool calls found. Tool calls will appear here when agents use
-          MCP tools.
-        </p>
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-4">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-[280px] justify-start text-left font-normal",
+                  !dateRange && "text-muted-foreground",
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateRange?.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "LLL dd, y")} -{" "}
+                      {format(dateRange.to, "LLL dd, y")}
+                    </>
+                  ) : (
+                    format(dateRange.from, "LLL dd, y")
+                  )
+                ) : (
+                  <span>Pick a date range</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={dateRange?.from}
+                selected={dateRange}
+                onSelect={handleDateRangeChange}
+                numberOfMonths={2}
+              />
+            </PopoverContent>
+          </Popover>
+
+          {dateRange && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={clearDateRange}
+              className="h-10 w-10"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        <div className="text-center py-12">
+          <p className="text-muted-foreground text-sm">
+            {hasFilters
+              ? "No MCP tool calls match your filters. Try adjusting your date range."
+              : "No MCP tool calls found. Tool calls will appear here when agents use MCP tools."}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <DataTable
-      columns={columns}
-      data={mcpToolCalls}
-      pagination={
-        paginationMeta
-          ? {
-              pageIndex: pagination.pageIndex,
-              pageSize: pagination.pageSize,
-              total: paginationMeta.total,
-            }
-          : undefined
-      }
-      manualPagination
-      onPaginationChange={(newPagination) => {
-        setPagination(newPagination);
-      }}
-      manualSorting
-      sorting={sorting}
-      onSortingChange={setSorting}
-    />
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-4">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-[280px] justify-start text-left font-normal",
+                !dateRange && "text-muted-foreground",
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dateRange?.from ? (
+                dateRange.to ? (
+                  <>
+                    {format(dateRange.from, "LLL dd, y")} -{" "}
+                    {format(dateRange.to, "LLL dd, y")}
+                  </>
+                ) : (
+                  format(dateRange.from, "LLL dd, y")
+                )
+              ) : (
+                <span>Pick a date range</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange?.from}
+              selected={dateRange}
+              onSelect={handleDateRangeChange}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
+
+        {dateRange && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={clearDateRange}
+            className="h-10 w-10"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={clearDateRange}>
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      <DataTable
+        columns={columns}
+        data={mcpToolCalls}
+        pagination={
+          paginationMeta
+            ? {
+                pageIndex: pagination.pageIndex,
+                pageSize: pagination.pageSize,
+                total: paginationMeta.total,
+              }
+            : undefined
+        }
+        manualPagination
+        onPaginationChange={(newPagination) => {
+          setPagination(newPagination);
+        }}
+        manualSorting
+        sorting={sorting}
+        onSortingChange={setSorting}
+      />
+    </div>
   );
 }

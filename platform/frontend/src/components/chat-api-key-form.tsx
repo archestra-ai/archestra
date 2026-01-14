@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useTeams } from "@/lib/team.query";
-import { WithPermissions } from './roles/with-permissions';
+import { WithPermissions } from "./roles/with-permissions";
 
 const ExternalSecretSelector = lazy(
   () =>

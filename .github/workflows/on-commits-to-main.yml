@@ -125,6 +125,9 @@ jobs:
             --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET="${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET }}" \
             --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS="agents@archestraai.onmicrosoft.com" \
             --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL="https://backend.archestra.dev/api/webhooks/incoming-email" \
+            --set archestra.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER="anthropic" \
+            --set archestra.env.ARCHESTRA_CHAT_DEFAULT_MODEL="claude-opus-4-5-20251101" \
+            --set archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY="${{ secrets.ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY }}" \
             --values .github/values-staging.yaml \
             --wait
 

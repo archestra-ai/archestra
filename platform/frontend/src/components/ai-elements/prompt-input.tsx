@@ -12,7 +12,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import React, {
+import {
+  type ChangeEvent,
   type ChangeEventHandler,
   Children,
   type ClipboardEventHandler,
@@ -58,7 +59,7 @@ import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
-  type InputGroupTextarea,
+  InputGroupTextarea,
 } from "@/components/ui/input-group";
 import {
   Select,
@@ -67,7 +68,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -871,106 +871,111 @@ export const PromptInputBody = ({
 
 export type PromptInputTextareaProps = ComponentProps<
   typeof InputGroupTextarea
->;
+> & {
+  disableEnterSubmit?: boolean;
+};
 
-export const PromptInputTextarea = React.forwardRef<
-  HTMLTextAreaElement,
-  PromptInputTextareaProps
->(
-  (
-    {
-      onChange,
-      className,
-      placeholder = "What would you like to know?",
-      ...props
-    },
-    ref,
-  ) => {
-    const controller = useOptionalPromptInputController();
-    const attachments = usePromptInputAttachments();
+export const PromptInputTextarea = ({
+  onChange,
+  className,
+  placeholder = "What would you like to know?",
+  disableEnterSubmit = false,
+  ...props
+}: PromptInputTextareaProps) => {
+  const controller = useOptionalPromptInputController();
+  const attachments = usePromptInputAttachments();
+  const [isComposing, setIsComposing] = useState(false);
 
-    const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-      // Remove last attachment when Backspace is pressed on empty input
-      if (e.key === "Backspace") {
-        // Don't act during IME composition
-        if (e.nativeEvent.isComposing) return;
-        const textEmpty = !controller?.textInput.value;
-        if (textEmpty && attachments.files.length > 0) {
-          e.preventDefault();
-          const last = attachments.files[attachments.files.length - 1];
-          if (last) attachments.remove(last.id);
-          return;
-        }
+  const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
+    if (e.key === "Enter") {
+      if (isComposing || e.nativeEvent.isComposing) {
+        return;
       }
-      if (e.key === "Enter") {
-        // Don't submit if IME composition is in progress
-        if (e.nativeEvent.isComposing) {
-          return;
-        }
-
-        if (e.shiftKey) {
-          // Allow newline
-          return;
-        }
-
-        // Submit on Enter (without Shift)
+      if (disableEnterSubmit) {
         e.preventDefault();
-        const form = e.currentTarget.form;
-        if (form) {
-          form.requestSubmit();
-        }
+        return;
       }
-    };
+      if (e.shiftKey) {
+        return;
+      }
+      e.preventDefault();
 
-    const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
-      const items = event.clipboardData?.items;
-
-      if (!items) {
+      // Check if the submit button is disabled before submitting
+      const form = e.currentTarget.form;
+      const submitButton = form?.querySelector(
+        'button[type="submit"]',
+      ) as HTMLButtonElement | null;
+      if (submitButton?.disabled) {
         return;
       }
 
-      const files: File[] = [];
+      form?.requestSubmit();
+    }
 
-      for (const item of items) {
-        if (item.kind === "file") {
-          const file = item.getAsFile();
-          if (file) {
-            files.push(file);
-          }
+    // Remove last attachment when Backspace is pressed and textarea is empty
+    if (
+      e.key === "Backspace" &&
+      e.currentTarget.value === "" &&
+      attachments.files.length > 0
+    ) {
+      e.preventDefault();
+      const lastAttachment = attachments.files.at(-1);
+      if (lastAttachment) {
+        attachments.remove(lastAttachment.id);
+      }
+    }
+  };
+
+  const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
+    const items = event.clipboardData?.items;
+
+    if (!items) {
+      return;
+    }
+
+    const files: File[] = [];
+
+    for (const item of items) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) {
+          files.push(file);
         }
       }
+    }
 
-      if (files.length > 0) {
-        event.preventDefault();
-        attachments.add(files);
-      }
-    };
+    if (files.length > 0) {
+      event.preventDefault();
+      attachments.add(files);
+    }
+  };
 
-    return (
-      <Textarea
-        ref={ref}
-        className={cn(
-          "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
-          "field-sizing-content bg-transparent dark:bg-transparent",
-          "max-h-48 min-h-16",
-          "focus-visible:ring-0",
-          className,
-        )}
-        name="message"
-        value={controller?.textInput.value}
-        onChange={(e) => {
-          controller?.textInput.setInput(e.target.value);
+  const controlledProps = controller
+    ? {
+        value: controller.textInput.value,
+        onChange: (e: ChangeEvent<HTMLTextAreaElement>) => {
+          controller.textInput.setInput(e.currentTarget.value);
           onChange?.(e);
-        }}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        placeholder={placeholder}
-        {...props}
-      />
-    );
-  },
-);
-PromptInputTextarea.displayName = "PromptInputTextarea";
+        },
+      }
+    : {
+        onChange,
+      };
+
+  return (
+    <InputGroupTextarea
+      className={cn("field-sizing-content max-h-48 min-h-16", className)}
+      name="message"
+      onCompositionEnd={() => setIsComposing(false)}
+      onCompositionStart={() => setIsComposing(true)}
+      onKeyDown={handleKeyDown}
+      onPaste={handlePaste}
+      placeholder={placeholder}
+      {...props}
+      {...controlledProps}
+    />
+  );
+};
 
 export type PromptInputHeaderProps = Omit<
   ComponentProps<typeof InputGroupAddon>,

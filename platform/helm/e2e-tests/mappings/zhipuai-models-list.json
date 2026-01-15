@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/zhipuai/v4/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "glm-4.5-flash",
+          "object": "model",
+          "created": 1753632000,
+          "owned_by": "z-ai"
+        },
+        {
+          "id": "glm-4.5",
+          "object": "model",
+          "created": 1753632000,
+          "owned_by": "z-ai"
+        },
+        {
+          "id": "glm-4.5-air",
+          "object": "model",
+          "created": 1753632000,
+          "owned_by": "z-ai"
+        }
+      ]
+    }
+  }
+}

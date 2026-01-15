@@ -2,7 +2,7 @@
 title: MCP Gateway
 category: Archestra Platform
 subcategory: Concepts
-order: 3
+order: 5
 description: Unified access point for all MCP servers
 lastUpdated: 2025-10-31
 ---

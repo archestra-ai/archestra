@@ -2,7 +2,7 @@
 title: Agents
 category: Archestra Platform
 subcategory: Concepts
-order: 3
+order: 1
 description: Agent invocation methods including A2A and incoming email
 lastUpdated: 2026-01-14
 ---

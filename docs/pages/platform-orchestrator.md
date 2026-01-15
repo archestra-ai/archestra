@@ -2,7 +2,7 @@
 title: MCP Orchestrator
 category: Archestra Platform
 subcategory: Concepts
-order: 5
+order: 7
 description: How Archestra orchestrates MCP servers in Kubernetes
 lastUpdated: 2025-10-31
 ---

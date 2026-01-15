@@ -1,0 +1,43 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/zhipuai/v4/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "zhipuai-compression"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "files[5]{name,size,type}"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "20260114011737450622882b094148",
+      "object": "chat.completion",
+      "created": 1768324666,
+      "model": "glm-4.5-flash",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Response with compression enabled."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 10,
+        "total_tokens": 110
+      }
+    }
+  }
+}

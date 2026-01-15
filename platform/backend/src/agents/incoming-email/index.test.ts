@@ -1,12 +1,12 @@
 import { vi } from "vitest";
 
 // Mock the a2a-executor service - must be before other imports
-vi.mock("@/services/a2a-executor", () => ({
+vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: vi.fn(),
 }));
 
+import { executeA2AMessage } from "@/agents/a2a-executor";
 import db, { schema } from "@/database";
-import { executeA2AMessage } from "@/services/a2a-executor";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { IncomingEmail } from "@/types";
 import { MAX_EMAIL_BODY_SIZE } from "./constants";

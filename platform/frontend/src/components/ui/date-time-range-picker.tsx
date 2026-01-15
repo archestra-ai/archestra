@@ -108,7 +108,7 @@ export function DateTimeRangePicker({
               <div className="flex justify-center">
                 <Calendar
                   mode="range"
-                  defaultMonth={tempDateRange?.from}
+                  defaultMonth={tempDateRange?.from ?? new Date()}
                   selected={tempDateRange}
                   onSelect={onTempDateRangeChange}
                   numberOfMonths={2}

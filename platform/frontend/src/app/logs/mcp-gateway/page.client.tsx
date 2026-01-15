@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useProfiles } from "@/lib/agent.query";
 import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
 import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
@@ -65,10 +66,12 @@ function McpToolCallsTable({
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
-  // Get URL params for date range
+  // Get URL params for filters
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
+  const profileIdFromUrl = searchParams.get("profileId");
 
+  const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: DEFAULT_TABLE_LIMIT,
@@ -91,6 +94,18 @@ function McpToolCallsTable({
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],
+  );
+
+  // Profile filter change handler
+  const handleProfileFilterChange = useCallback(
+    (value: string) => {
+      setProfileFilter(value);
+      setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
+      updateUrlParams({
+        profileId: value === "all" ? null : value,
+      });
+    },
+    [updateUrlParams],
   );
 
   // Date time range picker hook
@@ -127,6 +142,7 @@ function McpToolCallsTable({
             : undefined;
 
   const { data: mcpToolCallsResponse } = useMcpToolCalls({
+    agentId: profileFilter !== "all" ? profileFilter : undefined,
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
     sortBy: apiSortBy,
@@ -350,7 +366,8 @@ function McpToolCallsTable({
     },
   ];
 
-  const hasFilters = dateTimePicker.dateRange !== undefined;
+  const hasFilters =
+    profileFilter !== "all" || dateTimePicker.dateRange !== undefined;
 
   // Shared date picker component
   const datePickerComponent = (
@@ -375,12 +392,27 @@ function McpToolCallsTable({
   if (!mcpToolCalls || mcpToolCalls.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-4">{datePickerComponent}</div>
+        <div className="flex flex-wrap gap-4">
+          <SearchableSelect
+            value={profileFilter}
+            onValueChange={handleProfileFilterChange}
+            placeholder="Filter by Profile"
+            items={[
+              { value: "all", label: "All Profiles" },
+              ...(agents?.map((agent) => ({
+                value: agent.id,
+                label: agent.name,
+              })) || []),
+            ]}
+            className="w-[200px]"
+          />
+          {datePickerComponent}
+        </div>
 
         <div className="text-center py-12">
           <p className="text-muted-foreground text-sm">
             {hasFilters
-              ? "No MCP tool calls match your filters. Try adjusting your date range."
+              ? "No MCP tool calls match your filters. Try adjusting your search."
               : "No MCP tool calls found. Tool calls will appear here when agents use MCP tools."}
           </p>
         </div>
@@ -391,15 +423,31 @@ function McpToolCallsTable({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
+        <SearchableSelect
+          value={profileFilter}
+          onValueChange={handleProfileFilterChange}
+          placeholder="Filter by Profile"
+          items={[
+            { value: "all", label: "All Profiles" },
+            ...(agents?.map((agent) => ({
+              value: agent.id,
+              label: agent.name,
+            })) || []),
+          ]}
+          className="w-[200px]"
+        />
         {datePickerComponent}
 
         {hasFilters && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={dateTimePicker.clearDateRange}
+            onClick={() => {
+              handleProfileFilterChange("all");
+              dateTimePicker.clearDateRange();
+            }}
           >
-            Clear filters
+            Clear all filters
           </Button>
         )}
       </div>

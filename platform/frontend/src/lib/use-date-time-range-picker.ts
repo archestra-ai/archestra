@@ -176,17 +176,18 @@ export function useDateTimeRangePicker({
       toUtcHours !== 23 ||
       toUtcMinutes !== 59;
 
-    // Format dates with time if custom time is set
-    // Use a custom format that shows UTC time to avoid confusion
+    // Format dates using UTC to ensure consistency across timezones
     const fromDateStr = dateRange.from.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
+      timeZone: "UTC",
     });
     const toDateStr = dateRange.to.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
+      timeZone: "UTC",
     });
 
     if (hasCustomTime) {

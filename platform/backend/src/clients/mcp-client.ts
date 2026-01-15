@@ -172,17 +172,20 @@ class McpClient {
         // Get or create client
         const client = await this.getOrCreateClient(connectionKey, transport);
 
-      // Strip prefix and execute (same for all transports!)
-      // Try catalogName first (tools are created with catalogName prefix for local servers)
-      // Fall back to mcpServerName for remote servers or if catalogName doesn't match
-      let mcpToolName = this.stripServerPrefix(
-        toolCall.name,
-        tool.catalogName || "",
-      );
-      if (mcpToolName === toolCall.name && tool.mcpServerName) {
-        // catalogName didn't match, try mcpServerName
-        mcpToolName = this.stripServerPrefix(toolCall.name, tool.mcpServerName);
-      }
+        // Strip prefix and execute (same for all transports!)
+        // Try catalogName first (tools are created with catalogName prefix for local servers)
+        // Fall back to mcpServerName for remote servers or if catalogName doesn't match
+        let mcpToolName = this.stripServerPrefix(
+          toolCall.name,
+          tool.catalogName || "",
+        );
+        if (mcpToolName === toolCall.name && tool.mcpServerName) {
+          // catalogName didn't match, try mcpServerName
+          mcpToolName = this.stripServerPrefix(
+            toolCall.name,
+            tool.mcpServerName,
+          );
+        }
 
         const result = await client.callTool({
           name: mcpToolName,
@@ -917,7 +920,8 @@ class McpClient {
 
     // Should never reach here, but TypeScript needs it
     throw new Error(
-      `Failed to connect to MCP server ${catalogItem.name}: ${lastError?.message || "Unknown error"
+      `Failed to connect to MCP server ${catalogItem.name}: ${
+        lastError?.message || "Unknown error"
       }`,
     );
   }

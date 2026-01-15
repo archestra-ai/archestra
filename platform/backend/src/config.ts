@@ -15,7 +15,7 @@ import logger from "@/logging";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
-} from "@/types/incoming-email";
+} from "@/types/email-provider-type";
 import packageJson from "../../package.json";
 
 /**

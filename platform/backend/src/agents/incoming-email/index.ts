@@ -19,7 +19,10 @@ export type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
-export { EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL } from "./constants";
+export {
+  EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
+  MAX_EMAIL_BODY_SIZE,
+} from "./constants";
 export { OutlookEmailProvider } from "./outlook-provider";
 
 /**
@@ -451,7 +454,26 @@ export async function processIncomingEmail(
 
   // Use email body as the message to invoke the agent
   // If body is empty, use the subject line
-  const message = email.body.trim() || email.subject || "No message content";
+  let message = email.body.trim() || email.subject || "No message content";
+
+  // Truncate message if it exceeds the maximum size to prevent excessive LLM context usage
+  const { MAX_EMAIL_BODY_SIZE } = await import("./constants");
+  if (Buffer.byteLength(message, "utf8") > MAX_EMAIL_BODY_SIZE) {
+    // Truncate to MAX_EMAIL_BODY_SIZE bytes and add truncation notice
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder("utf8", { fatal: false });
+    const encoded = encoder.encode(message);
+    const truncated = decoder.decode(encoded.slice(0, MAX_EMAIL_BODY_SIZE));
+    message = `${truncated}\n\n[Message truncated - original size exceeded ${MAX_EMAIL_BODY_SIZE / 1024}KB limit]`;
+    logger.warn(
+      {
+        messageId: email.messageId,
+        originalSize: Buffer.byteLength(email.body, "utf8"),
+        maxSize: MAX_EMAIL_BODY_SIZE,
+      },
+      "[IncomingEmail] Email body truncated due to size limit",
+    );
+  }
 
   logger.info(
     {

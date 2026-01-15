@@ -21,6 +21,43 @@ import {
  */
 
 /**
+ * Simple in-memory rate limiter for webhook endpoint
+ * Limits requests per IP address to prevent abuse
+ */
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per IP
+
+const rateLimitMap = new Map<string, { count: number; windowStart: number }>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    // Start new window
+    rateLimitMap.set(ip, { count: 1, windowStart: now });
+    return false;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return true;
+  }
+
+  entry.count++;
+  return false;
+}
+
+// Cleanup old entries periodically to prevent memory leaks
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap.entries()) {
+    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, RATE_LIMIT_WINDOW_MS * 5);
+
+/**
  * Schema for subscription status response
  */
 const SubscriptionStatusSchema = z.object({
@@ -77,6 +114,9 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400: z.object({
             error: z.string(),
           }),
+          429: z.object({
+            error: z.string(),
+          }),
           500: z.object({
             error: z.string(),
           }),
@@ -97,6 +137,7 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Handle validation challenge (initial webhook setup)
       // Microsoft Graph sends validationToken as query parameter
+      // Validation challenges bypass rate limiting
       const query = request.query as { validationToken?: string };
       if (query.validationToken) {
         logger.info(
@@ -115,6 +156,18 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         // Microsoft Graph expects plain text response for validation
         return reply.type("text/plain").send(validationResponse);
+      }
+
+      // Apply rate limiting to actual webhook notifications (not validation challenges)
+      const clientIp = request.ip || "unknown";
+      if (isRateLimited(clientIp)) {
+        logger.warn(
+          { ip: clientIp },
+          "[IncomingEmail] Rate limit exceeded for webhook",
+        );
+        return reply.status(429).send({
+          error: "Too many requests",
+        });
       }
 
       // Validate webhook request

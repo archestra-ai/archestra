@@ -79,10 +79,7 @@ A2A supports nested agent-to-agent calls. When one agent invokes another, the de
 
 ### Configuration
 
-A2A uses the same LLM configuration as Chat. Ensure these environment variables are set:
-
-- `ARCHESTRA_CHAT_DEFAULT_PROVIDER` - LLM provider (anthropic, openai, gemini)
-- `ARCHESTRA_CHAT_<PROVIDER>_API_KEY` - API key for the provider
+A2A uses the same LLM configuration as Chat. See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables) for the full list of `ARCHESTRA_CHAT_*` variables.
 
 ## Incoming Email
 

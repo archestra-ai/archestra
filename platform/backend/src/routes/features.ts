@@ -7,8 +7,7 @@ import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
-import type { GlobalToolPolicy } from "@/types";
-import { EmailProviderTypeSchema } from "@/types/incoming-email";
+import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
 
 const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

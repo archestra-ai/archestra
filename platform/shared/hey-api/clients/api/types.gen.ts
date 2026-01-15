@@ -11089,6 +11089,12 @@ export type PostApiWebhooksIncomingEmailErrors = {
     /**
      * Default Response
      */
+    429: {
+        error: string;
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string;
     };
@@ -11511,45 +11517,6 @@ export type DeleteIncomingEmailSubscriptionResponses = {
 };
 
 export type DeleteIncomingEmailSubscriptionResponse = DeleteIncomingEmailSubscriptionResponses[keyof DeleteIncomingEmailSubscriptionResponses];
-
-export type PostApiWebhooksIncomingEmailSetupData = {
-    body?: {
-        webhookUrl?: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/webhooks/incoming-email/setup';
-};
-
-export type PostApiWebhooksIncomingEmailSetupErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string;
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string;
-    };
-};
-
-export type PostApiWebhooksIncomingEmailSetupError = PostApiWebhooksIncomingEmailSetupErrors[keyof PostApiWebhooksIncomingEmailSetupErrors];
-
-export type PostApiWebhooksIncomingEmailSetupResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-        subscriptionId?: string;
-        message?: string;
-    };
-};
-
-export type PostApiWebhooksIncomingEmailSetupResponse = PostApiWebhooksIncomingEmailSetupResponses[keyof PostApiWebhooksIncomingEmailSetupResponses];
 
 export type GetInteractionsData = {
     body?: never;

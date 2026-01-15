@@ -661,4 +661,7 @@ ${formattedHistory}
 
     return result.text;
   }
+
+  // No reply sent - return undefined explicitly for clarity
+  return undefined;
 }

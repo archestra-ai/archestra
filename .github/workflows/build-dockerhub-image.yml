@@ -99,7 +99,7 @@ jobs:
   merge-manifests:
     name: Create multi-arch manifest
     if: inputs.push_image
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs:
       - build-dockerhub-image
     permissions:

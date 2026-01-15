@@ -63,32 +63,22 @@ export function DateTimeRangePicker({
         variant="outline"
         onClick={onOpenDialog}
         className={cn(
-          "w-[320px] justify-start text-left font-normal",
+          "justify-start text-left font-normal",
           !dateRange && "text-muted-foreground",
         )}
       >
-        <CalendarIcon className="mr-2 h-4 w-4" />
-        {displayText || <span>Pick a date and time range</span>}
+        <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+        {displayText || <span>Pick a date range</span>}
       </Button>
 
       {dateRange && (
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={onOpenDialog}
-          className="h-10 w-10"
-        >
+        <Button variant="outline" size="icon" onClick={onOpenDialog}>
           <Clock className="h-4 w-4" />
         </Button>
       )}
 
       {dateRange && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClear}
-          className="h-10 w-10"
-        >
+        <Button variant="ghost" size="icon" onClick={onClear}>
           <X className="h-4 w-4" />
         </Button>
       )}

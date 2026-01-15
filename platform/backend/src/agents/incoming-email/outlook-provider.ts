@@ -297,12 +297,14 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         }
 
         // Extract plain text body
+        // For email threads, we need the full body content including quoted replies
+        // bodyPreview is limited (~255 chars) and truncates conversation history
         let body = "";
         if (message.body?.contentType === "text") {
           body = message.body.content || "";
         } else if (message.body?.content) {
-          // HTML body - use bodyPreview for plain text
-          body = message.bodyPreview || this.stripHtml(message.body.content);
+          // HTML body - convert to plain text to preserve conversation thread
+          body = this.stripHtml(message.body.content);
         }
 
         emails.push({
@@ -622,12 +624,11 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           message: {
             body: replyBody,
           },
-          comment: body, // Plain text comment added to the reply
         });
 
       // Graph API reply endpoint doesn't return the new message ID directly
       // Generate a tracking ID for logging purposes
-      const replyTrackingId = `reply-${originalEmail.messageId}-${Date.now()}`;
+      const replyTrackingId = `reply-${originalEmail.messageId}-${crypto.randomUUID()}`;
 
       logger.info(
         {
@@ -663,12 +664,65 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
   }
 
   /**
-   * Simple HTML tag stripper for fallback plain text extraction
+   * Convert HTML to plain text while preserving conversation structure
+   * Handles email-specific HTML elements like blockquotes for email threads
    */
   private stripHtml(html: string): string {
-    return html
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    let result = html;
+
+    // Handle horizontal rules FIRST (often used as reply separators)
+    // Must be before tag stripping since <hr> may have attributes
+    result = result.replace(/<hr[^>]*\/?>/gi, "\n---\n");
+
+    // Replace common block elements with newlines
+    result = result.replace(/<br\s*\/?>/gi, "\n");
+    result = result.replace(/<\/p>/gi, "\n\n");
+    result = result.replace(/<\/div>/gi, "\n");
+    result = result.replace(/<\/h[1-6]>/gi, "\n\n");
+    result = result.replace(/<\/li>/gi, "\n");
+
+    // Handle blockquotes (common in email replies) with ">" prefix
+    // Process iteratively to handle nested blockquotes from outside-in
+    let previousResult = "";
+    while (previousResult !== result) {
+      previousResult = result;
+      result = result.replace(
+        /<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi,
+        (_match, content) => {
+          // Strip tags from content but don't process blockquotes yet
+          const strippedContent = content
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<\/p>/gi, "\n")
+            .replace(/<\/div>/gi, "\n")
+            .replace(/<[^>]*>/g, " ")
+            .replace(/&nbsp;/gi, " ")
+            .replace(/[ \t]+/g, " ")
+            .trim();
+          const lines = strippedContent.split("\n");
+          return `\n${lines.map((line: string) => `> ${line.trim()}`).join("\n")}\n`;
+        },
+      );
+    }
+
+    // Strip remaining tags
+    result = result.replace(/<[^>]*>/g, " ");
+
+    // Decode common HTML entities
+    // Note: &amp; must be decoded LAST to prevent double-unescaping
+    // (e.g., &amp;lt; should become &lt; not <)
+    result = result.replace(/&nbsp;/gi, " ");
+    result = result.replace(/&lt;/gi, "<");
+    result = result.replace(/&gt;/gi, ">");
+    result = result.replace(/&quot;/gi, '"');
+    result = result.replace(/&#39;/gi, "'");
+    result = result.replace(/&amp;/gi, "&");
+
+    // Clean up whitespace while preserving intentional line breaks
+    result = result.replace(/[ \t]+/g, " ");
+    result = result.replace(/\n +/g, "\n");
+    result = result.replace(/ +\n/g, "\n");
+    result = result.replace(/\n{3,}/g, "\n\n");
+
+    return result.trim();
   }
 }

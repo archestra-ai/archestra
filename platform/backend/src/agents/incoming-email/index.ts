@@ -469,7 +469,7 @@ export async function processIncomingEmail(
       { messageId: email.messageId },
       "[IncomingEmail] Skipping duplicate email (already processed recently)",
     );
-    return;
+    return undefined;
   }
 
   // Mark as processed immediately to prevent concurrent processing

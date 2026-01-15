@@ -4,8 +4,10 @@ import {
   count,
   desc,
   eq,
+  gte,
   inArray,
   isNotNull,
+  lte,
   max,
   min,
   type SQL,
@@ -218,6 +220,8 @@ class InteractionModel {
       externalAgentId?: string;
       userId?: string;
       sessionId?: string;
+      startDate?: Date;
+      endDate?: Date;
     },
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
@@ -266,6 +270,16 @@ class InteractionModel {
       conditions.push(
         eq(schema.interactionsTable.sessionId, filters.sessionId),
       );
+    }
+
+    // Date range filter
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.interactionsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -649,6 +663,8 @@ class InteractionModel {
       userId?: string;
       externalAgentId?: string;
       sessionId?: string;
+      startDate?: Date;
+      endDate?: Date;
     },
   ): Promise<
     PaginatedResult<{
@@ -716,6 +732,16 @@ class InteractionModel {
       conditions.push(
         eq(schema.interactionsTable.sessionId, filters.sessionId),
       );
+    }
+
+    // Date range filter
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.interactionsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

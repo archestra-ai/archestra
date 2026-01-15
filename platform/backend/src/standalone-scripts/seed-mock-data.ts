@@ -3,7 +3,7 @@ import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import db, { schema } from "@/database";
 import { seedDefaultUserAndOrg } from "@/database/seed";
 import logger from "@/logging";
-import { AgentModel, OrganizationModel, TeamModel, ToolModel } from "@/models";
+import { AgentModel, OrganizationModel, TeamModel } from "@/models";
 import {
   generateMockAgents,
   generateMockInteractions,
@@ -78,13 +78,8 @@ async function seedMockData() {
   await db.insert(schema.agentsTable).values(agentData);
   logger.info(`✅ Created ${agentData.length} agents`);
 
-  // Step 2.5: Assign Archestra tools to all agents
-  logger.info("\nAssigning Archestra tools to all agents...");
-  const allAgents = await AgentModel.findAll();
-  for (const agent of allAgents) {
-    await ToolModel.assignArchestraToolsToAgent(agent.id);
-  }
-  logger.info(`✅ Assigned Archestra tools to ${allAgents.length} agents`);
+  // Note: Archestra tools are no longer auto-assigned to agents.
+  // They are now managed like any other MCP server tools and must be explicitly assigned.
 
   if (CREATE_TOOLS_AND_INTERACTIONS === false) return;
 

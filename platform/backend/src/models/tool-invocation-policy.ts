@@ -1,13 +1,27 @@
-import { isAgentTool, isArchestraMcpServerTool } from "@shared";
+import {
+  CONTEXT_EXTERNAL_AGENT_ID,
+  CONTEXT_TEAM_IDS,
+  isAgentTool,
+  isArchestraMcpServerTool,
+} from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type { GlobalToolPolicy, ToolInvocation } from "@/types";
+import type {
+  AutonomyPolicyOperator,
+  GlobalToolPolicy,
+  ToolInvocation,
+} from "@/types";
 
 type EvaluationResult = {
   isAllowed: boolean;
   reason: string;
+};
+
+export type PolicyEvaluationContext = {
+  teamIds: string[];
+  externalAgentId?: string;
 };
 
 class ToolInvocationPolicyModel {
@@ -19,14 +33,14 @@ class ToolInvocationPolicyModel {
       .values(policy)
       .returning();
 
-    // Clear auto-configured timestamp for all agent-tools using this tool
+    // Clear auto-configured timestamp for this tool
     await db
-      .update(schema.agentToolsTable)
+      .update(schema.toolsTable)
       .set({
         policiesAutoConfiguredAt: null,
         policiesAutoConfiguredReasoning: null,
       })
-      .where(eq(schema.agentToolsTable.toolId, policy.toolId));
+      .where(eq(schema.toolsTable.id, policy.toolId));
 
     return createdPolicy;
   }
@@ -59,14 +73,14 @@ class ToolInvocationPolicyModel {
       .returning();
 
     if (updatedPolicy) {
-      // Clear auto-configured timestamp for all agent-tools using this tool
+      // Clear auto-configured timestamp for this tool
       await db
-        .update(schema.agentToolsTable)
+        .update(schema.toolsTable)
         .set({
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.agentToolsTable.toolId, updatedPolicy.toolId));
+        .where(eq(schema.toolsTable.id, updatedPolicy.toolId));
     }
 
     return updatedPolicy || null;
@@ -86,14 +100,14 @@ class ToolInvocationPolicyModel {
     const deleted = result.rowCount !== null && result.rowCount > 0;
 
     if (deleted) {
-      // Clear auto-configured timestamp for all agent-tools using this tool
+      // Clear auto-configured timestamp for this tool
       await db
-        .update(schema.agentToolsTable)
+        .update(schema.toolsTable)
         .set({
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.agentToolsTable.toolId, policy.toolId));
+        .where(eq(schema.toolsTable.id, policy.toolId));
     }
 
     return deleted;
@@ -174,6 +188,81 @@ class ToolInvocationPolicyModel {
     return { updated, created };
   }
 
+  private static evaluateContextCondition(
+    key: string,
+    value: string,
+    operator: AutonomyPolicyOperator.SupportedOperator,
+    context: PolicyEvaluationContext,
+  ): boolean {
+    // Team matching - check if value is in teamIds array
+    if (key === CONTEXT_TEAM_IDS) {
+      switch (operator) {
+        case "contains":
+          return context.teamIds.includes(value);
+        case "notContains":
+          return !context.teamIds.includes(value);
+        default:
+          return false;
+      }
+    }
+
+    // Single value matching for other context fields
+    if (key === CONTEXT_EXTERNAL_AGENT_ID) {
+      const contextValue = context.externalAgentId;
+      switch (operator) {
+        case "equal":
+          return contextValue === value;
+        case "notEqual":
+          return contextValue !== value;
+        default:
+          return false;
+      }
+    }
+
+    return false;
+  }
+
+  private static evaluateInputCondition(
+    key: string,
+    value: string,
+    operator: AutonomyPolicyOperator.SupportedOperator,
+    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+    input: Record<string, any>,
+  ): boolean {
+    const argumentValue = get(input, key);
+    if (argumentValue === undefined) return false;
+
+    switch (operator) {
+      case "endsWith":
+        return (
+          typeof argumentValue === "string" && argumentValue.endsWith(value)
+        );
+      case "startsWith":
+        return (
+          typeof argumentValue === "string" && argumentValue.startsWith(value)
+        );
+      case "contains":
+        return (
+          typeof argumentValue === "string" && argumentValue.includes(value)
+        );
+      case "notContains":
+        return (
+          typeof argumentValue === "string" && !argumentValue.includes(value)
+        );
+      case "equal":
+        return argumentValue === value;
+      case "notEqual":
+        return argumentValue !== value;
+      case "regex":
+        return (
+          typeof argumentValue === "string" &&
+          new RegExp(value).test(argumentValue)
+        );
+      default:
+        return false;
+    }
+  }
+
   /**
    * Batch evaluate tool invocation policies for multiple tool calls at once.
    * This avoids N+1 queries by fetching all policies upfront.
@@ -187,6 +276,7 @@ class ToolInvocationPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
       toolInput: Record<string, any>;
     }>,
+    context: PolicyEvaluationContext,
     isContextTrusted: boolean,
     globalToolPolicy: GlobalToolPolicy,
   ): Promise<EvaluationResult & { toolCallName?: string }> {
@@ -269,44 +359,25 @@ class ToolInvocationPolicyModel {
 
       for (const policy of specificPolicies) {
         // Check if all conditions match (AND logic)
-        const conditionsMatch = policy.conditions.every((condition) => {
-          const argumentValue = get(toolInput, condition.key);
-          if (argumentValue === undefined) return false;
-
-          switch (condition.operator) {
-            case "endsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.endsWith(condition.value)
+        const conditionsMatch = policy.conditions.every(
+          function evaluateCondition(condition) {
+            const { key, value, operator } = condition;
+            if (key.startsWith("context.")) {
+              return ToolInvocationPolicyModel.evaluateContextCondition(
+                key,
+                value,
+                operator,
+                context,
               );
-            case "startsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.startsWith(condition.value)
-              );
-            case "contains":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.includes(condition.value)
-              );
-            case "notContains":
-              return (
-                typeof argumentValue === "string" &&
-                !argumentValue.includes(condition.value)
-              );
-            case "equal":
-              return argumentValue === condition.value;
-            case "notEqual":
-              return argumentValue !== condition.value;
-            case "regex":
-              return (
-                typeof argumentValue === "string" &&
-                new RegExp(condition.value).test(argumentValue)
-              );
-            default:
-              return false;
-          }
-        });
+            }
+            return ToolInvocationPolicyModel.evaluateInputCondition(
+              key,
+              value,
+              operator,
+              toolInput,
+            );
+          },
+        );
 
         if (!conditionsMatch) continue;
 

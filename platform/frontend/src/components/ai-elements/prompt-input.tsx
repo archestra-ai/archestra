@@ -12,8 +12,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import {
-  type ChangeEvent,
+import React, {
   type ChangeEventHandler,
   Children,
   type ClipboardEventHandler,
@@ -59,7 +58,7 @@ import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
-  InputGroupTextarea,
+  type InputGroupTextarea,
 } from "@/components/ui/input-group";
 import {
   Select,
@@ -68,6 +67,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -82,6 +82,49 @@ export type AttachmentsContext = {
   openFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
 };
+
+/**
+ * Get MIME type from file, with fallback to extension-based detection.
+ * Some browsers don't set file.type for certain file formats.
+ */
+function getMediaType(file: File): string {
+  if (file.type) {
+    return file.type;
+  }
+
+  // Fallback: detect from extension
+  const lastDotIndex = file.name.lastIndexOf(".");
+  const ext =
+    lastDotIndex > 0 && lastDotIndex < file.name.length - 1
+      ? file.name.slice(lastDotIndex + 1).toLowerCase()
+      : undefined;
+  const extensionMap: Record<string, string> = {
+    // Images
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    bmp: "image/bmp",
+    ico: "image/x-icon",
+    // Videos
+    mp4: "video/mp4",
+    webm: "video/webm",
+    mov: "video/quicktime",
+    avi: "video/x-msvideo",
+    // Documents
+    pdf: "application/pdf",
+    // Text
+    txt: "text/plain",
+    json: "application/json",
+    xml: "application/xml",
+  };
+
+  return ext
+    ? extensionMap[ext] || "application/octet-stream"
+    : "application/octet-stream";
+}
 
 export type TextInputContext = {
   value: string;
@@ -168,7 +211,7 @@ export function PromptInputProvider({
           id: nanoid(),
           type: "file" as const,
           url: URL.createObjectURL(file),
-          mediaType: file.type,
+          mediaType: getMediaType(file),
           filename: file.name,
         })),
       ),
@@ -301,44 +344,43 @@ export function PromptInputAttachment({
       <HoverCardTrigger asChild>
         <div
           className={cn(
-            "group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+            "group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 pr-1 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
             className,
           )}
           key={data.id}
           {...props}
         >
-          <div className="relative size-5 shrink-0">
-            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
-              {isImage ? (
-                <img
-                  alt={filename || "attachment"}
-                  className="size-5 object-cover"
-                  height={20}
-                  src={data.url}
-                  width={20}
-                />
-              ) : (
-                <div className="flex size-5 items-center justify-center text-muted-foreground">
-                  <PaperclipIcon className="size-3" />
-                </div>
-              )}
-            </div>
-            <Button
-              aria-label="Remove attachment"
-              className="absolute inset-0 size-5 cursor-pointer rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-2.5"
-              onClick={(e) => {
-                e.stopPropagation();
-                attachments.remove(data.id);
-              }}
-              type="button"
-              variant="ghost"
-            >
-              <XIcon />
-              <span className="sr-only">Remove</span>
-            </Button>
+          <div className="size-5 shrink-0 flex items-center justify-center overflow-hidden rounded bg-background">
+            {isImage ? (
+              <img
+                alt={filename || "attachment"}
+                className="size-5 object-cover"
+                height={20}
+                src={data.url}
+                width={20}
+              />
+            ) : (
+              <div className="flex size-5 items-center justify-center text-muted-foreground">
+                <PaperclipIcon className="size-3" />
+              </div>
+            )}
           </div>
 
           <span className="flex-1 truncate">{attachmentLabel}</span>
+
+          <Button
+            aria-label="Remove attachment"
+            className="size-5 shrink-0 cursor-pointer rounded p-0 opacity-60 hover:opacity-100 transition-opacity [&>svg]:size-3"
+            onClick={(e) => {
+              e.stopPropagation();
+              attachments.remove(data.id);
+            }}
+            type="button"
+            variant="ghost"
+          >
+            <XIcon />
+            <span className="sr-only">Remove</span>
+          </Button>
         </div>
       </HoverCardTrigger>
       <PromptInputHoverCardContent className="w-auto p-2">
@@ -392,7 +434,10 @@ export function PromptInputAttachments({
 
   return (
     <div
-      className={cn("flex flex-wrap items-center gap-2 p-3 w-full", className)}
+      className={cn(
+        "flex flex-wrap items-center gap-2 px-3 pt-1 pb-0 w-full",
+        className,
+      )}
       {...props}
     >
       {attachments.files.map((file) => (
@@ -505,12 +550,13 @@ export const PromptInput = ({
         .map((s) => s.trim())
         .filter(Boolean);
 
+      const mediaType = getMediaType(f);
       return patterns.some((pattern) => {
         if (pattern.endsWith("/*")) {
           const prefix = pattern.slice(0, -1); // e.g: image/* -> image/
-          return f.type.startsWith(prefix);
+          return mediaType.startsWith(prefix);
         }
-        return f.type === pattern;
+        return mediaType === pattern;
       });
     },
     [accept],
@@ -557,7 +603,7 @@ export const PromptInput = ({
             id: nanoid(),
             type: "file",
             url: URL.createObjectURL(file),
-            mediaType: file.type,
+            mediaType: getMediaType(file),
             filename: file.name,
           });
         }
@@ -825,111 +871,106 @@ export const PromptInputBody = ({
 
 export type PromptInputTextareaProps = ComponentProps<
   typeof InputGroupTextarea
-> & {
-  disableEnterSubmit?: boolean;
-};
+>;
 
-export const PromptInputTextarea = ({
-  onChange,
-  className,
-  placeholder = "What would you like to know?",
-  disableEnterSubmit = false,
-  ...props
-}: PromptInputTextareaProps) => {
-  const controller = useOptionalPromptInputController();
-  const attachments = usePromptInputAttachments();
-  const [isComposing, setIsComposing] = useState(false);
+export const PromptInputTextarea = React.forwardRef<
+  HTMLTextAreaElement,
+  PromptInputTextareaProps
+>(
+  (
+    {
+      onChange,
+      className,
+      placeholder = "What would you like to know?",
+      ...props
+    },
+    ref,
+  ) => {
+    const controller = useOptionalPromptInputController();
+    const attachments = usePromptInputAttachments();
 
-  const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-    if (e.key === "Enter") {
-      if (isComposing || e.nativeEvent.isComposing) {
-        return;
-      }
-      if (disableEnterSubmit) {
-        e.preventDefault();
-        return;
-      }
-      if (e.shiftKey) {
-        return;
-      }
-      e.preventDefault();
-
-      // Check if the submit button is disabled before submitting
-      const form = e.currentTarget.form;
-      const submitButton = form?.querySelector(
-        'button[type="submit"]',
-      ) as HTMLButtonElement | null;
-      if (submitButton?.disabled) {
-        return;
-      }
-
-      form?.requestSubmit();
-    }
-
-    // Remove last attachment when Backspace is pressed and textarea is empty
-    if (
-      e.key === "Backspace" &&
-      e.currentTarget.value === "" &&
-      attachments.files.length > 0
-    ) {
-      e.preventDefault();
-      const lastAttachment = attachments.files.at(-1);
-      if (lastAttachment) {
-        attachments.remove(lastAttachment.id);
-      }
-    }
-  };
-
-  const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
-    const items = event.clipboardData?.items;
-
-    if (!items) {
-      return;
-    }
-
-    const files: File[] = [];
-
-    for (const item of items) {
-      if (item.kind === "file") {
-        const file = item.getAsFile();
-        if (file) {
-          files.push(file);
+    const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
+      // Remove last attachment when Backspace is pressed on empty input
+      if (e.key === "Backspace") {
+        // Don't act during IME composition
+        if (e.nativeEvent.isComposing) return;
+        const textEmpty = !controller?.textInput.value;
+        if (textEmpty && attachments.files.length > 0) {
+          e.preventDefault();
+          const last = attachments.files[attachments.files.length - 1];
+          if (last) attachments.remove(last.id);
+          return;
         }
       }
-    }
+      if (e.key === "Enter") {
+        // Don't submit if IME composition is in progress
+        if (e.nativeEvent.isComposing) {
+          return;
+        }
 
-    if (files.length > 0) {
-      event.preventDefault();
-      attachments.add(files);
-    }
-  };
+        if (e.shiftKey) {
+          // Allow newline
+          return;
+        }
 
-  const controlledProps = controller
-    ? {
-        value: controller.textInput.value,
-        onChange: (e: ChangeEvent<HTMLTextAreaElement>) => {
-          controller.textInput.setInput(e.currentTarget.value);
-          onChange?.(e);
-        },
+        // Submit on Enter (without Shift)
+        e.preventDefault();
+        const form = e.currentTarget.form;
+        if (form) {
+          form.requestSubmit();
+        }
       }
-    : {
-        onChange,
-      };
+    };
 
-  return (
-    <InputGroupTextarea
-      className={cn("field-sizing-content max-h-48 min-h-16", className)}
-      name="message"
-      onCompositionEnd={() => setIsComposing(false)}
-      onCompositionStart={() => setIsComposing(true)}
-      onKeyDown={handleKeyDown}
-      onPaste={handlePaste}
-      placeholder={placeholder}
-      {...props}
-      {...controlledProps}
-    />
-  );
-};
+    const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
+      const items = event.clipboardData?.items;
+
+      if (!items) {
+        return;
+      }
+
+      const files: File[] = [];
+
+      for (const item of items) {
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file) {
+            files.push(file);
+          }
+        }
+      }
+
+      if (files.length > 0) {
+        event.preventDefault();
+        attachments.add(files);
+      }
+    };
+
+    return (
+      <Textarea
+        ref={ref}
+        className={cn(
+          "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
+          "field-sizing-content bg-transparent dark:bg-transparent",
+          "max-h-48 min-h-16",
+          "focus-visible:ring-0",
+          className,
+        )}
+        name="message"
+        value={controller?.textInput.value}
+        onChange={(e) => {
+          controller?.textInput.setInput(e.target.value);
+          onChange?.(e);
+        }}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        placeholder={placeholder}
+        {...props}
+      />
+    );
+  },
+);
+PromptInputTextarea.displayName = "PromptInputTextarea";
 
 export type PromptInputHeaderProps = Omit<
   ComponentProps<typeof InputGroupAddon>,

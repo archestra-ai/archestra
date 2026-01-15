@@ -1,1 +1,5 @@
 rules:
+  dangerous-triggers:
+    ignore:
+      # workflow_run is intentionally used to react to CI failures
+      - claude-auto-fix-ci.yml

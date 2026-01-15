@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/messages",
+    "headers": {
+      "x-api-key": {
+        "contains": "anthropic-context-policy-test"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "transformers": ["response-template"],
+    "body": "{\"id\": \"msg_test_123\", \"type\": \"message\", \"role\": \"assistant\", \"model\": \"claude-3-5-sonnet-20241022\", \"content\": [{\"type\": \"tool_use\", \"id\": \"toolu_test_123\", \"name\": \"{{jsonPath request.body '$.tools[0].name'}}\", \"input\": {\"file_path\": \"/etc/passwd\"}}], \"stop_reason\": \"tool_use\", \"stop_sequence\": null, \"usage\": {\"input_tokens\": 100, \"output_tokens\": 20}}"
+  }
+}

@@ -1,0 +1,64 @@
+# This workflow provides comprehensive PR reviews using Claude.
+# It triggers on new PRs and selects the appropriate OAuth token based on the user who opened the PR.
+#
+# See here for more details:
+# https://github.com/anthropics/claude-code-action/blob/main/examples/pr-review-comprehensive.yml
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+# Restrict default permissions - each job declares what it needs
+permissions: {}
+
+jobs:
+  # Determine which user opened the PR and set the appropriate token
+  determine-token:
+    if: |
+      !contains(github.event.pull_request.title, '[WIP]') &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      pr_author: ${{ github.event.pull_request.user.login }}
+      should_run: ${{ steps.check-user.outputs.should_run }}
+    steps:
+      - name: Check if user has configured token
+        id: check-user
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # Add users here as they configure their OAuth tokens
+          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ User $AUTHOR does not have a configured OAuth token. Skipping PR review."
+          fi
+
+  ildar-pr-review:
+    needs: determine-token
+    if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'iskhakov'
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    uses: ./.github/workflows/claude-pr-review-impl.yml
+    with:
+      pr_number: ${{ github.event.pull_request.number }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.ILDAR_CLAUDE_CODE_OAUTH_TOKEN }}
+
+  joey-pr-review:
+    needs: determine-token
+    if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'joeyorlando'
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    uses: ./.github/workflows/claude-pr-review-impl.yml
+    with:
+      pr_number: ${{ github.event.pull_request.number }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}

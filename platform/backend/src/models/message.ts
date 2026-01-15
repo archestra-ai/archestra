@@ -3,11 +3,27 @@ import db, { schema } from "@/database";
 import type { InsertMessage, Message } from "@/types";
 
 class MessageModel {
+  /**
+   * Update the conversation's updatedAt timestamp when messages are added.
+   * This ensures conversations are sorted by latest message activity.
+   */
+  private static async touchConversation(
+    conversationId: string,
+  ): Promise<void> {
+    await db
+      .update(schema.conversationsTable)
+      .set({ updatedAt: new Date() })
+      .where(eq(schema.conversationsTable.id, conversationId));
+  }
+
   static async create(data: InsertMessage): Promise<Message> {
     const [message] = await db
       .insert(schema.messagesTable)
       .values(data)
       .returning();
+
+    // Update conversation's updatedAt so it sorts to the top
+    await MessageModel.touchConversation(data.conversationId);
 
     return message;
   }
@@ -18,6 +34,14 @@ class MessageModel {
     }
 
     await db.insert(schema.messagesTable).values(messages);
+
+    // Update conversation's updatedAt for all affected conversations
+    const uniqueConversationIds = [
+      ...new Set(messages.map((m) => m.conversationId)),
+    ];
+    await Promise.all(
+      uniqueConversationIds.map((id) => MessageModel.touchConversation(id)),
+    );
   }
 
   static async findByConversation(conversationId: string): Promise<Message[]> {

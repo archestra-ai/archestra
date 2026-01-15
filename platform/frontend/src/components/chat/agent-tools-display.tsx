@@ -1,7 +1,7 @@
 "use client";
 
 import { Bot } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -27,6 +27,7 @@ interface AgentToolsDisplayProps {
   agentId: string;
   promptId: string | null;
   conversationId?: string;
+  addAgentsButton: ReactNode;
 }
 
 /**
@@ -38,6 +39,7 @@ export function AgentToolsDisplay({
   agentId,
   promptId,
   conversationId,
+  addAgentsButton,
 }: AgentToolsDisplayProps) {
   // Always fetch prompt tools - they exist regardless of conversation
   const { data: promptTools = [], isLoading } = usePromptTools(
@@ -156,7 +158,7 @@ export function AgentToolsDisplay({
 
   return (
     <TooltipProvider>
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-2">
         {agentToolsWithNames.map((tool) => {
           const isEnabled = isToolEnabled(tool.id);
 
@@ -167,7 +169,7 @@ export function AgentToolsDisplay({
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "h-7 px-2 gap-1.5 text-xs",
+                    "h-8 px-2 gap-1.5 text-xs",
                     !isEnabled && "opacity-60",
                   )}
                   onClick={() => handleToggle(tool.id)}
@@ -192,6 +194,7 @@ export function AgentToolsDisplay({
             </Tooltip>
           );
         })}
+        {addAgentsButton}
       </div>
     </TooltipProvider>
   );

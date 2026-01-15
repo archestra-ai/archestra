@@ -1,5 +1,9 @@
 import path from "node:path";
-import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
+import {
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ADMIN_PASSWORD,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import dotenv from "dotenv";
 
 // Load .env from platform root - this runs once when the module is imported
@@ -70,3 +74,6 @@ export {
   E2eTestId,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+
+export const TEST_CATALOG_ITEM_NAME = "internal-dev-test-server";
+export const TEST_TOOL_NAME = `${TEST_CATALOG_ITEM_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}print_archestra_test`;

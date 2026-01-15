@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.0.19",
+  "version": "1.0.23",
   "description": "",
   "author": "",
   "private": true,
@@ -23,7 +23,7 @@
     "db:studio": "drizzle-kit studio",
     "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts",
     "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
-    "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ee.ts",
+    "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts",
     "codegen:openapi": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-openapi.ts",
     "codegen": "pnpm codegen:openapi && pnpm codegen:access-control-docs",
     "sentry:sourcemaps": "if [ -n \"$SENTRY_AUTH_TOKEN\" ]; then sentry-cli sourcemaps inject --org archestra --project archestra-platform-backend ./dist && sentry-cli sourcemaps upload --org archestra --project archestra-platform-backend --release \"${VERSION:-dev}\" ./dist; else echo 'Skipping Sentry source map upload (SENTRY_AUTH_TOKEN not set)'; fi"
@@ -37,6 +37,7 @@
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@aws-crypto/sha256-js": "^5.2.0",
     "@aws-sdk/credential-providers": "^3.958.0",
+    "@azure/identity": "^4.13.0",
     "@better-auth/core": "1.4.10",
     "@better-auth/sso": "1.4.10",
     "@fastify/cors": "^11.1.0",
@@ -47,6 +48,7 @@
     "@google/genai": "^1.34.0",
     "@kubernetes/client-node": "^1.4.0",
     "@kubiks/otel-drizzle": "^2.1.0",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.67.3",

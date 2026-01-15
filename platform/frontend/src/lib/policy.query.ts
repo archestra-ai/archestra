@@ -5,6 +5,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import type { PolicyCondition } from "@/app/tools/_parts/tool-call-policy-condition";
 
 const {
   bulkUpsertDefaultCallPolicy,
@@ -21,6 +22,8 @@ const {
 } = archestraApiSdk;
 
 import {
+  type CallPolicyAction,
+  type ResultPolicyAction,
   transformToolInvocationPolicies,
   transformToolResultPolicies,
 } from "./policy.utils";
@@ -85,46 +88,20 @@ export function useToolInvocationPolicyCreateMutation() {
 export function useToolInvocationPolicyUpdateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    // Accept flat fields (argumentName, operator, value) and convert to conditions[]
     mutationFn: async (
       updatedPolicy: {
         id: string;
-        argumentName?: string;
-        operator?: string;
-        value?: string;
-        action?:
-          | "allow_when_context_is_untrusted"
-          | "block_when_context_is_untrusted"
-          | "block_always";
-        reason?: string | null;
-      } & Record<string, unknown>,
+        conditions?: PolicyCondition[];
+      } & NonNullable<archestraApiTypes.UpdateToolInvocationPolicyData["body"]>,
     ) => {
-      const { id, argumentName, operator, value, action, reason, ...rest } =
-        updatedPolicy;
-
-      // Build conditions array from flat fields if any are provided
-      const hasConditionFields =
-        argumentName !== undefined ||
-        operator !== undefined ||
-        value !== undefined;
-
-      const body: archestraApiTypes.UpdateToolInvocationPolicyData["body"] = {
-        ...rest,
-        ...(action !== undefined && { action }),
-        ...(reason !== undefined && { reason }),
-        ...(hasConditionFields && {
-          conditions: [
-            {
-              key: argumentName ?? "",
-              operator: (operator as "equal") ?? "equal",
-              value: value ?? "",
-            },
-          ],
-        }),
-      };
+      const { id, conditions, action, reason } = updatedPolicy;
 
       return await updateToolInvocationPolicy({
-        body,
+        body: {
+          ...(action !== undefined && { action }),
+          ...(reason !== undefined && { reason }),
+          ...(conditions !== undefined && { conditions }),
+        },
         path: { id },
       });
     },
@@ -175,44 +152,19 @@ export function useToolResultPoliciesCreateMutation() {
 export function useToolResultPoliciesUpdateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    // Accept flat fields (attributePath, operator, value) and convert to conditions[]
     mutationFn: async (
       updatedPolicy: {
         id: string;
-        attributePath?: string;
-        operator?: string;
-        value?: string;
-        action?:
-          | "mark_as_trusted"
-          | "mark_as_untrusted"
-          | "block_always"
-          | "sanitize_with_dual_llm";
-      } & Record<string, unknown>,
+        conditions?: PolicyCondition[];
+      } & NonNullable<archestraApiTypes.UpdateTrustedDataPolicyData["body"]>,
     ) => {
-      const { id, attributePath, operator, value, action, ...rest } =
-        updatedPolicy;
-
-      const hasConditionFields =
-        attributePath !== undefined ||
-        operator !== undefined ||
-        value !== undefined;
-
-      const body: archestraApiTypes.UpdateTrustedDataPolicyData["body"] = {
-        ...rest,
-        ...(action !== undefined && { action }),
-        ...(hasConditionFields && {
-          conditions: [
-            {
-              key: attributePath ?? "",
-              operator: (operator as "equal") ?? "equal",
-              value: value ?? "",
-            },
-          ],
-        }),
-      };
+      const { id, conditions, action } = updatedPolicy;
 
       return await updateTrustedDataPolicy({
-        body,
+        body: {
+          ...(action !== undefined && { action }),
+          ...(conditions !== undefined && { conditions }),
+        },
         path: { id },
       });
     },
@@ -241,10 +193,10 @@ export function useCallPolicyMutation() {
   return useMutation({
     mutationFn: async ({
       toolId,
-      allowUsage,
+      action,
     }: {
       toolId: string;
-      allowUsage: boolean;
+      action: CallPolicyAction;
     }) => {
       // Get current policies from cache
       const cachedPolicies = queryClient.getQueryData<
@@ -259,10 +211,6 @@ export function useCallPolicyMutation() {
       const defaultPolicy = existingPolicies.find(
         (p) => p.conditions.length === 0,
       );
-
-      const action = allowUsage
-        ? "allow_when_context_is_untrusted"
-        : "block_when_context_is_untrusted";
 
       if (defaultPolicy) {
         // Update existing default policy
@@ -294,10 +242,10 @@ export function useResultPolicyMutation() {
   return useMutation({
     mutationFn: async ({
       toolId,
-      treatment,
+      action,
     }: {
       toolId: string;
-      treatment: "trusted" | "untrusted" | "sanitize_with_dual_llm";
+      action: ResultPolicyAction;
     }) => {
       // Get current policies from cache
       const cachedPolicies = queryClient.getQueryData<
@@ -310,14 +258,6 @@ export function useResultPolicyMutation() {
       const defaultPolicy = existingPolicies.find(
         (p) => p.conditions.length === 0,
       );
-
-      // Map treatment to action
-      const actionMap = {
-        trusted: "mark_as_trusted",
-        untrusted: "mark_as_untrusted",
-        sanitize_with_dual_llm: "sanitize_with_dual_llm",
-      } as const;
-      const action = actionMap[treatment];
 
       if (defaultPolicy) {
         // Update existing default policy
@@ -348,14 +288,11 @@ export function useBulkCallPolicyMutation() {
   return useMutation({
     mutationFn: async ({
       toolIds,
-      allowUsage,
+      action,
     }: {
       toolIds: string[];
-      allowUsage: boolean;
+      action: CallPolicyAction;
     }) => {
-      const action = allowUsage
-        ? "allow_when_context_is_untrusted"
-        : "block_when_context_is_untrusted";
       const result = await bulkUpsertDefaultCallPolicy({
         body: { toolIds, action },
       });
@@ -374,17 +311,11 @@ export function useBulkResultPolicyMutation() {
   return useMutation({
     mutationFn: async ({
       toolIds,
-      treatment,
+      action,
     }: {
       toolIds: string[];
-      treatment: "trusted" | "untrusted" | "sanitize_with_dual_llm";
+      action: ResultPolicyAction;
     }) => {
-      const actionMap = {
-        trusted: "mark_as_trusted",
-        untrusted: "mark_as_untrusted",
-        sanitize_with_dual_llm: "sanitize_with_dual_llm",
-      } as const;
-      const action = actionMap[treatment];
       const result = await bulkUpsertDefaultResultPolicy({
         body: { toolIds, action },
       });

@@ -1,9 +1,14 @@
-import { isArchestraMcpServerTool } from "@shared";
+import {
+  CONTEXT_EXTERNAL_AGENT_ID,
+  CONTEXT_TEAM_IDS,
+  isArchestraMcpServerTool,
+} from "@shared";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
 import logger from "@/logging";
+import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type {
   AutonomyPolicyOperator,
   GlobalToolPolicy,
@@ -26,14 +31,14 @@ class TrustedDataPolicyModel {
       .values(policy)
       .returning();
 
-    // Clear auto-configured timestamp for all agent-tools using this tool
+    // Clear auto-configured timestamp for this tool
     await db
-      .update(schema.agentToolsTable)
+      .update(schema.toolsTable)
       .set({
         policiesAutoConfiguredAt: null,
         policiesAutoConfiguredReasoning: null,
       })
-      .where(eq(schema.agentToolsTable.toolId, policy.toolId));
+      .where(eq(schema.toolsTable.id, policy.toolId));
 
     return createdPolicy;
   }
@@ -66,14 +71,14 @@ class TrustedDataPolicyModel {
       .returning();
 
     if (updatedPolicy) {
-      // Clear auto-configured timestamp for all agent-tools using this tool
+      // Clear auto-configured timestamp for this tool
       await db
-        .update(schema.agentToolsTable)
+        .update(schema.toolsTable)
         .set({
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.agentToolsTable.toolId, updatedPolicy.toolId));
+        .where(eq(schema.toolsTable.id, updatedPolicy.toolId));
     }
 
     return updatedPolicy || null;
@@ -93,14 +98,14 @@ class TrustedDataPolicyModel {
     const deleted = result.rowCount !== null && result.rowCount > 0;
 
     if (deleted) {
-      // Clear auto-configured timestamp for all agent-tools using this tool
+      // Clear auto-configured timestamp for this tool
       await db
-        .update(schema.agentToolsTable)
+        .update(schema.toolsTable)
         .set({
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.agentToolsTable.toolId, policy.toolId));
+        .where(eq(schema.toolsTable.id, policy.toolId));
     }
 
     return deleted;
@@ -207,9 +212,46 @@ class TrustedDataPolicyModel {
   }
 
   /**
+   * Match a context-based condition (e.g., context.teamIds, context.externalAgentId)
+   */
+  private static evaluateContextCondition(
+    key: string,
+    value: string,
+    operator: AutonomyPolicyOperator.SupportedOperator,
+    context: PolicyEvaluationContext,
+  ): boolean {
+    // Team matching - check if value is in teamIds array
+    if (key === CONTEXT_TEAM_IDS) {
+      switch (operator) {
+        case "contains":
+          return context.teamIds.includes(value);
+        case "notContains":
+          return !context.teamIds.includes(value);
+        default:
+          return false;
+      }
+    }
+
+    // Single value matching for externalAgentId
+    if (key === CONTEXT_EXTERNAL_AGENT_ID) {
+      const contextValue = context.externalAgentId;
+      switch (operator) {
+        case "equal":
+          return contextValue === value;
+        case "notEqual":
+          return contextValue !== value;
+        default:
+          return false;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Evaluate if a value matches a condition
    */
-  private static evaluateCondition(
+  private static evaluateOutputCondition(
     // biome-ignore lint/suspicious/noExplicitAny: policy values can be any type
     value: any,
     operator: AutonomyPolicyOperator.SupportedOperator,
@@ -242,6 +284,7 @@ class TrustedDataPolicyModel {
     conditions: ResultPolicyCondition[],
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
+    context: PolicyEvaluationContext,
   ): boolean {
     // Empty conditions = default policy, always matches
     if (conditions.length === 0) {
@@ -250,10 +293,28 @@ class TrustedDataPolicyModel {
 
     // All conditions must match (AND logic)
     for (const condition of conditions) {
+      const { key, value, operator } = condition;
+
+      // Check if this is a context condition
+      if (key.startsWith("context.")) {
+        if (
+          !TrustedDataPolicyModel.evaluateContextCondition(
+            key,
+            value,
+            operator,
+            context,
+          )
+        ) {
+          return false;
+        }
+        continue;
+      }
+
+      // Regular output-based condition
       const outputValue = toolOutput?.value || toolOutput;
       const values = TrustedDataPolicyModel.extractValuesFromPath(
         outputValue,
-        condition.key,
+        key,
       );
 
       // If no values found for this path, condition doesn't match
@@ -262,12 +323,8 @@ class TrustedDataPolicyModel {
       }
 
       // All extracted values must match the condition
-      const allMatch = values.every((value) =>
-        TrustedDataPolicyModel.evaluateCondition(
-          value,
-          condition.operator,
-          condition.value,
-        ),
+      const allMatch = values.every((v) =>
+        TrustedDataPolicyModel.evaluateOutputCondition(v, operator, value),
       );
 
       if (!allMatch) {
@@ -294,6 +351,7 @@ class TrustedDataPolicyModel {
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
     globalToolPolicy: GlobalToolPolicy = "restrictive",
+    context: PolicyEvaluationContext,
   ): Promise<{
     isTrusted: boolean;
     isBlocked: boolean;
@@ -305,6 +363,7 @@ class TrustedDataPolicyModel {
       agentId,
       [{ toolName, toolOutput }],
       globalToolPolicy,
+      context,
     );
     return (
       results.get("0") || {
@@ -328,6 +387,7 @@ class TrustedDataPolicyModel {
       toolOutput: any;
     }>,
     globalToolPolicy: GlobalToolPolicy = "restrictive",
+    context: PolicyEvaluationContext,
   ): Promise<
     Map<
       string,
@@ -488,6 +548,7 @@ class TrustedDataPolicyModel {
           TrustedDataPolicyModel.evaluateConditions(
             policy.conditions,
             toolOutput,
+            context,
           )
         ) {
           isBlocked = true;
@@ -513,6 +574,7 @@ class TrustedDataPolicyModel {
           TrustedDataPolicyModel.evaluateConditions(
             policy.conditions,
             toolOutput,
+            context,
           )
         ) {
           matchedSpecific = true;

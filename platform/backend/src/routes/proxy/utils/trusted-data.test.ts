@@ -40,6 +40,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -85,6 +87,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Context should be untrusted and tool result should be blocked
@@ -136,6 +140,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -180,6 +186,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Context should be untrusted when no policies match
@@ -236,6 +244,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Context should be untrusted if any tool result is blocked or untrusted
@@ -267,6 +277,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Should mark as untrusted when tool is not found
@@ -295,6 +307,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Should handle gracefully and mark as untrusted
@@ -315,6 +329,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -365,6 +381,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -422,6 +440,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       expect(result.contextIsTrusted).toBe(false);
@@ -458,6 +478,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
 
       // Both should be untrusted (no policies match)
@@ -488,6 +510,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "openai",
         false,
         "permissive", // YOLO mode
+        { teamIds: [] },
       );
 
       // In permissive mode, all data is trusted regardless of policies
@@ -526,6 +549,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "openai",
         false,
         "permissive", // YOLO mode
+        { teamIds: [] },
       );
 
       // YOLO mode trusts everything, ignores block policies
@@ -556,6 +580,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "openai",
         false,
         "restrictive", // Default restrictive mode
+        { teamIds: [] },
       );
 
       // In restrictive mode with no policies, data should be untrusted
@@ -600,6 +625,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
       const updated = applyUpdates(openAiMessages, result.toolResultUpdates);
 
@@ -646,6 +673,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "anthropic",
         false,
+        "restrictive",
+        { teamIds: [] },
       );
       const updated = applyUpdates(anthropicMessages, result.toolResultUpdates);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarIcon, X } from "lucide-react";
+import { CalendarIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -29,7 +29,6 @@ export interface DateTimeRangePickerProps {
   onToTimeChange: (time: string) => void;
   onOpenDialog: () => void;
   onApply: () => void;
-  onClear: () => void;
   /** Optional ID prefix for input elements to avoid conflicts when multiple pickers exist */
   idPrefix?: string;
 }
@@ -51,7 +50,6 @@ export function DateTimeRangePicker({
   onToTimeChange,
   onOpenDialog,
   onApply,
-  onClear,
   idPrefix = "",
 }: DateTimeRangePickerProps) {
   const fromTimeId = `${idPrefix}from-time`;
@@ -70,12 +68,6 @@ export function DateTimeRangePicker({
         <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
         {displayText || <span>Pick a date range</span>}
       </Button>
-
-      {dateRange && (
-        <Button variant="ghost" size="icon" onClick={onClear}>
-          <X className="h-4 w-4" />
-        </Button>
-      )}
 
       <Dialog open={isDialogOpen} onOpenChange={onDialogOpenChange}>
         <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">

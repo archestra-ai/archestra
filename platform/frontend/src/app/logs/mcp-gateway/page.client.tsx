@@ -384,7 +384,6 @@ function McpToolCallsTable({
       onToTimeChange={dateTimePicker.setToTime}
       onOpenDialog={dateTimePicker.openDateDialog}
       onApply={dateTimePicker.handleApplyDateRange}
-      onClear={dateTimePicker.clearDateRange}
       idPrefix="mcp-gateway-"
     />
   );

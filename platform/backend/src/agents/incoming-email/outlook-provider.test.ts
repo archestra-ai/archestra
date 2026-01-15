@@ -209,14 +209,14 @@ describe("OutlookEmailProvider", () => {
   });
 
   describe("sendReply", () => {
-    const mockGraphClient = {
+    const createMockGraphClient = () => ({
       api: vi.fn().mockReturnThis(),
       post: vi.fn(),
-    };
+    });
 
-    test("sends reply with plain text body", async () => {
+    test("sends reply with from field set to agent email (Send As)", async () => {
+      const mockGraphClient = createMockGraphClient();
       const provider = new OutlookEmailProvider(validConfig);
-      // Access the private graphClient through the provider
       // @ts-expect-error - accessing private property for testing
       provider.graphClient = mockGraphClient;
 
@@ -234,6 +234,7 @@ describe("OutlookEmailProvider", () => {
       const replyId = await provider.sendReply({
         originalEmail,
         body: "This is the agent response",
+        agentName: "Test Agent",
       });
 
       expect(mockGraphClient.api).toHaveBeenCalledWith(
@@ -241,6 +242,12 @@ describe("OutlookEmailProvider", () => {
       );
       expect(mockGraphClient.post).toHaveBeenCalledWith({
         message: {
+          from: {
+            emailAddress: {
+              address: "agents+agent-abc123@example.com",
+              name: "Test Agent",
+            },
+          },
           body: {
             contentType: "Text",
             content: "This is the agent response",
@@ -250,7 +257,46 @@ describe("OutlookEmailProvider", () => {
       expect(replyId).toContain("reply-original-msg-123-");
     });
 
+    test("uses default agent name when agentName not provided", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.post.mockResolvedValueOnce({});
+
+      const originalEmail: IncomingEmail = {
+        messageId: "original-msg-default-name",
+        toAddress: "agents+agent-abc123@example.com",
+        fromAddress: "sender@example.com",
+        subject: "Test",
+        body: "Test",
+        receivedAt: new Date(),
+      };
+
+      await provider.sendReply({
+        originalEmail,
+        body: "Response",
+      });
+
+      expect(mockGraphClient.post).toHaveBeenCalledWith({
+        message: {
+          from: {
+            emailAddress: {
+              address: "agents+agent-abc123@example.com",
+              name: "Archestra Agent",
+            },
+          },
+          body: {
+            contentType: "Text",
+            content: "Response",
+          },
+        },
+      });
+    });
+
     test("sends reply with HTML body when provided", async () => {
+      const mockGraphClient = createMockGraphClient();
       const provider = new OutlookEmailProvider(validConfig);
       // @ts-expect-error - accessing private property for testing
       provider.graphClient = mockGraphClient;
@@ -270,10 +316,17 @@ describe("OutlookEmailProvider", () => {
         originalEmail,
         body: "Plain text version",
         htmlBody: "<p>This is <strong>formatted</strong> response</p>",
+        agentName: "HTML Agent",
       });
 
       expect(mockGraphClient.post).toHaveBeenCalledWith({
         message: {
+          from: {
+            emailAddress: {
+              address: "agents+agent-abc123@example.com",
+              name: "HTML Agent",
+            },
+          },
           body: {
             contentType: "HTML",
             content: "<p>This is <strong>formatted</strong> response</p>",
@@ -283,12 +336,85 @@ describe("OutlookEmailProvider", () => {
       expect(replyId).toContain("reply-original-msg-456-");
     });
 
-    test("throws error when Graph API fails", async () => {
+    test("falls back to replyTo when Send As permission fails", async () => {
+      const mockGraphClient = createMockGraphClient();
       const provider = new OutlookEmailProvider(validConfig);
       // @ts-expect-error - accessing private property for testing
       provider.graphClient = mockGraphClient;
 
-      mockGraphClient.post.mockRejectedValueOnce(new Error("Graph API error"));
+      // First call fails with "Send As" permission error, second succeeds
+      mockGraphClient.post
+        .mockRejectedValueOnce(
+          new Error(
+            "The user account which was used to submit this request does not have the right to send mail on behalf of the specified sending account.",
+          ),
+        )
+        .mockResolvedValueOnce({});
+
+      const originalEmail: IncomingEmail = {
+        messageId: "original-msg-fallback",
+        toAddress: "agents+agent-abc123@example.com",
+        fromAddress: "sender@example.com",
+        subject: "Test Subject",
+        body: "Original message",
+        receivedAt: new Date(),
+      };
+
+      const replyId = await provider.sendReply({
+        originalEmail,
+        body: "Fallback response",
+        agentName: "Fallback Agent",
+      });
+
+      // Should have been called twice - first with from, then with replyTo
+      expect(mockGraphClient.post).toHaveBeenCalledTimes(2);
+
+      // First call attempts with 'from' field
+      expect(mockGraphClient.post).toHaveBeenNthCalledWith(1, {
+        message: {
+          from: {
+            emailAddress: {
+              address: "agents+agent-abc123@example.com",
+              name: "Fallback Agent",
+            },
+          },
+          body: {
+            contentType: "Text",
+            content: "Fallback response",
+          },
+        },
+      });
+
+      // Second call uses 'replyTo' fallback
+      expect(mockGraphClient.post).toHaveBeenNthCalledWith(2, {
+        message: {
+          replyTo: [
+            {
+              emailAddress: {
+                address: "agents+agent-abc123@example.com",
+                name: "Fallback Agent",
+              },
+            },
+          ],
+          body: {
+            contentType: "Text",
+            content: "Fallback response",
+          },
+        },
+      });
+
+      expect(replyId).toContain("reply-original-msg-fallback-");
+    });
+
+    test("throws error when Graph API fails with non-permission error", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.post.mockRejectedValueOnce(
+        new Error("Network error: Unable to connect"),
+      );
 
       const originalEmail: IncomingEmail = {
         messageId: "original-msg-789",
@@ -304,10 +430,11 @@ describe("OutlookEmailProvider", () => {
           originalEmail,
           body: "Response",
         }),
-      ).rejects.toThrow("Graph API error");
+      ).rejects.toThrow("Network error: Unable to connect");
     });
 
     test("generates unique reply tracking ID", async () => {
+      const mockGraphClient = createMockGraphClient();
       const provider = new OutlookEmailProvider(validConfig);
       // @ts-expect-error - accessing private property for testing
       provider.graphClient = mockGraphClient;

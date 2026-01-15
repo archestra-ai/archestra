@@ -93,26 +93,17 @@ When an email arrives:
 4. The agent executes and generates a response
 5. Optionally, the agent's response is sent back as an email reply
 
+### Conversation History
+
+When processing emails that are part of a thread (replies), Archestra automatically fetches the conversation history and provides it to the agent. This allows the agent to understand the full context of the conversation and respond appropriately to follow-up messages.
+
 ### Email Reply
 
-When enabled, the agent's response is automatically sent back to the original sender as an email reply. The reply:
+When email replies are enabled, the agent's response is automatically sent back to the original sender. The reply:
 
 - Maintains the email conversation thread
 - Uses the original message's "Re:" subject prefix
-- Sends from the configured mailbox address
-
-To enable email replies programmatically, pass `sendReply: true` when calling `processIncomingEmail`:
-
-```typescript
-import { processIncomingEmail } from "@/agents/incoming-email";
-
-// Process email and send reply with agent's response
-const agentResponse = await processIncomingEmail(email, provider, {
-  sendReply: true,
-});
-```
-
-**Note:** Email replies require the Azure AD application to have `Mail.Send` permission in addition to `Mail.Read`.
+- Displays the agent's name as the sender
 
 ### Prerequisites
 

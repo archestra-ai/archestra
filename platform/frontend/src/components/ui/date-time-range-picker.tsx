@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarIcon, Clock, X } from "lucide-react";
+import { CalendarIcon, X } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -70,12 +70,6 @@ export function DateTimeRangePicker({
         <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
         {displayText || <span>Pick a date range</span>}
       </Button>
-
-      {dateRange && (
-        <Button variant="outline" size="icon" onClick={onOpenDialog}>
-          <Clock className="h-4 w-4" />
-        </Button>
-      )}
 
       {dateRange && (
         <Button variant="ghost" size="icon" onClick={onClear}>

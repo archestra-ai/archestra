@@ -23,3 +23,9 @@ export const MAX_EMAIL_BODY_SIZE = 100 * 1024; // 100KB
  * We track processed message IDs to prevent duplicate agent invocations.
  */
 export const EMAIL_DEDUP_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Default display name for agent email replies
+ * Used when the agent's name is not available
+ */
+export const DEFAULT_AGENT_EMAIL_NAME = "Archestra Agent";

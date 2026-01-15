@@ -11,6 +11,7 @@ import type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
+import { DEFAULT_AGENT_EMAIL_NAME } from "./constants";
 
 /**
  * Microsoft Outlook/Exchange email provider using Microsoft Graph API
@@ -588,40 +589,57 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
   /**
    * Send a reply to an incoming email
    * Uses Microsoft Graph API to send a reply that maintains the email thread
+   *
+   * For best results (proper threading and sender name):
+   * 1. Configure "Send As" permission in Exchange Online for the mailbox
+   * 2. This allows the reply to appear from the agent's email address
+   *
+   * Fallback behavior (without "Send As"):
+   * - Reply is sent from the mailbox address
+   * - replyTo is set to the agent's email so responses go to the right place
    */
   async sendReply(options: EmailReplyOptions): Promise<string> {
-    const { originalEmail, body, htmlBody } = options;
+    const { originalEmail, body, htmlBody, agentName } = options;
     const client = this.getGraphClient();
+    const displayName = agentName || DEFAULT_AGENT_EMAIL_NAME;
 
     logger.info(
       {
         originalMessageId: originalEmail.messageId,
         toAddress: originalEmail.fromAddress,
         subject: originalEmail.subject,
+        agentName: displayName,
       },
       "[OutlookEmailProvider] Sending reply to email",
     );
 
-    try {
-      // Build the reply message
-      // Microsoft Graph reply endpoint automatically:
-      // - Sets recipient to original sender
-      // - Prefixes subject with "Re:"
-      // - Maintains conversation thread
-      const replyBody: {
-        contentType: "Text" | "HTML";
-        content: string;
-      } = htmlBody
-        ? { contentType: "HTML", content: htmlBody }
-        : { contentType: "Text", content: body };
+    // Build the reply message body
+    const replyBody: {
+      contentType: "Text" | "HTML";
+      content: string;
+    } = htmlBody
+      ? { contentType: "HTML", content: htmlBody }
+      : { contentType: "Text", content: body };
 
-      // Use the reply endpoint to maintain email threading
+    // Use the agent's email address (the toAddress from the original email)
+    const agentEmailAddress = originalEmail.toAddress;
+
+    // Try to send with 'from' set to agent's email (requires "Send As" permission)
+    // This provides better threading and shows the agent as the sender
+    // Falls back to 'replyTo' if "Send As" permission is not configured
+    try {
       await client
         .api(
           `/users/${this.config.mailboxAddress}/messages/${originalEmail.messageId}/reply`,
         )
         .post({
           message: {
+            from: {
+              emailAddress: {
+                address: agentEmailAddress,
+                name: displayName,
+              },
+            },
             body: replyBody,
           },
         });
@@ -635,21 +653,77 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           originalMessageId: originalEmail.messageId,
           replyTrackingId,
           recipient: originalEmail.fromAddress,
+          fromAddress: agentEmailAddress,
         },
-        "[OutlookEmailProvider] Reply sent successfully",
+        "[OutlookEmailProvider] Reply sent with agent as sender",
       );
 
       return replyTrackingId;
-    } catch (error) {
-      logger.error(
+    } catch (sendAsError) {
+      // Check if this is a "Send As" permission error
+      const errorMessage =
+        sendAsError instanceof Error
+          ? sendAsError.message
+          : String(sendAsError);
+      const isSendAsError =
+        errorMessage.includes("send mail on behalf of") ||
+        errorMessage.includes("SendAs");
+
+      if (!isSendAsError) {
+        // Re-throw non-permission errors
+        logger.error(
+          {
+            originalMessageId: originalEmail.messageId,
+            recipient: originalEmail.fromAddress,
+            error: errorMessage,
+          },
+          "[OutlookEmailProvider] Failed to send reply",
+        );
+        throw sendAsError;
+      }
+
+      // Fallback: "Send As" permission not configured
+      // Send from mailbox but set replyTo to agent's email
+      logger.warn(
         {
           originalMessageId: originalEmail.messageId,
-          recipient: originalEmail.fromAddress,
-          error: error instanceof Error ? error.message : String(error),
+          agentEmailAddress,
+          error: errorMessage,
         },
-        "[OutlookEmailProvider] Failed to send reply",
+        "[OutlookEmailProvider] 'Send As' permission not configured, falling back to replyTo",
       );
-      throw error;
+
+      await client
+        .api(
+          `/users/${this.config.mailboxAddress}/messages/${originalEmail.messageId}/reply`,
+        )
+        .post({
+          message: {
+            replyTo: [
+              {
+                emailAddress: {
+                  address: agentEmailAddress,
+                  name: displayName,
+                },
+              },
+            ],
+            body: replyBody,
+          },
+        });
+
+      const replyTrackingId = `reply-${originalEmail.messageId}-${crypto.randomUUID()}`;
+
+      logger.info(
+        {
+          originalMessageId: originalEmail.messageId,
+          replyTrackingId,
+          recipient: originalEmail.fromAddress,
+          replyTo: agentEmailAddress,
+        },
+        "[OutlookEmailProvider] Reply sent with replyTo fallback",
+      );
+
+      return replyTrackingId;
     }
   }
 

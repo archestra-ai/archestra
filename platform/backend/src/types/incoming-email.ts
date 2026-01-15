@@ -97,6 +97,8 @@ export interface EmailReplyOptions {
   body: string;
   /** Optional HTML body for rich formatting */
   htmlBody?: string;
+  /** The name of the agent sending the reply (for display in email client) */
+  agentName?: string;
 }
 
 /**

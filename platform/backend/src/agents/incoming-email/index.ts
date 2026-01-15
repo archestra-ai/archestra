@@ -1,7 +1,7 @@
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentTeamModel, PromptModel, TeamModel } from "@/models";
+import { AgentModel, AgentTeamModel, PromptModel, TeamModel } from "@/models";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import { executeA2AMessage } from "@/services/a2a-executor";
 import type {
@@ -11,7 +11,10 @@ import type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
-import { EMAIL_DEDUP_CACHE_TTL_MS } from "./constants";
+import {
+  DEFAULT_AGENT_EMAIL_NAME,
+  EMAIL_DEDUP_CACHE_TTL_MS,
+} from "./constants";
 import { OutlookEmailProvider } from "./outlook-provider";
 
 export type {
@@ -571,9 +574,14 @@ export async function processIncomingEmail(
   // Optionally send the agent's response back via email reply
   if (shouldSendReply && result.text) {
     try {
+      // Look up the agent's name for the email reply
+      const agent = await AgentModel.findById(prompt.agentId);
+      const agentName = agent?.name || DEFAULT_AGENT_EMAIL_NAME;
+
       const replyId = await provider.sendReply({
         originalEmail: email,
         body: result.text,
+        agentName,
       });
 
       logger.info(

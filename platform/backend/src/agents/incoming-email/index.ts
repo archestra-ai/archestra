@@ -1,3 +1,4 @@
+import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentTeamModel, PromptModel, TeamModel } from "@/models";
@@ -10,6 +11,7 @@ import type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
+import { EMAIL_DEDUP_CACHE_TTL_MS } from "./constants";
 import { OutlookEmailProvider } from "./outlook-provider";
 
 export type {
@@ -20,10 +22,31 @@ export type {
   SubscriptionInfo,
 } from "@/types";
 export {
+  EMAIL_DEDUP_CACHE_TTL_MS,
   EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
   MAX_EMAIL_BODY_SIZE,
 } from "./constants";
 export { OutlookEmailProvider } from "./outlook-provider";
+
+/**
+ * Check if an email has already been processed recently
+ * Uses the shared CacheManager for TTL-based caching
+ */
+export async function isEmailAlreadyProcessed(
+  messageId: string,
+): Promise<boolean> {
+  const cacheKey = `${CacheKey.ProcessedEmail}-${messageId}` as const;
+  const cached = await cacheManager.get<boolean>(cacheKey);
+  return cached === true;
+}
+
+/**
+ * Mark an email as processed with TTL
+ */
+export async function markEmailAsProcessed(messageId: string): Promise<void> {
+  const cacheKey = `${CacheKey.ProcessedEmail}-${messageId}` as const;
+  await cacheManager.set(cacheKey, true, EMAIL_DEDUP_CACHE_TTL_MS);
+}
 
 /**
  * Singleton instance of the configured email provider
@@ -166,6 +189,17 @@ async function autoSetupSubscriptionWithRetry(
         { webhookUrl, attempt, maxRetries },
         "[IncomingEmail] Auto-creating subscription from env var config",
       );
+
+      // Clean up ALL existing subscriptions from Microsoft Graph first
+      // This prevents stale subscriptions from causing clientState mismatch errors
+      const deleted = await provider.deleteAllGraphSubscriptions();
+      if (deleted > 0) {
+        logger.info(
+          { deleted },
+          "[IncomingEmail] Cleaned up existing Graph subscriptions before auto-setup",
+        );
+      }
+
       const subscription = await provider.createSubscription(webhookUrl);
       logger.info(
         {
@@ -409,6 +443,19 @@ export async function processIncomingEmail(
   if (!provider) {
     throw new Error("No email provider configured");
   }
+
+  // Deduplication: check if we've already processed this email recently
+  // Microsoft Graph may send multiple notifications for the same email
+  if (await isEmailAlreadyProcessed(email.messageId)) {
+    logger.info(
+      { messageId: email.messageId },
+      "[IncomingEmail] Skipping duplicate email (already processed recently)",
+    );
+    return;
+  }
+
+  // Mark as processed immediately to prevent concurrent processing
+  await markEmailAsProcessed(email.messageId);
 
   logger.info(
     {

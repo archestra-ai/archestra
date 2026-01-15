@@ -16,3 +16,10 @@ export const EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL = 6 * 60 * 60 * 1000; // 6 hour
  * Emails larger than this will be truncated to prevent excessive LLM context usage
  */
 export const MAX_EMAIL_BODY_SIZE = 100 * 1024; // 100KB
+
+/**
+ * TTL for processed email deduplication cache (5 minutes)
+ * Microsoft Graph may send multiple notifications for the same email within seconds.
+ * We track processed message IDs to prevent duplicate agent invocations.
+ */
+export const EMAIL_DEDUP_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes

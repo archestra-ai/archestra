@@ -7,6 +7,7 @@ import {
   type OutlookEmailProvider,
   processIncomingEmail,
 } from "@/agents/incoming-email";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { PromptModel } from "@/models";
 import {
@@ -21,21 +22,33 @@ import {
  */
 
 /**
- * Simple in-memory rate limiter for webhook endpoint
+ * Rate limit configuration for webhook endpoint
  * Limits requests per IP address to prevent abuse
  */
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per IP
 
-const rateLimitMap = new Map<string, { count: number; windowStart: number }>();
+interface RateLimitEntry {
+  count: number;
+  windowStart: number;
+}
 
-function isRateLimited(ip: string): boolean {
+/**
+ * Check if an IP is rate limited using the shared CacheManager
+ * Returns true if the IP has exceeded the rate limit
+ */
+async function isRateLimited(ip: string): Promise<boolean> {
   const now = Date.now();
-  const entry = rateLimitMap.get(ip);
+  const cacheKey = `${CacheKey.WebhookRateLimit}-${ip}` as const;
+  const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
 
   if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
     // Start new window
-    rateLimitMap.set(ip, { count: 1, windowStart: now });
+    await cacheManager.set(
+      cacheKey,
+      { count: 1, windowStart: now },
+      RATE_LIMIT_WINDOW_MS * 2,
+    );
     return false;
   }
 
@@ -43,19 +56,14 @@ function isRateLimited(ip: string): boolean {
     return true;
   }
 
-  entry.count++;
+  // Increment count
+  await cacheManager.set(
+    cacheKey,
+    { count: entry.count + 1, windowStart: entry.windowStart },
+    RATE_LIMIT_WINDOW_MS * 2,
+  );
   return false;
 }
-
-// Cleanup old entries periodically to prevent memory leaks
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of rateLimitMap.entries()) {
-    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
-      rateLimitMap.delete(ip);
-    }
-  }
-}, RATE_LIMIT_WINDOW_MS * 5);
 
 /**
  * Schema for subscription status response
@@ -160,7 +168,7 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Apply rate limiting to actual webhook notifications (not validation challenges)
       const clientIp = request.ip || "unknown";
-      if (isRateLimited(clientIp)) {
+      if (await isRateLimited(clientIp)) {
         logger.warn(
           { ip: clientIp },
           "[IncomingEmail] Rate limit exceeded for webhook",
@@ -352,19 +360,17 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (provider.providerId === "outlook") {
         const outlookProvider = provider as OutlookEmailProvider;
 
-        // Check for existing active subscription to prevent duplicates
-        const existingStatus = await outlookProvider.getSubscriptionStatus();
-        if (existingStatus?.isActive) {
-          // Delete the old subscription before creating a new one
+        // Clean up ALL existing subscriptions from Microsoft Graph
+        // This prevents stale subscriptions (from previous dev sessions, database resets, etc.)
+        // from sending webhooks with mismatched clientState values
+        logger.info(
+          "[IncomingEmail] Cleaning up all existing Graph subscriptions before creating new one",
+        );
+        const deleted = await outlookProvider.deleteAllGraphSubscriptions();
+        if (deleted > 0) {
           logger.info(
-            {
-              existingSubscriptionId: existingStatus.subscriptionId,
-              newWebhookUrl: webhookUrl,
-            },
-            "[IncomingEmail] Deleting existing subscription before creating new one",
-          );
-          await outlookProvider.deleteSubscription(
-            existingStatus.subscriptionId,
+            { deleted },
+            "[IncomingEmail] Cleaned up existing Graph subscriptions",
           );
         }
 

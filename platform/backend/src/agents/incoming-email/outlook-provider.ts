@@ -470,6 +470,85 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
   }
 
   /**
+   * List all subscriptions from Microsoft Graph API
+   * Useful for debugging and cleaning up stale subscriptions
+   */
+  async listGraphSubscriptions(): Promise<
+    Array<{
+      id: string;
+      resource: string;
+      notificationUrl: string;
+      expirationDateTime: string;
+      clientState: string | null;
+    }>
+  > {
+    const client = this.getGraphClient();
+
+    try {
+      const response = await client.api("/subscriptions").get();
+      const subscriptions = response.value || [];
+
+      logger.info(
+        { count: subscriptions.length },
+        "[OutlookEmailProvider] Listed subscriptions from Graph API",
+      );
+
+      return subscriptions.map(
+        (sub: {
+          id: string;
+          resource: string;
+          notificationUrl: string;
+          expirationDateTime: string;
+          clientState?: string;
+        }) => ({
+          id: sub.id,
+          resource: sub.resource,
+          notificationUrl: sub.notificationUrl,
+          expirationDateTime: sub.expirationDateTime,
+          clientState: sub.clientState || null,
+        }),
+      );
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "[OutlookEmailProvider] Failed to list subscriptions from Graph API",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Delete all subscriptions from Microsoft Graph API
+   * Useful for cleaning up stale subscriptions during development
+   */
+  async deleteAllGraphSubscriptions(): Promise<number> {
+    const subscriptions = await this.listGraphSubscriptions();
+    let deleted = 0;
+
+    for (const sub of subscriptions) {
+      try {
+        await this.deleteSubscription(sub.id);
+        deleted++;
+      } catch (error) {
+        logger.warn(
+          {
+            subscriptionId: sub.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[OutlookEmailProvider] Failed to delete subscription",
+        );
+      }
+    }
+
+    logger.info(
+      { deleted, total: subscriptions.length },
+      "[OutlookEmailProvider] Deleted subscriptions from Graph API",
+    );
+
+    return deleted;
+  }
+
+  /**
    * Delete a subscription from Graph API and database
    */
   async deleteSubscription(subscriptionId: string): Promise<void> {

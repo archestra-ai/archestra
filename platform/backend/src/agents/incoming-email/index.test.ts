@@ -10,7 +10,12 @@ import { executeA2AMessage } from "@/services/a2a-executor";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { IncomingEmail } from "@/types";
 import { MAX_EMAIL_BODY_SIZE } from "./constants";
-import { createEmailProvider, processIncomingEmail } from "./index";
+import {
+  createEmailProvider,
+  isEmailAlreadyProcessed,
+  markEmailAsProcessed,
+  processIncomingEmail,
+} from "./index";
 import { OutlookEmailProvider } from "./outlook-provider";
 
 /**
@@ -439,5 +444,85 @@ describe("processIncomingEmail", () => {
     await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
       `No teams found for agent ${agent.id}`,
     );
+  });
+
+  test("skips duplicate emails (deduplication)", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    // Create test data
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+
+    // Create a prompt for the agent
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: "test-dedup-msg-1",
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test Subject",
+      body: "Hello, agent!",
+      receivedAt: new Date(),
+    };
+
+    // First call should process the email
+    await processIncomingEmail(email, mockProvider);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+
+    // Reset mock to track subsequent calls
+    mockExecuteA2AMessage.mockClear();
+
+    // Second call with same messageId should be skipped (deduplication)
+    await processIncomingEmail(email, mockProvider);
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("email deduplication helpers", () => {
+  test("isEmailAlreadyProcessed returns false for new messageId", async () => {
+    const messageId = `new-msg-${Date.now()}`;
+    const result = await isEmailAlreadyProcessed(messageId);
+    expect(result).toBe(false);
+  });
+
+  test("markEmailAsProcessed marks email as processed", async () => {
+    const messageId = `mark-msg-${Date.now()}`;
+
+    // Initially not processed
+    expect(await isEmailAlreadyProcessed(messageId)).toBe(false);
+
+    // Mark as processed
+    await markEmailAsProcessed(messageId);
+
+    // Now should be processed
+    expect(await isEmailAlreadyProcessed(messageId)).toBe(true);
+  });
+
+  test("isEmailAlreadyProcessed returns true for recently processed messageId", async () => {
+    const messageId = `recent-msg-${Date.now()}`;
+
+    await markEmailAsProcessed(messageId);
+    const result = await isEmailAlreadyProcessed(messageId);
+    expect(result).toBe(true);
   });
 });

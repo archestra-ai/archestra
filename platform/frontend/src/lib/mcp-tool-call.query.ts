@@ -50,6 +50,14 @@ export function useMcpToolCalls({
           sortDirection,
         },
       });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch MCP tool calls",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch MCP tool calls");
+      }
       return response.data;
     },
     // Only use initialData for the first page (offset 0) with default sorting and default limit
@@ -76,6 +84,14 @@ export function useMcpToolCall({
     queryKey: ["mcpToolCalls", mcpToolCallId],
     queryFn: async () => {
       const response = await getMcpToolCall({ path: { mcpToolCallId } });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch MCP tool call",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch MCP tool call");
+      }
       return response.data;
     },
     initialData,

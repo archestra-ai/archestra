@@ -15,7 +15,7 @@ import logger from "@/logging";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
-} from "@/types/email-provider";
+} from "@/types/incoming-email";
 import packageJson from "../../package.json";
 
 /**
@@ -288,15 +288,22 @@ export default {
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
-        tenantId: process.env.ARCHESTRA_AGENTS_OUTLOOK_TENANT_ID || "",
-        clientId: process.env.ARCHESTRA_AGENTS_OUTLOOK_CLIENT_ID || "",
-        clientSecret: process.env.ARCHESTRA_AGENTS_OUTLOOK_CLIENT_SECRET || "",
+        tenantId:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID || "",
+        clientId:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID || "",
+        clientSecret:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET ||
+          "",
         mailboxAddress:
-          process.env.ARCHESTRA_AGENTS_OUTLOOK_MAILBOX_ADDRESS || "",
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS ||
+          "",
         emailDomain:
-          process.env.ARCHESTRA_AGENTS_OUTLOOK_EMAIL_DOMAIN || undefined,
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN ||
+          undefined,
         webhookUrl:
-          process.env.ARCHESTRA_AGENTS_OUTLOOK_WEBHOOK_URL || undefined,
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL ||
+          undefined,
       },
     },
   },

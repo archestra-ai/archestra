@@ -1,5 +1,5 @@
 {
-  "id": "84ede0e0-209b-49b2-a812-6112c4f2cad0",
+  "id": "65d1eb0e-2f54-4db8-ac2a-e0649f14b13a",
   "prevId": "b48a7948-ff3c-4f40-bc4e-e5e532b1410d",
   "version": "7",
   "dialect": "postgresql",
@@ -1210,6 +1210,12 @@
         "webhook_url": {
           "name": "webhook_url",
           "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_state": {
+          "name": "client_state",
+          "type": "varchar(256)",
           "primaryKey": false,
           "notNull": true
         },

@@ -8,6 +8,7 @@ import { OrganizationModel } from "@/models";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import type { GlobalToolPolicy } from "@/types";
+import { EmailProviderTypeSchema } from "@/types/incoming-email";
 
 const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -41,7 +42,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             /** Incoming email - allows agents to be invoked via email */
             incomingEmail: z.object({
               enabled: z.boolean(),
-              provider: z.enum(["outlook"]).optional(),
+              provider: EmailProviderTypeSchema.optional(),
               displayName: z.string().optional(),
               emailDomain: z.string().optional(),
             }),

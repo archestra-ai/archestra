@@ -58,10 +58,10 @@ export default function IncomingEmailSettingsPage() {
             </p>
             <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
               <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook</li>
-              <li>ARCHESTRA_AGENTS_OUTLOOK_TENANT_ID</li>
-              <li>ARCHESTRA_AGENTS_OUTLOOK_CLIENT_ID</li>
-              <li>ARCHESTRA_AGENTS_OUTLOOK_CLIENT_SECRET</li>
-              <li>ARCHESTRA_AGENTS_OUTLOOK_MAILBOX_ADDRESS</li>
+              <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID</li>
+              <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID</li>
+              <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET</li>
+              <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS</li>
             </ul>
             <p className="mt-3">
               <Link
@@ -146,7 +146,7 @@ export default function IncomingEmailSettingsPage() {
             <p className="text-xs mt-1">
               The mailbox portion is the local part of{" "}
               <code className="bg-muted px-1 rounded">
-                ARCHESTRA_AGENTS_OUTLOOK_MAILBOX_ADDRESS
+                ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS
               </code>
             </p>
           </div>
@@ -286,7 +286,7 @@ export default function IncomingEmailSettingsPage() {
           <p>
             Alternatively, set{" "}
             <code className="bg-muted px-1 py-0.5 rounded">
-              ARCHESTRA_AGENTS_OUTLOOK_WEBHOOK_URL
+              ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL
             </code>{" "}
             to automatically create a subscription on server startup.
           </p>

@@ -1,10 +1,13 @@
 import config from "@/config";
 import logger from "@/logging";
+import { AgentTeamModel, PromptModel, TeamModel } from "@/models";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
+import { executeA2AMessage } from "@/services/a2a-executor";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
   EmailProviderType,
+  IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
 import { OutlookEmailProvider } from "./outlook-provider";
@@ -16,6 +19,7 @@ export type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
+export { EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL } from "./constants";
 export { OutlookEmailProvider } from "./outlook-provider";
 
 /**
@@ -390,4 +394,93 @@ export function getEmailProviderInfo(): {
     displayName: provider.displayName,
     emailDomain: provider.getEmailDomain(),
   };
+}
+
+/**
+ * Process an incoming email and invoke the appropriate agent
+ */
+export async function processIncomingEmail(
+  email: IncomingEmail,
+  provider: AgentIncomingEmailProvider | null,
+): Promise<void> {
+  if (!provider) {
+    throw new Error("No email provider configured");
+  }
+
+  logger.info(
+    {
+      messageId: email.messageId,
+      toAddress: email.toAddress,
+      fromAddress: email.fromAddress,
+      subject: email.subject,
+    },
+    "[IncomingEmail] Processing incoming email",
+  );
+
+  // Extract promptId from the email address
+  let promptId: string | null = null;
+
+  if (provider.providerId === "outlook") {
+    const outlookProvider = provider as OutlookEmailProvider;
+    promptId = outlookProvider.extractPromptIdFromEmail(email.toAddress);
+  }
+
+  if (!promptId) {
+    throw new Error(
+      `Could not extract promptId from email address: ${email.toAddress}`,
+    );
+  }
+
+  // Verify prompt exists
+  const prompt = await PromptModel.findById(promptId);
+  if (!prompt) {
+    throw new Error(`Prompt ${promptId} not found`);
+  }
+
+  // Get organization from agent's team
+  const agentTeamIds = await AgentTeamModel.getTeamsForAgent(prompt.agentId);
+  if (agentTeamIds.length === 0) {
+    throw new Error(`No teams found for agent ${prompt.agentId}`);
+  }
+
+  const teams = await TeamModel.findByIds(agentTeamIds);
+  if (teams.length === 0 || !teams[0].organizationId) {
+    throw new Error(`No organization found for agent ${prompt.agentId}`);
+  }
+  const organization = teams[0].organizationId;
+
+  // Use email body as the message to invoke the agent
+  // If body is empty, use the subject line
+  const message = email.body.trim() || email.subject || "No message content";
+
+  logger.info(
+    {
+      promptId,
+      agentId: prompt.agentId,
+      organizationId: organization,
+      messageLength: message.length,
+    },
+    "[IncomingEmail] Invoking agent with email content",
+  );
+
+  // Execute using the shared A2A service
+  const result = await executeA2AMessage({
+    promptId,
+    message,
+    organizationId: organization,
+    userId: "system", // Email invocations use system context
+  });
+
+  logger.info(
+    {
+      promptId,
+      messageId: result.messageId,
+      responseLength: result.text.length,
+      finishReason: result.finishReason,
+    },
+    "[IncomingEmail] Agent execution completed",
+  );
+
+  // TODO: Optionally send the response back via email
+  // This would require implementing reply functionality in the provider
 }

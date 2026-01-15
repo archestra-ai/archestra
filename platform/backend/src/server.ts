@@ -33,6 +33,7 @@ import {
 import { z } from "zod";
 import {
   cleanupEmailProvider,
+  EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
   initializeEmailProvider,
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
@@ -461,12 +462,10 @@ const start = async () => {
     startMcpServerRuntime(fastify);
 
     // Initialize incoming email provider (if configured)
-    // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_OUTLOOK_WEBHOOK_URL is set
+    // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
     await initializeEmailProvider();
 
     // Background job to renew email subscriptions before they expire
-    // Microsoft Graph subscriptions expire after 3 days, so we check every 6 hours
-    const EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
     const emailRenewalIntervalId = setInterval(() => {
       renewEmailSubscriptionIfNeeded().catch((error) => {
         logger.error(

@@ -1,1 +1,0 @@
-ALTER TABLE "incoming_email_subscription" ADD COLUMN "client_state" varchar(256) NOT NULL;

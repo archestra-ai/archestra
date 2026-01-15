@@ -114,15 +114,15 @@ Set these environment variables (see [Deployment](/docs/platform-deployment#inco
 
 ```bash
 ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook
-ARCHESTRA_AGENTS_OUTLOOK_TENANT_ID=<tenant-id>
-ARCHESTRA_AGENTS_OUTLOOK_CLIENT_ID=<client-id>
-ARCHESTRA_AGENTS_OUTLOOK_CLIENT_SECRET=<client-secret>
-ARCHESTRA_AGENTS_OUTLOOK_MAILBOX_ADDRESS=agents@yourcompany.com
+ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID=<tenant-id>
+ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID=<client-id>
+ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET=<client-secret>
+ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS=agents@yourcompany.com
 ```
 
 ### Webhook Setup
 
-**Option 1: Automatic** - Set `ARCHESTRA_AGENTS_OUTLOOK_WEBHOOK_URL` and the subscription is created on server startup.
+**Option 1: Automatic** - Set `ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL` and the subscription is created on server startup.
 
 **Option 2: Manual** - Navigate to Settings > Incoming Email and enter your webhook URL.
 

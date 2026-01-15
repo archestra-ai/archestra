@@ -5,8 +5,8 @@ vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: vi.fn(),
 }));
 
-import db, { schema } from "@/database";
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { IncomingEmail } from "@/types";
 import { MAX_EMAIL_BODY_SIZE } from "./constants";

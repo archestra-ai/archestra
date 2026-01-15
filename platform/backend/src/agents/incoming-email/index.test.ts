@@ -73,13 +73,11 @@ describe("createEmailProvider", () => {
 });
 
 describe("processIncomingEmail", () => {
-  const mockExecuteA2AMessage = vi.mocked(executeA2AMessage);
-
   beforeEach(async () => {
     vi.clearAllMocks();
 
     // Set up default mock for executeA2AMessage
-    mockExecuteA2AMessage.mockResolvedValue({
+    vi.mocked(executeA2AMessage).mockResolvedValue({
       messageId: "msg-123",
       text: "Agent response",
       finishReason: "end_turn",
@@ -202,7 +200,7 @@ describe("processIncomingEmail", () => {
 
     await processIncomingEmail(email, mockProvider);
 
-    expect(mockExecuteA2AMessage).toHaveBeenCalledWith({
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith({
       promptId,
       message: "Hello, agent!",
       organizationId: org.id,
@@ -249,7 +247,7 @@ describe("processIncomingEmail", () => {
 
     await processIncomingEmail(email, mockProvider);
 
-    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "Subject as message",
       }),
@@ -295,7 +293,7 @@ describe("processIncomingEmail", () => {
 
     await processIncomingEmail(email, mockProvider);
 
-    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "No message content",
       }),
@@ -344,7 +342,7 @@ describe("processIncomingEmail", () => {
 
     await processIncomingEmail(email, mockProvider);
 
-    const calledMessage = mockExecuteA2AMessage.mock.calls[0][0].message;
+    const calledMessage = vi.mocked(executeA2AMessage).mock.calls[0][0].message;
 
     // The message should be truncated and contain the truncation notice
     expect(calledMessage).toContain(
@@ -398,7 +396,7 @@ describe("processIncomingEmail", () => {
 
     await processIncomingEmail(email, mockProvider);
 
-    const calledMessage = mockExecuteA2AMessage.mock.calls[0][0].message;
+    const calledMessage = vi.mocked(executeA2AMessage).mock.calls[0][0].message;
 
     // The message should not be truncated
     expect(calledMessage).toBe(normalBody);
@@ -487,14 +485,14 @@ describe("processIncomingEmail", () => {
 
     // First call should process the email
     await processIncomingEmail(email, mockProvider);
-    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledTimes(1);
 
     // Reset mock to track subsequent calls
-    mockExecuteA2AMessage.mockClear();
+    vi.mocked(executeA2AMessage).mockClear();
 
     // Second call with same messageId should be skipped (deduplication)
     await processIncomingEmail(email, mockProvider);
-    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+    expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
   });
 });
 
@@ -528,11 +526,9 @@ describe("email deduplication helpers", () => {
 });
 
 describe("processIncomingEmail with sendReply option", () => {
-  const mockExecuteA2AMessage = vi.mocked(executeA2AMessage);
-
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockExecuteA2AMessage.mockResolvedValue({
+    vi.mocked(executeA2AMessage).mockResolvedValue({
       messageId: "msg-reply-test",
       text: "Agent response for reply",
       finishReason: "end_turn",
@@ -651,6 +647,7 @@ describe("processIncomingEmail with sendReply option", () => {
     expect(mockSendReply).toHaveBeenCalledWith({
       originalEmail: email,
       body: "Agent response for reply",
+      agentName: prompt.name,
     });
     expect(result).toBe("Agent response for reply");
   });
@@ -680,7 +677,7 @@ describe("processIncomingEmail with sendReply option", () => {
       })
       .returning();
 
-    mockExecuteA2AMessage.mockResolvedValueOnce({
+    vi.mocked(executeA2AMessage).mockResolvedValueOnce({
       messageId: "msg-specific",
       text: "Specific agent response",
       finishReason: "end_turn",
@@ -775,6 +772,238 @@ describe("processIncomingEmail with sendReply option", () => {
     ).resolves.not.toThrow();
 
     expect(mockSendReply).toHaveBeenCalled();
-    expect(mockExecuteA2AMessage).toHaveBeenCalled();
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalled();
+  });
+});
+
+describe("processIncomingEmail with conversation history", () => {
+  beforeEach(() => {
+    vi.mocked(executeA2AMessage).mockReset();
+    vi.mocked(executeA2AMessage).mockResolvedValue({
+      messageId: "conversation-response-123",
+      text: "Agent response with context",
+      finishReason: "end_turn",
+    });
+  });
+
+  test("includes conversation history in message when conversationId is present", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+
+    const [prompt] = await db
+      .insert(schema.promptsTable)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: org.id,
+        name: "Context Test Prompt",
+        agentId: agent.id,
+        userPrompt: null,
+        systemPrompt: null,
+        version: 1,
+        history: [],
+      })
+      .returning();
+
+    const mockGetConversationHistory = vi.fn().mockResolvedValue([
+      {
+        messageId: "prev-msg-1",
+        fromAddress: "user@example.com",
+        fromName: "Test User",
+        body: "First message from user",
+        receivedAt: new Date("2024-01-15T10:00:00Z"),
+        isAgentMessage: false,
+      },
+      {
+        messageId: "prev-msg-2",
+        fromAddress: "agents@test.com",
+        fromName: "Agent",
+        body: "Agent's first response",
+        receivedAt: new Date("2024-01-15T10:05:00Z"),
+        isAgentMessage: true,
+      },
+    ]);
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => prompt.id,
+      sendReply: vi.fn().mockResolvedValue("reply-123"),
+      getConversationHistory: mockGetConversationHistory,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-with-context-${Date.now()}`,
+      conversationId: "conv-123",
+      toAddress: `agents+agent-${prompt.id}@test.com`,
+      fromAddress: "user@example.com",
+      subject: "Follow-up question",
+      body: "What was my first message?",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider, { sendReply: false });
+
+    // Verify getConversationHistory was called
+    expect(mockGetConversationHistory).toHaveBeenCalledWith(
+      "conv-123",
+      email.messageId,
+    );
+
+    // Verify the message sent to the agent includes conversation history
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalled();
+    const callArgs = vi.mocked(executeA2AMessage).mock.calls[0][0];
+    expect(callArgs.message).toContain("<conversation_history>");
+    expect(callArgs.message).toContain("First message from user");
+    expect(callArgs.message).toContain("Agent's first response");
+    expect(callArgs.message).toContain("[User (Test User)]:");
+    expect(callArgs.message).toContain("[You (Agent) (Agent)]:");
+    expect(callArgs.message).toContain("[Current message from user]:");
+    expect(callArgs.message).toContain("What was my first message?");
+  });
+
+  test("processes email without conversation history when no conversationId", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+
+    const [prompt] = await db
+      .insert(schema.promptsTable)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: org.id,
+        name: "No Context Prompt",
+        agentId: agent.id,
+        userPrompt: null,
+        systemPrompt: null,
+        version: 1,
+        history: [],
+      })
+      .returning();
+
+    const mockGetConversationHistory = vi.fn();
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => prompt.id,
+      sendReply: vi.fn().mockResolvedValue("reply-123"),
+      getConversationHistory: mockGetConversationHistory,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-no-context-${Date.now()}`,
+      // No conversationId
+      toAddress: `agents+agent-${prompt.id}@test.com`,
+      fromAddress: "user@example.com",
+      subject: "Standalone message",
+      body: "Hello, agent!",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider, { sendReply: false });
+
+    // getConversationHistory should NOT be called
+    expect(mockGetConversationHistory).not.toHaveBeenCalled();
+
+    // Message should not contain conversation history tags
+    const callArgs = vi.mocked(executeA2AMessage).mock.calls[0][0];
+    expect(callArgs.message).not.toContain("<conversation_history>");
+    expect(callArgs.message).toBe("Hello, agent!");
+  });
+
+  test("continues processing when getConversationHistory fails", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+
+    const [prompt] = await db
+      .insert(schema.promptsTable)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: org.id,
+        name: "Error Handler Prompt",
+        agentId: agent.id,
+        userPrompt: null,
+        systemPrompt: null,
+        version: 1,
+        history: [],
+      })
+      .returning();
+
+    const mockGetConversationHistory = vi
+      .fn()
+      .mockRejectedValue(new Error("Failed to fetch history"));
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => prompt.id,
+      sendReply: vi.fn().mockResolvedValue("reply-123"),
+      getConversationHistory: mockGetConversationHistory,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-error-handling-${Date.now()}`,
+      conversationId: "conv-error",
+      toAddress: `agents+agent-${prompt.id}@test.com`,
+      fromAddress: "user@example.com",
+      subject: "Test error handling",
+      body: "Current message only",
+      receivedAt: new Date(),
+    };
+
+    // Should not throw
+    await expect(
+      processIncomingEmail(email, mockProvider, { sendReply: false }),
+    ).resolves.not.toThrow();
+
+    // Agent should still be invoked with just the current message
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalled();
+    const callArgs = vi.mocked(executeA2AMessage).mock.calls[0][0];
+    expect(callArgs.message).toBe("Current message only");
+    expect(callArgs.message).not.toContain("<conversation_history>");
   });
 });

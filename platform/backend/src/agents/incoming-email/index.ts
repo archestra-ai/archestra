@@ -2,7 +2,7 @@ import { executeA2AMessage } from "@/agents/a2a-executor";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, AgentTeamModel, PromptModel, TeamModel } from "@/models";
+import { AgentTeamModel, PromptModel, TeamModel } from "@/models";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import type {
   AgentIncomingEmailProvider,
@@ -19,6 +19,7 @@ import { OutlookEmailProvider } from "./outlook-provider";
 
 export type {
   AgentIncomingEmailProvider,
+  ConversationMessage,
   EmailProviderConfig,
   EmailProviderType,
   EmailReplyOptions,
@@ -520,9 +521,63 @@ export async function processIncomingEmail(
   }
   const organization = teams[0].organizationId;
 
+  // Fetch conversation history if this is part of a thread
+  let conversationContext = "";
+  if (email.conversationId && provider.getConversationHistory) {
+    try {
+      const history = await provider.getConversationHistory(
+        email.conversationId,
+        email.messageId,
+      );
+
+      if (history.length > 0) {
+        logger.info(
+          {
+            messageId: email.messageId,
+            conversationId: email.conversationId,
+            historyCount: history.length,
+          },
+          "[IncomingEmail] Including conversation history in agent context",
+        );
+
+        // Format conversation history for the agent
+        const formattedHistory = history
+          .map((msg) => {
+            const role = msg.isAgentMessage ? "You (Agent)" : "User";
+            const name = msg.fromName ? ` (${msg.fromName})` : "";
+            return `[${role}${name}]: ${msg.body.trim()}`;
+          })
+          .join("\n\n---\n\n");
+
+        conversationContext = `<conversation_history>
+The following is the previous conversation in this email thread. Use this context to understand the full conversation.
+
+${formattedHistory}
+</conversation_history>
+
+`;
+      }
+    } catch (error) {
+      logger.warn(
+        {
+          messageId: email.messageId,
+          conversationId: email.conversationId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[IncomingEmail] Failed to fetch conversation history, continuing without it",
+      );
+    }
+  }
+
   // Use email body as the message to invoke the agent
   // If body is empty, use the subject line
-  let message = email.body.trim() || email.subject || "No message content";
+  const currentMessage =
+    email.body.trim() || email.subject || "No message content";
+
+  // Combine conversation context with current message
+  let message = conversationContext
+    ? `${conversationContext}[Current message from user]: ${currentMessage}`
+    : currentMessage;
 
   // Truncate message if it exceeds the maximum size to prevent excessive LLM context usage
   const { MAX_EMAIL_BODY_SIZE } = await import("./constants");
@@ -549,6 +604,7 @@ export async function processIncomingEmail(
       agentId: prompt.agentId,
       organizationId: organization,
       messageLength: message.length,
+      hasConversationHistory: conversationContext.length > 0,
     },
     "[IncomingEmail] Invoking agent with email content",
   );
@@ -574,9 +630,8 @@ export async function processIncomingEmail(
   // Optionally send the agent's response back via email reply
   if (shouldSendReply && result.text) {
     try {
-      // Look up the agent's name for the email reply
-      const agent = await AgentModel.findById(prompt.agentId);
-      const agentName = agent?.name || DEFAULT_AGENT_EMAIL_NAME;
+      // Use the prompt (agent) name for the email reply
+      const agentName = prompt.name || DEFAULT_AGENT_EMAIL_NAME;
 
       const replyId = await provider.sendReply({
         originalEmail: email,

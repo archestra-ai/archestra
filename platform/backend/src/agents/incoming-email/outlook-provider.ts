@@ -269,11 +269,11 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       }
 
       try {
-        // Fetch the full message
+        // Fetch the full message including conversationId for thread context
         const message = await client
           .api(`/users/${this.config.mailboxAddress}/messages/${messageId}`)
           .select(
-            "id,subject,body,bodyPreview,from,toRecipients,receivedDateTime",
+            "id,conversationId,subject,body,bodyPreview,from,toRecipients,receivedDateTime",
           )
           .get();
 
@@ -310,6 +310,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
         emails.push({
           messageId: message.id,
+          conversationId: message.conversationId,
           toAddress: agentEmailAddress,
           fromAddress: message.from?.emailAddress?.address || "unknown",
           subject: message.subject || "",
@@ -590,13 +591,20 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
    * Send a reply to an incoming email
    * Uses Microsoft Graph API to send a reply that maintains the email thread
    *
-   * For best results (proper threading and sender name):
-   * 1. Configure "Send As" permission in Exchange Online for the mailbox
-   * 2. This allows the reply to appear from the agent's email address
+   * **Threading**: The Graph API `/reply` endpoint automatically maintains proper
+   * email threading by setting conversationId, In-Reply-To, and References headers.
+   * This ensures replies appear in the same thread regardless of the `from` address.
    *
-   * Fallback behavior (without "Send As"):
-   * - Reply is sent from the mailbox address
-   * - replyTo is set to the agent's email so responses go to the right place
+   * **Microsoft Graph API Limitation**: The Graph API does not support sending from
+   * dynamically generated plus-addressed aliases (e.g., mailbox+agent-xxx@domain.com)
+   * even with "Send As" permission configured in Exchange. The `from` address must be
+   * a primary email or explicitly configured proxy address on the mailbox.
+   *
+   * **Fallback behavior** (default for plus-addressed agent emails):
+   * - Reply is sent from the mailbox's primary address
+   * - `replyTo` is set to the agent's plus-addressed email
+   * - Recipients can reply directly to the agent using "Reply" in their email client
+   * - Threading is preserved via the Graph API's reply mechanism
    */
   async sendReply(options: EmailReplyOptions): Promise<string> {
     const { originalEmail, body, htmlBody, agentName } = options;
@@ -624,9 +632,9 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     // Use the agent's email address (the toAddress from the original email)
     const agentEmailAddress = originalEmail.toAddress;
 
-    // Try to send with 'from' set to agent's email (requires "Send As" permission)
-    // This provides better threading and shows the agent as the sender
-    // Falls back to 'replyTo' if "Send As" permission is not configured
+    // Try to send with 'from' set to agent's email address
+    // Note: This will likely fail for plus-addressed aliases due to Graph API limitations
+    // (see JSDoc above). We try anyway in case the address is an explicit alias.
     try {
       await client
         .api(
@@ -682,15 +690,15 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         throw sendAsError;
       }
 
-      // Fallback: "Send As" permission not configured
-      // Send from mailbox but set replyTo to agent's email
-      logger.warn(
+      // Fallback: Graph API rejected the plus-addressed 'from' address (expected behavior)
+      // Send from mailbox's primary address but set replyTo to agent's email
+      // Threading is still maintained via the Graph API's reply mechanism
+      logger.info(
         {
           originalMessageId: originalEmail.messageId,
           agentEmailAddress,
-          error: errorMessage,
         },
-        "[OutlookEmailProvider] 'Send As' permission not configured, falling back to replyTo",
+        "[OutlookEmailProvider] Using replyTo for plus-addressed agent email (Graph API limitation)",
       );
 
       await client
@@ -724,6 +732,122 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       );
 
       return replyTrackingId;
+    }
+  }
+
+  /**
+   * Get conversation history for an email thread
+   * Fetches all messages in the conversation except the current one
+   * @param conversationId - The conversation ID from the email
+   * @param currentMessageId - The current message ID to exclude from history
+   * @returns Array of previous messages in the conversation, oldest first
+   */
+  async getConversationHistory(
+    conversationId: string,
+    currentMessageId: string,
+  ): Promise<
+    Array<{
+      messageId: string;
+      fromAddress: string;
+      fromName?: string;
+      body: string;
+      receivedAt: Date;
+      isAgentMessage: boolean;
+    }>
+  > {
+    const client = this.getGraphClient();
+
+    try {
+      // Escape single quotes in conversationId for OData filter
+      // The conversationId may contain special characters that need escaping
+      const escapedConversationId = conversationId.replace(/'/g, "''");
+
+      // Fetch all messages in the conversation
+      // Note: Microsoft Graph API doesn't allow combining $filter on conversationId
+      // with $orderby on receivedDateTime, so we fetch without ordering and sort client-side
+      const response = await client
+        .api(`/users/${this.config.mailboxAddress}/messages`)
+        .filter(`conversationId eq '${escapedConversationId}'`)
+        .select("id,from,body,receivedDateTime,sender")
+        .top(50) // Limit to last 50 messages to avoid excessive context
+        .get();
+
+      const messages = response.value || [];
+      const history: Array<{
+        messageId: string;
+        fromAddress: string;
+        fromName?: string;
+        body: string;
+        receivedAt: Date;
+        isAgentMessage: boolean;
+      }> = [];
+
+      for (const message of messages) {
+        // Skip the current message
+        if (message.id === currentMessageId) {
+          continue;
+        }
+
+        const fromAddress = message.from?.emailAddress?.address || "unknown";
+        const fromName = message.from?.emailAddress?.name;
+
+        // Determine if this message was sent by the agent (from the mailbox)
+        const isAgentMessage =
+          fromAddress.toLowerCase() ===
+          this.config.mailboxAddress.toLowerCase();
+
+        // Extract plain text body
+        let body = "";
+        if (message.body?.contentType === "text") {
+          body = message.body.content || "";
+        } else if (message.body?.content) {
+          body = this.stripHtml(message.body.content);
+        }
+
+        history.push({
+          messageId: message.id,
+          fromAddress,
+          fromName,
+          body,
+          receivedAt: new Date(message.receivedDateTime),
+          isAgentMessage,
+        });
+      }
+
+      // Sort by receivedAt ascending (oldest first) since we couldn't use $orderby with $filter
+      history.sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime());
+
+      logger.debug(
+        {
+          conversationId,
+          currentMessageId,
+          historyCount: history.length,
+        },
+        "[OutlookEmailProvider] Fetched conversation history",
+      );
+
+      return history;
+    } catch (error) {
+      // Log detailed error information for debugging
+      const errorDetails =
+        error instanceof Error
+          ? {
+              message: error.message,
+              name: error.name,
+              stack: error.stack?.split("\n").slice(0, 3).join("\n"),
+            }
+          : { raw: String(error) };
+
+      logger.error(
+        {
+          conversationId,
+          currentMessageId,
+          errorDetails,
+        },
+        "[OutlookEmailProvider] Failed to fetch conversation history",
+      );
+      // Return empty history on error - allow processing to continue
+      return [];
     }
   }
 

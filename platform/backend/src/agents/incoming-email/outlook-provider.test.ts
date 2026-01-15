@@ -471,6 +471,178 @@ describe("OutlookEmailProvider", () => {
     });
   });
 
+  describe("getConversationHistory", () => {
+    const createMockGraphClient = () => ({
+      api: vi.fn().mockReturnThis(),
+      filter: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      orderby: vi.fn().mockReturnThis(),
+      top: vi.fn().mockReturnThis(),
+      get: vi.fn(),
+    });
+
+    test("fetches conversation messages excluding current message", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.get.mockResolvedValueOnce({
+        value: [
+          {
+            id: "msg-1",
+            from: {
+              emailAddress: { address: "user@example.com", name: "User" },
+            },
+            body: { contentType: "text", content: "First message" },
+            receivedDateTime: "2024-01-15T10:00:00Z",
+          },
+          {
+            id: "msg-2",
+            from: {
+              emailAddress: { address: "agents@example.com", name: "Agent" },
+            },
+            body: { contentType: "text", content: "Agent response" },
+            receivedDateTime: "2024-01-15T10:05:00Z",
+          },
+          {
+            id: "current-msg",
+            from: {
+              emailAddress: { address: "user@example.com", name: "User" },
+            },
+            body: { contentType: "text", content: "Current message" },
+            receivedDateTime: "2024-01-15T10:10:00Z",
+          },
+        ],
+      });
+
+      const history = await provider.getConversationHistory(
+        "conv-123",
+        "current-msg",
+      );
+
+      expect(history).toHaveLength(2);
+      expect(history[0]).toEqual({
+        messageId: "msg-1",
+        fromAddress: "user@example.com",
+        fromName: "User",
+        body: "First message",
+        receivedAt: new Date("2024-01-15T10:00:00Z"),
+        isAgentMessage: false,
+      });
+      expect(history[1]).toEqual({
+        messageId: "msg-2",
+        fromAddress: "agents@example.com",
+        fromName: "Agent",
+        body: "Agent response",
+        receivedAt: new Date("2024-01-15T10:05:00Z"),
+        isAgentMessage: true,
+      });
+    });
+
+    test("correctly identifies agent messages by mailbox address", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.get.mockResolvedValueOnce({
+        value: [
+          {
+            id: "msg-1",
+            from: { emailAddress: { address: "AGENTS@EXAMPLE.COM" } },
+            body: { contentType: "text", content: "From agent" },
+            receivedDateTime: "2024-01-15T10:00:00Z",
+          },
+        ],
+      });
+
+      const history = await provider.getConversationHistory(
+        "conv-123",
+        "current-msg",
+      );
+
+      expect(history[0].isAgentMessage).toBe(true);
+    });
+
+    test("strips HTML from message bodies", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.get.mockResolvedValueOnce({
+        value: [
+          {
+            id: "msg-1",
+            from: { emailAddress: { address: "user@example.com" } },
+            body: { contentType: "html", content: "<p>Hello <b>world</b></p>" },
+            receivedDateTime: "2024-01-15T10:00:00Z",
+          },
+        ],
+      });
+
+      const history = await provider.getConversationHistory(
+        "conv-123",
+        "current-msg",
+      );
+
+      expect(history[0].body).toBe("Hello world");
+    });
+
+    test("returns empty array on API error", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.get.mockRejectedValueOnce(new Error("API Error"));
+
+      const history = await provider.getConversationHistory(
+        "conv-123",
+        "current-msg",
+      );
+
+      expect(history).toEqual([]);
+    });
+
+    test("returns empty array when no messages in conversation", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.get.mockResolvedValueOnce({ value: [] });
+
+      const history = await provider.getConversationHistory(
+        "conv-123",
+        "current-msg",
+      );
+
+      expect(history).toEqual([]);
+    });
+
+    test("escapes single quotes in conversationId for OData filter", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.get.mockResolvedValueOnce({ value: [] });
+
+      // ConversationId with single quotes (can happen with certain email subjects)
+      await provider.getConversationHistory(
+        "AAQkADk='test'value",
+        "current-msg",
+      );
+
+      // Single quotes should be escaped to '' for OData filter syntax
+      expect(mockGraphClient.filter).toHaveBeenCalledWith(
+        "conversationId eq 'AAQkADk=''test''value'",
+      );
+    });
+  });
+
   describe("stripHtml (email threading)", () => {
     // Access private method via type casting for testing
     const getStripHtml = (provider: OutlookEmailProvider) => {

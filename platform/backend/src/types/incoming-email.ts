@@ -71,6 +71,8 @@ export type SubscriptionInfo = Omit<
 export interface IncomingEmail {
   /** The unique message ID from the email provider */
   messageId: string;
+  /** The conversation ID for threading (used to fetch conversation history) */
+  conversationId?: string;
   /** The email address that received the email (agent's email) */
   toAddress: string;
   /** The sender's email address */
@@ -85,6 +87,24 @@ export interface IncomingEmail {
   receivedAt: Date;
   /** Any additional metadata from the provider */
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * A message in an email conversation thread
+ */
+export interface ConversationMessage {
+  /** The unique message ID */
+  messageId: string;
+  /** The sender's email address */
+  fromAddress: string;
+  /** The sender's display name */
+  fromName?: string;
+  /** The plain text body of the message */
+  body: string;
+  /** When the message was received */
+  receivedAt: Date;
+  /** Whether this message was sent by the agent (vs the user) */
+  isAgentMessage: boolean;
 }
 
 /**
@@ -207,6 +227,17 @@ export interface AgentIncomingEmailProvider {
    * @returns The message ID of the sent reply
    */
   sendReply(options: EmailReplyOptions): Promise<string>;
+
+  /**
+   * Get conversation history for an email thread
+   * @param conversationId - The conversation ID from the email
+   * @param currentMessageId - The current message ID to exclude from history
+   * @returns Array of previous messages in the conversation, oldest first
+   */
+  getConversationHistory(
+    conversationId: string,
+    currentMessageId: string,
+  ): Promise<ConversationMessage[]>;
 }
 
 /**

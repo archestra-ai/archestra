@@ -3,7 +3,7 @@ import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, PromptModel } from "@/models";
-import { createLLMModelForAgent } from "@/services/llm-client";
+import { createLLMModelForAgent } from "@/clients/llm-client";
 
 export interface A2AExecuteParams {
   promptId: string;

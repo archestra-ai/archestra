@@ -32,7 +32,7 @@ import { browserStreamFeature } from "@/services/browser-stream-feature";
 import {
   createLLMModelForAgent,
   detectProviderFromModel,
-} from "@/services/llm-client";
+} from "@/clients/llm-client";
 import {
   ApiError,
   constructResponseSchema,

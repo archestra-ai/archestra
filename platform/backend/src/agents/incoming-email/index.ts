@@ -3,7 +3,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { AgentTeamModel, PromptModel, TeamModel } from "@/models";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
-import { executeA2AMessage } from "@/services/a2a-executor";
+import { executeA2AMessage } from "@/agents/a2a-executor";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,

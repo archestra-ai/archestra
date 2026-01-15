@@ -23,7 +23,7 @@ import {
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
 import type { TokenAuthResult } from "@/routes/mcp-gateway.utils";
-import { executeA2AMessage } from "@/services/a2a-executor";
+import { executeA2AMessage } from "@/agents/a2a-executor";
 import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,

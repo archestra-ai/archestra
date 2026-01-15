@@ -8,7 +8,7 @@ import {
   extractBearerToken,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway.utils";
-import { executeA2AMessage } from "@/services/a2a-executor";
+import { executeA2AMessage } from "@/agents/a2a-executor";
 import { ApiError, UuidIdSchema } from "@/types";
 
 /**

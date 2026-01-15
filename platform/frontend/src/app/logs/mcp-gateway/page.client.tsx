@@ -101,7 +101,9 @@ function McpToolCallsTable({
 
   // Datetime picker dialog state
   const [isDateDialogOpen, setIsDateDialogOpen] = useState(false);
-  const [tempDateRange, setTempDateRange] = useState<DateRange | undefined>(dateRange);
+  const [tempDateRange, setTempDateRange] = useState<DateRange | undefined>(
+    dateRange,
+  );
   const [fromTime, setFromTime] = useState(() => {
     if (startDateFromUrl) {
       const date = new Date(startDateFromUrl);
@@ -136,12 +138,16 @@ function McpToolCallsTable({
   const openDateDialog = useCallback(() => {
     setTempDateRange(dateRange);
     if (dateRange?.from) {
-      setFromTime(`${String(dateRange.from.getHours()).padStart(2, "0")}:${String(dateRange.from.getMinutes()).padStart(2, "0")}`);
+      setFromTime(
+        `${String(dateRange.from.getHours()).padStart(2, "0")}:${String(dateRange.from.getMinutes()).padStart(2, "0")}`,
+      );
     } else {
       setFromTime("00:00");
     }
     if (dateRange?.to) {
-      setToTime(`${String(dateRange.to.getHours()).padStart(2, "0")}:${String(dateRange.to.getMinutes()).padStart(2, "0")}`);
+      setToTime(
+        `${String(dateRange.to.getHours()).padStart(2, "0")}:${String(dateRange.to.getMinutes()).padStart(2, "0")}`,
+      );
     } else {
       setToTime("23:59");
     }
@@ -502,10 +508,7 @@ function McpToolCallsTable({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setIsDateDialogOpen(false)}
-          >
+          <Button variant="outline" onClick={() => setIsDateDialogOpen(false)}>
             Cancel
           </Button>
           <Button
@@ -561,9 +564,7 @@ function McpToolCallsTable({
   if (!mcpToolCalls || mcpToolCalls.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-4">
-          {datePickerButton}
-        </div>
+        <div className="flex flex-wrap gap-4">{datePickerButton}</div>
 
         {datePickerDialog}
 

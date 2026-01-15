@@ -2,7 +2,14 @@
 
 import type { archestraApiTypes } from "@shared";
 import { format } from "date-fns";
-import { CalendarIcon, Clock, Layers, MessageSquare, User, X } from "lucide-react";
+import {
+  CalendarIcon,
+  Clock,
+  Layers,
+  MessageSquare,
+  User,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -360,7 +367,9 @@ function SessionsTable({
 
   // Datetime picker dialog state
   const [isDateDialogOpen, setIsDateDialogOpen] = useState(false);
-  const [tempDateRange, setTempDateRange] = useState<DateRange | undefined>(dateRange);
+  const [tempDateRange, setTempDateRange] = useState<DateRange | undefined>(
+    dateRange,
+  );
   const [fromTime, setFromTime] = useState(() => {
     if (startDateFromUrl) {
       const date = new Date(startDateFromUrl);
@@ -427,12 +436,16 @@ function SessionsTable({
   const openDateDialog = useCallback(() => {
     setTempDateRange(dateRange);
     if (dateRange?.from) {
-      setFromTime(`${String(dateRange.from.getHours()).padStart(2, "0")}:${String(dateRange.from.getMinutes()).padStart(2, "0")}`);
+      setFromTime(
+        `${String(dateRange.from.getHours()).padStart(2, "0")}:${String(dateRange.from.getMinutes()).padStart(2, "0")}`,
+      );
     } else {
       setFromTime("00:00");
     }
     if (dateRange?.to) {
-      setToTime(`${String(dateRange.to.getHours()).padStart(2, "0")}:${String(dateRange.to.getMinutes()).padStart(2, "0")}`);
+      setToTime(
+        `${String(dateRange.to.getHours()).padStart(2, "0")}:${String(dateRange.to.getMinutes()).padStart(2, "0")}`,
+      );
     } else {
       setToTime("23:59");
     }

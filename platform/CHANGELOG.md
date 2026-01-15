@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.23](https://github.com/archestra-ai/archestra/compare/platform-v1.0.22...platform-v1.0.23) (2026-01-15)
+
+
+### Features
+
+* add date range filtering for logs ([#2137](https://github.com/archestra-ai/archestra/issues/2137)) ([92871ba](https://github.com/archestra-ai/archestra/commit/92871bac403e34399a932c0b718ffed792926105))
+* invoke Agents by email ([#2044](https://github.com/archestra-ai/archestra/issues/2044)) ([2691cb7](https://github.com/archestra-ai/archestra/commit/2691cb7f54c8dd75353f24a5d52b04db0c8f3c1b))
+
+
+### Bug Fixes
+
+* **chat:** auto-refocus textarea after dropdown changes ([#2059](https://github.com/archestra-ai/archestra/issues/2059)) ([d98af2a](https://github.com/archestra-ai/archestra/commit/d98af2a95e0df9b07c2cd148575420c26537b7b8))
+* **ci:** use GitHub artifacts instead of GHCR for sharing Docker images ([#2133](https://github.com/archestra-ai/archestra/issues/2133)) ([ff5e777](https://github.com/archestra-ai/archestra/commit/ff5e7775b1276e25e78e20d6a238aa3bbc577960))
+* prevent horizontal scroll in agent edit dialog ([#2128](https://github.com/archestra-ai/archestra/issues/2128)) ([c4fa4db](https://github.com/archestra-ai/archestra/commit/c4fa4db49b6ea26f7024210f27a6467949ae2554))
+
+
+### Miscellaneous Chores
+
+* dev -&gt; main ([#2142](https://github.com/archestra-ai/archestra/issues/2142)) ([12e2ef7](https://github.com/archestra-ai/archestra/commit/12e2ef7a88eff8bf42859efd8301c77b59814ded))
+* prevent rebuilding same docker image ([#2123](https://github.com/archestra-ai/archestra/issues/2123)) ([14354a4](https://github.com/archestra-ai/archestra/commit/14354a4e6765867a313659fe0dd3a8e1212058bc))
+* remove archestra-coding-agent (moved to dedicated repo) ([#2098](https://github.com/archestra-ai/archestra/issues/2098)) ([05fe6e3](https://github.com/archestra-ai/archestra/commit/05fe6e3a3fee614452d9bb5190a84da3050b7803))
+* sort chats by updatedAt instead of createdAt ([#2114](https://github.com/archestra-ai/archestra/issues/2114)) ([4e49dc2](https://github.com/archestra-ai/archestra/commit/4e49dc2130453862324cba53f7390a6cfb75ba21))
+
 ## [1.0.22](https://github.com/archestra-ai/archestra/compare/platform-v1.0.21...platform-v1.0.22) (2026-01-14)
 
 

@@ -128,6 +128,7 @@ export function EnvironmentVariablesFormField<
               promptOnInstallation: false,
               required: false,
               description: "",
+              mounted: false,
             })
           }
         >
@@ -147,13 +148,14 @@ export function EnvironmentVariablesFormField<
         </p>
       ) : (
         <div className="border rounded-lg">
-          <div className="grid grid-cols-[1.5fr_1.2fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2 p-3 bg-muted/50 border-b">
+          <div className="grid grid-cols-[1.5fr_1fr_0.6fr_0.6fr_0.6fr_1.5fr_2fr_auto] gap-2 p-3 bg-muted/50 border-b">
             <div className="text-xs font-medium">Key</div>
             <div className="text-xs font-medium">Type</div>
             <div className="text-xs font-medium">
               Prompt on each installation
             </div>
             <div className="text-xs font-medium">Required</div>
+            <div className="text-xs font-medium">Mount as file</div>
             <div className="text-xs font-medium">Value</div>
             <div className="text-xs font-medium">Description</div>
             <div className="w-9" />
@@ -165,7 +167,7 @@ export function EnvironmentVariablesFormField<
             return (
               <div
                 key={field.id}
-                className="grid grid-cols-[1.5fr_1.2fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2 p-3 items-start border-b last:border-b-0"
+                className="grid grid-cols-[1.5fr_1fr_0.6fr_0.6fr_0.6fr_1.5fr_2fr_auto] gap-2 p-3 items-start border-b last:border-b-0"
               >
                 <FormField
                   control={control}
@@ -274,6 +276,39 @@ export function EnvironmentVariablesFormField<
                     </FormItem>
                   )}
                 />
+                {/* Mount as file checkbox - only shown for secret type */}
+                {(() => {
+                  const envType = form.watch(
+                    `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
+                  );
+
+                  // Only show "Mount as file" for secret type
+                  if (envType !== "secret") {
+                    return <div className="h-10" />;
+                  }
+
+                  return (
+                    <FormField
+                      control={control}
+                      name={
+                        `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>
+                      }
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <div className="flex items-center h-10">
+                              <Checkbox
+                                checked={field.value ?? false}
+                                onCheckedChange={field.onChange}
+                              />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  );
+                })()}
                 {(() => {
                   const envType = form.watch(
                     `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,

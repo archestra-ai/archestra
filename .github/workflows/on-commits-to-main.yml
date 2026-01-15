@@ -119,6 +119,12 @@ jobs:
             --set archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }}" \
             --set archestra.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="true" \
             --set archestra.env.FEATURES_BROWSER_STREAMING_ENABLED="true" \
+            --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER="outlook" \
+            --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID="${{ secrets.ARCHESTRA_STAGING_OUTLOOK_TENANT_ID }}" \
+            --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID="${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID }}" \
+            --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET="${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET }}" \
+            --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS="agents@archestraai.onmicrosoft.com" \
+            --set archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL="https://backend.archestra.dev/api/webhooks/incoming-email" \
             --values .github/values-staging.yaml \
             --wait
 

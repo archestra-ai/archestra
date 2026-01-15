@@ -2399,6 +2399,174 @@ export type OllamaChatCompletionResponseInput = {
     };
 };
 
+export type ZhipuaiChatCompletionRequestInput = {
+    model: string;
+    /**
+     * https://docs.z.ai/api-reference/llm/chat-completion#body
+     */
+    messages: Array<{
+        role: 'system';
+        content: string;
+        name?: string;
+    } | {
+        role: 'user';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://docs.z.ai/api-reference/llm/chat-completion#body
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        name?: string;
+    } | {
+        role: 'assistant';
+        content?: string | unknown;
+        name?: string;
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://docs.z.ai/api-reference/llm/chat-completion#response
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        }>;
+        function_call?: {
+            arguments: string;
+            name: string;
+        };
+    } | {
+        role: 'tool';
+        content: string;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string;
+        name: string;
+    }>;
+    tools?: Array<{
+        type: 'function';
+        /**
+         * https://docs.z.ai/api-reference/llm/chat-completion#body
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * https://docs.z.ai/api-reference/llm/chat-completion#body
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    }>;
+    /**
+     * https://docs.z.ai/api-reference/llm/chat-completion#body
+     */
+    tool_choice?: 'auto' | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    };
+    request_id?: string;
+    do_sample?: boolean;
+    stream?: boolean;
+    thinking?: {
+        type: 'enabled' | 'disabled';
+        clear_thinking?: boolean;
+    };
+    temperature?: number | unknown;
+    top_p?: number | unknown;
+    max_tokens?: number | unknown;
+    tool_stream?: boolean;
+    stop?: Array<string>;
+    response_format?: {
+        type: 'text' | 'json_object';
+    };
+    user_id?: string;
+};
+
+export type ZhipuaiChatCompletionResponseInput = {
+    id: string;
+    request_id?: string;
+    choices: Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
+        index: number;
+        logprobs: unknown;
+        /**
+         * https://docs.z.ai/api-reference/llm/chat-completion#response
+         */
+        message: {
+            content: string | unknown;
+            role: 'assistant';
+            reasoning_content?: string;
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://docs.z.ai/api-reference/llm/chat-completion#response
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            }>;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: 'chat.completion';
+    system_fingerprint?: string | unknown;
+    /**
+     * https://docs.z.ai/api-reference/llm/chat-completion#response
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        /**
+         * https://docs.z.ai/api-reference/llm/chat-completion#response
+         */
+        prompt_tokens_details?: {
+            cached_tokens: number;
+        };
+    };
+    /**
+     * https://docs.z.ai/api-reference/llm/chat-completion#response
+     */
+    web_search?: Array<{
+        title: string;
+        content: string;
+        link: string;
+        media: string;
+        icon: string;
+        refer: string;
+        publish_date: string;
+    }>;
+};
+
 export type WebSocketMessageInput = {
     type: string;
     payload: {
@@ -4853,6 +5021,174 @@ export type OllamaChatCompletionResponse = {
         completion_tokens_details?: unknown;
         prompt_tokens_details?: unknown;
     };
+};
+
+export type ZhipuaiChatCompletionRequest = {
+    model: string;
+    /**
+     * https://docs.z.ai/api-reference/llm/chat-completion#body
+     */
+    messages: Array<{
+        role: 'system';
+        content: string;
+        name?: string;
+    } | {
+        role: 'user';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://docs.z.ai/api-reference/llm/chat-completion#body
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        name?: string;
+    } | {
+        role: 'assistant';
+        content?: string | unknown;
+        name?: string;
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://docs.z.ai/api-reference/llm/chat-completion#response
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        }>;
+        function_call?: {
+            arguments: string;
+            name: string;
+        };
+    } | {
+        role: 'tool';
+        content: string;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string;
+        name: string;
+    }>;
+    tools?: Array<{
+        type: 'function';
+        /**
+         * https://docs.z.ai/api-reference/llm/chat-completion#body
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * https://docs.z.ai/api-reference/llm/chat-completion#body
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    }>;
+    /**
+     * https://docs.z.ai/api-reference/llm/chat-completion#body
+     */
+    tool_choice?: 'auto' | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    };
+    request_id?: string;
+    do_sample?: boolean;
+    stream?: boolean;
+    thinking?: {
+        type: 'enabled' | 'disabled';
+        clear_thinking?: boolean;
+    };
+    temperature?: number | unknown;
+    top_p?: number | unknown;
+    max_tokens?: number | unknown;
+    tool_stream?: boolean;
+    stop?: Array<string>;
+    response_format?: {
+        type: 'text' | 'json_object';
+    };
+    user_id?: string;
+};
+
+export type ZhipuaiChatCompletionResponse = {
+    id: string;
+    request_id?: string;
+    choices: Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
+        index: number;
+        logprobs: unknown;
+        /**
+         * https://docs.z.ai/api-reference/llm/chat-completion#response
+         */
+        message: {
+            content: string | unknown;
+            role: 'assistant';
+            reasoning_content?: string;
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://docs.z.ai/api-reference/llm/chat-completion#response
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            }>;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: 'chat.completion';
+    system_fingerprint?: string | unknown;
+    /**
+     * https://docs.z.ai/api-reference/llm/chat-completion#response
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        /**
+         * https://docs.z.ai/api-reference/llm/chat-completion#response
+         */
+        prompt_tokens_details?: {
+            cached_tokens: number;
+        };
+    };
+    /**
+     * https://docs.z.ai/api-reference/llm/chat-completion#response
+     */
+    web_search?: Array<{
+        title: string;
+        content: string;
+        link: string;
+        media: string;
+        icon: string;
+        refer: string;
+        publish_date: string;
+    }>;
 };
 
 export type WebSocketMessage = {
@@ -8371,7 +8707,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8391,7 +8727,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -8470,7 +8806,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8486,7 +8822,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -8558,7 +8894,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8730,7 +9066,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8830,7 +9166,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8846,7 +9182,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat/models';
 };
@@ -8917,7 +9253,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         createdAt?: string;
     }>;
 };
@@ -9097,7 +9433,7 @@ export type CreateChatConversationData = {
         promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -9377,7 +9713,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -11746,6 +12082,26 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             createdAt: string;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            request: ZhipuaiChatCompletionRequest;
+            processedRequest?: ZhipuaiChatCompletionRequest | null;
+            response: ZhipuaiChatCompletionResponse;
+            type: 'zhipuai:chatCompletions';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            createdAt: string;
         }>;
         pagination: {
             currentPage: number;
@@ -12233,6 +12589,26 @@ export type GetInteractionResponses = {
         processedRequest?: OllamaChatCompletionRequest | null;
         response: OllamaChatCompletionResponse;
         type: 'ollama:chatCompletions';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        createdAt: string;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        request: ZhipuaiChatCompletionRequest;
+        processedRequest?: ZhipuaiChatCompletionRequest | null;
+        response: ZhipuaiChatCompletionResponse;
+        type: 'zhipuai:chatCompletions';
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
@@ -16829,7 +17205,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -16849,7 +17225,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -16932,7 +17308,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -17031,7 +17407,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -17116,7 +17492,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -20862,7 +21238,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -20875,7 +21251,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -20950,7 +21326,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21114,7 +21490,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21127,7 +21503,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -21204,7 +21580,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -22294,6 +22670,180 @@ export type VllmChatCompletionsWithAgentResponses = {
 };
 
 export type VllmChatCompletionsWithAgentResponse = VllmChatCompletionsWithAgentResponses[keyof VllmChatCompletionsWithAgentResponses];
+
+export type ZhipuaiChatCompletionsWithDefaultAgentData = {
+    body?: ZhipuaiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Zhipu AI
+         */
+        authorization: string;
+        'accept-language'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/zhipuai/chat/completions';
+};
+
+export type ZhipuaiChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ZhipuaiChatCompletionsWithDefaultAgentError = ZhipuaiChatCompletionsWithDefaultAgentErrors[keyof ZhipuaiChatCompletionsWithDefaultAgentErrors];
+
+export type ZhipuaiChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: ZhipuaiChatCompletionResponse;
+};
+
+export type ZhipuaiChatCompletionsWithDefaultAgentResponse = ZhipuaiChatCompletionsWithDefaultAgentResponses[keyof ZhipuaiChatCompletionsWithDefaultAgentResponses];
+
+export type ZhipuaiChatCompletionsWithAgentData = {
+    body?: ZhipuaiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Zhipu AI
+         */
+        authorization: string;
+        'accept-language'?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/zhipuai/{agentId}/chat/completions';
+};
+
+export type ZhipuaiChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ZhipuaiChatCompletionsWithAgentError = ZhipuaiChatCompletionsWithAgentErrors[keyof ZhipuaiChatCompletionsWithAgentErrors];
+
+export type ZhipuaiChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: ZhipuaiChatCompletionResponse;
+};
+
+export type ZhipuaiChatCompletionsWithAgentResponse = ZhipuaiChatCompletionsWithAgentResponses[keyof ZhipuaiChatCompletionsWithAgentResponses];
 
 export type GetPublicSsoProvidersData = {
     body?: never;

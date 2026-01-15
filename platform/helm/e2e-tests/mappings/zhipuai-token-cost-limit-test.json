@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/zhipuai/v4/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "zhipuai-token-cost-limit-test"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "20260114011737450622882b094150",
+      "object": "chat.completion",
+      "created": 1768324666,
+      "model": "test-zhipuai-cost-limit",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Token cost limit test response."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1000,
+        "completion_tokens": 50,
+        "total_tokens": 1050
+      }
+    }
+  }
+}

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.24](https://github.com/archestra-ai/archestra/compare/platform-v1.0.23...platform-v1.0.24) (2026-01-15)
+
+
+### Bug Fixes
+
+* revert 1734 queued messages for chat ([#2154](https://github.com/archestra-ai/archestra/issues/2154)) ([23ff47f](https://github.com/archestra-ai/archestra/commit/23ff47f752300cd711ee46e1b7841fd48253192e))
+
+
+### Miscellaneous Chores
+
+* move backend files into existing `clients` + `agents` directories ([#2152](https://github.com/archestra-ai/archestra/issues/2152)) ([3858b64](https://github.com/archestra-ai/archestra/commit/3858b64c8e04cbb5c44479eb0848223acd6e148e))
+
 ## [1.0.23](https://github.com/archestra-ai/archestra/compare/platform-v1.0.22...platform-v1.0.23) (2026-01-15)
 
 

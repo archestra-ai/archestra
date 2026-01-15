@@ -215,7 +215,7 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       for (const email of emails) {
         try {
-          await processIncomingEmail(email, provider);
+          await processIncomingEmail(email, provider, { sendReply: true });
           processed++;
         } catch (error) {
           errors++;

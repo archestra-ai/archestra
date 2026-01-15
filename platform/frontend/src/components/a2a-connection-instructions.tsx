@@ -2,10 +2,11 @@
 
 import type { archestraApiTypes } from "@shared";
 import { archestraApiSdk } from "@shared";
-import { Check, Copy, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,8 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
+import { useFeatures } from "@/lib/features.query";
+import { usePromptEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
@@ -38,11 +42,13 @@ export function A2AConnectionInstructions({
   const { data: hasProfileAdminPermission } = useHasPermissions({
     profile: ["admin"],
   });
+  const { data: features } = useFeatures();
 
   const tokens = tokensData?.tokens;
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedChatLink, setCopiedChatLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
@@ -50,6 +56,24 @@ export function A2AConnectionInstructions({
   );
   const [isLoadingToken, setIsLoadingToken] = useState(false);
   const [isCopyingCode, setIsCopyingCode] = useState(false);
+
+  // Email invocation info
+  const emailEnabled = features?.incomingEmail?.enabled ?? false;
+  const emailProvider = features?.incomingEmail?.displayName;
+
+  // Fetch the email address from the backend (uses correct mailbox local part)
+  const { data: emailAddressData } = usePromptEmailAddress(
+    emailEnabled ? prompt.id : null,
+  );
+  const agentEmailAddress = emailAddressData?.emailAddress ?? null;
+
+  const handleCopyEmail = useCallback(async () => {
+    if (!agentEmailAddress) return;
+    await navigator.clipboard.writeText(agentEmailAddress);
+    setCopiedEmail(true);
+    toast.success("Email address copied");
+    setTimeout(() => setCopiedEmail(false), 2000);
+  }, [agentEmailAddress]);
 
   // Get base URL from config (displayProxyUrl includes /v1)
   const baseUrl = config.api.displayProxyUrl;
@@ -495,6 +519,63 @@ curl -X GET "${agentCardUrl}" \\
           </div>
         </div>
       </div>
+
+      {/* Email Invocation Section */}
+      {emailEnabled && agentEmailAddress && (
+        <>
+          <Separator />
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Email Invocation</Label>
+              {emailProvider && (
+                <Badge variant="secondary" className="text-xs">
+                  {emailProvider}
+                </Badge>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">
+                Send an email to invoke this agent. The email body will be used
+                as the first message.
+              </Label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+                  <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  <CodeText className="text-xs text-primary break-all flex-1">
+                    {agentEmailAddress}
+                  </CodeText>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0"
+                    onClick={handleCopyEmail}
+                  >
+                    {copiedEmail ? (
+                      <Check className="h-3 w-3 text-green-500" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-muted/50 rounded-md p-3 text-xs text-muted-foreground space-y-1">
+              <p>
+                <strong>How it works:</strong>
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 ml-2">
+                <li>Send an email to the address above</li>
+                <li>The email body becomes the agent&apos;s input message</li>
+                <li>No authentication token required</li>
+                <li>Agent executes automatically upon receiving the email</li>
+              </ul>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

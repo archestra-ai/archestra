@@ -266,6 +266,13 @@ export const RouteId = {
   GetSecret: "getSecret",
   CheckSecretsConnectivity: "checkSecretsConnectivity",
   InitializeSecretsManager: "initializeSecretsManager",
+
+  // Incoming Email Routes
+  GetIncomingEmailStatus: "getIncomingEmailStatus",
+  SetupIncomingEmailWebhook: "setupIncomingEmailWebhook",
+  RenewIncomingEmailSubscription: "renewIncomingEmailSubscription",
+  DeleteIncomingEmailSubscription: "deleteIncomingEmailSubscription",
+  GetPromptEmailAddress: "getPromptEmailAddress",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

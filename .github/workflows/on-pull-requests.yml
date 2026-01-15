@@ -174,7 +174,7 @@ jobs:
     if: github.event_name == 'pull_request'
     permissions:
       contents: write
-      packages: write # Required for pushing platform image to GHCR
+      packages: write # Required for pushing platform image to GHCR (non-fork PRs only)
       security-events: write
       id-token: write # Required for Workload Identity Federation
       pull-requests: write # Required for Docker Scout to write a comment to a PR
@@ -186,6 +186,8 @@ jobs:
       is-release-please-pr: ${{ startsWith(github.head_ref, 'release-please--') }}
       # On pull requests we don't skip running but in GH settings those are not required to succeed to hit Merge
       should-skip-running-and-always-succeed: false
+      # Fork PRs use GitHub artifacts instead of GHCR (no packages:write permission for forks)
+      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
@@ -200,7 +202,7 @@ jobs:
     name: Platform Linting and Tests (Required)
     permissions:
       contents: write
-      packages: write # Required for pushing platform image to GHCR
+      packages: write # Required for pushing platform image to GHCR (non-fork PRs only)
       security-events: write
       id-token: write # Required for Workload Identity Federation
       pull-requests: write # Required for Docker Scout to write a comment to a PR
@@ -210,6 +212,10 @@ jobs:
       # They should always succeed quickly in pull requests
       # while on merge queues they should run normally and fail if needed
       should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
+      # Fork PRs use GitHub artifacts instead of GHCR (no packages:write permission for forks)
+      # In merge_group events, github.event.pull_request is not available, so this evaluates to false
+      # (merge_group runs in base repo context with full permissions, so GHCR works)
+      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

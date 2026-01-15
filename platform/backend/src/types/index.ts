@@ -7,6 +7,7 @@ export * from "./chat-api-key";
 export * from "./common-llm-format";
 export * from "./conversation";
 export * from "./dual-llm";
+export * from "./incoming-email";
 export * from "./interaction";
 export * from "./invitation";
 export * from "./label";

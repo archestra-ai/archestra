@@ -1,6 +1,6 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
 import { describe, expect, test } from "@/test";
-import { SelectInternalMcpCatalogSchema } from "@/types/mcp-catalog";
+import { SelectInternalMcpCatalogSchema } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 
 describe("InternalMcpCatalogModel", () => {

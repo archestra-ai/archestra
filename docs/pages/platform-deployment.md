@@ -681,5 +681,53 @@ The following environment variables can be used to configure Archestra Platform:
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
+- **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Default LLM provider for Chat and A2A features.
+
+  - Default: `anthropic`
+  - Options: `anthropic`, `openai`, `gemini`
+  - Used when no profile-specific provider is configured
+
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
   - Please reach out to <sales@archestra.ai> to learn more about the license.
+
+### Incoming Email Configuration
+
+These environment variables configure the Incoming Email feature, which allows external users to invoke agents by sending emails. See [Agents - Incoming Email](/docs/platform-agents#incoming-email) for setup instructions.
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER`** - Email provider to use for incoming email.
+
+  - Default: Not set (feature disabled)
+  - Options: `outlook`
+  - Required to enable the incoming email feature
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID`** - Azure AD tenant ID for Microsoft Graph API.
+
+  - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
+  - Example: `e6ec2dea-2205-4e2f-afb6-f83e5f588f40`
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID`** - Azure AD application (client) ID.
+
+  - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
+  - Example: `8d184f86-d6a1-4fd6-8783-b2f4931be17b`
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET`** - Azure AD application client secret.
+
+  - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
+  - Note: Keep this value secure; do not commit to version control
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS`** - Email address of the mailbox to monitor.
+
+  - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
+  - Example: `agents@yourcompany.com`
+  - This mailbox receives all agent-bound emails via plus-addressing
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN`** - Override the email domain for agent addresses.
+
+  - Optional: Defaults to domain extracted from `ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS`
+  - Example: `yourcompany.com`
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL`** - Public webhook URL for Microsoft Graph notifications.
+
+  - Optional: If set, subscription is created automatically on server startup
+  - Example: `https://api.yourcompany.com/api/webhooks/incoming-email`
+  - If not set, configure the subscription manually via Settings > Incoming Email

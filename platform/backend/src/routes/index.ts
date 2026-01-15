@@ -21,6 +21,7 @@ export { default as chatModelsRoutes } from "./chat/routes.models";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";
+export { default as incomingEmailRoutes } from "./incoming-email";
 export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";

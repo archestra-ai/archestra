@@ -8,6 +8,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Savings } from "@/components/savings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table,
@@ -24,7 +25,7 @@ import {
   useUniqueUserIds,
 } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
-
+import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
@@ -326,6 +327,8 @@ function SessionsTable({
   const pageSizeFromUrl = searchParams.get("pageSize");
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
+  const startDateFromUrl = searchParams.get("startDate");
+  const endDateFromUrl = searchParams.get("endDate");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
@@ -348,6 +351,22 @@ function SessionsTable({
     },
     [searchParams, router, pathname],
   );
+
+  // Date time range picker hook
+  const dateTimePicker = useDateTimeRangePicker({
+    startDateFromUrl,
+    endDateFromUrl,
+    onDateRangeChange: useCallback(
+      ({ startDate, endDate }) => {
+        updateUrlParams({
+          startDate,
+          endDate,
+          page: "1", // Reset to first page
+        });
+      },
+      [updateUrlParams],
+    ),
+  });
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -386,6 +405,8 @@ function SessionsTable({
     offset: pageIndex * pageSize,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     userId: userFilter !== "all" ? userFilter : undefined,
+    startDate: dateTimePicker.startDateParam,
+    endDate: dateTimePicker.endDateParam,
   });
 
   const { data: agents } = useProfiles({
@@ -397,7 +418,10 @@ function SessionsTable({
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;
 
-  const hasFilters = profileFilter !== "all" || userFilter !== "all";
+  const hasFilters =
+    profileFilter !== "all" ||
+    userFilter !== "all" ||
+    dateTimePicker.dateRange !== undefined;
 
   return (
     <div className="space-y-4">
@@ -430,6 +454,22 @@ function SessionsTable({
           className="w-[200px]"
         />
 
+        <DateTimeRangePicker
+          dateRange={dateTimePicker.dateRange}
+          isDialogOpen={dateTimePicker.isDateDialogOpen}
+          tempDateRange={dateTimePicker.tempDateRange}
+          fromTime={dateTimePicker.fromTime}
+          toTime={dateTimePicker.toTime}
+          displayText={dateTimePicker.getDateRangeDisplay()}
+          onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
+          onTempDateRangeChange={dateTimePicker.setTempDateRange}
+          onFromTimeChange={dateTimePicker.setFromTime}
+          onToTimeChange={dateTimePicker.setToTime}
+          onOpenDialog={dateTimePicker.openDateDialog}
+          onApply={dateTimePicker.handleApplyDateRange}
+          idPrefix="llm-proxy-"
+        />
+
         {hasFilters && (
           <Button
             variant="ghost"
@@ -437,9 +477,10 @@ function SessionsTable({
             onClick={() => {
               handleProfileFilterChange("all");
               handleUserFilterChange("all");
+              dateTimePicker.clearDateRange();
             }}
           >
-            Clear filters
+            Clear all filters
           </Button>
         )}
       </div>

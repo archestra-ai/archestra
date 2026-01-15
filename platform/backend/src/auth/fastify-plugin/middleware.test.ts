@@ -292,6 +292,54 @@ describe("Authnz", () => {
       }
     });
 
+    test("should skip auth for incoming email webhook routes", async () => {
+      const webhookUrls = [
+        "/api/webhooks/incoming-email",
+        "/api/webhooks/incoming-email?validationToken=abc123",
+      ];
+
+      for (const url of webhookUrls) {
+        const mockRequest = {
+          url,
+          method: "POST",
+          headers: {},
+        } as FastifyRequest;
+
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+
+        await authnz.handle(mockRequest, mockReply);
+
+        expect(mockReply.status).not.toHaveBeenCalled();
+        expect(mockReply.send).not.toHaveBeenCalled();
+      }
+    });
+
+    test("should NOT skip auth for incoming email setup endpoint (legacy)", async () => {
+      const mockRequest = {
+        url: "/api/webhooks/incoming-email/setup",
+        method: "POST",
+        headers: {},
+        routeOptions: {
+          schema: {
+            operationId: "LegacyIncomingEmailSetup",
+          },
+        },
+      } as FastifyRequest;
+
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      // Should throw ApiError for unauthenticated requests to setup endpoint
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Unauthenticated",
+      );
+    });
+
     test("should NOT skip auth for similar but different paths", async () => {
       const protectedPaths = [
         "/.well-known/something-else",

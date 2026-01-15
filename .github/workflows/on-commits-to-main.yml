@@ -1,9 +1,9 @@
-name: On commits to dev
+name: On commits to main
 
 on:
   push:
     branches:
-      - dev
+      - main
   # Allow manual triggering of the workflow
   workflow_dispatch:
 
@@ -31,8 +31,8 @@ jobs:
             docs:
               - 'docs/**'
 
-  build-dev-image:
-    name: Build Platform Dev Docker Image
+  build-staging-image:
+    name: Build Platform Staging Docker Image
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -67,8 +67,8 @@ jobs:
 
   deploy-to-staging:
     name: Deploy to staging
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: build-dev-image
+    runs-on: ubuntu-latest
+    needs: build-staging-image
     permissions:
       contents: read
       id-token: write # Required for Workload Identity Federation

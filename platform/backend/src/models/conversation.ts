@@ -92,7 +92,7 @@ class ConversationModel {
         ),
       )
       .orderBy(
-        desc(schema.conversationsTable.createdAt),
+        desc(schema.conversationsTable.updatedAt),
         schema.messagesTable.createdAt,
       );
 

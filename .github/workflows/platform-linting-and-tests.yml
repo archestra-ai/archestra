@@ -12,6 +12,11 @@ on:
         required: false
         type: boolean
         default: false
+      is-fork-pr:
+        description: "Whether this PR is from a fork (uses artifacts instead of GHCR)"
+        required: false
+        type: boolean
+        default: false
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN:
         required: true
@@ -56,7 +61,7 @@ jobs:
 
   platform-linting-and-tests:
     name: Platform Linting and Tests
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: write # Required for release-please auto-commit of codegen changes
     defaults:
@@ -173,6 +178,8 @@ jobs:
           echo "✅ All validation checks passed"
 
   # Build platform Docker image once for all e2e tests
+  # Non-fork PRs: Push to GHCR (faster)
+  # Fork PRs: Upload as artifact (no package write permissions needed)
   platform-e2e-build:
     name: Build Platform Image
     runs-on: blacksmith-16vcpu-ubuntu-2404
@@ -180,6 +187,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image-source: ${{ inputs.is-fork-pr && 'artifact' || 'ghcr' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -192,13 +201,16 @@ jobs:
           working-directory: ./platform
 
       - name: Login to GHCR
+        if: ${{ !inputs.is-fork-pr }}
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      # Non-fork PRs: Build and push to GHCR
+      - name: Build and push Docker image to GHCR
+        if: ${{ !inputs.is-fork-pr }}
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ./platform
@@ -206,6 +218,33 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      # Fork PRs: Build locally and export as artifact
+      - name: Build Docker image locally
+        if: ${{ inputs.is-fork-pr }}
+        uses: ./.github/actions/build-platform-docker-image
+        with:
+          context: ./platform
+          push: "false"
+          load: "true"
+          tags: archestra-platform:${{ github.sha }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      - name: Export Docker image as tarball
+        if: ${{ inputs.is-fork-pr }}
+        run: |
+          docker save archestra-platform:${{ github.sha }} | gzip > /tmp/platform-image.tar.gz
+          ls -lh /tmp/platform-image.tar.gz
+
+      - name: Upload Docker image artifact
+        if: ${{ inputs.is-fork-pr }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: platform-docker-image
+          path: /tmp/platform-image.tar.gz
+          retention-days: 1
+          compression-level: 0 # Already gzipped
 
   # E2E tests - runs all e2e test suites in parallel
   # Uses matrix strategy to run API, UI (sharded), and Vault tests concurrently
@@ -262,8 +301,9 @@ jobs:
         with:
           working-directory: ./platform
 
+      # Non-fork PRs: Pull from GHCR
       - name: Login to GHCR
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !inputs.is-fork-pr }}
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
@@ -271,9 +311,23 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull platform image from GHCR
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !inputs.is-fork-pr }}
         run: |
           docker pull ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
+
+      # Fork PRs: Download artifact and load
+      - name: Download platform image artifact
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-fork-pr }}
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: platform-docker-image
+          path: /tmp
+
+      - name: Load platform Docker image
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-fork-pr }}
+        run: |
+          gunzip -c /tmp/platform-image.tar.gz | docker load
+          docker images
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -284,7 +338,7 @@ jobs:
           helm-values-path: .github/values-ci.yaml
           deploy-e2e-dependencies: "true"
           build-platform-image: "false"
-          platform-image-tag: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
+          platform-image-tag: ${{ inputs.is-fork-pr && format('archestra-platform:{0}', github.sha) || format('ghcr.io/{0}/platform:{1}', github.repository, github.sha) }}
           platform-context: ./platform
 
       - name: Resolve Playwright version
@@ -408,24 +462,41 @@ jobs:
 
   platform-docker-image-scanning:
     name: Platform Docker Image Scanning
+    needs: [platform-e2e-build]
+    # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # Non-fork PRs: Pull from GHCR
+      - name: Login to GHCR
+        if: ${{ github.event_name == 'merge_group' && !inputs.is-fork-pr }}
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          persist-credentials: false
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image
-        if: ${{ github.event_name == 'merge_group' }}
-        uses: ./.github/actions/build-platform-docker-image
+      - name: Pull platform image from GHCR
+        if: ${{ github.event_name == 'merge_group' && !inputs.is-fork-pr }}
+        run: |
+          docker pull ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
+
+      # Fork PRs: Download artifact and load
+      - name: Download platform image artifact
+        if: ${{ github.event_name == 'merge_group' && inputs.is-fork-pr }}
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
-          context: ./platform
-          load: "true"
-          tags: archestra/platform:ci-test
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          name: platform-docker-image
+          path: /tmp
+
+      - name: Load platform Docker image
+        if: ${{ github.event_name == 'merge_group' && inputs.is-fork-pr }}
+        run: |
+          gunzip -c /tmp/platform-image.tar.gz | docker load
+          docker images
 
       # Scan Docker image for CVEs using Docker Scout
       # https://github.com/docker/scout-action
@@ -436,11 +507,11 @@ jobs:
       # NOTE: Skipped for fork PRs because GitHub doesn't expose repository secrets
       # to workflows triggered by fork PRs. Docker Scout requires Docker Hub auth.
       - name: Docker Scout CVE Check
-        if: ${{ github.event_name == 'merge_group' && github.event.pull_request.head.repo.fork != true }}
+        if: ${{ github.event_name == 'merge_group' && !inputs.is-fork-pr }}
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
         with:
           command: cves
-          image: archestra/platform:ci-test
+          image: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           only-severities: critical,high
@@ -450,7 +521,7 @@ jobs:
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     defaults:

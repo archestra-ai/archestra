@@ -17,6 +17,8 @@ export function useInteractions({
   externalAgentId,
   userId,
   sessionId,
+  startDate,
+  endDate,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -27,6 +29,8 @@ export function useInteractions({
   externalAgentId?: string;
   userId?: string;
   sessionId?: string;
+  startDate?: string;
+  endDate?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -42,6 +46,8 @@ export function useInteractions({
       externalAgentId,
       userId,
       sessionId,
+      startDate,
+      endDate,
       limit,
       offset,
       sortBy,
@@ -54,6 +60,8 @@ export function useInteractions({
           ...(externalAgentId ? { externalAgentId } : {}),
           ...(userId ? { userId } : {}),
           ...(sessionId ? { sessionId } : {}),
+          ...(startDate ? { startDate } : {}),
+          ...(endDate ? { endDate } : {}),
           limit,
           offset,
           ...(sortBy ? { sortBy } : {}),
@@ -79,7 +87,9 @@ export function useInteractions({
       !profileId &&
       !externalAgentId &&
       !userId &&
-      !sessionId
+      !sessionId &&
+      !startDate &&
+      !endDate
         ? initialData
         : undefined,
     // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
@@ -154,6 +164,8 @@ export function useInteractionSessions({
   profileId,
   userId,
   sessionId,
+  startDate,
+  endDate,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   initialData,
@@ -161,6 +173,8 @@ export function useInteractionSessions({
   profileId?: string;
   userId?: string;
   sessionId?: string;
+  startDate?: string;
+  endDate?: string;
   limit?: number;
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
@@ -172,6 +186,8 @@ export function useInteractionSessions({
       profileId,
       userId,
       sessionId,
+      startDate,
+      endDate,
       limit,
       offset,
     ],
@@ -181,6 +197,8 @@ export function useInteractionSessions({
           ...(profileId ? { profileId } : {}),
           ...(userId ? { userId } : {}),
           ...(sessionId ? { sessionId } : {}),
+          ...(startDate ? { startDate } : {}),
+          ...(endDate ? { endDate } : {}),
           limit,
           offset,
         },
@@ -200,7 +218,9 @@ export function useInteractionSessions({
       limit === DEFAULT_TABLE_LIMIT &&
       !profileId &&
       !userId &&
-      !sessionId
+      !sessionId &&
+      !startDate &&
+      !endDate
         ? initialData
         : undefined,
   });

@@ -1,0 +1,92 @@
+# This workflow automatically attempts to fix CI failures using Claude.
+# It triggers when the "On Pull Requests" workflow fails and selects the
+# appropriate OAuth token based on the user who opened the PR.
+#
+# See here for more details:
+# https://github.com/anthropics/claude-code-action/blob/main/examples/ci-failure-auto-fix.yml
+name: Claude Auto Fix CI
+
+on:
+  workflow_run:
+    workflows: ["On Pull Requests"]
+    types:
+      - completed
+
+# Restrict default permissions - each job declares what it needs
+permissions: {}
+
+jobs:
+  # Determine which user opened the PR and set the appropriate token
+  determine-token:
+    if: |
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.pull_requests[0] &&
+      !startsWith(github.event.workflow_run.head_branch, 'claude-auto-fix-ci-')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      pr_author: ${{ steps.get-pr-author.outputs.author }}
+      should_run: ${{ steps.check-user.outputs.should_run }}
+    steps:
+      - name: Get PR author
+        id: get-pr-author
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const prNumber = context.payload.workflow_run.pull_requests[0].number;
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            const author = pr.data.user.login;
+            core.setOutput('author', author);
+            console.log(`PR author: ${author}`);
+
+      - name: Check if user has configured token
+        id: check-user
+        env:
+          AUTHOR: ${{ steps.get-pr-author.outputs.author }}
+        run: |
+          # Add users here as they configure their OAuth tokens
+          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ User $AUTHOR does not have a configured OAuth token. Skipping auto-fix."
+          fi
+
+  ildar-auto-fix:
+    needs: determine-token
+    if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'iskhakov'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      issues: write
+      id-token: write
+    uses: ./.github/workflows/claude-auto-fix-ci-impl.yml
+    with:
+      head_branch: ${{ github.event.workflow_run.head_branch }}
+      workflow_run_id: ${{ github.event.workflow_run.id }}
+      pr_number: ${{ github.event.workflow_run.pull_requests[0].number }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.ILDAR_CLAUDE_CODE_OAUTH_TOKEN }}
+
+  joey-auto-fix:
+    needs: determine-token
+    if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'joeyorlando'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      issues: write
+      id-token: write
+    uses: ./.github/workflows/claude-auto-fix-ci-impl.yml
+    with:
+      head_branch: ${{ github.event.workflow_run.head_branch }}
+      workflow_run_id: ${{ github.event.workflow_run.id }}
+      pr_number: ${{ github.event.workflow_run.pull_requests[0].number }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}

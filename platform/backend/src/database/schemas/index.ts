@@ -12,6 +12,7 @@ export { default as conversationsTable } from "./conversation";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
+export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";

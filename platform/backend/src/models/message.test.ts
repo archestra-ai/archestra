@@ -1,8 +1,189 @@
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
 import MessageModel from "./message";
 
 describe("MessageModel", () => {
+  describe("create", () => {
+    test("updates conversation updatedAt when message is created", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Touch Test Agent", teams: [] });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Touch Test",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      const originalUpdatedAt = conversation.updatedAt;
+
+      // Small delay to ensure different timestamps
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await MessageModel.create({
+        conversationId: conversation.id,
+        role: "user",
+        content: {
+          id: "temp-id",
+          role: "user",
+          parts: [{ type: "text", text: "Hello" }],
+        },
+      });
+
+      // Fetch the conversation directly from DB to check updatedAt
+      const [updatedConversation] = await db
+        .select()
+        .from(schema.conversationsTable)
+        .where(eq(schema.conversationsTable.id, conversation.id));
+
+      expect(updatedConversation.updatedAt.getTime()).toBeGreaterThan(
+        originalUpdatedAt.getTime(),
+      );
+    });
+  });
+
+  describe("bulkCreate", () => {
+    test("updates conversation updatedAt when messages are bulk created", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        name: "Bulk Touch Test Agent",
+        teams: [],
+      });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Bulk Touch Test",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      const originalUpdatedAt = conversation.updatedAt;
+
+      // Small delay to ensure different timestamps
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await MessageModel.bulkCreate([
+        {
+          conversationId: conversation.id,
+          role: "user",
+          content: {
+            id: "temp-1",
+            role: "user",
+            parts: [{ type: "text", text: "Message 1" }],
+          },
+        },
+        {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: {
+            id: "temp-2",
+            role: "assistant",
+            parts: [{ type: "text", text: "Message 2" }],
+          },
+        },
+      ]);
+
+      // Fetch the conversation directly from DB to check updatedAt
+      const [updatedConversation] = await db
+        .select()
+        .from(schema.conversationsTable)
+        .where(eq(schema.conversationsTable.id, conversation.id));
+
+      expect(updatedConversation.updatedAt.getTime()).toBeGreaterThan(
+        originalUpdatedAt.getTime(),
+      );
+    });
+
+    test("updates multiple conversations when bulk creating messages across them", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        name: "Multi Conv Touch Agent",
+        teams: [],
+      });
+
+      const conversation1 = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Conversation 1",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      const conversation2 = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Conversation 2",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      const original1 = conversation1.updatedAt;
+      const original2 = conversation2.updatedAt;
+
+      // Small delay to ensure different timestamps
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await MessageModel.bulkCreate([
+        {
+          conversationId: conversation1.id,
+          role: "user",
+          content: {
+            id: "temp-1",
+            role: "user",
+            parts: [{ type: "text", text: "Message for conv 1" }],
+          },
+        },
+        {
+          conversationId: conversation2.id,
+          role: "user",
+          content: {
+            id: "temp-2",
+            role: "user",
+            parts: [{ type: "text", text: "Message for conv 2" }],
+          },
+        },
+      ]);
+
+      // Fetch both conversations directly from DB
+      const [updated1] = await db
+        .select()
+        .from(schema.conversationsTable)
+        .where(eq(schema.conversationsTable.id, conversation1.id));
+
+      const [updated2] = await db
+        .select()
+        .from(schema.conversationsTable)
+        .where(eq(schema.conversationsTable.id, conversation2.id));
+
+      expect(updated1.updatedAt.getTime()).toBeGreaterThan(original1.getTime());
+      expect(updated2.updatedAt.getTime()).toBeGreaterThan(original2.getTime());
+    });
+
+    test("does not fail when bulk creating empty array", async () => {
+      // Should not throw and should not attempt to update any conversations
+      await expect(MessageModel.bulkCreate([])).resolves.not.toThrow();
+    });
+  });
+
   describe("findById", () => {
     test("returns message by ID", async ({
       makeUser,

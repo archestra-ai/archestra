@@ -1,4 +1,14 @@
-import { and, asc, count, desc, eq, inArray, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  lte,
+  type SQL,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -30,12 +40,18 @@ class McpToolCallModel {
     sorting?: SortingQuery,
     userId?: string,
     isMcpServerAdmin?: boolean,
+    filters?: {
+      startDate?: Date;
+      endDate?: Date;
+    },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = McpToolCallModel.getOrderByClause(sorting);
 
-    // Build where clause for access control
-    let whereClause: SQL | undefined;
+    // Build where clauses
+    const conditions: SQL[] = [];
+
+    // Access control filter
     if (userId && !isMcpServerAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
@@ -46,11 +62,22 @@ class McpToolCallModel {
         return createPaginatedResult([], 0, pagination);
       }
 
-      whereClause = inArray(
-        schema.mcpToolCallsTable.agentId,
-        accessibleAgentIds,
+      conditions.push(
+        inArray(schema.mcpToolCallsTable.agentId, accessibleAgentIds),
       );
     }
+
+    // Date range filter
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.mcpToolCallsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [data, [{ total }]] = await Promise.all([
       db
@@ -147,11 +174,30 @@ class McpToolCallModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     whereClauses?: SQL[],
+    filters?: {
+      startDate?: Date;
+      endDate?: Date;
+    },
   ): Promise<PaginatedResult<McpToolCall>> {
-    const whereCondition = and(
-      eq(schema.mcpToolCallsTable.agentId, agentId),
-      ...(whereClauses ?? []),
-    );
+    // Build conditions array
+    const conditions: SQL[] = [eq(schema.mcpToolCallsTable.agentId, agentId)];
+
+    // Add any custom where clauses
+    if (whereClauses && whereClauses.length > 0) {
+      conditions.push(...whereClauses);
+    }
+
+    // Date range filter
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.mcpToolCallsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
+    }
+
+    const whereCondition = and(...conditions);
 
     const orderByClause = McpToolCallModel.getOrderByClause(sorting);
 

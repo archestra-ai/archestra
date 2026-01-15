@@ -10717,6 +10717,12 @@ export type GetFeaturesResponses = {
         ollamaEnabled: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
         browserStreamingEnabled: boolean;
+        incomingEmail: {
+            enabled: boolean;
+            provider?: 'outlook';
+            displayName?: string;
+            emailDomain?: string;
+        };
     };
 };
 
@@ -11066,6 +11072,452 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
 
+export type PostApiWebhooksIncomingEmailData = {
+    body?: unknown;
+    path?: never;
+    query?: never;
+    url: '/api/webhooks/incoming-email';
+};
+
+export type PostApiWebhooksIncomingEmailErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string;
+    };
+};
+
+export type PostApiWebhooksIncomingEmailError = PostApiWebhooksIncomingEmailErrors[keyof PostApiWebhooksIncomingEmailErrors];
+
+export type PostApiWebhooksIncomingEmailResponses = {
+    /**
+     * Default Response
+     */
+    200: string | {
+        success: boolean;
+        processed?: number;
+        errors?: number;
+    };
+};
+
+export type PostApiWebhooksIncomingEmailResponse = PostApiWebhooksIncomingEmailResponses[keyof PostApiWebhooksIncomingEmailResponses];
+
+export type GetPromptEmailAddressData = {
+    body?: never;
+    path: {
+        promptId: string;
+    };
+    query?: never;
+    url: '/api/prompts/{promptId}/email-address';
+};
+
+export type GetPromptEmailAddressErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPromptEmailAddressError = GetPromptEmailAddressErrors[keyof GetPromptEmailAddressErrors];
+
+export type GetPromptEmailAddressResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        emailAddress: string | null;
+    };
+};
+
+export type GetPromptEmailAddressResponse = GetPromptEmailAddressResponses[keyof GetPromptEmailAddressResponses];
+
+export type GetIncomingEmailStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/incoming-email/status';
+};
+
+export type GetIncomingEmailStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetIncomingEmailStatusError = GetIncomingEmailStatusErrors[keyof GetIncomingEmailStatusErrors];
+
+export type GetIncomingEmailStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        isActive: boolean;
+        subscription: {
+            id: string;
+            subscriptionId: string;
+            provider: string;
+            webhookUrl: string;
+            expiresAt: string;
+        } | null;
+    };
+};
+
+export type GetIncomingEmailStatusResponse = GetIncomingEmailStatusResponses[keyof GetIncomingEmailStatusResponses];
+
+export type SetupIncomingEmailWebhookData = {
+    body: {
+        webhookUrl: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/incoming-email/setup';
+};
+
+export type SetupIncomingEmailWebhookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetupIncomingEmailWebhookError = SetupIncomingEmailWebhookErrors[keyof SetupIncomingEmailWebhookErrors];
+
+export type SetupIncomingEmailWebhookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        subscriptionId?: string;
+        expiresAt?: string;
+        message?: string;
+    };
+};
+
+export type SetupIncomingEmailWebhookResponse = SetupIncomingEmailWebhookResponses[keyof SetupIncomingEmailWebhookResponses];
+
+export type RenewIncomingEmailSubscriptionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/incoming-email/renew';
+};
+
+export type RenewIncomingEmailSubscriptionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RenewIncomingEmailSubscriptionError = RenewIncomingEmailSubscriptionErrors[keyof RenewIncomingEmailSubscriptionErrors];
+
+export type RenewIncomingEmailSubscriptionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        subscriptionId?: string;
+        expiresAt?: string;
+        message?: string;
+    };
+};
+
+export type RenewIncomingEmailSubscriptionResponse = RenewIncomingEmailSubscriptionResponses[keyof RenewIncomingEmailSubscriptionResponses];
+
+export type DeleteIncomingEmailSubscriptionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/incoming-email/subscription';
+};
+
+export type DeleteIncomingEmailSubscriptionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteIncomingEmailSubscriptionError = DeleteIncomingEmailSubscriptionErrors[keyof DeleteIncomingEmailSubscriptionErrors];
+
+export type DeleteIncomingEmailSubscriptionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteIncomingEmailSubscriptionResponse = DeleteIncomingEmailSubscriptionResponses[keyof DeleteIncomingEmailSubscriptionResponses];
+
 export type GetInteractionsData = {
     body?: never;
     path?: never;
@@ -11086,6 +11538,14 @@ export type GetInteractionsData = {
          * Filter by session ID
          */
         sessionId?: string;
+        /**
+         * Filter by start date (ISO 8601 format)
+         */
+        startDate?: string;
+        /**
+         * Filter by end date (ISO 8601 format)
+         */
+        endDate?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
@@ -11316,6 +11776,14 @@ export type GetInteractionSessionsData = {
          * Filter by session ID
          */
         sessionId?: string;
+        /**
+         * Filter by start date (ISO 8601 format)
+         */
+        startDate?: string;
+        /**
+         * Filter by end date (ISO 8601 format)
+         */
+        endDate?: string;
         limit?: number;
         offset?: number;
     };
@@ -15470,6 +15938,14 @@ export type GetMcpToolCallsData = {
          * Filter by agent ID
          */
         agentId?: string;
+        /**
+         * Filter by start date (ISO 8601 format)
+         */
+        startDate?: string;
+        /**
+         * Filter by end date (ISO 8601 format)
+         */
+        endDate?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';

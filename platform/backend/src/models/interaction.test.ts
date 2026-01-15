@@ -695,6 +695,220 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("date range filtering", () => {
+    test("filters by startDate", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create interactions with different timestamps
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+
+      // Interaction from 2 days ago
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: twoDaysAgo.getTime(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Interaction from yesterday
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: yesterday.getTime(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter for interactions from yesterday onwards
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { startDate: yesterday },
+      );
+
+      // Should include yesterday's interaction and possibly the one just created
+      expect(interactions.data.length).toBeGreaterThanOrEqual(1);
+    });
+
+    test("filters by endDate", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create interactions
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter for interactions before a past date (should exclude all current interactions)
+      const pastDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { endDate: pastDate },
+      );
+
+      // Should not include the just-created interaction
+      expect(
+        interactions.data.every(
+          (i) => new Date(i.createdAt).getTime() <= pastDate.getTime(),
+        ),
+      ).toBe(true);
+    });
+
+    test("filters by date range (startDate and endDate)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create an interaction
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter for interactions in a date range that includes now
+      const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // yesterday
+      const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // tomorrow
+
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { startDate, endDate },
+      );
+
+      expect(interactions.data.length).toBeGreaterThanOrEqual(1);
+      expect(
+        interactions.data.every((i) => {
+          const createdAt = new Date(i.createdAt).getTime();
+          return (
+            createdAt >= startDate.getTime() && createdAt <= endDate.getTime()
+          );
+        }),
+      ).toBe(true);
+    });
+
+    test("date filter works with other filters", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
+      const agent2 = await AgentModel.create({ name: "Agent 2", teams: [] });
+
+      // Create interactions for both agents
+      await InteractionModel.create({
+        profileId: agent1.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent2.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter by profileId and date range
+      const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { profileId: agent1.id, startDate, endDate },
+      );
+
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].profileId).toBe(agent1.id);
+    });
+  });
+
+  describe("getSessions date filtering", () => {
+    test("filters sessions by date range", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create interaction
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "test-session",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter for sessions in a date range that includes now
+      const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { startDate, endDate },
+      );
+
+      expect(sessions.data.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe("getUniqueUserIds", () => {
     test("returns unique user IDs with names", async ({
       makeAdmin,

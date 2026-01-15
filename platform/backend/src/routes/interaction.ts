@@ -64,6 +64,16 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .optional()
               .describe("Filter by user ID (from X-Archestra-User-Id header)"),
             sessionId: z.string().optional().describe("Filter by session ID"),
+            startDate: z
+              .string()
+              .datetime()
+              .optional()
+              .describe("Filter by start date (ISO 8601 format)"),
+            endDate: z
+              .string()
+              .datetime()
+              .optional()
+              .describe("Filter by end date (ISO 8601 format)"),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -87,6 +97,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           externalAgentId,
           userId,
           sessionId,
+          startDate,
+          endDate,
           limit,
           offset,
           sortBy,
@@ -114,6 +126,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           externalAgentId,
           filterUserId: userId,
           sessionId,
+          startDate,
+          endDate,
           pagination,
           sorting,
         },
@@ -125,7 +139,14 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sorting,
         user.id,
         isAgentAdmin,
-        { profileId, externalAgentId, userId, sessionId },
+        {
+          profileId,
+          externalAgentId,
+          userId,
+          sessionId,
+          startDate: startDate ? new Date(startDate) : undefined,
+          endDate: endDate ? new Date(endDate) : undefined,
+        },
       );
 
       fastify.log.info(
@@ -160,6 +181,16 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .optional()
               .describe("Filter by user ID (from X-Archestra-User-Id header)"),
             sessionId: z.string().optional().describe("Filter by session ID"),
+            startDate: z
+              .string()
+              .datetime()
+              .optional()
+              .describe("Filter by start date (ISO 8601 format)"),
+            endDate: z
+              .string()
+              .datetime()
+              .optional()
+              .describe("Filter by end date (ISO 8601 format)"),
           })
           .merge(PaginationQuerySchema),
         response: constructResponseSchema(
@@ -168,7 +199,19 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { profileId, userId, sessionId, limit, offset }, user, headers },
+      {
+        query: {
+          profileId,
+          userId,
+          sessionId,
+          startDate,
+          endDate,
+          limit,
+          offset,
+        },
+        user,
+        headers,
+      },
       reply,
     ) => {
       const pagination = { limit, offset };
@@ -186,6 +229,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           filterUserId: userId,
           sessionId,
+          startDate,
+          endDate,
           pagination,
         },
         "GetInteractionSessions request",
@@ -195,7 +240,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pagination,
         user.id,
         isAgentAdmin,
-        { profileId, userId, sessionId },
+        {
+          profileId,
+          userId,
+          sessionId,
+          startDate: startDate ? new Date(startDate) : undefined,
+          endDate: endDate ? new Date(endDate) : undefined,
+        },
       );
 
       fastify.log.info(

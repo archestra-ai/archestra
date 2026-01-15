@@ -38,6 +38,11 @@ class CacheManager {
 export const CacheKey = {
   GetChatModels: "get-chat-models",
   ChatMcpTools: "chat-mcp-tools",
+  ProcessedEmail: "processed-email",
+  WebhookRateLimit: "webhook-rate-limit",
+  OAuthState: "oauth-state",
+  McpSession: "mcp-session",
+  SsoGroups: "sso-groups",
 } as const;
 export type CacheKey = (typeof CacheKey)[keyof typeof CacheKey];
 

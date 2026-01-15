@@ -648,10 +648,13 @@ describe("processIncomingEmail with sendReply option", () => {
       sendReply: true,
     });
 
-    expect(mockSendReply).toHaveBeenCalledWith({
-      originalEmail: email,
-      body: "Agent response for reply",
-    });
+    expect(mockSendReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        originalEmail: email,
+        body: "Agent response for reply",
+        agentName: expect.any(String),
+      }),
+    );
     expect(result).toBe("Agent response for reply");
   });
 

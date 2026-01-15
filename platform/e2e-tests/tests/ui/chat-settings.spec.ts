@@ -32,7 +32,7 @@ test.describe("Chat API Keys", () => {
     // Provider should be Anthropic by default
     await expect(
       page.getByRole("combobox", { name: "Provider" }),
-    ).toContainText("Anthropic");
+    ).toContainText("Anthropic-faaaaail");
 
     // Fill in API key
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);

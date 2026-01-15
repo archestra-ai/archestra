@@ -85,7 +85,7 @@ jobs:
   merge-manifests:
     name: Create multi-arch manifest
     if: inputs.push_to_gcr
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs:
       - build-mcp-server-base-image
     permissions:

@@ -18,6 +18,7 @@ export type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
   EmailProviderType,
+  EmailReplyOptions,
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
@@ -434,12 +435,29 @@ export function getEmailProviderInfo(): {
 }
 
 /**
+ * Options for processing incoming emails
+ */
+export interface ProcessIncomingEmailOptions {
+  /**
+   * Whether to send the agent's response back via email reply
+   * @default false
+   */
+  sendReply?: boolean;
+}
+
+/**
  * Process an incoming email and invoke the appropriate agent
+ * @param email - The incoming email to process
+ * @param provider - The email provider instance
+ * @param options - Optional processing options
+ * @returns The agent's response text if sendReply is enabled
  */
 export async function processIncomingEmail(
   email: IncomingEmail,
   provider: AgentIncomingEmailProvider | null,
-): Promise<void> {
+  options: ProcessIncomingEmailOptions = {},
+): Promise<string | undefined> {
+  const { sendReply: shouldSendReply = false } = options;
   if (!provider) {
     throw new Error("No email provider configured");
   }
@@ -550,6 +568,34 @@ export async function processIncomingEmail(
     "[IncomingEmail] Agent execution completed",
   );
 
-  // TODO: Optionally send the response back via email
-  // This would require implementing reply functionality in the provider
+  // Optionally send the agent's response back via email reply
+  if (shouldSendReply && result.text) {
+    try {
+      const replyId = await provider.sendReply({
+        originalEmail: email,
+        body: result.text,
+      });
+
+      logger.info(
+        {
+          promptId,
+          originalMessageId: email.messageId,
+          replyId,
+        },
+        "[IncomingEmail] Sent email reply with agent response",
+      );
+    } catch (error) {
+      // Log but don't fail the entire operation if reply fails
+      logger.error(
+        {
+          promptId,
+          originalMessageId: email.messageId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[IncomingEmail] Failed to send email reply",
+      );
+    }
+
+    return result.text;
+  }
 }

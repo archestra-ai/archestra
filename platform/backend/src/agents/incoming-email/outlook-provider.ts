@@ -7,6 +7,7 @@ import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
+  EmailReplyOptions,
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
@@ -579,6 +580,75 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
     if (this.subscriptionId === subscriptionId) {
       this.subscriptionId = null;
+    }
+  }
+
+  /**
+   * Send a reply to an incoming email
+   * Uses Microsoft Graph API to send a reply that maintains the email thread
+   */
+  async sendReply(options: EmailReplyOptions): Promise<string> {
+    const { originalEmail, body, htmlBody } = options;
+    const client = this.getGraphClient();
+
+    logger.info(
+      {
+        originalMessageId: originalEmail.messageId,
+        toAddress: originalEmail.fromAddress,
+        subject: originalEmail.subject,
+      },
+      "[OutlookEmailProvider] Sending reply to email",
+    );
+
+    try {
+      // Build the reply message
+      // Microsoft Graph reply endpoint automatically:
+      // - Sets recipient to original sender
+      // - Prefixes subject with "Re:"
+      // - Maintains conversation thread
+      const replyBody: {
+        contentType: "Text" | "HTML";
+        content: string;
+      } = htmlBody
+        ? { contentType: "HTML", content: htmlBody }
+        : { contentType: "Text", content: body };
+
+      // Use the reply endpoint to maintain email threading
+      await client
+        .api(
+          `/users/${this.config.mailboxAddress}/messages/${originalEmail.messageId}/reply`,
+        )
+        .post({
+          message: {
+            body: replyBody,
+          },
+          comment: body, // Plain text comment added to the reply
+        });
+
+      // Graph API reply endpoint doesn't return the new message ID directly
+      // Generate a tracking ID for logging purposes
+      const replyTrackingId = `reply-${originalEmail.messageId}-${Date.now()}`;
+
+      logger.info(
+        {
+          originalMessageId: originalEmail.messageId,
+          replyTrackingId,
+          recipient: originalEmail.fromAddress,
+        },
+        "[OutlookEmailProvider] Reply sent successfully",
+      );
+
+      return replyTrackingId;
+    } catch (error) {
+      logger.error(
+        {
+          originalMessageId: originalEmail.messageId,
+          recipient: originalEmail.fromAddress,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[OutlookEmailProvider] Failed to send reply",
+      );
+      throw error;
     }
   }
 

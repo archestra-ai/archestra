@@ -88,6 +88,18 @@ export interface IncomingEmail {
 }
 
 /**
+ * Options for sending an email reply
+ */
+export interface EmailReplyOptions {
+  /** The original email to reply to */
+  originalEmail: IncomingEmail;
+  /** The reply message body (plain text) */
+  body: string;
+  /** Optional HTML body for rich formatting */
+  htmlBody?: string;
+}
+
+/**
  * Result of processing an incoming email
  */
 export interface EmailProcessingResult {
@@ -186,6 +198,13 @@ export interface AgentIncomingEmailProvider {
    * Called on graceful shutdown
    */
   cleanup(): Promise<void>;
+
+  /**
+   * Send a reply to an incoming email
+   * @param options - The reply options including original email and response body
+   * @returns The message ID of the sent reply
+   */
+  sendReply(options: EmailReplyOptions): Promise<string>;
 }
 
 /**

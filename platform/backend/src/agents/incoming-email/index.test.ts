@@ -526,3 +526,255 @@ describe("email deduplication helpers", () => {
     expect(result).toBe(true);
   });
 });
+
+describe("processIncomingEmail with sendReply option", () => {
+  const mockExecuteA2AMessage = vi.mocked(executeA2AMessage);
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "msg-reply-test",
+      text: "Agent response for reply",
+      finishReason: "end_turn",
+    });
+  });
+
+  test("does not send reply when sendReply option is false (default)", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+
+    const [prompt] = await db
+      .insert(schema.promptsTable)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: org.id,
+        name: "Test Prompt",
+        agentId: agent.id,
+        userPrompt: null,
+        systemPrompt: null,
+        version: 1,
+        history: [],
+      })
+      .returning();
+
+    const mockSendReply = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => prompt.id,
+      sendReply: mockSendReply,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-no-reply-${Date.now()}`,
+      toAddress: `agents+agent-${prompt.id}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test Subject",
+      body: "Hello, agent!",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    expect(mockSendReply).not.toHaveBeenCalled();
+  });
+
+  test("sends reply when sendReply option is true", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+
+    const [prompt] = await db
+      .insert(schema.promptsTable)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: org.id,
+        name: "Test Prompt",
+        agentId: agent.id,
+        userPrompt: null,
+        systemPrompt: null,
+        version: 1,
+        history: [],
+      })
+      .returning();
+
+    const mockSendReply = vi.fn().mockResolvedValue("reply-id-123");
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => prompt.id,
+      sendReply: mockSendReply,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-with-reply-${Date.now()}`,
+      toAddress: `agents+agent-${prompt.id}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test Subject",
+      body: "Hello, agent!",
+      receivedAt: new Date(),
+    };
+
+    const result = await processIncomingEmail(email, mockProvider, {
+      sendReply: true,
+    });
+
+    expect(mockSendReply).toHaveBeenCalledWith({
+      originalEmail: email,
+      body: "Agent response for reply",
+    });
+    expect(result).toBe("Agent response for reply");
+  });
+
+  test("returns agent response text when sendReply succeeds", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+
+    const [prompt] = await db
+      .insert(schema.promptsTable)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: org.id,
+        name: "Test Prompt",
+        agentId: agent.id,
+        userPrompt: null,
+        systemPrompt: null,
+        version: 1,
+        history: [],
+      })
+      .returning();
+
+    mockExecuteA2AMessage.mockResolvedValueOnce({
+      messageId: "msg-specific",
+      text: "Specific agent response",
+      finishReason: "end_turn",
+    });
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => prompt.id,
+      sendReply: vi.fn().mockResolvedValue("reply-123"),
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-return-value-${Date.now()}`,
+      toAddress: `agents+agent-${prompt.id}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test",
+      body: "Test body",
+      receivedAt: new Date(),
+    };
+
+    const result = await processIncomingEmail(email, mockProvider, {
+      sendReply: true,
+    });
+
+    expect(result).toBe("Specific agent response");
+  });
+
+  test("continues processing even if sendReply fails", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+
+    const [prompt] = await db
+      .insert(schema.promptsTable)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: org.id,
+        name: "Test Prompt",
+        agentId: agent.id,
+        userPrompt: null,
+        systemPrompt: null,
+        version: 1,
+        history: [],
+      })
+      .returning();
+
+    const mockSendReply = vi
+      .fn()
+      .mockRejectedValue(new Error("Failed to send reply"));
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => prompt.id,
+      sendReply: mockSendReply,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-reply-failure-${Date.now()}`,
+      toAddress: `agents+agent-${prompt.id}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test Subject",
+      body: "Hello, agent!",
+      receivedAt: new Date(),
+    };
+
+    // Should not throw even if sendReply fails
+    await expect(
+      processIncomingEmail(email, mockProvider, { sendReply: true }),
+    ).resolves.not.toThrow();
+
+    expect(mockSendReply).toHaveBeenCalled();
+    expect(mockExecuteA2AMessage).toHaveBeenCalled();
+  });
+});

@@ -1,4 +1,6 @@
+import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
+import type { IncomingEmail } from "@/types";
 import { OutlookEmailProvider } from "./outlook-provider";
 
 const validConfig = {
@@ -203,6 +205,142 @@ describe("OutlookEmailProvider", () => {
     test("has correct displayName", () => {
       const provider = new OutlookEmailProvider(validConfig);
       expect(provider.displayName).toBe("Microsoft Outlook");
+    });
+  });
+
+  describe("sendReply", () => {
+    const mockGraphClient = {
+      api: vi.fn().mockReturnThis(),
+      post: vi.fn(),
+    };
+
+    test("sends reply with plain text body", async () => {
+      const provider = new OutlookEmailProvider(validConfig);
+      // Access the private graphClient through the provider
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.post.mockResolvedValueOnce({});
+
+      const originalEmail: IncomingEmail = {
+        messageId: "original-msg-123",
+        toAddress: "agents+agent-abc123@example.com",
+        fromAddress: "sender@example.com",
+        subject: "Test Subject",
+        body: "Original message",
+        receivedAt: new Date(),
+      };
+
+      const replyId = await provider.sendReply({
+        originalEmail,
+        body: "This is the agent response",
+      });
+
+      expect(mockGraphClient.api).toHaveBeenCalledWith(
+        "/users/agents@example.com/messages/original-msg-123/reply",
+      );
+      expect(mockGraphClient.post).toHaveBeenCalledWith({
+        message: {
+          body: {
+            contentType: "Text",
+            content: "This is the agent response",
+          },
+        },
+        comment: "This is the agent response",
+      });
+      expect(replyId).toContain("reply-original-msg-123-");
+    });
+
+    test("sends reply with HTML body when provided", async () => {
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.post.mockResolvedValueOnce({});
+
+      const originalEmail: IncomingEmail = {
+        messageId: "original-msg-456",
+        toAddress: "agents+agent-abc123@example.com",
+        fromAddress: "sender@example.com",
+        subject: "Test Subject",
+        body: "Original message",
+        receivedAt: new Date(),
+      };
+
+      const replyId = await provider.sendReply({
+        originalEmail,
+        body: "Plain text version",
+        htmlBody: "<p>This is <strong>formatted</strong> response</p>",
+      });
+
+      expect(mockGraphClient.post).toHaveBeenCalledWith({
+        message: {
+          body: {
+            contentType: "HTML",
+            content: "<p>This is <strong>formatted</strong> response</p>",
+          },
+        },
+        comment: "Plain text version",
+      });
+      expect(replyId).toContain("reply-original-msg-456-");
+    });
+
+    test("throws error when Graph API fails", async () => {
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.post.mockRejectedValueOnce(new Error("Graph API error"));
+
+      const originalEmail: IncomingEmail = {
+        messageId: "original-msg-789",
+        toAddress: "agents+agent-abc123@example.com",
+        fromAddress: "sender@example.com",
+        subject: "Test Subject",
+        body: "Original message",
+        receivedAt: new Date(),
+      };
+
+      await expect(
+        provider.sendReply({
+          originalEmail,
+          body: "Response",
+        }),
+      ).rejects.toThrow("Graph API error");
+    });
+
+    test("generates unique reply tracking ID", async () => {
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.post.mockResolvedValue({});
+
+      const originalEmail: IncomingEmail = {
+        messageId: "unique-msg-test",
+        toAddress: "agents+agent-abc123@example.com",
+        fromAddress: "sender@example.com",
+        subject: "Test",
+        body: "Test",
+        receivedAt: new Date(),
+      };
+
+      const replyId1 = await provider.sendReply({
+        originalEmail,
+        body: "Response 1",
+      });
+
+      // Small delay to ensure different timestamp
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const replyId2 = await provider.sendReply({
+        originalEmail,
+        body: "Response 2",
+      });
+
+      expect(replyId1).not.toBe(replyId2);
+      expect(replyId1).toMatch(/^reply-unique-msg-test-\d+$/);
+      expect(replyId2).toMatch(/^reply-unique-msg-test-\d+$/);
     });
   });
 });

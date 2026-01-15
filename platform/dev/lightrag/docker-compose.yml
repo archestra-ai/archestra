@@ -1,0 +1,58 @@
+# LightRAG API Server
+# Connects to Neo4j (graph) and Qdrant (vector) with local KV storage
+# Start with: tilt trigger lightrag-server
+# API & Web UI: http://localhost:9621
+#
+# For local dev (with lightrag-storage):
+#   LIGHTRAG_NEO4J_URI=bolt://host.docker.internal:7687
+#   LIGHTRAG_QDRANT_URL=http://host.docker.internal:6333
+#
+# See .env.example for all configuration options
+
+services:
+  lightrag:
+    image: ghcr.io/hkuds/lightrag:latest
+    container_name: lightrag
+    ports:
+      - "9621:9621"
+    volumes:
+      # Persistent KV storage (survives container restarts)
+      - lightrag-data:/app/data
+    environment:
+      # Server config
+      - HOST=0.0.0.0
+      - PORT=9621
+      - WORKING_DIR=/app/data
+      - LOG_LEVEL=INFO
+
+      # Storage backends (use full class names)
+      - LIGHTRAG_KV_STORAGE=JsonKVStorage
+      - LIGHTRAG_DOC_STATUS_STORAGE=JsonDocStatusStorage
+      - LIGHTRAG_GRAPH_STORAGE=Neo4JStorage
+      - LIGHTRAG_VECTOR_STORAGE=QdrantVectorDBStorage
+
+      # Neo4j - graph storage
+      - NEO4J_URI=${LIGHTRAG_NEO4J_URI?LIGHTRAG_NEO4J_URI is required}
+      - NEO4J_USERNAME=${LIGHTRAG_NEO4J_USERNAME:-neo4j}
+      - NEO4J_PASSWORD=${LIGHTRAG_NEO4J_PASSWORD?LIGHTRAG_NEO4J_PASSWORD is required}
+
+      # Qdrant - vector storage
+      - QDRANT_URL=${LIGHTRAG_QDRANT_URL}
+      - QDRANT_API_KEY=${LIGHTRAG_QDRANT_API_KEY}
+
+      # LLM (OpenAI)
+      - LLM_BINDING=openai
+      - LLM_MODEL=${LIGHTRAG_LLM_MODEL:-gpt-4o-mini}
+      - LLM_BINDING_API_KEY=${OPENAI_API_KEY}
+
+      # Embeddings (OpenAI)
+      - EMBEDDING_BINDING=openai
+      - EMBEDDING_MODEL=${LIGHTRAG_EMBEDDING_MODEL:-text-embedding-3-small}
+      - EMBEDDING_DIM=${LIGHTRAG_EMBEDDING_DIM:-1536}
+      - EMBEDDING_BINDING_API_KEY=${OPENAI_API_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  lightrag-data:

@@ -3,14 +3,17 @@
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useProfiles } from "@/lib/agent.query";
 import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
-
+import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
@@ -59,6 +62,16 @@ function McpToolCallsTable({
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
+  // Get URL params for filters
+  const startDateFromUrl = searchParams.get("startDate");
+  const endDateFromUrl = searchParams.get("endDate");
+  const profileIdFromUrl = searchParams.get("profileId");
+
+  const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: DEFAULT_TABLE_LIMIT,
@@ -66,6 +79,50 @@ function McpToolCallsTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
   ]);
+
+  // Helper to update URL params
+  const updateUrlParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === "") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      });
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  // Profile filter change handler
+  const handleProfileFilterChange = useCallback(
+    (value: string) => {
+      setProfileFilter(value);
+      setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
+      updateUrlParams({
+        profileId: value === "all" ? null : value,
+      });
+    },
+    [updateUrlParams],
+  );
+
+  // Date time range picker hook
+  const dateTimePicker = useDateTimeRangePicker({
+    startDateFromUrl,
+    endDateFromUrl,
+    onDateRangeChange: useCallback(
+      ({ startDate, endDate }) => {
+        setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
+        updateUrlParams({
+          startDate,
+          endDate,
+        });
+      },
+      [updateUrlParams],
+    ),
+  });
 
   // Convert TanStack sorting to API format
   const sortBy = sorting[0]?.id;
@@ -85,10 +142,13 @@ function McpToolCallsTable({
             : undefined;
 
   const { data: mcpToolCallsResponse } = useMcpToolCalls({
+    agentId: profileFilter !== "all" ? profileFilter : undefined,
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
     sortBy: apiSortBy,
     sortDirection,
+    startDate: dateTimePicker.startDateParam,
+    endDate: dateTimePicker.endDateParam,
     initialData: initialData?.mcpToolCalls,
   });
 
@@ -306,37 +366,111 @@ function McpToolCallsTable({
     },
   ];
 
+  const hasFilters =
+    profileFilter !== "all" || dateTimePicker.dateRange !== undefined;
+
+  // Shared date picker component
+  const datePickerComponent = (
+    <DateTimeRangePicker
+      dateRange={dateTimePicker.dateRange}
+      isDialogOpen={dateTimePicker.isDateDialogOpen}
+      tempDateRange={dateTimePicker.tempDateRange}
+      fromTime={dateTimePicker.fromTime}
+      toTime={dateTimePicker.toTime}
+      displayText={dateTimePicker.getDateRangeDisplay()}
+      onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
+      onTempDateRangeChange={dateTimePicker.setTempDateRange}
+      onFromTimeChange={dateTimePicker.setFromTime}
+      onToTimeChange={dateTimePicker.setToTime}
+      onOpenDialog={dateTimePicker.openDateDialog}
+      onApply={dateTimePicker.handleApplyDateRange}
+      idPrefix="mcp-gateway-"
+    />
+  );
+
   if (!mcpToolCalls || mcpToolCalls.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground text-sm">
-          No MCP tool calls found. Tool calls will appear here when agents use
-          MCP tools.
-        </p>
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-4">
+          <SearchableSelect
+            value={profileFilter}
+            onValueChange={handleProfileFilterChange}
+            placeholder="Filter by Profile"
+            items={[
+              { value: "all", label: "All Profiles" },
+              ...(agents?.map((agent) => ({
+                value: agent.id,
+                label: agent.name,
+              })) || []),
+            ]}
+            className="w-[200px]"
+          />
+          {datePickerComponent}
+        </div>
+
+        <div className="text-center py-12">
+          <p className="text-muted-foreground text-sm">
+            {hasFilters
+              ? "No MCP tool calls match your filters. Try adjusting your search."
+              : "No MCP tool calls found. Tool calls will appear here when agents use MCP tools."}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <DataTable
-      columns={columns}
-      data={mcpToolCalls}
-      pagination={
-        paginationMeta
-          ? {
-              pageIndex: pagination.pageIndex,
-              pageSize: pagination.pageSize,
-              total: paginationMeta.total,
-            }
-          : undefined
-      }
-      manualPagination
-      onPaginationChange={(newPagination) => {
-        setPagination(newPagination);
-      }}
-      manualSorting
-      sorting={sorting}
-      onSortingChange={setSorting}
-    />
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-4">
+        <SearchableSelect
+          value={profileFilter}
+          onValueChange={handleProfileFilterChange}
+          placeholder="Filter by Profile"
+          items={[
+            { value: "all", label: "All Profiles" },
+            ...(agents?.map((agent) => ({
+              value: agent.id,
+              label: agent.name,
+            })) || []),
+          ]}
+          className="w-[200px]"
+        />
+        {datePickerComponent}
+
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              handleProfileFilterChange("all");
+              dateTimePicker.clearDateRange();
+            }}
+          >
+            Clear all filters
+          </Button>
+        )}
+      </div>
+
+      <DataTable
+        columns={columns}
+        data={mcpToolCalls}
+        pagination={
+          paginationMeta
+            ? {
+                pageIndex: pagination.pageIndex,
+                pageSize: pagination.pageSize,
+                total: paginationMeta.total,
+              }
+            : undefined
+        }
+        manualPagination
+        onPaginationChange={(newPagination) => {
+          setPagination(newPagination);
+        }}
+        manualSorting
+        sorting={sorting}
+        onSortingChange={setSorting}
+      />
+    </div>
   );
 }

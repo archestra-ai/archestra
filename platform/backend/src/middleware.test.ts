@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import config from "@/config";
-import { ApiError } from "@/types/api";
+import { ApiError } from "@/types";
 import {
   enterpriseLicenseMiddleware,
   isEnterpriseOnlyRoute,

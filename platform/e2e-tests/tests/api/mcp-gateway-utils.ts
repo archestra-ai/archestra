@@ -297,3 +297,40 @@ export async function listMcpTools(
 
   return listResult.result.tools;
 }
+
+/**
+ * Assign all Archestra tools to a profile
+ * This is required because Archestra tools are not auto-assigned to profiles.
+ * @returns Array of assigned tool IDs
+ */
+export async function assignArchestraToolsToProfile(
+  request: APIRequestContext,
+  profileId: string,
+): Promise<string[]> {
+  // 1. Get all tools
+  const toolsResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/tools",
+  });
+  const tools = await toolsResponse.json();
+
+  // 2. Filter for Archestra tools (name starts with "archestra__")
+  const archestraTools = tools.filter((t: { name: string }) =>
+    t.name.startsWith("archestra__"),
+  );
+
+  // 3. Assign each archestra tool to the profile
+  const assignedToolIds: string[] = [];
+  for (const tool of archestraTools) {
+    await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/api/agents/${profileId}/tools/${tool.id}`,
+      data: {},
+    });
+    assignedToolIds.push(tool.id);
+  }
+
+  return assignedToolIds;
+}

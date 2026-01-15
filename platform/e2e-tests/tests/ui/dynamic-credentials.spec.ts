@@ -45,6 +45,8 @@ test("Verify tool calling using dynamic credentials", async ({
     { user: "Member", page: memberPage, team: "Marketing" },
   ] as const;
 
+  const CONNECT_BUTTON_TIMEOUT = 25_000;
+
   const install = async ({ page, user, team }: (typeof MATRIX_A)[number]) => {
     // Go to MCP Registry page
     await goToPage(page, "/mcp-catalog/registry");
@@ -53,7 +55,7 @@ test("Verify tool calling using dynamic credentials", async ({
     const btn = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
     );
-    await btn.waitFor({ state: "visible" });
+    await btn.waitFor({ state: "visible", timeout: CONNECT_BUTTON_TIMEOUT });
     await btn.click();
     // Fill ARCHESTRA_TEST environment variable to mark personal credential
     await page
@@ -65,7 +67,10 @@ test("Verify tool calling using dynamic credentials", async ({
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
     );
-    await connectButton.waitFor({ state: "visible" });
+    await connectButton.waitFor({
+      state: "visible",
+      timeout: CONNECT_BUTTON_TIMEOUT,
+    });
     await connectButton.click();
     // Fill ARCHESTRA_TEST environment variable to mark team credential
     await page

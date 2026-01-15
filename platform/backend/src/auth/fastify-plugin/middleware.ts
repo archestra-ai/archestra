@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/node";
 import { type RouteId, SupportedProviders } from "@shared";
+import { requiredEndpointPermissionsMap } from "@shared/access-control";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
@@ -7,25 +8,12 @@ import logger from "@/logging";
 import { UserModel } from "@/models";
 import { ApiError } from "@/types";
 
-const { requiredEndpointPermissionsMap } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: conditional endpoint permissions
-    await import("@shared/access-control.ee")
-  : await import("@shared/access-control");
-
 export class Authnz {
   public handle = async (request: FastifyRequest, _reply: FastifyReply) => {
     const requestId = request.id;
-    logger.debug(
-      { requestId, method: request.method, url: request.url },
-      "[Authnz] Starting auth check",
-    );
 
     // custom logic to skip auth check
     if (await this.shouldSkipAuthCheck(request)) {
-      logger.debug(
-        { requestId, url: request.url },
-        "[Authnz] Skipping auth check for route",
-      );
       return;
     }
 
@@ -113,9 +101,12 @@ export class Authnz {
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/sso-providers/public") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
-      (method === "GET" && url === "/api/organization/appearance")
+      (method === "GET" && url === "/api/organization/appearance") ||
+      // Incoming email webhooks - Microsoft Graph calls these directly
+      // Only allow the exact webhook path (with optional query params), not sub-paths like /setup
+      url === "/api/webhooks/incoming-email" ||
+      url.startsWith("/api/webhooks/incoming-email?")
     ) {
-      logger.debug({ url, method }, "[Authnz] Route is in skip list");
       return true;
     }
     return false;

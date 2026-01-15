@@ -3,6 +3,7 @@ import anthropicProxyRoutesV1 from "./proxy/anthropic";
 import geminiProxyRoutesV1 from "./proxy/gemini";
 import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
+import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
@@ -20,6 +21,7 @@ export { default as chatModelsRoutes } from "./chat/routes.models";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";
+export { default as incomingEmailRoutes } from "./incoming-email";
 export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";
@@ -31,6 +33,7 @@ export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as oauthRoutes } from "./oauth";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
+export { default as organizationRoleRoutes } from "./organization-role";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
 export { default as promptAgentRoutes } from "./prompt-agents";
 export { default as promptRoutes } from "./prompts";
@@ -38,6 +41,8 @@ export { default as promptRoutes } from "./prompts";
 export const anthropicProxyRoutes = config.llm.anthropic.useV2Routes
   ? anthropicProxyRoutesV2
   : anthropicProxyRoutesV1;
+// Cerebras proxy routes - V2 only (no legacy V1 implementation)
+export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;
 // Gemini proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
 export const geminiProxyRoutes = config.llm.gemini.useV2Routes
   ? geminiProxyRoutesV2
@@ -60,4 +65,5 @@ export { default as teamRoutes } from "./team";
 export { default as tokenRoutes } from "./token";
 export { default as tokenPriceRoutes } from "./token-price";
 export { default as toolRoutes } from "./tool";
+export { default as userRoutes } from "./user";
 export { default as userTokenRoutes } from "./user-token";

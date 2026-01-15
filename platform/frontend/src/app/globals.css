@@ -105,6 +105,25 @@
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+  /* Fix Shiki syntax highlighting in dark mode - apply dark theme colors from CSS variables */
+  .dark [data-streamdown="code-block-body"] span[style*="--shiki-dark"] {
+    color: var(--shiki-dark) !important;
+    background-color: transparent !important;
+  }
+  /* Code block styling - use accent color for background */
+  [data-streamdown="code-block"] {
+    background-color: var(--accent) !important;
+  }
+  [data-streamdown="code-block-header"] {
+    background-color: var(--accent) !important;
+  }
+  [data-streamdown="code-block-body"] {
+    background-color: var(--accent) !important;
+  }
+  /* Inline code styling - use accent color for background */
+  [data-streamdown="inline-code"] {
+    background-color: var(--accent) !important;
+  }
   /* Override Tailwind's font-sans to use our dynamic CSS variable */
   .font-sans {
     font-family: var(--font-sans) !important;

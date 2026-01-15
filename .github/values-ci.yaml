@@ -12,12 +12,14 @@ archestra:
     ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/openai/v1"
     ARCHESTRA_ANTHROPIC_BASE_URL: "http://e2e-tests-wiremock:8080/anthropic"
     ARCHESTRA_GEMINI_BASE_URL: "http://e2e-tests-wiremock:8080/gemini"
+    ARCHESTRA_CEREBRAS_BASE_URL: "http://e2e-tests-wiremock:8080/cerebras/v1"
     ARCHESTRA_VLLM_BASE_URL: "http://e2e-tests-wiremock:8080/vllm/v1"
     ARCHESTRA_OLLAMA_BASE_URL: "http://e2e-tests-wiremock:8080/ollama/v1"
     # Chat API keys (for e2e testing)
     ARCHESTRA_CHAT_OPENAI_API_KEY: test-key
     ARCHESTRA_CHAT_ANTHROPIC_API_KEY: test-key
     ARCHESTRA_CHAT_GEMINI_API_KEY: test-key
+    ARCHESTRA_CHAT_CEREBRAS_API_KEY: test-key
     ARCHESTRA_CHAT_VLLM_API_KEY: test-key
     ARCHESTRA_CHAT_OLLAMA_API_KEY: test-key
     ARCHESTRA_METRICS_SECRET: "foo-bar"

@@ -229,6 +229,84 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * Cerebras implementation of DualLlmClient (OpenAI-compatible)
+ */
+export class CerebrasDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "gpt-oss-120b") {
+    logger.debug({ model }, "[dualLlmClient] Cerebras: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.cerebras.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] Cerebras: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Cerebras: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] Cerebras: starting chat with schema",
+    );
+
+    // Cerebras uses OpenAI-compatible API with JSON schema support
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: schema,
+      },
+      temperature,
+    });
+
+    const content = response.choices[0].message.content || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Cerebras: chat with schema complete, parsing response",
+    );
+    return JSON.parse(content) as T;
+  }
+}
+
+/**
  * Google Gemini implementation of DualLlmClient
  * Supports both API key authentication and Vertex AI (ADC) mode
  */
@@ -592,14 +670,19 @@ export function createDualLlmClient(
         throw new Error("API key required for Anthropic dual LLM");
       }
       return new AnthropicDualLlmClient(apiKey);
+    case "cerebras":
+      if (!apiKey) {
+        throw new Error("API key required for Cerebras dual LLM");
+      }
+      return new CerebrasDualLlmClient(apiKey);
+    case "gemini":
+      // Gemini supports Vertex AI mode where apiKey may be undefined
+      return new GeminiDualLlmClient(apiKey);
     case "openai":
       if (!apiKey) {
         throw new Error("API key required for OpenAI dual LLM");
       }
       return new OpenAiDualLlmClient(apiKey);
-    case "gemini":
-      // Gemini supports Vertex AI mode where apiKey may be undefined
-      return new GeminiDualLlmClient(apiKey);
     case "vllm":
       // vLLM typically doesn't require API keys
       if (!model) {

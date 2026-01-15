@@ -24,10 +24,14 @@ import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
+import { QueuedMessagesList } from "@/components/chat/queued-messages-list";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
+import { WithPermissions } from "@/components/roles/with-permissions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -58,6 +62,7 @@ import {
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
+import { useOrganization } from "@/lib/organization.query";
 import {
   applyPendingActions,
   clearPendingActions,
@@ -98,9 +103,13 @@ export default function ChatPage() {
   });
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
+  const pendingFilesRef = useRef<
+    Array<{ url: string; mediaType: string; filename?: string }>
+  >([]);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
-  const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const userMessageJustEdited = useRef(false);
+  const autoSendTriggeredRef = useRef(false);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -210,6 +219,7 @@ export default function ChatPage() {
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   // vLLM/Ollama may not require an API key either
@@ -236,6 +246,11 @@ export default function ChatPage() {
       }
     }
   }, [searchParams, conversationId]);
+
+  // Get user_prompt from URL for auto-sending
+  const initialUserPrompt = useMemo(() => {
+    return searchParams.get("user_prompt") || undefined;
+  }, [searchParams]);
 
   // Update URL when conversation changes
   const selectConversation = useCallback(
@@ -466,6 +481,17 @@ export default function ChatPage() {
     openDialog,
   ]);
 
+  // Auto-focus textarea when status becomes ready (message sent or stream finished)
+  // Also focus when queued messages change (to handle auto-sent messages)
+  useEffect(() => {
+    if (status === "ready") {
+      // Use requestAnimationFrame for more reliable focusing
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    }
+  }, [status]);
+
   // Sync messages when conversation loads or changes
   useEffect(() => {
     if (!setMessages || !sendMessage) {
@@ -492,13 +518,38 @@ export default function ChatPage() {
       setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
 
-      // If there's a pending prompt and the conversation is empty, send it
-      if (pendingPromptRef.current && conversation.messages.length === 0) {
+      // If there's a pending prompt/files and the conversation is empty, send it
+      if (
+        (pendingPromptRef.current || pendingFilesRef.current.length > 0) &&
+        conversation.messages.length === 0
+      ) {
         const promptToSend = pendingPromptRef.current;
+        const filesToSend = pendingFilesRef.current;
         pendingPromptRef.current = undefined;
+        pendingFilesRef.current = [];
+
+        // Build message parts
+        const parts: Array<
+          | { type: "text"; text: string }
+          | { type: "file"; url: string; mediaType: string; filename?: string }
+        > = [];
+
+        if (promptToSend) {
+          parts.push({ type: "text", text: promptToSend });
+        }
+
+        for (const file of filesToSend) {
+          parts.push({
+            type: "file",
+            url: file.url,
+            mediaType: file.mediaType,
+            filename: file.filename,
+          });
+        }
+
         sendMessage({
           role: "user",
-          parts: [{ type: "text", text: promptToSend }],
+          parts,
         });
       }
     }
@@ -515,6 +566,69 @@ export default function ChatPage() {
     status,
     messages.length,
   ]);
+
+  const focusTextarea = useCallback(() => {
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }, []);
+
+  const handleSubmit = useCallback(
+    (
+      // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
+      message: { text?: string; files?: any[] },
+      e: React.FormEvent<HTMLFormElement>,
+    ) => {
+      e.preventDefault();
+      if (!sendMessage) return;
+
+      const hasText = message.text?.trim();
+      const hasFiles = message.files && message.files.length > 0;
+
+      if (!hasText && !hasFiles) return;
+
+      // Build message parts: text first, then file attachments
+      const parts: Array<
+        | { type: "text"; text: string }
+        | { type: "file"; url: string; mediaType: string; filename?: string }
+      > = [];
+
+      if (hasText) {
+        parts.push({ type: "text", text: hasText });
+      }
+
+      if (hasFiles) {
+        for (const file of message.files ?? []) {
+          parts.push({
+            type: "file",
+            url: file.url,
+            mediaType: file.mediaType,
+            filename: file.filename,
+          });
+        }
+      }
+
+      // If a message is currently being generated, queue this message instead
+      if (status === "submitted" || status === "streaming") {
+        chatSession?.addQueuedMessage?.({
+          id: crypto.randomUUID(),
+          role: "user",
+          parts,
+        });
+        focusTextarea();
+        return;
+      }
+
+      // Otherwise, send immediately
+      sendMessage({
+        role: "user",
+        parts,
+      });
+
+      focusTextarea();
+    },
+    [sendMessage, status, chatSession, focusTextarea],
+  );
 
   // Merge database UUIDs from backend into local message state
   // This runs after streaming completes and backend query has fetched
@@ -563,16 +677,17 @@ export default function ChatPage() {
       return localMsg;
     });
 
-    setMessages(mergedMessages as UIMessage[]);
-  }, [
-    conversationId,
-    conversation?.messages,
-    conversation?.id,
-    messages,
-    setMessages,
-    status,
-  ]);
+    setMessages(mergedMessages);
+  }, [conversation, conversationId, messages, setMessages, status]);
 
+  const handleDeleteQueued = useCallback(
+    (id: string) => {
+      if (chatSession?.removeQueuedMessage) {
+        chatSession.removeQueuedMessage(id);
+      }
+    },
+    [chatSession],
+  );
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
   // or when conversation loads (e.g., new chat created, hard refresh)
   useLayoutEffect(() => {
@@ -581,26 +696,46 @@ export default function ChatPage() {
     }
   }, [status, conversation?.id]);
 
-  const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
-    e.preventDefault();
-    if (status === "submitted" || status === "streaming") {
-      stop?.();
-    }
+  const handleSendNow = useCallback(
+    (id: string) => {
+      if (
+        !chatSession?.queuedMessages ||
+        !sendMessage ||
+        !chatSession.removeMessagesUpTo
+      ) {
+        return;
+      }
 
-    if (
-      !sendMessage ||
-      !message.text?.trim() ||
-      status === "submitted" ||
-      status === "streaming"
-    ) {
-      return;
-    }
+      // Find the message in the queue
+      const queued = chatSession.queuedMessages.find((msg) => msg.id === id);
+      if (!queued) {
+        return;
+      }
 
-    sendMessage?.({
-      role: "user",
-      parts: [{ type: "text", text: message.text }],
-    });
-  };
+      // Mark that we're manually sending to prevent auto-send from interfering
+      chatSession.setIsManuallySending?.(true);
+
+      // Stop the current stream if one is running - this cancels the ongoing response immediately
+      if (status === "streaming" || status === "submitted") {
+        stop?.();
+      }
+
+      // Remove all messages up to and including the selected one from the queue
+      // This keeps only messages that come after the selected one
+      chatSession.removeMessagesUpTo(id);
+
+      // Send the selected message immediately
+      sendMessage(queued);
+
+      // Reset the manual send flag after a brief delay so the status can settle
+      setTimeout(() => {
+        chatSession.setIsManuallySending?.(false);
+      }, 400);
+
+      focusTextarea();
+    },
+    [chatSession, sendMessage, status, stop, focusTextarea],
+  );
 
   // Handle initial prompt change (when no conversation exists)
   const handleInitialPromptChange = useCallback(
@@ -615,17 +750,21 @@ export default function ChatPage() {
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
     (message, e) => {
       e.preventDefault();
+      const hasText = message.text?.trim();
+      const hasFiles = message.files && message.files.length > 0;
+
       if (
-        !message.text?.trim() ||
+        (!hasText && !hasFiles) ||
         !initialAgentId ||
-        !initialModel ||
+        // !initialModel ||
         createConversationMutation.isPending
       ) {
         return;
       }
 
-      // Store the message to send after conversation is created
-      pendingPromptRef.current = message.text;
+      // Store the message (text and files) to send after conversation is created
+      pendingPromptRef.current = message.text || "";
+      pendingFilesRef.current = message.files || [];
 
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(
@@ -701,6 +840,62 @@ export default function ChatPage() {
     ],
   );
 
+  // Auto-send message from URL when conditions are met (deep link support)
+  useEffect(() => {
+    // Skip if already triggered or no user_prompt in URL
+    if (autoSendTriggeredRef.current || !initialUserPrompt) return;
+
+    // Skip if conversation already exists
+    if (conversationId) return;
+
+    // Wait for agent to be ready.
+    if (!initialAgentId) return;
+
+    // Skip if mutation is already in progress
+    if (createConversationMutation.isPending) return;
+
+    // Mark as triggered to prevent duplicate sends
+    autoSendTriggeredRef.current = true;
+
+    // Store the message to send after conversation is created
+    pendingPromptRef.current = initialUserPrompt;
+
+    // Find the provider for the initial model
+    const modelInfo = chatModels.find((m) => m.id === initialModel);
+    const selectedProvider = modelInfo?.provider as
+      | SupportedChatProvider
+      | undefined;
+
+    // Create conversation and send message
+    createConversationMutation.mutate(
+      {
+        agentId: initialAgentId,
+        selectedModel: initialModel,
+        selectedProvider,
+        promptId: initialPromptId ?? undefined,
+        chatApiKeyId: initialApiKeyId,
+      },
+      {
+        onSuccess: (newConversation) => {
+          if (newConversation) {
+            newlyCreatedConversationRef.current = newConversation.id;
+            selectConversation(newConversation.id);
+          }
+        },
+      },
+    );
+  }, [
+    initialUserPrompt,
+    conversationId,
+    initialAgentId,
+    initialModel,
+    initialPromptId,
+    initialApiKeyId,
+    chatModels,
+    createConversationMutation,
+    selectConversation,
+  ]);
+
   // Determine which agent ID to use for prompt input
   const activeAgentId = conversationId
     ? conversation?.agent?.id
@@ -732,6 +927,32 @@ export default function ChatPage() {
     );
   }
 
+  // If conversation ID is provided but conversation is not found (404)
+  if (conversationId && !isLoadingConversation && !conversation) {
+    return (
+      <div className="flex h-full w-full items-center justify-center p-8">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Conversation not found</CardTitle>
+            <CardDescription>
+              This conversation doesn&apos;t exist or you don&apos;t have access
+              to it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              The conversation may have been deleted, or you may not have
+              permission to view it.
+            </p>
+            <Button asChild>
+              <Link href="/chat">Start a new chat</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col min-w-0">
@@ -739,26 +960,33 @@ export default function ChatPage() {
           <StreamTimeoutWarning status={status} messages={messages} />
           <PermissivePolicyBar />
 
-          <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {/* Agent/Profile selector */}
-              {conversationId ? (
-                <AgentSelector
-                  currentPromptId={conversation?.promptId ?? null}
-                  currentAgentId={conversation?.agentId ?? ""}
-                  currentModel={conversation?.selectedModel ?? ""}
-                />
-              ) : (
-                <InitialAgentSelector
-                  currentPromptId={initialPromptId}
-                  onPromptChange={handleInitialPromptChange}
-                  defaultAgentId={initialAgentId ?? allProfiles[0]?.id ?? ""}
-                />
-              )}
+          <div className="sticky top-0 z-10 bg-background border-b p-2">
+            <div className="flex items-start justify-between gap-2">
+              {/* Left side - agent selector stays fixed, tools wrap internally */}
+              <div className="flex items-start gap-2 min-w-0 flex-1">
+                {/* Agent/Profile selector - fixed width */}
+                <div className="flex-shrink-0">
+                  {conversationId ? (
+                    <AgentSelector
+                      currentPromptId={conversation?.promptId ?? null}
+                      currentAgentId={conversation?.agentId ?? ""}
+                      currentModel={conversation?.selectedModel ?? ""}
+                    />
+                  ) : (
+                    <InitialAgentSelector
+                      currentPromptId={initialPromptId}
+                      onPromptChange={handleInitialPromptChange}
+                      defaultAgentId={
+                        initialAgentId ?? allProfiles[0]?.id ?? ""
+                      }
+                    />
+                  )}
+                </div>
 
-              {/* Agent tools display - pending actions stored in localStorage until first message */}
-              {(conversationId ? conversation?.promptId : initialPromptId) && (
-                <>
+                {/* Agent tools display - wraps internally, takes remaining space */}
+                {(conversationId
+                  ? conversation?.promptId
+                  : initialPromptId) && (
                   <AgentToolsDisplay
                     agentId={
                       conversationId
@@ -771,68 +999,71 @@ export default function ChatPage() {
                         : initialPromptId
                     }
                     conversationId={conversationId}
+                    addAgentsButton={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 gap-1.5 text-xs border-dashed"
+                        onClick={() => {
+                          const promptIdToEdit = conversationId
+                            ? conversation?.promptId
+                            : initialPromptId;
+                          if (promptIdToEdit) {
+                            setEditingPromptId(promptIdToEdit);
+                            setIsPromptDialogOpen(true);
+                          }
+                        }}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add agents
+                      </Button>
+                    }
                   />
+                )}
+              </div>
+              {/* Right side - controls stay fixed in first row */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {hasPlaywrightMcp && isBrowserStreamingEnabled && (
                   <Button
-                    variant="outline"
+                    variant={isBrowserPanelOpen ? "secondary" : "ghost"}
                     size="sm"
-                    className="h-7 px-2 gap-1.5 text-xs border-dashed"
-                    onClick={() => {
-                      const promptIdToEdit = conversationId
-                        ? conversation?.promptId
-                        : initialPromptId;
-                      if (promptIdToEdit) {
-                        setEditingPromptId(promptIdToEdit);
-                        setIsPromptDialogOpen(true);
-                      }
-                    }}
+                    onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
+                    className="text-xs"
                   >
-                    <Plus className="h-3 w-3" />
-                    Add agents
+                    <Globe className="h-3 w-3 mr-1" />
+                    Browser
                   </Button>
-                </>
-              )}
-            </div>
-            <div className="flex-1 flex justify-end gap-2 items-center">
-              {hasPlaywrightMcp && isBrowserStreamingEnabled && (
-                <Button
-                  variant={isBrowserPanelOpen ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
-                  className="text-xs"
-                >
-                  <Globe className="h-3 w-3 mr-1" />
-                  Browser
-                </Button>
-              )}
-              {!isArtifactOpen && (
+                )}
+                {!isArtifactOpen && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleArtifactPanel}
+                    className="text-xs"
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    Show Artifact
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={toggleArtifactPanel}
+                  onClick={toggleHideToolCalls}
                   className="text-xs"
                 >
-                  <FileText className="h-3 w-3 mr-1" />
-                  Show Artifact
+                  {hideToolCalls ? (
+                    <>
+                      <Eye className="h-3 w-3 mr-1" />
+                      Show tool calls
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      Hide tool calls
+                    </>
+                  )}
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleHideToolCalls}
-                className="text-xs"
-              >
-                {hideToolCalls ? (
-                  <>
-                    <Eye className="h-3 w-3 mr-1" />
-                    Show tool calls
-                  </>
-                ) : (
-                  <>
-                    <EyeOff className="h-3 w-3 mr-1" />
-                    Hide tool calls
-                  </>
-                )}
-              </Button>
+              </div>
             </div>
           </div>
 
@@ -995,7 +1226,37 @@ export default function ChatPage() {
 
           {activeAgentId && (
             <div className="sticky bottom-0 bg-background border-t p-4">
-              <div className="max-w-4xl mx-auto space-y-3">
+              <div className="max-w-3xl mx-auto space-y-3">
+                {currentProfileId && (
+                  <WithPermissions
+                    permissions={{ profile: ["read"] }}
+                    noPermissionHandle="tooltip"
+                  >
+                    {({ hasPermission }) => {
+                      return hasPermission ===
+                        undefined ? null : hasPermission ? (
+                        <McpToolsDisplay
+                          agentId={currentProfileId}
+                          className="text-xs text-muted-foreground"
+                        />
+                      ) : (
+                        <Badge variant="outline" className="text-xs my-2">
+                          Unable to show the list of tools
+                        </Badge>
+                      );
+                    }}
+                  </WithPermissions>
+                )}
+                {chatSession?.queuedMessages &&
+                  chatSession.queuedMessages.length > 0 && (
+                    <div className="mb-2">
+                      <QueuedMessagesList
+                        messages={chatSession.queuedMessages}
+                        onDelete={handleDeleteQueued}
+                        onSendNow={handleSendNow}
+                      />
+                    </div>
+                  )}
                 <ArchestraPromptInput
                   onSubmit={
                     conversationId && conversation?.agent.id
@@ -1066,6 +1327,7 @@ export default function ChatPage() {
                       ? (conversation?.promptId ?? null)
                       : initialPromptId
                   }
+                  allowFileUploads={organization?.allowChatFileUploads ?? false}
                 />
                 <div className="text-center">
                   <Version inline />

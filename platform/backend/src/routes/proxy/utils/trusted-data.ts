@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
 import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
+import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type {
   CommonMessage,
   GlobalToolPolicy,
@@ -28,6 +29,7 @@ export async function evaluateIfContextIsTrusted(
   provider: SupportedProvider,
   considerContextUntrusted: boolean = false,
   globalToolPolicy: GlobalToolPolicy = "restrictive",
+  policyContext: PolicyEvaluationContext,
   onDualLlmStart?: () => void,
   onDualLlmProgress?: (progress: {
     question: string;
@@ -117,6 +119,7 @@ export async function evaluateIfContextIsTrusted(
       toolOutput: toolResult,
     })),
     globalToolPolicy,
+    policyContext,
   );
 
   logger.debug(

@@ -37,6 +37,8 @@ interface ModelSelectorProps {
   disabled?: boolean;
   /** Number of messages in current conversation (for mid-conversation warning) */
   messageCount?: number;
+  /** Callback when the selector opens or closes */
+  onOpenChange?: (open: boolean) => void;
 }
 
 /** Map our provider names to logo provider names */
@@ -44,6 +46,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   openai: "openai",
   anthropic: "anthropic",
   gemini: "google",
+  cerebras: "cerebras",
   vllm: "vllm",
   ollama: "ollama",
 };
@@ -60,10 +63,16 @@ export function ModelSelector({
   onModelChange,
   disabled = false,
   messageCount = 0,
+  onOpenChange: onOpenChangeProp,
 }: ModelSelectorProps) {
   const { modelsByProvider } = useModelsByProvider();
   const [pendingModel, setPendingModel] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen);
+    onOpenChangeProp?.(newOpen);
+  };
 
   // Get available providers from the fetched models
   const availableProviders = useMemo(() => {
@@ -100,9 +109,11 @@ export function ModelSelector({
   const handleSelectModel = (model: string) => {
     // If selecting the same model, just close the dialog
     if (model === selectedModel) {
-      setOpen(false);
+      handleOpenChange(false);
       return;
     }
+
+    handleOpenChange(false);
 
     // If there are messages, show warning dialog
     if (messageCount > 0) {
@@ -110,7 +121,6 @@ export function ModelSelector({
     } else {
       onModelChange(model);
     }
-    setOpen(false);
   };
 
   const handleConfirmChange = () => {
@@ -145,7 +155,7 @@ export function ModelSelector({
 
   return (
     <>
-      <ModelSelectorRoot open={open} onOpenChange={setOpen}>
+      <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
         <ModelSelectorTrigger asChild>
           <PromptInputButton disabled={disabled}>
             {selectedModelLogo && (
@@ -156,7 +166,10 @@ export function ModelSelector({
             </ModelSelectorName>
           </PromptInputButton>
         </ModelSelectorTrigger>
-        <ModelSelectorContent title="Select Model">
+        <ModelSelectorContent
+          title="Select Model"
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
           <ModelSelectorInput placeholder="Search models..." />
           <ModelSelectorList>
             <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
@@ -209,7 +222,12 @@ export function ModelSelector({
       {/* Mid-conversation warning dialog */}
       <AlertDialog
         open={!!pendingModel}
-        onOpenChange={(open) => !open && handleCancelChange()}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancelChange();
+            onOpenChangeProp?.(false);
+          }
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>

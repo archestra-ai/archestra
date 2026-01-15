@@ -161,21 +161,20 @@ export function EditableAssistantMessage({
   }
 
   return (
-    <Message
-      from="assistant"
-      className="relative pt-0 group/message flex-col items-start pl-4 ml-[-1rem]"
-    >
-      <MessageContent>
-        <Response>{text}</Response>
-      </MessageContent>
-      {showActions && (
-        <MessageActions
-          textToCopy={text}
-          onEditClick={handleStartEdit}
-          editDisabled={editDisabled}
-          className="opacity-0 group-hover/message:opacity-100 transition-opacity"
-        />
-      )}
+    <Message from="assistant" className="group/message">
+      <div className="relative flex flex-col items-start pb-8 w-full">
+        <MessageContent>
+          <Response>{text}</Response>
+        </MessageContent>
+        {showActions && (
+          <MessageActions
+            textToCopy={text}
+            onEditClick={handleStartEdit}
+            editDisabled={editDisabled}
+            className="absolute -bottom-1 left-0 opacity-0 group-hover/message:opacity-100 transition-opacity"
+          />
+        )}
+      </div>
     </Message>
   );
 }

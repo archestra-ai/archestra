@@ -13,7 +13,6 @@ export interface ChatModel {
 
 /**
  * Fetch available chat models from all configured providers.
- * Models are cached server-side for 12 hours.
  */
 export function useChatModels() {
   return useSuspenseQuery({
@@ -21,6 +20,7 @@ export function useChatModels() {
     queryFn: async () => {
       const { data, error } = await getChatModels();
       if (error) {
+        console.error("[DEBUG chat-models] API error:", error);
         throw new Error(
           typeof error.error === "string"
             ? error.error
@@ -29,8 +29,6 @@ export function useChatModels() {
       }
       return (data ?? []) as ChatModel[];
     },
-    // Frontend cache for 5 minutes (server caches for 12 hours)
-    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -43,7 +41,7 @@ export function useModelsByProvider() {
 
   // Memoize to prevent creating new object reference on every render
   const modelsByProvider = useMemo(() => {
-    return query.data.reduce(
+    const result = query.data.reduce(
       (acc, model) => {
         if (!acc[model.provider]) {
           acc[model.provider] = [];
@@ -53,6 +51,7 @@ export function useModelsByProvider() {
       },
       {} as Record<SupportedProvider, ChatModel[]>,
     );
+    return result;
   }, [query.data]);
 
   return {
@@ -80,6 +79,5 @@ export function useChatModelsQuery(conversationId?: string) {
       }
       return (data ?? []) as ChatModel[];
     },
-    staleTime: 5 * 60 * 1000,
   });
 }

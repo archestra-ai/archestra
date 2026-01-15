@@ -12,6 +12,10 @@ import {
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import {
+  type EmailProviderType,
+  EmailProviderTypeSchema,
+} from "@/types/email-provider-type";
 import packageJson from "../../package.json";
 
 /**
@@ -201,6 +205,56 @@ export const getAdditionalTrustedSsoProviderIds = (): string[] => {
     .filter((id) => id.length > 0);
 };
 
+/**
+ * Parse incoming email provider from environment variable
+ */
+const parseIncomingEmailProvider = (): EmailProviderType | undefined => {
+  const provider =
+    process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER?.toLowerCase();
+  const result = EmailProviderTypeSchema.safeParse(provider);
+  return result.success ? result.data : undefined;
+};
+
+/**
+ * Parse body limit from environment variable.
+ * Supports numeric bytes (e.g., "52428800") or human-readable format (e.g., "50MB", "100KB").
+ */
+export const parseBodyLimit = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue) {
+    return defaultValue;
+  }
+
+  const trimmed = envValue.trim();
+
+  // Try parsing human-readable format first (e.g., "50MB", "100KB")
+  // This must come first because parseInt("50MB") would return 50
+  const match = trimmed.match(/^(\d+)(KB|MB|GB)$/i);
+  if (match) {
+    const value = Number.parseInt(match[1], 10);
+    const unit = match[2].toUpperCase();
+    switch (unit) {
+      case "KB":
+        return value * 1024;
+      case "MB":
+        return value * 1024 * 1024;
+      case "GB":
+        return value * 1024 * 1024 * 1024;
+    }
+  }
+
+  // Try parsing as plain number (bytes) - must be all digits
+  if (/^\d+$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10);
+  }
+
+  return defaultValue;
+};
+
+const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
+
 export default {
   frontendBaseUrl,
   api: {
@@ -210,6 +264,16 @@ export default {
     version: process.env.ARCHESTRA_VERSION || packageJson.version,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
+    /**
+     * Maximum request body size for LLM proxy and chat routes.
+     * Default Fastify limit is 1MB, which is too small for long conversations
+     * with large context windows (100k+ tokens) or file attachments.
+     * Configurable via ARCHESTRA_API_BODY_LIMIT environment variable.
+     */
+    bodyLimit: parseBodyLimit(
+      process.env.ARCHESTRA_API_BODY_LIMIT,
+      DEFAULT_BODY_LIMIT,
+    ),
   },
   websocket: {
     path: "/ws",
@@ -219,6 +283,29 @@ export default {
   },
   a2aGateway: {
     endpoint: "/v1/a2a",
+  },
+  agents: {
+    incomingEmail: {
+      provider: parseIncomingEmailProvider(),
+      outlook: {
+        tenantId:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID || "",
+        clientId:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID || "",
+        clientSecret:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET ||
+          "",
+        mailboxAddress:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS ||
+          "",
+        emailDomain:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN ||
+          undefined,
+        webhookUrl:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL ||
+          undefined,
+      },
+    },
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
@@ -263,6 +350,11 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    cerebras: {
+      baseUrl:
+        process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
+      useV2Routes: process.env.ARCHESTRA_CEREBRAS_USE_V2_ROUTES !== "false",
+    },
     vllm: {
       enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
@@ -283,6 +375,12 @@ export default {
     },
     gemini: {
       apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",
+    },
+    cerebras: {
+      apiKey: process.env.ARCHESTRA_CHAT_CEREBRAS_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_CEREBRAS_BASE_URL ||
+        "https://api.cerebras.ai/v1",
     },
     vllm: {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",

@@ -98,5 +98,9 @@ export const MessagesHeadersSchema = z
       .optional()
       .describe("Beta features to enable (comma-separated)"),
     "x-api-key": z.string().optional(),
+    authorization: z
+      .string()
+      .optional()
+      .describe("Authorization header (Bearer token for OAuth)"),
   })
   .describe(`https://docs.claude.com/en/api/messages#parameter-anthropic-beta`);

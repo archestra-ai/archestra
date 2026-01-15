@@ -27,6 +27,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InteractionModel,
   LimitValidationService,
   TokenPriceModel,
@@ -123,6 +124,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     externalAgentId?: string,
     userId?: string,
+    sessionId?: string | null,
+    sessionSource?: string | null,
   ) => {
     const { messages, tools, stream } = body;
 
@@ -166,6 +169,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const resolvedAgentId = resolvedAgent.id;
+    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
 
     fastify.log.info(
       {
@@ -319,6 +323,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "openai",
           resolvedAgent.considerContextUntrusted,
           globalToolPolicy,
+          { teamIds, externalAgentId },
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -592,6 +597,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               }),
               resolvedAgentId,
+              { teamIds, externalAgentId },
               contextIsTrusted,
               enabledToolNames,
               globalToolPolicy,
@@ -818,6 +824,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             profileId: resolvedAgentId,
             externalAgentId,
             userId,
+            sessionId,
+            sessionSource,
             type: "openai:chatCompletions",
             request: body,
             processedRequest: {
@@ -900,6 +908,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             }),
             resolvedAgentId,
+            { teamIds, externalAgentId },
             contextIsTrusted,
             enabledToolNames,
             globalToolPolicy,
@@ -972,6 +981,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId: resolvedAgentId,
           externalAgentId,
           userId,
+          sessionId,
+          sessionSource,
           type: "openai:chatCompletions",
           request: body,
           processedRequest: {
@@ -1033,6 +1044,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // OpenAI requests use the header for session tracking
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleChatCompletion(
         request.body,
         request.headers,
@@ -1041,6 +1057,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         undefined,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );
@@ -1072,6 +1090,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // OpenAI requests use the header for session tracking
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleChatCompletion(
         request.body,
         request.headers,
@@ -1080,6 +1103,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.agentId,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );

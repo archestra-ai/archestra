@@ -127,6 +127,23 @@ For non-GKE environments, Vertex AI supports several authentication methods thro
 
 See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs/authentication) for detailed setup instructions for each environment.
 
+## Cerebras
+
+[Cerebras](https://www.cerebras.ai/) provides fast inference for open-source AI models through an OpenAI-compatible API.
+
+### Supported Cerebras APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Cerebras Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/cerebras/{agent-id}`
+- **Authentication**: Pass your Cerebras API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Important Notes
+
+- Usage of the llama models in the chat ⚠️ Not yet supported ([GitHub Issue #2058](https://github.com/archestra-ai/archestra/issues/2058)) 
+
 ## vLLM
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.

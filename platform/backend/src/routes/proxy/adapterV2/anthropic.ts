@@ -1072,7 +1072,17 @@ export const anthropicAdapterFactory: LLMProvider<
   },
 
   extractApiKey(headers: AnthropicHeaders): string | undefined {
-    return headers["x-api-key"];
+    // Check for x-api-key (traditional API key)
+    if (headers["x-api-key"]) {
+      return headers["x-api-key"];
+    }
+    // Check for Authorization Bearer token (OAuth) - used by Claude Code
+    const authHeader = headers.authorization;
+    if (authHeader?.startsWith("Bearer ")) {
+      // Return with "Bearer:" prefix to signal it's an authToken
+      return `Bearer:${authHeader.slice(7)}`;
+    }
+    return undefined;
   },
 
   getBaseUrl(): string | undefined {
@@ -1096,8 +1106,14 @@ export const anthropicAdapterFactory: LLMProvider<
       ? getObservableFetch("anthropic", options.agent, options.externalAgentId)
       : undefined;
 
+    // Check if this is a Bearer token (OAuth) or regular API key
+    const isAuthToken = apiKey?.startsWith("Bearer:") ?? false;
+    const token = isAuthToken && apiKey ? apiKey.slice(7) : undefined;
+    const regularApiKey = isAuthToken ? undefined : apiKey;
+
     return new AnthropicProvider({
-      apiKey,
+      apiKey: regularApiKey,
+      authToken: token,
       baseURL: options?.baseUrl,
       fetch: customFetch,
       defaultHeaders: options?.defaultHeaders,

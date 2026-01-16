@@ -2,7 +2,7 @@ import { DEFAULT_VAULT_TOKEN, RouteId, SecretsManagerType } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import SecretModel from "@/models/secret";
+import { SecretModel } from "@/models";
 import {
   isByosEnabled,
   secretManager,

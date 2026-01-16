@@ -1,7 +1,7 @@
 import { SecretsManagerType } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
-import SecretModel from "@/models/secret";
+import { SecretModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { DbSecretsManager } from "./db";
 import {

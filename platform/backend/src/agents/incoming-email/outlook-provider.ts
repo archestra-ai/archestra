@@ -3,7 +3,7 @@ import { ClientSecretCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import logger from "@/logging";
-import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
+import { IncomingEmailSubscriptionModel } from "@/models";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
@@ -151,7 +151,10 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     }
 
     // Reconstruct UUID: 8-4-4-4-12
-    return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
+    return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(
+      12,
+      16,
+    )}-${raw.slice(16, 20)}-${raw.slice(20)}`;
   }
 
   handleValidationChallenge(payload: unknown): string | null {
@@ -654,7 +657,9 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
       // Graph API reply endpoint doesn't return the new message ID directly
       // Generate a tracking ID for logging purposes
-      const replyTrackingId = `reply-${originalEmail.messageId}-${crypto.randomUUID()}`;
+      const replyTrackingId = `reply-${
+        originalEmail.messageId
+      }-${crypto.randomUUID()}`;
 
       logger.info(
         {
@@ -719,7 +724,9 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           },
         });
 
-      const replyTrackingId = `reply-${originalEmail.messageId}-${crypto.randomUUID()}`;
+      const replyTrackingId = `reply-${
+        originalEmail.messageId
+      }-${crypto.randomUUID()}`;
 
       logger.info(
         {
@@ -897,7 +904,9 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
             .replace(/[ \t]+/g, " ")
             .trim();
           const lines = strippedContent.split("\n");
-          return `\n${lines.map((line: string) => `> ${line.trim()}`).join("\n")}\n`;
+          return `\n${lines
+            .map((line: string) => `> ${line.trim()}`)
+            .join("\n")}\n`;
         },
       );
     }

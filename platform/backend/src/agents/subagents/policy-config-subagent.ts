@@ -4,8 +4,7 @@ import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
-import AgentModel from "@/models/agent";
-import InteractionModel from "@/models/interaction";
+import { AgentModel, InteractionModel } from "@/models";
 import type { Agent, Tool } from "@/types";
 
 const PolicyConfigSchema = z.object({

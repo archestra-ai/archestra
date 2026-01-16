@@ -1,6 +1,4 @@
-import MemberModel from "@/models/member";
-import SessionModel from "@/models/session";
-import UserModel from "@/models/user";
+import { MemberModel, SessionModel, UserModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
 describe("Member deletion with user cleanup", () => {

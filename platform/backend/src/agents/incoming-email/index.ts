@@ -1,9 +1,13 @@
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentTeamModel, PromptModel, TeamModel } from "@/models";
-import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
-import ProcessedEmailModel from "@/models/processed-email";
+import {
+  AgentTeamModel,
+  IncomingEmailSubscriptionModel,
+  ProcessedEmailModel,
+  PromptModel,
+  TeamModel,
+} from "@/models";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
@@ -586,7 +590,9 @@ ${formattedHistory}
     const decoder = new TextDecoder("utf8", { fatal: false });
     const encoded = encoder.encode(message);
     const truncated = decoder.decode(encoded.slice(0, MAX_EMAIL_BODY_SIZE));
-    message = `${truncated}\n\n[Message truncated - original size exceeded ${MAX_EMAIL_BODY_SIZE / 1024}KB limit]`;
+    message = `${truncated}\n\n[Message truncated - original size exceeded ${
+      MAX_EMAIL_BODY_SIZE / 1024
+    }KB limit]`;
     logger.warn(
       {
         messageId: email.messageId,

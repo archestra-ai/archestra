@@ -652,8 +652,12 @@ for (const config of testConfigs) {
       createToolInvocationPolicy,
       makeApiRequest,
       waitForAgentTool,
+      updateOrganization,
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-blocks-tool-untrusted-data`;
+
+      // 0. Ensure organization has restrictive policy (required for tool invocation policies to be evaluated)
+      await updateOrganization(request, { globalToolPolicy: "restrictive" });
 
       // 1. Create a test agent
       const createResponse = await createAgent(
@@ -724,10 +728,8 @@ for (const config of testConfigs) {
       const toolInvocationPolicy = await toolInvocationPolicyResponse.json();
       toolInvocationPolicyId = toolInvocationPolicy.id;
 
-      // Wait for policies to be fully active before testing
-      // This helps prevent race conditions where policies aren't immediately effective
-      // Increased from 500ms to 2000ms for CI stability under load
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Small buffer for database consistency
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // 6. Send a request with untrusted data
       const response = await makeApiRequest({

@@ -675,6 +675,7 @@ const updateOrganization = async (
   updates: {
     convertToolResultsToToon?: boolean;
     compressionScope?: "organization" | "team";
+    globalToolPolicy?: "permissive" | "restrictive";
   },
 ) =>
   makeApiRequest({

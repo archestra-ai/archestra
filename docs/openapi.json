@@ -41629,6 +41629,15 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Free-text search across session content (case-insensitive)"
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -57204,6 +57213,15 @@
             "name": "endDate",
             "required": false,
             "description": "Filter by end date (ISO 8601 format)"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Free-text search across MCP server name, tool name, and arguments (case-insensitive)"
           },
           {
             "schema": {

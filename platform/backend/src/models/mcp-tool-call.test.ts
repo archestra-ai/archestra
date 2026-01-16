@@ -188,7 +188,9 @@ describe("McpToolCallModel", () => {
   });
 
   describe("search filtering", () => {
-    test("searches by mcpServerName (case insensitive)", async ({ makeAdmin }) => {
+    test("searches by mcpServerName (case insensitive)", async ({
+      makeAdmin,
+    }) => {
       const admin = await makeAdmin();
       const agent = await AgentModel.create({ name: "Agent", teams: [] });
 

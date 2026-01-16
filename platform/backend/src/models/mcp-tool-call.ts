@@ -25,6 +25,26 @@ import type {
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 
+/**
+ * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
+ * This prevents users from crafting searches that behave unexpectedly.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
+}
+
+/**
+ * Builds a search condition for MCP tool calls across server name, tool name, and arguments.
+ */
+function buildMcpToolCallSearchCondition(search: string) {
+  const searchPattern = `%${escapeLikePattern(search)}%`;
+  return or(
+    ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
+    sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
+    sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
+  );
+}
+
 class McpToolCallModel {
   static async create(data: InsertMcpToolCall) {
     const [mcpToolCall] = await db
@@ -84,12 +104,7 @@ class McpToolCallModel {
     // Free-text search filter (case-insensitive)
     // Searches across: mcpServerName, toolCall.name, toolCall.arguments
     if (filters?.search) {
-      const searchPattern = `%${filters.search}%`;
-      const searchCondition = or(
-        ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
-        sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
-        sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
-      );
+      const searchCondition = buildMcpToolCallSearchCondition(filters.search);
       if (searchCondition) {
         conditions.push(searchCondition);
       }
@@ -219,12 +234,7 @@ class McpToolCallModel {
     // Free-text search filter (case-insensitive)
     // Searches across: mcpServerName, toolCall.name, toolCall.arguments
     if (filters?.search) {
-      const searchPattern = `%${filters.search}%`;
-      const searchCondition = or(
-        ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
-        sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
-        sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
-      );
+      const searchCondition = buildMcpToolCallSearchCondition(filters.search);
       if (searchCondition) {
         conditions.push(searchCondition);
       }

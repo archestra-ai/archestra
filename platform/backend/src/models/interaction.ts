@@ -32,6 +32,14 @@ import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
 
 /**
+ * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
+ * This prevents users from crafting searches that behave unexpectedly.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
+}
+
+/**
  * Extracts text content from a message content field.
  * Handles both string content and array of content blocks.
  */
@@ -750,7 +758,7 @@ class InteractionModel {
     // Searches across: request messages content, response content (for titles)
     // Also searches conversation titles via the joined table
     if (filters?.search) {
-      const searchPattern = `%${filters.search}%`;
+      const searchPattern = `%${escapeLikePattern(filters.search)}%`;
       const searchCondition = or(
         // Search in request messages content (JSONB)
         sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,

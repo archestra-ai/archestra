@@ -242,7 +242,8 @@ export default function ChatPage() {
   const hasAnyApiKey =
     chatApiKeys.some((k) => k.secretId) ||
     features?.geminiVertexAiEnabled ||
-    features?.vllmEnabled;
+    features?.vllmEnabled ||
+    features?.minimaxEnabled;
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   // Sync conversation ID with URL and reset initial state when navigating to base /chat

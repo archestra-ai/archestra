@@ -37,6 +37,7 @@ import {
   type SupportedChatProvider,
   useAvailableChatApiKeys,
 } from "@/lib/chat-settings.query";
+import { useFeatureFlag } from "@/lib/features.hook";
 
 interface ChatApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */
@@ -79,6 +80,21 @@ export function ChatApiKeySelector({
   // Fetch ALL available API keys (no provider filter)
   const { data: availableKeys = [], isLoading } = useAvailableChatApiKeys();
   const updateConversationMutation = useUpdateConversation();
+
+  // Feature flag to detect Vertex AI (Gemini) mode
+  const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
+
+  // Determine if current provider requires an API key
+  const providerRequiresApiKey = useMemo(() => {
+    if (!currentProvider) return true;
+    // Vertex AI Gemini uses service-account / ADC and doesn't need an API key
+    if (currentProvider === "gemini" && geminiVertexAiEnabled) return false;
+    // vLLM and Ollama typically don't require API keys in our setup
+    if (currentProvider === "vllm" || currentProvider === "ollama")
+      return false;
+    return true;
+  }, [currentProvider, geminiVertexAiEnabled]);
+
   const [pendingKeyId, setPendingKeyId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   // Track if we've already auto-selected to prevent infinite loops
@@ -116,6 +132,12 @@ export function ChatApiKeySelector({
     return providers.sort();
   }, [keysByProviderAndScope]);
 
+  // Only consider keys for the current provider when determining selection/auto-select
+  const availableKeysForProvider = useMemo(() => {
+    if (!currentProvider) return availableKeys;
+    return availableKeys.filter((k) => k.provider === currentProvider);
+  }, [availableKeys, currentProvider]);
+
   // For backward compatibility: get flat list of keys by scope (for auto-select)
   const keysByScope = useMemo(() => {
     const grouped: Record<ChatApiKeyScope, ChatApiKey[]> = {
@@ -124,17 +146,19 @@ export function ChatApiKeySelector({
       org_wide: [],
     };
 
-    for (const key of availableKeys) {
+    for (const key of availableKeysForProvider) {
       grouped[key.scope].push(key);
     }
 
     return grouped;
-  }, [availableKeys]);
+  }, [availableKeysForProvider]);
 
-  // Find selected key
+  // Find selected key (limited to provider-specific keys)
   const currentConversationChatApiKey = useMemo(() => {
-    return availableKeys.find((k) => k.id === currentConversationChatApiKeyId);
-  }, [availableKeys, currentConversationChatApiKeyId]);
+    return availableKeysForProvider.find(
+      (k) => k.id === currentConversationChatApiKeyId,
+    );
+  }, [availableKeysForProvider, currentConversationChatApiKeyId]);
 
   // Reset auto-select flag when conversation context changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: we want to reset when conversationId changes
@@ -145,21 +169,23 @@ export function ChatApiKeySelector({
   // Auto-select first key when no key is selected or current key is invalid
   // biome-ignore lint/correctness/useExhaustiveDependencies: adding updateConversationMutation as a dependency would cause a infinite loop
   useEffect(() => {
-    // Skip if loading or no keys available
-    if (isLoading || availableKeys.length === 0) return;
+    // Skip if loading or no keys available for this provider
+    if (isLoading || availableKeysForProvider.length === 0) return;
 
     // Skip if we've already auto-selected to prevent infinite loops
     if (hasAutoSelectedRef.current) return;
 
-    // Check if current key is valid
+    // Check if current key is valid (within provider keys)
     const currentKeyValid =
       currentConversationChatApiKey &&
-      availableKeys.some((k) => k.id === currentConversationChatApiKeyId);
+      availableKeysForProvider.some(
+        (k) => k.id === currentConversationChatApiKeyId,
+      );
 
-    // Try to find key from localStorage (use generic key without provider)
+    // Try to find key from localStorage (validate it belongs to provider)
     const keyIdFromLocalStorage = localStorage.getItem(LOCAL_STORAGE_KEY);
     const keyFromLocalStorage = keyIdFromLocalStorage
-      ? availableKeys.find((k) => k.id === keyIdFromLocalStorage)
+      ? availableKeysForProvider.find((k) => k.id === keyIdFromLocalStorage)
       : null;
     const keyToSelect =
       keyFromLocalStorage ||
@@ -167,7 +193,8 @@ export function ChatApiKeySelector({
       keysByScope.team[0] ||
       keysByScope.org_wide[0];
     const keyToSelectValid =
-      keyToSelect && availableKeys.some((k) => k.id === keyToSelect.id);
+      keyToSelect &&
+      availableKeysForProvider.some((k) => k.id === keyToSelect.id);
 
     // Auto-select first key if no valid key is selected
     if (!currentKeyValid && keyToSelectValid) {
@@ -188,7 +215,7 @@ export function ChatApiKeySelector({
       }
     }
   }, [
-    availableKeys,
+    availableKeysForProvider,
     currentConversationChatApiKeyId,
     isLoading,
     conversationId,
@@ -249,8 +276,11 @@ export function ChatApiKeySelector({
     setPendingKeyId(null);
   };
 
-  // If no keys available for this provider
-  if (!isLoading && availableKeys.length === 0) {
+  // If no keys available for this provider OR provider doesn't require API keys
+  if (
+    !isLoading &&
+    (!providerRequiresApiKey || availableKeysForProvider.length === 0)
+  ) {
     return null;
   }
 

@@ -5,9 +5,12 @@ import {
   desc,
   eq,
   gte,
+  ilike,
   inArray,
   lte,
+  or,
   type SQL,
+  sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
@@ -43,6 +46,7 @@ class McpToolCallModel {
     filters?: {
       startDate?: Date;
       endDate?: Date;
+      search?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
@@ -75,6 +79,20 @@ class McpToolCallModel {
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
+    }
+
+    // Free-text search filter (case-insensitive)
+    // Searches across: mcpServerName, toolCall.name, toolCall.arguments
+    if (filters?.search) {
+      const searchPattern = `%${filters.search}%`;
+      const searchCondition = or(
+        ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
+        sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
+        sql`${schema.mcpToolCallsTable.toolCall}->'arguments'::text ILIKE ${searchPattern}`,
+      );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -177,6 +195,7 @@ class McpToolCallModel {
     filters?: {
       startDate?: Date;
       endDate?: Date;
+      search?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Build conditions array
@@ -195,6 +214,20 @@ class McpToolCallModel {
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
+    }
+
+    // Free-text search filter (case-insensitive)
+    // Searches across: mcpServerName, toolCall.name, toolCall.arguments
+    if (filters?.search) {
+      const searchPattern = `%${filters.search}%`;
+      const searchCondition = or(
+        ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
+        sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
+        sql`${schema.mcpToolCallsTable.toolCall}->'arguments'::text ILIKE ${searchPattern}`,
+      );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
     }
 
     const whereCondition = and(...conditions);

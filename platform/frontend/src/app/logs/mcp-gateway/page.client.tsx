@@ -2,9 +2,10 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
+import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,8 +71,10 @@ function McpToolCallsTable({
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const profileIdFromUrl = searchParams.get("profileId");
+  const searchFromUrl = searchParams.get("search");
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
+  const [searchFilter, setSearchFilter] = useState(searchFromUrl || "");
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: DEFAULT_TABLE_LIMIT,
@@ -103,6 +106,18 @@ function McpToolCallsTable({
       setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
       updateUrlParams({
         profileId: value === "all" ? null : value,
+      });
+    },
+    [updateUrlParams],
+  );
+
+  // Search filter change handler
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchFilter(value);
+      setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
+      updateUrlParams({
+        search: value || null,
       });
     },
     [updateUrlParams],
@@ -149,6 +164,7 @@ function McpToolCallsTable({
     sortDirection,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
+    search: searchFilter || undefined,
     initialData: initialData?.mcpToolCalls,
   });
 
@@ -367,7 +383,9 @@ function McpToolCallsTable({
   ];
 
   const hasFilters =
-    profileFilter !== "all" || dateTimePicker.dateRange !== undefined;
+    profileFilter !== "all" ||
+    dateTimePicker.dateRange !== undefined ||
+    searchFilter !== "";
 
   // Shared date picker component
   const datePickerComponent = (
@@ -388,10 +406,25 @@ function McpToolCallsTable({
     />
   );
 
+  // Shared search input component
+  const searchInputComponent = (
+    <div className="relative w-[250px]">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <DebouncedInput
+        initialValue={searchFromUrl || ""}
+        onChange={handleSearchChange}
+        placeholder="Search tools, servers..."
+        className="pl-9"
+        debounceMs={400}
+      />
+    </div>
+  );
+
   if (!mcpToolCalls || mcpToolCalls.length === 0) {
     return (
       <div className="space-y-4">
         <div className="flex flex-wrap gap-4">
+          {searchInputComponent}
           <SearchableSelect
             value={profileFilter}
             onValueChange={handleProfileFilterChange}
@@ -422,6 +455,7 @@ function McpToolCallsTable({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
+        {searchInputComponent}
         <SearchableSelect
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
@@ -442,6 +476,7 @@ function McpToolCallsTable({
             variant="ghost"
             size="sm"
             onClick={() => {
+              handleSearchChange("");
               handleProfileFilterChange("all");
               dateTimePicker.clearDateRange();
             }}

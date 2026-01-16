@@ -15,7 +15,13 @@ function getDefaultModelPrice(model: string): {
   pricePerMillionInput: string;
   pricePerMillionOutput: string;
 } {
-  const cheaperPatterns = ["-haiku", "-nano", "-mini"];
+  const cheaperPatterns = [
+    "-haiku",
+    "-nano",
+    "-mini",
+    "command-r-08", // Cohere command-r base models
+    "command-r-plus", // Cohere plus models
+  ];
   const isCheaper = cheaperPatterns.some((pattern) =>
     model.toLowerCase().includes(pattern),
   );

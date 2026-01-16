@@ -52,6 +52,7 @@ const LocalConfigSelectSchema = z.object({
         required: z.boolean().optional(), // Optional in database
         description: z.string().optional(), // Optional in database
         default: z.union([z.string(), z.number(), z.boolean()]).optional(), // Default value for installation dialog
+        mounted: z.boolean().optional(), // When true for secret type, mount as file at /secrets/<key>
       }),
     )
     .optional(),

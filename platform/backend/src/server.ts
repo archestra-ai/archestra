@@ -31,6 +31,14 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  cleanupEmailProvider,
+  cleanupOldProcessedEmails,
+  EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
+  initializeEmailProvider,
+  PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
+  renewEmailSubscriptionIfNeeded,
+} from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
 import config from "@/config";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -48,6 +56,7 @@ import {
   OpenAi,
   Vllm,
   WebSocketMessageSchema,
+  Zhipuai,
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
@@ -112,6 +121,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Ollama.API.ChatCompletionResponseSchema, {
     id: "OllamaChatCompletionResponse",
+  });
+  z.globalRegistry.add(Zhipuai.API.ChatCompletionRequestSchema, {
+    id: "ZhipuaiChatCompletionRequest",
+  });
+  z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
+    id: "ZhipuaiChatCompletionResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",
@@ -455,6 +470,30 @@ const start = async () => {
 
     startMcpServerRuntime(fastify);
 
+    // Initialize incoming email provider (if configured)
+    // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
+    await initializeEmailProvider();
+
+    // Background job to renew email subscriptions before they expire
+    const emailRenewalIntervalId = setInterval(() => {
+      renewEmailSubscriptionIfNeeded().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to run email subscription renewal check",
+        );
+      });
+    }, EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL);
+
+    // Background job to clean up old processed email records
+    const processedEmailCleanupIntervalId = setInterval(() => {
+      cleanupOldProcessedEmails().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to run processed email cleanup",
+        );
+      });
+    }, PROCESSED_EMAIL_CLEANUP_INTERVAL_MS);
+
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
      * inside of this server instance. Metrics are actually exposed on a different port
@@ -508,6 +547,15 @@ const start = async () => {
       fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
       try {
+        // Clear email subscription renewal interval
+        clearInterval(emailRenewalIntervalId);
+        clearInterval(processedEmailCleanupIntervalId);
+        fastify.log.info("Email background job intervals cleared");
+
+        // Cleanup email provider (unsubscribe from Graph API if needed)
+        await cleanupEmailProvider();
+        fastify.log.info("Email provider cleanup completed");
+
         // Close WebSocket server
         websocketService.stop();
 

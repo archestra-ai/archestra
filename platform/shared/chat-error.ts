@@ -128,6 +128,39 @@ export const GeminiErrorReasons = {
   CONTEXT_LENGTH_EXCEEDED: "CONTEXT_LENGTH_EXCEEDED",
 } as const;
 
+/**
+ * Zhipuai API error codes (from response body `error.code` field)
+ * Zhipuai uses numeric string codes for errors
+ * @see https://docs.z.ai/api-reference/api-code#errors
+ */
+export const ZhipuaiErrorTypes = {
+  // Basic errors
+  INTERNAL_ERROR: "500",
+
+  // Authentication errors (1000-1004)
+  AUTHENTICATION_FAILED: "1000",
+  INVALID_AUTH_TOKEN: "1002",
+  AUTH_TOKEN_EXPIRED: "1003",
+
+  // Account errors (1110-1121)
+  ACCOUNT_LOCKED: "1112",
+  INSUFFICIENT_BALANCE: "1113",
+
+  // API call errors (1200-1234)
+  INVALID_API_PARAMETERS: "1210",
+  MODEL_NOT_FOUND: "1211",
+  INVALID_PARAMETER: "1214",
+  NO_PERMISSION: "1220",
+  API_OFFLINE: "1221",
+  NETWORK_ERROR: "1234",
+
+  // Policy block errors (1300-1309)
+  CONTENT_FILTERED: "1301", // Unsafe or sensitive content detected
+  HIGH_CONCURRENCY: "1302",
+  HIGH_FREQUENCY: "1303",
+  RATE_LIMIT: "1305",
+} as const;
+
 // =============================================================================
 // Normalized Chat Error Codes
 // =============================================================================

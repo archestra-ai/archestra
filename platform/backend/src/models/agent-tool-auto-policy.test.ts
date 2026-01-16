@@ -17,7 +17,7 @@ vi.mock("@/secrets-manager", () => ({
   })),
 }));
 
-vi.mock("@/subagents", () => ({
+vi.mock("@/agents/subagents", () => ({
   policyConfigSubagent: {
     analyze: vi.fn(),
   },
@@ -200,7 +200,7 @@ describe("ToolAutoPolicyService", () => {
         "./trusted-data-policy"
       );
       const { secretManager } = await import("@/secrets-manager");
-      const { policyConfigSubagent } = await import("@/subagents");
+      const { policyConfigSubagent } = await import("@/agents/subagents");
 
       vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue(mockChatApiKey);
 
@@ -256,7 +256,7 @@ describe("ToolAutoPolicyService", () => {
         "./trusted-data-policy"
       );
       const { secretManager } = await import("@/secrets-manager");
-      const { policyConfigSubagent } = await import("@/subagents");
+      const { policyConfigSubagent } = await import("@/agents/subagents");
 
       vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue(mockChatApiKey);
 
@@ -306,7 +306,7 @@ describe("ToolAutoPolicyService", () => {
         "./tool-invocation-policy"
       );
       const { secretManager } = await import("@/secrets-manager");
-      const { policyConfigSubagent } = await import("@/subagents");
+      const { policyConfigSubagent } = await import("@/agents/subagents");
 
       vi.mocked(ChatApiKeyModel.findByScope).mockResolvedValue(mockChatApiKey);
 

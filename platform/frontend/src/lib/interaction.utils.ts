@@ -11,6 +11,7 @@ import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
+import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
 
 export interface CostSavingsInput {
   cost: string | null | undefined;
@@ -122,6 +123,8 @@ export class DynamicInteraction implements InteractionUtils {
     }
     if (type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);
+    } else if (this.type === "zhipuai:chatCompletions") {
+      return new ZhipuaiChatCompletionInteraction(interaction);
     }
     if (type === "cerebras:chatCompletions") {
       return new CerebrasChatCompletionInteraction(interaction);

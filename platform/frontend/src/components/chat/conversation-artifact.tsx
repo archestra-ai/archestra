@@ -326,7 +326,7 @@ export function ConversationArtifactPanel({
       </div>
 
       {/* Panel header */}
-      <div className="border-b px-4 py-3 flex items-center justify-between">
+      <div className="border-b px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
           <h3 className="font-medium text-sm">Conversation Artifact</h3>

@@ -107,6 +107,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
   },
+  zhipuai: {
+    name: "Zhipu AI",
+    icon: "/icons/zhipuai.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://z.ai/model-api",
+    consoleName: "Zhipu AI Platform",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

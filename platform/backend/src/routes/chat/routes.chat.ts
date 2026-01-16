@@ -11,6 +11,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import {
+  createLLMModelForAgent,
+  detectProviderFromModel,
+} from "@/clients/llm-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -29,10 +33,6 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { browserStreamFeature } from "@/services/browser-stream-feature";
-import {
-  createLLMModelForAgent,
-  detectProviderFromModel,
-} from "@/services/llm-client";
 import {
   ApiError,
   constructResponseSchema,

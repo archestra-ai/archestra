@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/zhipuai/v4/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "zhipuai-tool-persistence"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "20260114011737450622882b094147",
+      "object": "chat.completion",
+      "created": 1768324666,
+      "model": "glm-4.5-flash",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Tool persistence test response."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 150,
+        "completion_tokens": 10,
+        "total_tokens": 160
+      }
+    }
+  }
+}

@@ -12,6 +12,10 @@ import {
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import {
+  type EmailProviderType,
+  EmailProviderTypeSchema,
+} from "@/types/email-provider-type";
 import packageJson from "../../package.json";
 
 /**
@@ -202,6 +206,16 @@ export const getAdditionalTrustedSsoProviderIds = (): string[] => {
 };
 
 /**
+ * Parse incoming email provider from environment variable
+ */
+const parseIncomingEmailProvider = (): EmailProviderType | undefined => {
+  const provider =
+    process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER?.toLowerCase();
+  const result = EmailProviderTypeSchema.safeParse(provider);
+  return result.success ? result.data : undefined;
+};
+
+/**
  * Parse body limit from environment variable.
  * Supports numeric bytes (e.g., "52428800") or human-readable format (e.g., "50MB", "100KB").
  */
@@ -270,6 +284,29 @@ export default {
   a2aGateway: {
     endpoint: "/v1/a2a",
   },
+  agents: {
+    incomingEmail: {
+      provider: parseIncomingEmailProvider(),
+      outlook: {
+        tenantId:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID || "",
+        clientId:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID || "",
+        clientSecret:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET ||
+          "",
+        mailboxAddress:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS ||
+          "",
+        emailDomain:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN ||
+          undefined,
+        webhookUrl:
+          process.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL ||
+          undefined,
+      },
+    },
+  },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
     trustedOrigins: getTrustedOrigins(),
@@ -328,6 +365,11 @@ export default {
       baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
       useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
     },
+    zhipuai: {
+      baseUrl:
+        process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
+        "https://api.z.ai/api/paas/v4",
+    },
   },
   chat: {
     openai: {
@@ -350,6 +392,12 @@ export default {
     },
     ollama: {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
+    },
+    zhipuai: {
+      apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_ZHIPUAI_BASE_URL ||
+        "https://api.z.ai/api/paas/v4",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

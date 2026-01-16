@@ -1,6 +1,6 @@
 {
   "name": "@shared",
-  "version": "1.0.20",
+  "version": "1.0.24",
   "description": "",
   "type": "module",
   "private": true,
@@ -27,9 +27,9 @@
     "zod": "^4.3.4"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.89.2",
+    "@hey-api/openapi-ts": "^0.90.2",
     "@types/node": "^25",
-    "knip": "^5.79.0",
+    "knip": "^5.80.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.2"
   }

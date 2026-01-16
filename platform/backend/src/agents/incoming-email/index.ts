@@ -1,13 +1,11 @@
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import logger from "@/logging";
-import {
-  AgentTeamModel,
-  IncomingEmailSubscriptionModel,
-  ProcessedEmailModel,
-  PromptModel,
-  TeamModel,
-} from "@/models";
+import AgentTeamModel from "@/models/agent-team";
+import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
+import ProcessedEmailModel from "@/models/processed-email";
+import PromptModel from "@/models/prompt";
+import TeamModel from "@/models/team";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,

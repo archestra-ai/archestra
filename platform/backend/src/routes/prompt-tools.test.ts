@@ -1,4 +1,7 @@
-import { AgentModel, PromptAgentModel, PromptModel, ToolModel } from "@/models";
+import AgentModel from "@/models/agent";
+import PromptModel from "@/models/prompt";
+import PromptAgentModel from "@/models/prompt-agent";
+import ToolModel from "@/models/tool";
 import { describe, expect, test } from "@/test";
 
 describe("GET /api/prompts/:id/tools", () => {

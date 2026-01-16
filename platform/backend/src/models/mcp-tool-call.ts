@@ -85,13 +85,14 @@ class McpToolCallModel {
     // Searches across: mcpServerName, toolCall.name, toolCall.arguments
     if (filters?.search) {
       const searchPattern = `%${filters.search}%`;
-      conditions.push(
-        or(
-          ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
-          sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
-          sql`${schema.mcpToolCallsTable.toolCall}->'arguments'::text ILIKE ${searchPattern}`,
-        ),
+      const searchCondition = or(
+        ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
+        sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
+        sql`${schema.mcpToolCallsTable.toolCall}->'arguments'::text ILIKE ${searchPattern}`,
       );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -219,13 +220,14 @@ class McpToolCallModel {
     // Searches across: mcpServerName, toolCall.name, toolCall.arguments
     if (filters?.search) {
       const searchPattern = `%${filters.search}%`;
-      conditions.push(
-        or(
-          ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
-          sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
-          sql`${schema.mcpToolCallsTable.toolCall}->'arguments'::text ILIKE ${searchPattern}`,
-        ),
+      const searchCondition = or(
+        ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
+        sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
+        sql`${schema.mcpToolCallsTable.toolCall}->'arguments'::text ILIKE ${searchPattern}`,
       );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
     }
 
     const whereCondition = and(...conditions);

@@ -778,11 +778,131 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * MiniMax implementation of DualLlmClient
+ * MiniMax exposes an OpenAI-compatible API, so we use the OpenAI SDK with MiniMax's base URL
+ */
+export class MiniMaxDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string | undefined, model: string) {
+    logger.debug({ model }, "[dualLlmClient] MiniMax: initializing client");
+    if (!apiKey) {
+      throw new Error("API key required for MiniMax dual LLM");
+    }
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.minimax.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] MiniMax: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] MiniMax: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] MiniMax: starting chat with schema",
+    );
+
+    // MiniMax supports JSON schema via OpenAI-compatible structured output
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages,
+        response_format: {
+          type: "json_schema",
+          json_schema: schema,
+        },
+        temperature,
+      });
+
+      const content = response.choices[0].message.content || "";
+      logger.debug(
+        { model: this.model, responseLength: content.length },
+        "[dualLlmClient] MiniMax: chat with schema complete, parsing response",
+      );
+      return JSON.parse(content) as T;
+    } catch {
+      // Fallback to prompt-based approach if structured output not supported
+      logger.debug(
+        { model: this.model },
+        "[dualLlmClient] MiniMax: structured output not supported, using prompt fallback",
+      );
+
+      const systemPrompt = `You must respond with valid JSON matching this schema:
+${JSON.stringify(schema.schema, null, 2)}
+
+Return only the JSON object, no other text.`;
+
+      const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
+        if (idx === 0 && msg.role === "user") {
+          return {
+            ...msg,
+            content: `${systemPrompt}\n\n${msg.content}`,
+          };
+        }
+        return msg;
+      });
+
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages: enhancedMessages,
+        temperature,
+      });
+
+      const content = response.choices[0].message.content || "";
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
+        null,
+        content,
+      ];
+      const jsonText = jsonMatch[1].trim();
+
+      return JSON.parse(jsonText) as T;
+    }
+  }
+}
+
+/**
  * Factory function to create the appropriate LLM client
  *
  * @param provider - The LLM provider
  * @param apiKey - API key (optional for Gemini when Vertex AI is enabled, optional for vLLM/Ollama)
- * @param model - Model name. Optional in the signature, but required when provider is 'vllm' or 'ollama'
+ * @param model - Model name. Optional in the signature, but required when provider is 'vllm', 'ollama', or 'minimax'
  *                since these providers can serve multiple models and need explicit model selection.
  */
 export function createDualLlmClient(
@@ -830,6 +950,15 @@ export function createDualLlmClient(
         throw new Error("API key required for Zhipuai dual LLM");
       }
       return new ZhipuaiDualLlmClient(apiKey, model);
+    case "minimax":
+      // MiniMax requires API key
+      if (!apiKey) {
+        throw new Error("API key required for MiniMax dual LLM");
+      }
+      if (!model) {
+        throw new Error("Model name required for MiniMax dual LLM");
+      }
+      return new MiniMaxDualLlmClient(apiKey, model);
     default:
       logger.debug(
         { provider },

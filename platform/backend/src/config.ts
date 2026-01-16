@@ -393,6 +393,11 @@ export default {
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
     },
+    minimax: {
+      enabled: Boolean(process.env.ARCHESTRA_MINIMAX_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_MINIMAX_BASE_URL,
+      useV2Routes: process.env.ARCHESTRA_MINIMAX_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {

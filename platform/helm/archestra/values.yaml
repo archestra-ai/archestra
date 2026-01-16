@@ -60,6 +60,7 @@ archestra:
   # Example:
   #   env:
   #     ARCHESTRA_API_BASE_URL: "https://api.example.com"
+  #     ARCHESTRA_GATEWAY_EXTERNAL_URL: "https://gateway.archestra.com"  # External URL for connection instructions
   #     CUSTOM_VAR: "custom-value"
   env: {}
 

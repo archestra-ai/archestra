@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.0.24" # x-release-please-version
+  imageTag: "1.0.26" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -60,6 +60,7 @@ archestra:
   # Example:
   #   env:
   #     ARCHESTRA_API_BASE_URL: "https://api.example.com"
+  #     ARCHESTRA_API_EXTERNAL_BASE_URL: "https://api.archestra.com"  # External URL for connection instructions
   #     CUSTOM_VAR: "custom-value"
   env: {}
 

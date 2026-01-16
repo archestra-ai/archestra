@@ -166,6 +166,7 @@ export function useInteractionSessions({
   sessionId,
   startDate,
   endDate,
+  search,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   initialData,
@@ -175,6 +176,7 @@ export function useInteractionSessions({
   sessionId?: string;
   startDate?: string;
   endDate?: string;
+  search?: string;
   limit?: number;
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
@@ -188,6 +190,7 @@ export function useInteractionSessions({
       sessionId,
       startDate,
       endDate,
+      search,
       limit,
       offset,
     ],
@@ -199,6 +202,7 @@ export function useInteractionSessions({
           ...(sessionId ? { sessionId } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
+          ...(search ? { search } : {}),
           limit,
           offset,
         },
@@ -220,7 +224,8 @@ export function useInteractionSessions({
       !userId &&
       !sessionId &&
       !startDate &&
-      !endDate
+      !endDate &&
+      !search
         ? initialData
         : undefined,
   });

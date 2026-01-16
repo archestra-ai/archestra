@@ -12140,6 +12140,10 @@ export type GetInteractionSessionsData = {
          * Filter by end date (ISO 8601 format)
          */
         endDate?: string;
+        /**
+         * Free-text search across session content (case-insensitive)
+         */
+        search?: string;
         limit?: number;
         offset?: number;
     };
@@ -12726,6 +12730,7 @@ export type GetInternalMcpCatalogResponses = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
+                mounted?: boolean;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -12809,6 +12814,7 @@ export type CreateInternalMcpCatalogItemData = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
+                mounted?: boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -12957,6 +12963,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
+                mounted?: boolean;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -13190,6 +13197,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
+                mounted?: boolean;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -13272,6 +13280,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
+                mounted?: boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -13422,6 +13431,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
+                mounted?: boolean;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -14313,6 +14323,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
+                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -14392,6 +14403,7 @@ export type CreateMcpServerInstallationRequestData = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
+                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -14525,6 +14537,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
+                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -14757,6 +14770,7 @@ export type GetMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
+                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -14836,6 +14850,7 @@ export type UpdateMcpServerInstallationRequestData = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
+                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -14981,6 +14996,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
+                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -15136,6 +15152,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
+                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -15291,6 +15308,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
+                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -15446,6 +15464,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
+                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -16322,6 +16341,10 @@ export type GetMcpToolCallsData = {
          * Filter by end date (ISO 8601 format)
          */
         endDate?: string;
+        /**
+         * Free-text search across MCP server name, tool name, and arguments (case-insensitive)
+         */
+        search?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';

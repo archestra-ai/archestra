@@ -10,6 +10,7 @@ export function useMcpToolCalls({
   agentId,
   startDate,
   endDate,
+  search,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -19,6 +20,7 @@ export function useMcpToolCalls({
   agentId?: string;
   startDate?: string;
   endDate?: string;
+  search?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -33,6 +35,7 @@ export function useMcpToolCalls({
       agentId,
       startDate,
       endDate,
+      search,
       limit,
       offset,
       sortBy,
@@ -44,6 +47,7 @@ export function useMcpToolCalls({
           ...(agentId ? { agentId } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
+          ...(search ? { search } : {}),
           limit,
           offset,
           ...(sortBy ? { sortBy } : {}),
@@ -67,7 +71,8 @@ export function useMcpToolCalls({
       sortBy === "createdAt" &&
       sortDirection === "desc" &&
       !startDate &&
-      !endDate
+      !endDate &&
+      !search
         ? initialData
         : undefined,
   });

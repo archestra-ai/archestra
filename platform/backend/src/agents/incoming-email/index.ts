@@ -15,7 +15,11 @@ import type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
-import { DEFAULT_AGENT_EMAIL_NAME } from "./constants";
+import {
+  DEFAULT_AGENT_EMAIL_NAME,
+  MAX_EMAIL_BODY_SIZE,
+  PROCESSED_EMAIL_RETENTION_MS,
+} from "./constants";
 import { OutlookEmailProvider } from "./outlook-provider";
 
 export type {
@@ -53,7 +57,6 @@ export async function tryMarkEmailAsProcessed(
  * Should be called periodically to prevent unbounded table growth.
  */
 export async function cleanupOldProcessedEmails(): Promise<void> {
-  const { PROCESSED_EMAIL_RETENTION_MS } = await import("./constants");
   const olderThan = new Date(Date.now() - PROCESSED_EMAIL_RETENTION_MS);
   await ProcessedEmailModel.cleanupOldRecords(olderThan);
 }
@@ -583,7 +586,6 @@ ${formattedHistory}
     : currentMessage;
 
   // Truncate message if it exceeds the maximum size to prevent excessive LLM context usage
-  const { MAX_EMAIL_BODY_SIZE } = await import("./constants");
   if (Buffer.byteLength(message, "utf8") > MAX_EMAIL_BODY_SIZE) {
     // Truncate to MAX_EMAIL_BODY_SIZE bytes and add truncation notice
     const encoder = new TextEncoder();

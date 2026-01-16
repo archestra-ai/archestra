@@ -1,10 +1,11 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Layers, MessageSquare, User } from "lucide-react";
+import { Layers, MessageSquare, Search, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { DebouncedInput } from "@/components/debounced-input";
 import { Savings } from "@/components/savings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -329,12 +330,14 @@ function SessionsTable({
   const userIdFromUrl = searchParams.get("userId");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
+  const searchFromUrl = searchParams.get("search");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const [userFilter, setUserFilter] = useState(userIdFromUrl || "all");
+  const [searchFilter, setSearchFilter] = useState(searchFromUrl || "");
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -400,6 +403,17 @@ function SessionsTable({
     [updateUrlParams],
   );
 
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchFilter(value);
+      updateUrlParams({
+        search: value || null,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateUrlParams],
+  );
+
   const { data: sessionsResponse } = useInteractionSessions({
     limit: pageSize,
     offset: pageIndex * pageSize,
@@ -407,6 +421,7 @@ function SessionsTable({
     userId: userFilter !== "all" ? userFilter : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
+    search: searchFilter || undefined,
   });
 
   const { data: agents } = useProfiles({
@@ -421,11 +436,23 @@ function SessionsTable({
   const hasFilters =
     profileFilter !== "all" ||
     userFilter !== "all" ||
-    dateTimePicker.dateRange !== undefined;
+    dateTimePicker.dateRange !== undefined ||
+    searchFilter !== "";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
+        <div className="relative w-[250px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <DebouncedInput
+            initialValue={searchFromUrl || ""}
+            onChange={handleSearchChange}
+            placeholder="Search sessions..."
+            className="pl-9"
+            debounceMs={400}
+          />
+        </div>
+
         <SearchableSelect
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
@@ -475,6 +502,7 @@ function SessionsTable({
             variant="ghost"
             size="sm"
             onClick={() => {
+              handleSearchChange("");
               handleProfileFilterChange("all");
               handleUserFilterChange("all");
               dateTimePicker.clearDateRange();

@@ -10,6 +10,7 @@ import {
   lte,
   max,
   min,
+  or,
   type SQL,
   sql,
   sum,
@@ -29,6 +30,14 @@ import type {
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
+
+/**
+ * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
+ * This prevents users from crafting searches that behave unexpectedly.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
+}
 
 /**
  * Extracts text content from a message content field.
@@ -665,6 +674,7 @@ class InteractionModel {
       sessionId?: string;
       startDate?: Date;
       endDate?: Date;
+      search?: string;
     },
   ): Promise<
     PaginatedResult<{
@@ -742,6 +752,22 @@ class InteractionModel {
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
+    }
+
+    // Free-text search filter (case-insensitive)
+    // Searches across: request messages content, response content (for titles)
+    // Also searches conversation titles via the joined table
+    if (filters?.search) {
+      const searchPattern = `%${escapeLikePattern(filters.search)}%`;
+      const searchCondition = or(
+        // Search in request messages content (JSONB)
+        sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
+        // Search in response content (for Claude Code titles)
+        sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
+      );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

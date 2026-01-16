@@ -44,7 +44,7 @@ You'll need these later for your MS Teams app as `ARCHESTRA_PROMPT_A2A_ENDPOINT`
 8. Copy the secret value (shown only once) and note down for later
 9. Back in Bot Configuration, set **Messaging endpoint** to `https://your-domain.com/api/messages` (or ngrok URL for local dev)
 10. Go to **Channels** > **Connect to channels** > add **Microsoft Teams**
-11. Navigate again to **App Registration**. Click **Search resources, services, and docs** at the top of a page and search **App registrations**, then click on it. Open **All applications** tab, find your registration and click on it.
+11. Navigate again to **App Registration**. Click **Search resources, services, and docs** at the top of the page and search **App registrations**, then click on it. Open **All applications** tab, find your registration and click on it.
 12. Go to **API permissions** > **Add a permission** > **Microsoft Graph** > **Application permissions**
 13. Add `ChannelMessage.Read.All` (for thread history)
 14. Click **Grant admin consent**
@@ -282,8 +282,8 @@ Update your Azure Bot messaging endpoint with the ngrok URL.
 
 In Teams:
 1. **Apps** > **Manage your apps** > **Upload an app** > select your manifest zip
-2. On **Apps** -> **Build for your org** add your app
-2. Start a chat with the bot
+2. On **Apps** > **Build for your org** add your app
+3. Start a chat with the bot
 
 ## Troubleshooting
 

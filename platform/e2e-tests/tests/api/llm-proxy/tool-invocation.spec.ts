@@ -652,7 +652,6 @@ for (const config of testConfigs) {
       createToolInvocationPolicy,
       makeApiRequest,
       waitForAgentTool,
-      updateOrganization,
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-blocks-tool-untrusted-data`;
 

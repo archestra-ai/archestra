@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.24"
+    "version": "1.0.25"
   },
   "components": {
     "schemas": {
@@ -43791,6 +43791,9 @@
                                       "type": "boolean"
                                     }
                                   ]
+                                },
+                                "mounted": {
+                                  "type": "boolean"
                                 }
                               },
                               "required": [
@@ -44383,6 +44386,9 @@
                                   "type": "boolean"
                                 }
                               ]
+                            },
+                            "mounted": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -44739,6 +44745,9 @@
                                     "type": "boolean"
                                   }
                                 ]
+                              },
+                              "mounted": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -45345,6 +45354,9 @@
                                     "type": "boolean"
                                   }
                                 ]
+                              },
+                              "mounted": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -45931,6 +45943,9 @@
                                   "type": "boolean"
                                 }
                               ]
+                            },
+                            "mounted": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -46294,6 +46309,9 @@
                                     "type": "boolean"
                                   }
                                 ]
+                              },
+                              "mounted": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -49605,6 +49623,9 @@
                                               "type": "boolean"
                                             }
                                           ]
+                                        },
+                                        "mounted": {
+                                          "type": "boolean"
                                         }
                                       },
                                       "required": [
@@ -50158,6 +50179,9 @@
                                           "type": "boolean"
                                         }
                                       ]
+                                    },
+                                    "mounted": {
+                                      "type": "boolean"
                                     }
                                   },
                                   "required": [
@@ -50440,6 +50464,9 @@
                                             "type": "boolean"
                                           }
                                         ]
+                                      },
+                                      "mounted": {
+                                        "type": "boolean"
                                       }
                                     },
                                     "required": [
@@ -51021,6 +51048,9 @@
                                             "type": "boolean"
                                           }
                                         ]
+                                      },
+                                      "mounted": {
+                                        "type": "boolean"
                                       }
                                     },
                                     "required": [
@@ -51577,6 +51607,9 @@
                                           "type": "boolean"
                                         }
                                       ]
+                                    },
+                                    "mounted": {
+                                      "type": "boolean"
                                     }
                                   },
                                   "required": [
@@ -51909,6 +51942,9 @@
                                             "type": "boolean"
                                           }
                                         ]
+                                      },
+                                      "mounted": {
+                                        "type": "boolean"
                                       }
                                     },
                                     "required": [
@@ -52754,6 +52790,9 @@
                                             "type": "boolean"
                                           }
                                         ]
+                                      },
+                                      "mounted": {
+                                        "type": "boolean"
                                       }
                                     },
                                     "required": [
@@ -53349,6 +53388,9 @@
                                             "type": "boolean"
                                           }
                                         ]
+                                      },
+                                      "mounted": {
+                                        "type": "boolean"
                                       }
                                     },
                                     "required": [
@@ -53949,6 +53991,9 @@
                                             "type": "boolean"
                                           }
                                         ]
+                                      },
+                                      "mounted": {
+                                        "type": "boolean"
                                       }
                                     },
                                     "required": [

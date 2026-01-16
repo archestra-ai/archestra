@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp/context7",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.method == 'tools/list')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "transformers": ["response-template"],
+    "body": "{\"jsonrpc\": \"2.0\", \"id\": {{jsonPath request.body '$.id'}}, \"result\": {\"tools\": [{\"name\": \"resolve-library-id\", \"description\": \"Resolves a package name to a Context7-compatible library ID\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"libraryName\": {\"type\": \"string\", \"description\": \"Library name to search for\"}}, \"required\": [\"libraryName\"]}}, {\"name\": \"get-library-docs\", \"description\": \"Fetches documentation for a library\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"libraryId\": {\"type\": \"string\", \"description\": \"Context7 library ID\"}}, \"required\": [\"libraryId\"]}}]}}"
+  }
+}

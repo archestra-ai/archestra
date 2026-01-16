@@ -32,6 +32,13 @@ export const UI_BASE_URL = "http://localhost:3000";
 export const API_BASE_URL = "http://localhost:9000";
 export const WIREMOCK_BASE_URL = "http://localhost:9092";
 
+// Internal WireMock URL for backend-to-wiremock connections (used when storing URLs in database)
+// In CI, the backend pod needs to use the Kubernetes service DNS name
+// In local dev, localhost works because everything runs on the same host
+export const WIREMOCK_INTERNAL_URL = IS_CI
+  ? "http://e2e-tests-wiremock:8080"
+  : "http://localhost:9092";
+
 export const METRICS_BASE_URL = "http://localhost:9050";
 export const METRICS_BEARER_TOKEN = "foo-bar";
 export const METRICS_ENDPOINT = "/metrics";

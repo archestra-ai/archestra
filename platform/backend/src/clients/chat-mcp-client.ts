@@ -418,10 +418,11 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
   const result = { ...schema } as JSONSchema7;
 
   if (result.type === "object") {
-    if (result.additionalProperties === undefined) result.additionalProperties = false;
+    if (result.additionalProperties === undefined)
+      result.additionalProperties = false;
     if (result.properties && typeof result.properties === "object") {
       for (const key in result.properties) {
-        if (Object.prototype.hasOwnProperty.call(result.properties, key)) {
+        if (Object.hasOwn(result.properties, key)) {
           result.properties[key] = normalizeJsonSchema(result.properties[key]);
         }
       }

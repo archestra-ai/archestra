@@ -34,19 +34,16 @@ export const CohereAssistantMessageSchema = z.object({
   tool_calls: z.array(CohereToolCallSchema).optional(),
 });
 
-
 export const CohereSystemMessageSchema = z.object({
   role: z.literal("system"),
   content: z.string(),
 });
-
 
 export const CohereToolMessageSchema = z.object({
   role: z.literal("tool"),
   tool_call_id: z.string(),
   content: z.string(),
 });
-
 
 export const CohereMessageParamSchema = z.union([
   CohereUserMessageSchema,

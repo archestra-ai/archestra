@@ -11,6 +11,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import {
+  createLLMModelForAgent,
+  detectProviderFromModel,
+} from "@/clients/llm-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -29,10 +33,6 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { browserStreamFeature } from "@/services/browser-stream-feature";
-import {
-  createLLMModelForAgent,
-  detectProviderFromModel,
-} from "@/services/llm-client";
 import {
   ApiError,
   constructResponseSchema,
@@ -89,8 +89,8 @@ async function getSmartDefaultModel(
             return { model: "gemini-2.5-pro", provider: "gemini" };
           case "openai":
             return { model: "gpt-4o", provider: "openai" };
-            case "cohere":
-              return { model: "command-r-plus-08-2024", provider: "cohere" };
+          case "cohere":
+            return { model: "command-r-08-2024", provider: "cohere" };
         }
       }
     }
@@ -107,11 +107,14 @@ async function getSmartDefaultModel(
     return { model: "gemini-2.5-pro", provider: "gemini" };
   }
   if (config.chat.cohere?.apiKey) {
-    return { model: "command-r-plus-08-2024", provider: "cohere" };
+    return { model: "command-r-08-2024", provider: "cohere" };
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key
   if (isVertexAiEnabled()) {
+    logger.info(
+      "getSmartDefaultModel:Vertex AI is enabled, using gemini-2.5-pro",
+    );
     return { model: "gemini-2.5-pro", provider: "gemini" };
   }
 
@@ -126,6 +129,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/chat",
     {
+      bodyLimit: config.api.bodyLimit,
       schema: {
         operationId: RouteId.StreamChat,
         description: "Stream chat response with MCP tools (useChat format)",
@@ -148,9 +152,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      // Extract external agent ID from incoming request headers to forward to LLM Proxy
-      const externalAgentId = getExternalAgentId(headers);
-
       // Get conversation
       const conversation = await ConversationModel.findById({
         id: conversationId,
@@ -161,6 +162,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
       }
+
+      // Use prompt ID as external agent ID if available, otherwise use header value
+      // This allows prompt names to be displayed in LLM proxy logs
+      const headerExternalAgentId = getExternalAgentId(headers);
+      const externalAgentId = conversation.promptId ?? headerExternalAgentId;
 
       // Fetch enabled tool IDs, custom selection status, and agent prompts in parallel
       const [enabledToolIds, hasCustomSelection, prompt] = await Promise.all([
@@ -181,6 +187,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationId: conversation.id,
         promptId: conversation.promptId ?? undefined,
         organizationId,
+        // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
+        sessionId: conversation.id,
+        // Pass promptId as initial delegation chain (will be extended by delegated agents)
+        delegationChain: conversation.promptId ?? undefined,
       });
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
@@ -231,6 +241,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Create LLM model using shared service
+      // Pass conversationId as sessionId to group all requests in this chat session
       const { model } = await createLLMModelForAgent({
         organizationId,
         userId: user.id,
@@ -239,6 +250,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
         conversationId,
         externalAgentId,
+        sessionId: conversationId,
       });
 
       // Strip images and large browser tool results from messages before sending to LLM

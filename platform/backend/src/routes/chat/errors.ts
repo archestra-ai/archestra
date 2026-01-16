@@ -10,8 +10,9 @@ import {
   RetryableErrorCodes,
   type SupportedProvider,
   VllmErrorTypes,
+  ZhipuaiErrorTypes,
 } from "@shared";
-import { APICallError } from "ai";
+import { APICallError, RetryError } from "ai";
 import logger from "@/logging";
 
 // =============================================================================
@@ -79,6 +80,11 @@ interface ParsedOpenAIError {
 
 interface ParsedAnthropicError {
   type?: string;
+  message?: string;
+}
+
+interface ParsedZhipuaiError {
+  code?: string;
   message?: string;
 }
 
@@ -156,6 +162,29 @@ function parseAnthropicError(
       return {
         type: parsed.type,
         message: parsed.message,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse Zhipuai error response body.
+ * Zhipuai errors have structure: { error: { code, message } }
+ * Zhipuai uses numeric string codes (e.g., "1211", "1305")
+ * Since Zhipuai is OpenAI-compatible, the error format follows OpenAI structure
+ *
+ * @see https://docs.z.ai/api-reference/api-code#errors
+ */
+function parseZhipuaiError(responseBody: string): ParsedZhipuaiError | null {
+  try {
+    const parsed = JSON.parse(responseBody);
+    if (parsed?.error) {
+      return {
+        code: parsed.error.code,
+        message: parsed.error.message,
       };
     }
     return null;
@@ -367,16 +396,14 @@ function parseGeminiError(responseBody: string): ParsedGeminiError | null {
   }
 }
 
-
 // Cohere Error Types and Parser
-
 
 interface ParsedCohereError {
   message?: string;
 }
 
 /**
- * 
+ *
  *  Errors in Cohere have this structure: { message: string }
  * @see https://docs.cohere.com/reference/errors
  */
@@ -393,7 +420,6 @@ function parseCohereError(responseBody: string): ParsedCohereError | null {
     return null;
   }
 }
-
 
 function mapCohereErrorToCode(
   statusCode: number | undefined,
@@ -521,6 +547,72 @@ function mapAnthropicErrorToCode(
     return ChatErrorCode.ServerError;
   }
 
+  return mapStatusCodeToErrorCode(statusCode);
+}
+
+/**
+ * Map Zhipuai error to ChatErrorCode.
+ * Uses error.code field from the API response.
+ * Zhipuai uses numeric string codes for different error types.
+ *
+ * Error codes documented at:
+ * @see https://docs.z.ai/api-reference/api-code#errors
+ *
+ * Error categories:
+ * - 500: Internal server error
+ * - 1000-1004: Authentication errors
+ * - 1110-1121: Account errors (inactive, locked, balance)
+ * - 1200-1234: API call errors (parameters, models, network)
+ * - 1300-1309: Policy blocks (content filter, rate limits)
+ */
+function mapZhipuaiErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedZhipuaiError | null,
+): ChatErrorCode {
+  const errorCode = parsedError?.code;
+
+  if (errorCode) {
+    switch (errorCode) {
+      // Authentication errors (1000-1004)
+      case ZhipuaiErrorTypes.AUTHENTICATION_FAILED:
+      case ZhipuaiErrorTypes.INVALID_AUTH_TOKEN:
+      case ZhipuaiErrorTypes.AUTH_TOKEN_EXPIRED:
+        return ChatErrorCode.Authentication;
+
+      // Account/permission errors
+      case ZhipuaiErrorTypes.ACCOUNT_LOCKED:
+      case ZhipuaiErrorTypes.INSUFFICIENT_BALANCE:
+      case ZhipuaiErrorTypes.NO_PERMISSION:
+        return ChatErrorCode.PermissionDenied;
+
+      // Model/API not found
+      case ZhipuaiErrorTypes.MODEL_NOT_FOUND:
+        return ChatErrorCode.NotFound;
+
+      // Rate limiting (multiple variants)
+      case ZhipuaiErrorTypes.RATE_LIMIT:
+      case ZhipuaiErrorTypes.HIGH_CONCURRENCY:
+      case ZhipuaiErrorTypes.HIGH_FREQUENCY:
+        return ChatErrorCode.RateLimit;
+
+      // Content filtering
+      case ZhipuaiErrorTypes.CONTENT_FILTERED:
+        return ChatErrorCode.ContentFiltered;
+
+      // Invalid request parameters
+      case ZhipuaiErrorTypes.INVALID_API_PARAMETERS:
+      case ZhipuaiErrorTypes.INVALID_PARAMETER:
+        return ChatErrorCode.InvalidRequest;
+
+      // Server/network errors
+      case ZhipuaiErrorTypes.INTERNAL_ERROR:
+      case ZhipuaiErrorTypes.NETWORK_ERROR:
+      case ZhipuaiErrorTypes.API_OFFLINE:
+        return ChatErrorCode.ServerError;
+    }
+  }
+
+  // Fall back to HTTP status code
   return mapStatusCodeToErrorCode(statusCode);
 }
 
@@ -663,7 +755,8 @@ type ParsedProviderError =
   | ParsedOpenAIError
   | ParsedAnthropicError
   | ParsedGeminiError
-  | ParsedCohereError;
+  | ParsedCohereError
+  | ParsedZhipuaiError;
 
 type ErrorParser = (responseBody: string) => ParsedProviderError | null;
 type ErrorMapper = (
@@ -711,6 +804,16 @@ function mapCohereErrorWrapper(
   return mapCohereErrorToCode(
     statusCode,
     parsedError as ParsedCohereError | null,
+  );
+}
+
+function mapZhipuaiErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapZhipuaiErrorToCode(
+    statusCode,
+    parsedError as ParsedZhipuaiError | null,
   );
 }
 
@@ -869,9 +972,11 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   openai: parseOpenAIError,
   anthropic: parseAnthropicError,
   gemini: parseGeminiError,
+  cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
   cohere: parseCohereError,
   vllm: parseVllmError,
   ollama: parseOllamaError,
+  zhipuai: parseZhipuaiError,
 };
 
 /**
@@ -883,9 +988,11 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   openai: mapOpenAIErrorWrapper,
   anthropic: mapAnthropicErrorWrapper,
   gemini: mapGeminiErrorWrapper,
+  cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
   cohere: mapCohereErrorWrapper,
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
+  zhipuai: mapZhipuaiErrorWrapper,
 };
 
 // =============================================================================
@@ -1020,7 +1127,42 @@ export function mapProviderError(
   error: unknown,
   provider: SupportedProvider,
 ): ChatErrorResponse {
-  logger.debug({ error, provider }, "[ChatErrorMapper] Mapping provider error");
+  logger.debug({ provider }, "[ChatErrorMapper] Mapping provider error");
+
+  // Handle Vercel AI SDK RetryError - extract the lastError and map it
+  // RetryError wraps errors from retry attempts and contains the last underlying error
+  if (RetryError.isInstance(error)) {
+    const retryError = error as InstanceType<typeof RetryError>;
+    logger.debug(
+      {
+        provider,
+        reason: retryError.reason,
+        errorCount: retryError.errors?.length,
+        lastErrorType:
+          retryError.lastError instanceof Error
+            ? retryError.lastError.name
+            : typeof retryError.lastError,
+      },
+      "[ChatErrorMapper] Unwrapping RetryError to extract lastError",
+    );
+
+    // If we have a lastError, recursively map it to get the actual error details
+    if (retryError.lastError) {
+      const mappedLastError = mapProviderError(retryError.lastError, provider);
+      // Preserve the retry context in the message
+      const originalMessage =
+        mappedLastError.originalError?.message || "Unknown error";
+      return {
+        ...mappedLastError,
+        originalError: mappedLastError.originalError
+          ? {
+              ...mappedLastError.originalError,
+              message: `Failed after ${retryError.errors?.length || "multiple"} attempts. Last error: ${originalMessage}`,
+            }
+          : undefined,
+      };
+    }
+  }
 
   // Get provider-specific parser and mapper
   const parseError = providerParsers[provider];

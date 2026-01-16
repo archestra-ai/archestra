@@ -170,13 +170,79 @@ const cohereConfig: CompressionTestConfig = {
   endpoint: (profileId) => `/v1/cohere/${profileId}/chat`,
 
   headers: (wiremockStub) => ({
-    authorization: `Bearer ${wiremockStub}`,
+    Authorization: `Bearer ${wiremockStub}`,
     "Content-Type": "application/json",
   }),
 
   // Cohere format: assistant has tool_calls and tool results are separate tool messages
   buildRequestWithToolResult: () => ({
-    model: "command-xlarge-nightly",
+    model: "command-r-plus-08-2024",
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: "What files are in the current directory?" }],
+      },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
+const cerebrasConfig: CompressionTestConfig = {
+  providerName: "Cerebras",
+
+  endpoint: (profileId) => `/v1/cerebras/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // Cerebras format: same as OpenAI (tool results as separate "tool" role messages)
+  buildRequestWithToolResult: () => ({
+    model: "llama-4-scout-17b-16e-instruct",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 const vllmConfig: CompressionTestConfig = {
   providerName: "vLLM",
 
@@ -253,6 +319,44 @@ const ollamaConfig: CompressionTestConfig = {
   }),
 };
 
+const zhipuaiConfig: CompressionTestConfig = {
+  providerName: "Zhipuai",
+
+  endpoint: (profileId) => `/v1/zhipuai/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // Zhipuai uses similar format to OpenAI
+  buildRequestWithToolResult: () => ({
+    model: "glm-4.5-flash",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -262,8 +366,10 @@ const testConfigs: CompressionTestConfig[] = [
   anthropicConfig,
   geminiConfig,
   cohereConfig,
+  cerebrasConfig,
   vllmConfig,
   ollamaConfig,
+  zhipuaiConfig,
 ];
 
 for (const config of testConfigs) {

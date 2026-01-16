@@ -40,7 +40,9 @@ type CohereStreamChunk = {
 };
 
 // Small helper to safely parse JSON without throwing. Returns ok=false on parse error.
-function safeJsonParse(input: string): { ok: true; value: unknown } | { ok: false } {
+function safeJsonParse(
+  input: string,
+): { ok: true; value: unknown } | { ok: false } {
   try {
     return { ok: true, value: JSON.parse(input) };
   } catch {
@@ -52,7 +54,8 @@ function safeJsonParse(input: string): { ok: true; value: unknown } | { ok: fals
 // =============================================================================
 
 class CohereRequestAdapter
-  implements LLMRequestAdapter<CohereRequest, CohereMessages> {
+  implements LLMRequestAdapter<CohereRequest, CohereMessages>
+{
   readonly provider = "cohere" as const;
   private request: CohereRequest;
   private modifiedModel: string | null = null;
@@ -87,9 +90,8 @@ class CohereRequestAdapter
         const toolMsg = message as Cohere.Types.ToolMessage;
         const toolName = this.findToolName(toolMsg.tool_call_id);
 
-        let content: unknown;
         const parsed = safeJsonParse(toolMsg.content);
-        content = parsed.ok ? parsed.value : toolMsg.content;
+        const content = parsed.ok ? parsed.value : toolMsg.content;
 
         results.push({
           id: toolMsg.tool_call_id,
@@ -226,9 +228,8 @@ class CohereRequestAdapter
         const toolName = this.findToolName(toolMsg.tool_call_id);
 
         if (toolName) {
-          let toolResult: unknown;
           const parsed = safeJsonParse(toolMsg.content);
-          toolResult = parsed.ok ? parsed.value : toolMsg.content;
+          const toolResult = parsed.ok ? parsed.value : toolMsg.content;
 
           commonMessage.toolCalls = [
             {
@@ -356,7 +357,8 @@ class CohereResponseAdapter implements LLMResponseAdapter<CohereResponse> {
 // =============================================================================
 
 class CohereStreamAdapter
-  implements LLMStreamAdapter<CohereStreamChunk, CohereResponse> {
+  implements LLMStreamAdapter<CohereStreamChunk, CohereResponse>
+{
   readonly provider = "cohere" as const;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndex = -1;
@@ -413,7 +415,10 @@ class CohereStreamAdapter
         // Pass through raw Cohere chunk - @ai-sdk/cohere expects native format
         // The SDK schema expects: { type, index, delta: { message: { content: {...} } } }
         // Extract text for internal accumulation but don't modify the chunk
-        const delta = get(chunk, "delta.message.content", {}) as Record<string, unknown>;
+        const delta = get(chunk, "delta.message.content", {}) as Record<
+          string,
+          unknown
+        >;
         const text = (delta.text as string) || "";
         if (text) {
           this.state.text += text;
@@ -431,16 +436,24 @@ class CohereStreamAdapter
       case "tool-call-start": {
         this.currentToolCallIndex = this.state.toolCalls.length;
         // SDK expects: delta.message.tool_calls structure
-        const toolCallData = get(chunk, "delta.message.tool_calls", {}) as Record<string, unknown>;
+        const toolCallData = get(
+          chunk,
+          "delta.message.tool_calls",
+          {},
+        ) as Record<string, unknown>;
 
         // Fallback to old structure if new structure not present
-        const toolCall = Object.keys(toolCallData).length > 0
-          ? toolCallData
-          : (get(chunk, "tool_call", {}) as Record<string, unknown>);
+        const toolCall =
+          Object.keys(toolCallData).length > 0
+            ? toolCallData
+            : (get(chunk, "tool_call", {}) as Record<string, unknown>);
 
         // Critically: Generate ID if missing. Cohere V2 sometimes omits it.
         const fixedId = (toolCall.id as string) || randomUUID();
-        const funcData = get(toolCall, "function", {}) as Record<string, unknown>;
+        const funcData = get(toolCall, "function", {}) as Record<
+          string,
+          unknown
+        >;
 
         this.state.toolCalls.push({
           id: fixedId,
@@ -471,8 +484,13 @@ class CohereStreamAdapter
 
       case "tool-call-delta": {
         // SDK expects: delta.message.tool_calls.function.arguments
-        const deltaData = get(chunk, "delta.message.tool_calls.function", {}) as Record<string, unknown>;
-        const args = (deltaData.arguments as string) ||
+        const deltaData = get(
+          chunk,
+          "delta.message.tool_calls.function",
+          {},
+        ) as Record<string, unknown>;
+        const args =
+          (deltaData.arguments as string) ||
           (get(chunk, "delta.function.arguments", "") as string);
 
         if (this.currentToolCallIndex >= 0 && args) {
@@ -503,7 +521,6 @@ class CohereStreamAdapter
         isToolCallChunk = true;
         break;
       }
-
 
       case "message-end": {
         const finishReason = get(
@@ -537,7 +554,13 @@ class CohereStreamAdapter
     }
 
     if (sseData) {
-      logger.debug({ sseDataLength: sseData.length, sseDeltaSnippet: sseData.substring(0, 50) }, "CohereStreamAdapter emitting SSE data");
+      logger.debug(
+        {
+          sseDataLength: sseData.length,
+          sseDeltaSnippet: sseData.substring(0, 50),
+        },
+        "CohereStreamAdapter emitting SSE data",
+      );
     }
     return { sseData, isToolCallChunk, isFinal };
   }
@@ -676,14 +699,13 @@ export async function convertToolResultsToToon(
   stats: CompressionStats;
 }> {
   const tokenizer = getTokenizer("cohere");
-  let toolResultCount = 0;
+
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
 
   const result = messages.map((message) => {
     if (message.role === "tool") {
       const toolMsg = message as Cohere.Types.ToolMessage;
-      toolResultCount++;
 
       try {
         const unwrapped = unwrapToolContent(toolMsg.content);
@@ -750,9 +772,9 @@ export async function convertToolResultsToToon(
       const savedTokens = totalTokensBefore - totalTokensAfter;
       const inputPricePerToken =
         parseFloat(tokenPrice.pricePerMillionInput) / 1_000_000;
-      costSavings = savedTokens * (Number.isFinite(inputPricePerToken)
-        ? inputPricePerToken
-        : 0);
+      costSavings =
+        savedTokens *
+        (Number.isFinite(inputPricePerToken) ? inputPricePerToken : 0);
     }
   }
 
@@ -891,7 +913,6 @@ export const cohereAdapterFactory: LLMProvider<
 
   createClient(apiKey: string, options: CreateClientOptions) {
     if (options.mockMode) {
-
       throw new Error("Mock mode not yet implemented for Cohere");
     }
     return createCohereClient(apiKey, options);

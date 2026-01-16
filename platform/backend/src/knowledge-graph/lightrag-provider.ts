@@ -142,6 +142,13 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
       }
 
       const url = joinUrl(this.config.apiUrl, "/documents/text");
+
+      // Build metadata object - include filename if provided, preserve other metadata
+      const metadataObj = {
+        ...(metadata ?? {}),
+        ...(filename && { filename }),
+      };
+
       const response = await fetchWithTimeout(
         url,
         {
@@ -149,9 +156,10 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
           headers,
           body: JSON.stringify({
             text: content,
-            // Use filename as document identifier if provided
-            // Explicit filename takes precedence over metadata.filename
-            ...(filename && { metadata: { ...(metadata ?? {}), filename } }),
+            // Include metadata if we have any fields
+            ...(Object.keys(metadataObj).length > 0 && {
+              metadata: metadataObj,
+            }),
           }),
         },
         DOCUMENT_OPERATION_TIMEOUT_MS,

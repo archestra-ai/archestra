@@ -234,6 +234,56 @@ describe("LightRAGProvider", () => {
         }),
       );
     });
+
+    test("preserves metadata when filename is not provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            status: "success",
+            message: "Document inserted",
+          }),
+      });
+
+      await provider.insertDocument({
+        content: "Test content",
+        metadata: { author: "test-author", source: "test-source" },
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:9621/documents/text",
+        expect.objectContaining({
+          body: JSON.stringify({
+            text: "Test content",
+            metadata: { author: "test-author", source: "test-source" },
+          }),
+        }),
+      );
+    });
+
+    test("does not include metadata field when no metadata or filename provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            status: "success",
+            message: "Document inserted",
+          }),
+      });
+
+      await provider.insertDocument({
+        content: "Test content",
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:9621/documents/text",
+        expect.objectContaining({
+          body: JSON.stringify({
+            text: "Test content",
+          }),
+        }),
+      );
+    });
   });
 
   describe("queryDocument", () => {

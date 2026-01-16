@@ -98,6 +98,11 @@ const SUPPORTED_EXTENSIONS = [
 const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
 
 /**
+ * Maximum concurrent document ingestions to prevent overwhelming LightRAG service
+ */
+const MAX_CONCURRENT_INGESTIONS = 3;
+
+/**
  * Check if a MIME type is a supported document type
  */
 function isSupportedDocumentType(mediaType?: string): boolean {
@@ -117,7 +122,16 @@ function hasSupportedExtension(filename?: string): boolean {
 }
 
 /**
+ * Estimate decoded size from base64 length
+ * Base64 encoding increases size by ~4/3, so decoded ≈ base64Length * 3/4
+ */
+function estimateDecodedSize(base64Length: number): number {
+  return Math.ceil(base64Length * 0.75);
+}
+
+/**
  * Extract text content from a base64 data URL
+ * Returns null if the content exceeds size limits or cannot be decoded
  */
 function extractContentFromDataUrl(dataUrl: string): string | null {
   try {
@@ -127,6 +141,16 @@ function extractContentFromDataUrl(dataUrl: string): string | null {
 
     const [, , data] = match;
     if (!data) return null;
+
+    // Early size check before decoding to prevent memory spikes
+    const estimatedSize = estimateDecodedSize(data.length);
+    if (estimatedSize > MAX_DOCUMENT_SIZE_BYTES) {
+      logger.warn(
+        { estimatedSize },
+        "[KnowledgeGraph] Skipping data URL that likely exceeds size limit",
+      );
+      return null;
+    }
 
     // Decode base64
     const decoded = Buffer.from(data, "base64").toString("utf-8");
@@ -289,20 +313,53 @@ export async function extractAndIngestDocuments(
     "[KnowledgeGraph] Ingesting documents from chat",
   );
 
-  // Ingest documents asynchronously (fire and forget)
-  // We don't await these to avoid blocking the chat response
-  for (const doc of documentsToIngest) {
-    ingestDocument({
-      content: doc.content,
-      filename: doc.filename,
-    }).catch((error) => {
-      logger.error(
-        {
-          filename: doc.filename,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "[KnowledgeGraph] Background document ingestion failed",
-      );
-    });
-  }
+  // Ingest documents asynchronously with concurrency limit
+  // This prevents overwhelming the LightRAG service with too many parallel requests
+  const ingestWithConcurrencyLimit = async () => {
+    const inProgress: Promise<void>[] = [];
+
+    for (const doc of documentsToIngest) {
+      const promise: Promise<void> = ingestDocument({
+        content: doc.content,
+        filename: doc.filename,
+      })
+        .then(() => {
+          // Discard boolean return value, we just need void
+        })
+        .catch((error) => {
+          logger.error(
+            {
+              filename: doc.filename,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            "[KnowledgeGraph] Background document ingestion failed",
+          );
+        })
+        .finally(() => {
+          // Remove completed promise from tracking array
+          const index = inProgress.indexOf(promise);
+          if (index > -1) {
+            inProgress.splice(index, 1);
+          }
+        });
+
+      inProgress.push(promise);
+
+      // Wait for one to complete if we've hit the concurrency limit
+      if (inProgress.length >= MAX_CONCURRENT_INGESTIONS) {
+        await Promise.race(inProgress);
+      }
+    }
+
+    // Wait for remaining ingestions to complete
+    await Promise.all(inProgress);
+  };
+
+  // Fire and forget - don't block the chat response
+  ingestWithConcurrencyLimit().catch((error) => {
+    logger.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      "[KnowledgeGraph] Background document ingestion batch failed",
+    );
+  });
 }

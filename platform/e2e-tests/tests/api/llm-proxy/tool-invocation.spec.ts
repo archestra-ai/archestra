@@ -726,7 +726,8 @@ for (const config of testConfigs) {
 
       // Wait for policies to be fully active before testing
       // This helps prevent race conditions where policies aren't immediately effective
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Increased from 500ms to 2000ms for CI stability under load
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // 6. Send a request with untrusted data
       const response = await makeApiRequest({

@@ -1,0 +1,23 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp/context7",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.method == 'ping')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "jsonrpc": "2.0",
+      "id": "{{jsonPath request.body '$.id'}}",
+      "result": {}
+    },
+    "transformers": ["response-template"]
+  }
+}

@@ -1,4 +1,4 @@
-import { TEST_CATALOG_ITEM_NAME } from "../../consts";
+import { TEST_CATALOG_ITEM_NAME, WIREMOCK_BASE_URL } from "../../consts";
 import {
   findCatalogItem,
   findInstalledServer,
@@ -75,12 +75,12 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           throw new Error("Default Team not found");
         }
 
-        // Create a catalog item for context7 remote MCP server (no auth required)
+        // Create a catalog item for context7 remote MCP server (mocked via WireMock)
         const catalogResponse = await createMcpCatalogItem(request, {
           name: "Context7 - Remote",
           description: "Context7 MCP Server for testing remote installation",
           serverType: "remote",
-          serverUrl: "https://mcp.context7.com/mcp",
+          serverUrl: `${WIREMOCK_BASE_URL}/mcp/context7`,
         });
         const catalogItem = await catalogResponse.json();
         catalogId = catalogItem.id;

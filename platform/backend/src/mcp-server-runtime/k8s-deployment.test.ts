@@ -1888,6 +1888,126 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     const portEnv = podSpec?.containers[0]?.env?.find((e) => e.name === "PORT");
     expect(portEnv?.value).toBe("3000");
   });
+
+  test("skips mounted secrets with empty values - no volumes created", () => {
+    const mockCatalogItem = {
+      id: "catalog-empty-mounted",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        environment: [
+          {
+            key: "TLS_CERT",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+          {
+            key: "TLS_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+        ],
+      },
+    };
+
+    // Empty values for both mounted secrets
+    const environmentValues: Record<string, string> = {
+      TLS_CERT: "",
+      TLS_KEY: "   ", // Whitespace only
+    };
+
+    const deployment = createK8sDeploymentInstance(
+      environmentValues,
+      undefined,
+    );
+    // @ts-expect-error - accessing private property for testing
+    deployment.catalogItem = mockCatalogItem;
+
+    const deploymentSpec = deployment.generateDeploymentSpec(
+      "test:latest",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const podSpec = deploymentSpec.spec?.template.spec;
+    const container = podSpec?.containers[0];
+
+    // No volumes should be created for empty secrets
+    expect(podSpec?.volumes).toBeUndefined();
+    expect(container?.volumeMounts).toBeUndefined();
+
+    // No env vars either (mounted secrets skip env var injection)
+    expect(container?.env).toEqual([]);
+  });
+
+  test("only mounts secrets with values, skips empty ones", () => {
+    const mockCatalogItem = {
+      id: "catalog-partial-mounted",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        environment: [
+          {
+            key: "TLS_CERT",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+          {
+            key: "TLS_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+          {
+            key: "CA_BUNDLE",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+        ],
+      },
+    };
+
+    // Only TLS_CERT has a value
+    const environmentValues: Record<string, string> = {
+      TLS_CERT: "-----BEGIN CERTIFICATE-----...",
+      TLS_KEY: "", // Empty - should be skipped
+      CA_BUNDLE: "  ", // Whitespace - should be skipped
+    };
+
+    const deployment = createK8sDeploymentInstance(
+      environmentValues,
+      undefined,
+    );
+    // @ts-expect-error - accessing private property for testing
+    deployment.catalogItem = mockCatalogItem;
+
+    const deploymentSpec = deployment.generateDeploymentSpec(
+      "test:latest",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const podSpec = deploymentSpec.spec?.template.spec;
+    const container = podSpec?.containers[0];
+
+    // Only one volume with one item (TLS_CERT)
+    expect(podSpec?.volumes).toHaveLength(1);
+    expect(podSpec?.volumes?.[0].secret?.items).toHaveLength(1);
+    expect(podSpec?.volumes?.[0].secret?.items?.[0].key).toBe("TLS_CERT");
+
+    // Only one volumeMount for TLS_CERT
+    expect(container?.volumeMounts).toHaveLength(1);
+    expect(container?.volumeMounts?.[0].mountPath).toBe("/secrets/TLS_CERT");
+
+    // No env vars (all are mounted secrets, empty ones skipped entirely)
+    expect(container?.env).toEqual([]);
+  });
 });
 
 describe("K8sDeployment.createK8sSecret", () => {

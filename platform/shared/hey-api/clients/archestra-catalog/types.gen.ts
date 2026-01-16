@@ -5,8 +5,6 @@ export type ClientOptions = {
 };
 
 export type ArchestraMcpServerManifest = {
-    name: string;
-    display_name: string;
     description: string;
     long_description?: string;
     author: {
@@ -19,24 +17,6 @@ export type ArchestraMcpServerManifest = {
     support?: string;
     icon?: string;
     screenshots?: Array<string>;
-    server: {
-        command: string;
-        args?: Array<string>;
-        env?: {
-            [key: string]: string;
-        };
-        type: 'local';
-        setup?: Array<{
-            type: 'log-monitor';
-            provider: 'whatsapp';
-        }>;
-        docker_image?: string;
-        service_account?: string;
-    } | {
-        type: 'remote';
-        url: string;
-        docs_url: string | null;
-    };
     tools?: Array<{
         name: string;
         description?: string;
@@ -72,6 +52,8 @@ export type ArchestraMcpServerManifest = {
             max?: number;
         };
     };
+    name: string;
+    display_name: string;
     instructions?: string;
     readme: string | null;
     category: 'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General' | null;
@@ -150,6 +132,24 @@ export type ArchestraMcpServerManifest = {
         browser_auth?: boolean;
         streamable_http_url?: string;
         streamable_http_port?: number;
+    };
+    server: {
+        command: string;
+        args?: Array<string>;
+        env?: {
+            [key: string]: string;
+        };
+        type: 'local';
+        setup?: Array<{
+            type: 'log-monitor';
+            provider: 'whatsapp';
+        }>;
+        docker_image?: string;
+        service_account?: string;
+    } | {
+        type: 'remote';
+        url: string;
+        docs_url: string | null;
     };
 };
 

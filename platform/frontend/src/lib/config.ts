@@ -30,19 +30,36 @@ export const getBackendBaseUrl = (): string => {
 };
 
 /**
+ * Get the external base URL for displaying connection instructions to users.
+ * This is the URL that external agents should use to connect to Archestra from outside the cluster.
+ *
+ * Priority:
+ * 1. NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL (explicit external URL)
+ * 2. Falls back to getBackendBaseUrl() for backwards compatibility
+ */
+export const getExternalBaseUrl = (): string => {
+  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL");
+  if (externalUrl) {
+    return externalUrl;
+  }
+  return getBackendBaseUrl();
+};
+
+/**
  * Get the display proxy URL for showing to users.
  * This is the URL that external agents should use to connect to Archestra.
+ * Uses getExternalBaseUrl() to support separate internal/external URLs in K8s deployments.
  */
 export const getDisplayProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
-  const backendBaseUrl = getBackendBaseUrl();
+  const baseUrl = getExternalBaseUrl();
 
-  if (backendBaseUrl.endsWith(proxyUrlSuffix)) {
-    return backendBaseUrl;
-  } else if (backendBaseUrl.endsWith("/")) {
-    return `${backendBaseUrl.slice(0, -1)}${proxyUrlSuffix}`;
+  if (baseUrl.endsWith(proxyUrlSuffix)) {
+    return baseUrl;
+  } else if (baseUrl.endsWith("/")) {
+    return `${baseUrl.slice(0, -1)}${proxyUrlSuffix}`;
   }
-  return `${backendBaseUrl}${proxyUrlSuffix}`;
+  return `${baseUrl}${proxyUrlSuffix}`;
 };
 
 /**

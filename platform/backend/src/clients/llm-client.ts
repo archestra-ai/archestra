@@ -57,8 +57,12 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "zhipuai";
   }
 
+  if (lowerModel.includes("minimax")) {
+    return "minimax";
+  }
+
   // Default to anthropic for backwards compatibility
-  // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
+  // Note: vLLM, Ollama, and MiniMax cannot be auto-detected as they can serve any model
   return "anthropic";
 }
 
@@ -97,7 +101,8 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.anthropicApiKey ??
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
-      secret?.secret?.zhipuaiApiKey;
+      secret?.secret?.zhipuaiApiKey ??
+      secret?.secret?.minimaxApiKey;
     if (secretValue) {
       providerApiKey = secretValue as string;
       apiKeySource = resolvedApiKey.scope;
@@ -125,6 +130,9 @@ export async function resolveProviderApiKey(params: {
       providerApiKey = config.chat.ollama.apiKey;
     } else if (provider === "zhipuai" && config.chat.zhipuai.apiKey) {
       providerApiKey = config.chat.zhipuai.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "minimax" && config.chat.minimax.apiKey) {
+      providerApiKey = config.chat.minimax.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -263,6 +271,18 @@ export function createLLMModel(params: {
     return client.chat(modelName);
   }
 
+  if (provider === "minimax") {
+    // URL format: /v1/minimax/:agentId (SDK appends /chat/completions)
+    // MiniMax uses OpenAI-compatible API, so we use the OpenAI SDK
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/minimax/${agentId}`,
+      headers,
+    });
+    // Use .chat() to force Chat Completions API
+    return client.chat(modelName);
+  }
+
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
@@ -308,13 +328,14 @@ export async function createLLMModelForAgent(params: {
   // vLLM and Ollama typically don't require API keys
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
+  const isMiniMax = provider === "minimax";
 
   logger.info(
-    { apiKeySource: source, provider, isGeminiWithVertexAi, isVllm, isOllama },
+    { apiKeySource: source, provider, isGeminiWithVertexAi, isVllm, isOllama, isMiniMax },
     "Using LLM provider API key",
   );
 
-  if (!apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama) {
+  if (!apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama && !isMiniMax) {
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Chat Settings.",

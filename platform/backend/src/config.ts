@@ -427,6 +427,13 @@ export default {
         process.env.ARCHESTRA_CHAT_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
     },
+    minimax: {
+      apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_MINIMAX_BASE_URL ||
+        process.env.ARCHESTRA_MINIMAX_BASE_URL ||
+        "https://api.minimax.io/v1",
+    },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
       remoteServerHeaders: process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS

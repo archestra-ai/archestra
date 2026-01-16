@@ -411,6 +411,50 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from MiniMax API
+ * MiniMax exposes an OpenAI-compatible /models endpoint
+ * See: https://platform.minimax.io/docs/api-reference/text-openai-api
+ */
+async function fetchMiniMaxModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.chat.minimax.baseUrl || config.llm.minimax.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch MiniMax models",
+    );
+    throw new Error(`Failed to fetch MiniMax models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      object: string;
+      created?: number;
+      owned_by?: string;
+    }>;
+  };
+
+  // MiniMax returns all available models
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "minimax" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }));
+}
+
+/**
  * Fetch models from Gemini API via Vertex AI SDK
  * Uses Application Default Credentials (ADC) for authentication
  *
@@ -548,6 +592,8 @@ async function getProviderApiKey({
       return config.chat.ollama.apiKey || "";
     case "zhipuai":
       return config.chat.zhipuai?.apiKey || null;
+    case "minimax":
+      return config.chat.minimax.apiKey || null;
     default:
       return null;
   }
@@ -565,6 +611,7 @@ const modelFetchers: Record<
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
   zhipuai: fetchZhipuaiModels,
+  minimax: fetchMiniMaxModels,
 };
 
 /**
@@ -603,10 +650,12 @@ export async function fetchModelsForProvider({
   // vLLM and Ollama typically don't require API keys, but need base URL configured
   const isVllmEnabled = provider === "vllm" && config.llm.vllm.enabled;
   const isOllamaEnabled = provider === "ollama" && config.llm.ollama.enabled;
+  const isMiniMax = provider === "minimax";
 
   // For Gemini with Vertex AI, we don't need an API key - authentication is via ADC
   // For vLLM and Ollama, API key is optional but base URL must be configured
-  if (!apiKey && !vertexAiEnabled && !isVllmEnabled && !isOllamaEnabled) {
+  // For MiniMax, API key is required
+  if (!apiKey && !vertexAiEnabled && !isVllmEnabled && !isOllamaEnabled && !isMiniMax) {
     logger.debug(
       { provider, organizationId },
       "No API key available for provider",
@@ -635,6 +684,11 @@ export async function fetchModelsForProvider({
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     } else if (provider === "zhipuai") {
+      if (apiKey) {
+        models = await modelFetchers[provider](apiKey);
+      }
+    } else if (provider === "minimax") {
+      // MiniMax requires API key
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

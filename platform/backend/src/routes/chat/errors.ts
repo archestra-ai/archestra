@@ -920,6 +920,41 @@ function mapOllamaErrorWrapper(
 }
 
 /**
+ * Parse MiniMax error response body.
+ * MiniMax uses OpenAI-compatible error format: { error: { type, code, message } }
+ *
+ * @see https://platform.minimax.io/docs/api-reference/text-openai-api
+ */
+function parseMiniMaxError(responseBody: string): ParsedOpenAIError | null {
+  // MiniMax uses the same error format as OpenAI
+  return parseOpenAIError(responseBody);
+}
+
+/**
+ * Map MiniMax error to ChatErrorCode.
+ * MiniMax uses OpenAI-compatible error format.
+ *
+ * @see https://platform.minimax.io/docs/api-reference/text-openai-api
+ */
+function mapMiniMaxErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  // MiniMax is OpenAI-compatible, so use OpenAI error mapping
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
+function mapMiniMaxErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapMiniMaxErrorToCode(
+    statusCode,
+    parsedError as ParsedOpenAIError | null,
+  );
+}
+
+/**
  * Registry of provider-specific error parsers.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
  * if a new provider is added to SupportedProvider without updating this map.
@@ -932,6 +967,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
+  minimax: parseMiniMaxError,
 };
 
 /**
@@ -947,6 +983,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,
+  minimax: mapMiniMaxErrorWrapper,
 };
 
 // =============================================================================

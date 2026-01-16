@@ -4,6 +4,8 @@ export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as ChatApiKeyModel } from "./chat-api-key";
+export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
+export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
 export { default as ConversationModel } from "./conversation";
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as DualLlmConfigModel } from "./dual-llm-config";

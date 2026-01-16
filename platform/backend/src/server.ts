@@ -32,6 +32,10 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
+  cleanupChatOpsProviders,
+  initializeChatOpsProviders,
+} from "@/agents/chatops";
+import {
   cleanupEmailProvider,
   cleanupOldProcessedEmails,
   EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
@@ -474,6 +478,9 @@ const start = async () => {
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
     await initializeEmailProvider();
 
+    // Initialize chatops providers (MS Teams, Slack, etc.)
+    await initializeChatOpsProviders();
+
     // Background job to renew email subscriptions before they expire
     const emailRenewalIntervalId = setInterval(() => {
       renewEmailSubscriptionIfNeeded().catch((error) => {
@@ -555,6 +562,10 @@ const start = async () => {
         // Cleanup email provider (unsubscribe from Graph API if needed)
         await cleanupEmailProvider();
         fastify.log.info("Email provider cleanup completed");
+
+        // Cleanup chatops providers
+        await cleanupChatOpsProviders();
+        fastify.log.info("ChatOps provider cleanup completed");
 
         // Close WebSocket server
         websocketService.stop();

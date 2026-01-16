@@ -277,6 +277,11 @@ export const RouteId = {
   RenewIncomingEmailSubscription: "renewIncomingEmailSubscription",
   DeleteIncomingEmailSubscription: "deleteIncomingEmailSubscription",
   GetPromptEmailAddress: "getPromptEmailAddress",
+
+  // ChatOps Routes
+  GetChatOpsStatus: "getChatOpsStatus",
+  ListChatOpsBindings: "listChatOpsBindings",
+  DeleteChatOpsBinding: "deleteChatOpsBinding",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

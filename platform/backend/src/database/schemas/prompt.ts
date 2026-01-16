@@ -6,6 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { ChatOpsProviderType } from "@/types/chatops";
 import agentsTable from "./agent";
 
 /**
@@ -29,6 +30,11 @@ const promptsTable = pgTable("prompts", {
   systemPrompt: text("system_prompt"),
   version: integer("version").notNull().default(1),
   history: jsonb("history").$type<PromptHistoryEntry[]>().notNull().default([]),
+  /** Which chatops providers can trigger this prompt/agent (empty = none) */
+  allowedChatops: jsonb("allowed_chatops")
+    .$type<ChatOpsProviderType[]>()
+    .notNull()
+    .default([]),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

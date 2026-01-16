@@ -307,6 +307,19 @@ export default {
       },
     },
   },
+  chatops: {
+    msTeams: {
+      enabled: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED === "true",
+      appId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID || "",
+      appPassword: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD || "",
+      graph: {
+        tenantId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID || "",
+        clientId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID || "",
+        clientSecret:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET || "",
+      },
+    },
+  },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
     trustedOrigins: getTrustedOrigins(),

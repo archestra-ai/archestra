@@ -544,7 +544,7 @@ export function McpConnectionInstructions({
         <p className="text-sm text-muted-foreground">
           The URL is configurable via the{" "}
           <CodeText className="text-xs">
-            ARCHESTRA_GATEWAY_EXTERNAL_URL
+            ARCHESTRA_API_EXTERNAL_BASE_URL
           </CodeText>{" "}
           environment variable. See{" "}
           <a

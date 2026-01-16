@@ -259,7 +259,7 @@ export function ProxyConnectionInstructions({
       )}
       <p className="text-sm text-muted-foreground">
         The URL is configurable via the{" "}
-        <CodeText className="text-xs">ARCHESTRA_GATEWAY_EXTERNAL_URL</CodeText>{" "}
+        <CodeText className="text-xs">ARCHESTRA_API_EXTERNAL_BASE_URL</CodeText>{" "}
         environment variable. See{" "}
         <a
           href="https://archestra.ai/docs/platform-deployment#environment-variables"

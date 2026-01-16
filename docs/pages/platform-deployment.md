@@ -490,14 +490,14 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Default: `http://localhost:9000`
   - Example: `http://localhost:9001` or `https://api.internal.example.com`
-  - Note: The backend parses the port from this URL to determine its listening port. In Kubernetes deployments, this is typically the internal service URL (e.g., `http://archestra-backend:9000`). For external access URLs shown in the UI, use `ARCHESTRA_GATEWAY_EXTERNAL_URL` instead.
+  - Note: The backend parses the port from this URL to determine its listening port. In Kubernetes deployments, this is typically the internal service URL (e.g., `http://archestra-backend:9000`). For external access URLs shown in the UI, use `ARCHESTRA_API_EXTERNAL_BASE_URL` instead.
 
-- **`ARCHESTRA_GATEWAY_EXTERNAL_URL`** - Public URL for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway from outside the Kubernetes cluster.
+- **`ARCHESTRA_API_EXTERNAL_BASE_URL`** - Public URL for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway from outside the Kubernetes cluster.
 
   This URL is displayed in the UI connection instructions to help users configure their agents. It does not affect internal routing.
 
   - Default: Falls back to `ARCHESTRA_API_BASE_URL`
-  - Example: `https://backend.archestra.com`
+  - Example: `https://api.archestra.com`
   - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.

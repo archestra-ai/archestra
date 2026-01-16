@@ -34,11 +34,11 @@ export const getBackendBaseUrl = (): string => {
  * This is the URL that external agents should use to connect to Archestra from outside the cluster.
  *
  * Priority:
- * 1. NEXT_PUBLIC_ARCHESTRA_GATEWAY_EXTERNAL_URL (explicit external URL)
+ * 1. NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL (explicit external URL)
  * 2. Falls back to getBackendBaseUrl() for backwards compatibility
  */
 export const getExternalBaseUrl = (): string => {
-  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_GATEWAY_EXTERNAL_URL");
+  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL");
   if (externalUrl) {
     return externalUrl;
   }

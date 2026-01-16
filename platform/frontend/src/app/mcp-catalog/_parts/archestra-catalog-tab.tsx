@@ -147,6 +147,11 @@ export function ArchestraCatalogTab({
                   default: Array.isArray(userConfigEntry.default)
                     ? undefined
                     : userConfigEntry.default,
+                  mounted: (
+                    userConfigEntry as typeof userConfigEntry & {
+                      mounted?: boolean;
+                    }
+                  ).mounted,
                 };
               }
             }
@@ -180,6 +185,8 @@ export function ArchestraCatalogTab({
               default: Array.isArray(config.default)
                 ? undefined
                 : config.default,
+              mounted: (config as typeof config & { mounted?: boolean })
+                .mounted,
             }))
         : [];
 
@@ -205,6 +212,7 @@ export function ArchestraCatalogTab({
       required?: boolean;
       description?: string;
       default?: string | number | boolean;
+      mounted?: boolean;
     }>,
   ) => {
     // Rewrite redirect URIs to prefer platform callback (port 3000)

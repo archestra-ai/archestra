@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.26](https://github.com/archestra-ai/archestra/compare/platform-v1.0.25...platform-v1.0.26) (2026-01-16)
+
+
+### Miscellaneous Chores
+
+* suport mounted secrets from the catalog ([#2179](https://github.com/archestra-ai/archestra/issues/2179)) ([3c84eee](https://github.com/archestra-ai/archestra/commit/3c84eee0e1b05511afad54090a12e21156d972a2))
+
 ## [1.0.25](https://github.com/archestra-ai/archestra/compare/platform-v1.0.24...platform-v1.0.25) (2026-01-16)
 
 

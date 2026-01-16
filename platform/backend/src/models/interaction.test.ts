@@ -693,6 +693,313 @@ describe("InteractionModel", () => {
       expect(interactions.data).toHaveLength(1);
       expect(interactions.data[0].userId).toBe(user1.id);
     });
+
+    test("filters by search (case-insensitive in request content)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Search Test Agent",
+        teams: [],
+      });
+
+      // Create interaction with specific user message
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "Find all the IMPORTANT documents" },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Found some documents.",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Create interaction without the search term
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "What is the weather?" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "The weather is sunny.",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Search with lowercase should find uppercase match
+      const results = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "important" },
+      );
+
+      expect(results.data).toHaveLength(1);
+      // Type assertion for OpenAI request format
+      const request = results.data[0].request as {
+        messages: { content: string }[];
+      };
+      expect(request.messages[0].content).toContain("IMPORTANT");
+    });
+
+    test("filters by search in response content", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Search Test Agent",
+        teams: [],
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Here is the SECRET_ANSWER you requested.",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Hi there!",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const results = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "secret_answer" },
+      );
+
+      expect(results.data).toHaveLength(1);
+    });
+
+    test("combines search with profileId filter", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
+      const agent2 = await AgentModel.create({ name: "Agent 2", teams: [] });
+
+      // Interaction in agent1 with search term
+      await InteractionModel.create({
+        profileId: agent1.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Find the UNIQUE_TERM" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Interaction in agent2 with search term
+      await InteractionModel.create({
+        profileId: agent2.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Find the UNIQUE_TERM" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Search with profileId filter should only return agent1's interaction
+      const results = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "unique_term", profileId: agent1.id },
+      );
+
+      expect(results.data).toHaveLength(1);
+      expect(results.data[0].profileId).toBe(agent1.id);
+    });
+
+    test("search returns empty when term not found", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello world" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const results = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "nonexistent_xyz_123" },
+      );
+
+      expect(results.data).toHaveLength(0);
+    });
+
+    test("search respects access control for non-admin users", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
+
+      const accessibleAgent = await AgentModel.create({
+        name: "Accessible Agent",
+        teams: [team.id],
+      });
+      const inaccessibleAgent = await AgentModel.create({
+        name: "Inaccessible Agent",
+        teams: [],
+      });
+
+      // Create interactions with same search term in both agents
+      await InteractionModel.create({
+        profileId: accessibleAgent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Find ACCESS_TEST data" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: inaccessibleAgent.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Find ACCESS_TEST data" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Non-admin user should only see accessible agent's interaction
+      const results = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        user.id,
+        false,
+        { search: "access_test" },
+      );
+
+      expect(results.data).toHaveLength(1);
+      expect(results.data[0].profileId).toBe(accessibleAgent.id);
+    });
   });
 
   describe("getUniqueUserIds", () => {

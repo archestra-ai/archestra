@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Savings } from "@/components/savings";
@@ -10,6 +10,7 @@ import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Tooltip,
@@ -135,6 +136,7 @@ function LogsTable({
   const profileIdFromUrl = searchParams.get("profileId");
   const externalAgentIdFromUrl = searchParams.get("externalAgentId");
   const userIdFromUrl = searchParams.get("userId");
+  const searchFromUrl = searchParams.get("search");
   const sortByFromUrl = searchParams.get("sortBy");
   const sortDirectionFromUrl = searchParams.get("sortDirection");
 
@@ -146,6 +148,7 @@ function LogsTable({
     externalAgentIdFromUrl || "",
   );
   const [userIdFilter, setUserIdFilter] = useState(userIdFromUrl || "");
+  const [searchQuery, setSearchQuery] = useState(searchFromUrl || "");
   const [sorting, setSorting] = useState<SortingState>([
     {
       id: sortByFromUrl || "createdAt",
@@ -212,6 +215,17 @@ function LogsTable({
     [updateUrlParams],
   );
 
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+      updateUrlParams({
+        search: value || null,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateUrlParams],
+  );
+
   const handleSortingChange = useCallback(
     (newSorting: SortingState) => {
       setSorting(newSorting);
@@ -252,6 +266,7 @@ function LogsTable({
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     externalAgentId: externalAgentIdFilter || undefined,
     userId: userIdFilter || undefined,
+    search: searchQuery || undefined,
     initialData: initialData?.interactions,
   });
 
@@ -573,11 +588,31 @@ function LogsTable({
   const hasFilters =
     profileFilter !== "all" ||
     externalAgentIdFilter.length > 0 ||
-    userIdFilter.length > 0;
+    userIdFilter.length > 0 ||
+    searchQuery.length > 0;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
+        <div className="relative w-[300px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search messages and responses..."
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
         <SearchableSelect
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
@@ -632,6 +667,7 @@ function LogsTable({
               handleProfileFilterChange("all");
               handleUserIdFilterChange("");
               handleExternalAgentIdFilterChange("");
+              handleSearchChange("");
             }}
           >
             Clear filters

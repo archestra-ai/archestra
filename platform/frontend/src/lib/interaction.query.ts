@@ -15,6 +15,7 @@ export function useInteractions({
   profileId,
   externalAgentId,
   userId,
+  search,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -24,6 +25,7 @@ export function useInteractions({
   profileId?: string;
   externalAgentId?: string;
   userId?: string;
+  search?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -38,6 +40,7 @@ export function useInteractions({
       profileId,
       externalAgentId,
       userId,
+      search,
       limit,
       offset,
       sortBy,
@@ -49,6 +52,7 @@ export function useInteractions({
           ...(profileId ? { profileId } : {}),
           ...(externalAgentId ? { externalAgentId } : {}),
           ...(userId ? { userId } : {}),
+          ...(search ? { search } : {}),
           limit,
           offset,
           ...(sortBy ? { sortBy } : {}),
@@ -65,7 +69,8 @@ export function useInteractions({
       sortDirection === "desc" &&
       !profileId &&
       !externalAgentId &&
-      !userId
+      !userId &&
+      !search
         ? initialData
         : undefined,
     // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now

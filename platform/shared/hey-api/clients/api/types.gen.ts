@@ -8461,6 +8461,10 @@ export type GetInteractionsData = {
          * Filter by user ID (from X-Archestra-User-Id header)
          */
         userId?: string;
+        /**
+         * Free-text search across user messages and assistant responses (case-insensitive)
+         */
+        search?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
@@ -12480,6 +12484,10 @@ export type GetMcpToolCallsData = {
          * Filter by agent ID
          */
         agentId?: string;
+        /**
+         * Free-text search across tool name, arguments, result, and MCP server name (case-insensitive)
+         */
+        search?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';

@@ -2,12 +2,14 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
 import { useProfiles } from "@/lib/agent.query";
 import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
 
@@ -59,13 +61,77 @@ function McpToolCallsTable({
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: DEFAULT_TABLE_LIMIT,
-  });
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
+  // Get URL params
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
+  const searchFromUrl = searchParams.get("search");
+  const sortByFromUrl = searchParams.get("sortBy");
+  const sortDirectionFromUrl = searchParams.get("sortDirection");
+
+  const pageIndex = Number(pageFromUrl || "1") - 1;
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
+
+  const [searchQuery, setSearchQuery] = useState(searchFromUrl || "");
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
+    {
+      id: sortByFromUrl || "createdAt",
+      desc: sortDirectionFromUrl !== "asc",
+    },
   ]);
+
+  // Helper to update URL params
+  const updateUrlParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === "") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      });
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  const handlePaginationChange = useCallback(
+    (newPagination: { pageIndex: number; pageSize: number }) => {
+      updateUrlParams({
+        page: String(newPagination.pageIndex + 1),
+        pageSize: String(newPagination.pageSize),
+      });
+    },
+    [updateUrlParams],
+  );
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+      updateUrlParams({
+        search: value || null,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateUrlParams],
+  );
+
+  const handleSortingChange = useCallback(
+    (newSorting: SortingState) => {
+      setSorting(newSorting);
+      if (newSorting.length > 0) {
+        updateUrlParams({
+          sortBy: newSorting[0].id,
+          sortDirection: newSorting[0].desc ? "desc" : "asc",
+        });
+      }
+    },
+    [updateUrlParams],
+  );
 
   // Convert TanStack sorting to API format
   const sortBy = sorting[0]?.id;
@@ -85,10 +151,11 @@ function McpToolCallsTable({
             : undefined;
 
   const { data: mcpToolCallsResponse } = useMcpToolCalls({
-    limit: pagination.pageSize,
-    offset: pagination.pageIndex * pagination.pageSize,
+    limit: pageSize,
+    offset: pageIndex * pageSize,
     sortBy: apiSortBy,
     sortDirection,
+    search: searchQuery || undefined,
     initialData: initialData?.mcpToolCalls,
   });
 
@@ -306,37 +373,69 @@ function McpToolCallsTable({
     },
   ];
 
-  if (!mcpToolCalls || mcpToolCalls.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground text-sm">
-          No MCP tool calls found. Tool calls will appear here when agents use
-          MCP tools.
-        </p>
-      </div>
-    );
-  }
+  const hasFilters = searchQuery.length > 0;
 
   return (
-    <DataTable
-      columns={columns}
-      data={mcpToolCalls}
-      pagination={
-        paginationMeta
-          ? {
-              pageIndex: pagination.pageIndex,
-              pageSize: pagination.pageSize,
-              total: paginationMeta.total,
-            }
-          : undefined
-      }
-      manualPagination
-      onPaginationChange={(newPagination) => {
-        setPagination(newPagination);
-      }}
-      manualSorting
-      sorting={sorting}
-      onSortingChange={setSorting}
-    />
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-4">
+        <div className="relative w-[300px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search tools, arguments, and results..."
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              handleSearchChange("");
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      {!mcpToolCalls || mcpToolCalls.length === 0 ? (
+        <p className="text-muted-foreground">
+          {hasFilters
+            ? "No MCP tool calls match your search. Try adjusting your search."
+            : "No MCP tool calls found. Tool calls will appear here when agents use MCP tools."}
+        </p>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={mcpToolCalls}
+          pagination={
+            paginationMeta
+              ? {
+                  pageIndex,
+                  pageSize,
+                  total: paginationMeta.total,
+                }
+              : undefined
+          }
+          manualPagination
+          onPaginationChange={handlePaginationChange}
+          manualSorting
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
+        />
+      )}
+    </div>
   );
 }

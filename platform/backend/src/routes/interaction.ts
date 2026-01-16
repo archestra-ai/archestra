@@ -37,6 +37,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by user ID (from X-Archestra-User-Id header)"),
+            search: z
+              .string()
+              .optional()
+              .describe(
+                "Free-text search across user messages and assistant responses (case-insensitive)",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -59,6 +65,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           externalAgentId,
           userId,
+          search,
           limit,
           offset,
           sortBy,
@@ -85,6 +92,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           externalAgentId,
           filterUserId: userId,
+          search,
           pagination,
           sorting,
         },
@@ -96,7 +104,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sorting,
         user.id,
         isAgentAdmin,
-        { profileId, externalAgentId, userId },
+        { profileId, externalAgentId, userId, search },
       );
 
       fastify.log.info(

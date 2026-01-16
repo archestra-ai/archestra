@@ -24,6 +24,12 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             agentId: UuidIdSchema.optional().describe("Filter by agent ID"),
+            search: z
+              .string()
+              .optional()
+              .describe(
+                "Free-text search across tool name, arguments, result, and MCP server name (case-insensitive)",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -41,7 +47,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { agentId, limit, offset, sortBy, sortDirection },
+        query: { agentId, search, limit, offset, sortBy, sortDirection },
         user,
         headers,
       },
@@ -71,6 +77,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sorting,
           user.id,
           isMcpServerAdmin,
+          { search },
         ),
       );
     },

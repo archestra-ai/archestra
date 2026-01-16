@@ -26960,6 +26960,15 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Free-text search across user messages and assistant responses (case-insensitive)"
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -41886,6 +41895,15 @@
             "name": "agentId",
             "required": false,
             "description": "Filter by agent ID"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Free-text search across tool name, arguments, result, and MCP server name (case-insensitive)"
           },
           {
             "schema": {

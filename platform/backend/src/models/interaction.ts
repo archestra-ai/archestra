@@ -6,6 +6,7 @@ import {
   eq,
   inArray,
   isNotNull,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -54,7 +55,12 @@ class InteractionModel {
     sorting?: SortingQuery,
     requestingUserId?: string,
     isAgentAdmin?: boolean,
-    filters?: { profileId?: string; externalAgentId?: string; userId?: string },
+    filters?: {
+      profileId?: string;
+      externalAgentId?: string;
+      userId?: string;
+      search?: string;
+    },
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = InteractionModel.getOrderByClause(sorting);
@@ -95,6 +101,20 @@ class InteractionModel {
     // User ID filter (from X-Archestra-User-Id header)
     if (filters?.userId) {
       conditions.push(eq(schema.interactionsTable.userId, filters.userId));
+    }
+
+    // Free-text search filter (case-insensitive)
+    // Searches through user messages and assistant responses in the JSONB fields
+    if (filters?.search) {
+      const searchPattern = `%${filters.search}%`;
+      conditions.push(
+        or(
+          // Search in request messages content (user messages)
+          sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
+          // Search in response content (assistant responses)
+          sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
+        )!,
+      );
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

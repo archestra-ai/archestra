@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -30,12 +30,14 @@ class McpToolCallModel {
     sorting?: SortingQuery,
     userId?: string,
     isMcpServerAdmin?: boolean,
+    filters?: { search?: string },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = McpToolCallModel.getOrderByClause(sorting);
 
-    // Build where clause for access control
-    let whereClause: SQL | undefined;
+    // Build where clause for access control and filters
+    const conditions: SQL[] = [];
+
     if (userId && !isMcpServerAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
@@ -46,11 +48,30 @@ class McpToolCallModel {
         return createPaginatedResult([], 0, pagination);
       }
 
-      whereClause = inArray(
-        schema.mcpToolCallsTable.agentId,
-        accessibleAgentIds,
+      conditions.push(
+        inArray(schema.mcpToolCallsTable.agentId, accessibleAgentIds),
       );
     }
+
+    // Free-text search filter (case-insensitive)
+    // Searches through tool name, arguments, and result in the JSONB fields
+    if (filters?.search) {
+      const searchPattern = `%${filters.search}%`;
+      conditions.push(
+        or(
+          // Search in tool name
+          sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
+          // Search in tool arguments
+          sql`${schema.mcpToolCallsTable.toolCall}::text ILIKE ${searchPattern}`,
+          // Search in tool result
+          sql`${schema.mcpToolCallsTable.toolResult}::text ILIKE ${searchPattern}`,
+          // Search in MCP server name
+          sql`${schema.mcpToolCallsTable.mcpServerName} ILIKE ${searchPattern}`,
+        )!,
+      );
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [data, [{ total }]] = await Promise.all([
       db

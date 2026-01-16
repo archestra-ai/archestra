@@ -327,7 +327,7 @@ export default {
     provider: parseKnowledgeGraphProvider(),
     lightrag: {
       apiUrl: process.env.ARCHESTRA_LIGHTRAG_API_URL || "",
-      apiKey: process.env.ARCHESTRA_LIGHTRAG_API_KEY || undefined,
+      apiKey: process.env.ARCHESTRA_LIGHTRAG_API_KEY,
     },
   },
   auth: {

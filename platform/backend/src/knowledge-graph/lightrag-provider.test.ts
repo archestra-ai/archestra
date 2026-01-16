@@ -111,7 +111,7 @@ describe("LightRAGProvider", () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         "http://localhost:9621/documents/text",
-        {
+        expect.objectContaining({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -119,9 +119,9 @@ describe("LightRAGProvider", () => {
           },
           body: JSON.stringify({
             text: "Test document content",
-            metadata: { filename: "test.txt", author: "test" },
+            metadata: { author: "test", filename: "test.txt" },
           }),
-        },
+        }),
       );
     });
 
@@ -248,17 +248,20 @@ describe("LightRAGProvider", () => {
 
       await provider.queryDocument("What is the answer?");
 
-      expect(mockFetch).toHaveBeenCalledWith("http://localhost:9621/query", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": "test-api-key",
-        },
-        body: JSON.stringify({
-          query: "What is the answer?",
-          mode: "hybrid",
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:9621/query",
+        expect.objectContaining({
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": "test-api-key",
+          },
+          body: JSON.stringify({
+            query: "What is the answer?",
+            mode: "hybrid",
+          }),
         }),
-      });
+      );
     });
 
     test("returns answer on success", async () => {
@@ -311,12 +314,15 @@ describe("LightRAGProvider", () => {
 
       await provider.getHealth();
 
-      expect(mockFetch).toHaveBeenCalledWith("http://localhost:9621/health", {
-        method: "GET",
-        headers: {
-          "X-API-Key": "test-api-key",
-        },
-      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:9621/health",
+        expect.objectContaining({
+          method: "GET",
+          headers: {
+            "X-API-Key": "test-api-key",
+          },
+        }),
+      );
     });
 
     test("returns healthy status when service is healthy", async () => {
@@ -393,10 +399,13 @@ describe("LightRAGProvider", () => {
 
       await providerWithoutKey.getHealth();
 
-      expect(mockFetch).toHaveBeenCalledWith("http://localhost:9621/health", {
-        method: "GET",
-        headers: {},
-      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:9621/health",
+        expect.objectContaining({
+          method: "GET",
+          headers: {},
+        }),
+      );
     });
   });
 });

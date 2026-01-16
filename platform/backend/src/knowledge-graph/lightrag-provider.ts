@@ -38,6 +38,40 @@ interface LightRAGQueryResponse {
   response: string;
 }
 
+/** Timeout for health check requests (10 seconds) */
+const HEALTH_CHECK_TIMEOUT_MS = 10000;
+
+/** Timeout for document operations (30 seconds) */
+const DOCUMENT_OPERATION_TIMEOUT_MS = 30000;
+
+/**
+ * Helper to create a fetch request with timeout
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Safely join a base URL with a path
+ */
+function joinUrl(baseUrl: string, path: string): string {
+  // Remove trailing slash from base and leading slash from path
+  const normalizedBase = baseUrl.replace(/\/+$/, "");
+  const normalizedPath = path.replace(/^\/+/, "");
+  return `${normalizedBase}/${normalizedPath}`;
+}
+
 /**
  * LightRAG Knowledge Graph Provider
  *
@@ -107,15 +141,21 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
         headers["X-API-Key"] = this.config.apiKey;
       }
 
-      const response = await fetch(`${this.config.apiUrl}/documents/text`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          text: content,
-          // Use filename as document identifier if provided
-          ...(filename && { metadata: { filename, ...metadata } }),
-        }),
-      });
+      const url = joinUrl(this.config.apiUrl, "/documents/text");
+      const response = await fetchWithTimeout(
+        url,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            text: content,
+            // Use filename as document identifier if provided
+            // Explicit filename takes precedence over metadata.filename
+            ...(filename && { metadata: { ...(metadata ?? {}), filename } }),
+          }),
+        },
+        DOCUMENT_OPERATION_TIMEOUT_MS,
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -180,14 +220,19 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
         headers["X-API-Key"] = this.config.apiKey;
       }
 
-      const response = await fetch(`${this.config.apiUrl}/query`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          query,
-          mode: "hybrid", // Use hybrid mode for best results
-        }),
-      });
+      const url = joinUrl(this.config.apiUrl, "/query");
+      const response = await fetchWithTimeout(
+        url,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            query,
+            mode: "hybrid", // Use hybrid mode for best results
+          }),
+        },
+        DOCUMENT_OPERATION_TIMEOUT_MS,
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -229,10 +274,15 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
         headers["X-API-Key"] = this.config.apiKey;
       }
 
-      const response = await fetch(`${this.config.apiUrl}/health`, {
-        method: "GET",
-        headers,
-      });
+      const url = joinUrl(this.config.apiUrl, "/health");
+      const response = await fetchWithTimeout(
+        url,
+        {
+          method: "GET",
+          headers,
+        },
+        HEALTH_CHECK_TIMEOUT_MS,
+      );
 
       if (!response.ok) {
         return {

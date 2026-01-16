@@ -92,6 +92,12 @@ const SUPPORTED_EXTENSIONS = [
 ];
 
 /**
+ * Maximum document size for ingestion (10MB)
+ * Documents larger than this will be skipped to prevent memory issues
+ */
+const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
+
+/**
  * Check if a MIME type is a supported document type
  */
 function isSupportedDocumentType(mediaType?: string): boolean {
@@ -163,6 +169,14 @@ function extractDocumentContent(part: MessagePart): {
   if (part.url?.startsWith("data:")) {
     const content = extractContentFromDataUrl(part.url);
     if (content) {
+      // Check document size limit
+      if (Buffer.byteLength(content, "utf-8") > MAX_DOCUMENT_SIZE_BYTES) {
+        logger.warn(
+          { filename, size: Buffer.byteLength(content, "utf-8") },
+          "[KnowledgeGraph] Skipping document that exceeds size limit",
+        );
+        return null;
+      }
       return {
         content,
         filename: filename || "unknown",
@@ -174,12 +188,28 @@ function extractDocumentContent(part: MessagePart): {
   if (part.data && typeof part.data === "string") {
     try {
       const content = Buffer.from(part.data, "base64").toString("utf-8");
+      // Check document size limit
+      if (Buffer.byteLength(content, "utf-8") > MAX_DOCUMENT_SIZE_BYTES) {
+        logger.warn(
+          { filename, size: Buffer.byteLength(content, "utf-8") },
+          "[KnowledgeGraph] Skipping document that exceeds size limit",
+        );
+        return null;
+      }
       return {
         content,
         filename: filename || "unknown",
       };
     } catch {
       // Not valid base64, might be raw content
+      // Check document size limit
+      if (Buffer.byteLength(part.data, "utf-8") > MAX_DOCUMENT_SIZE_BYTES) {
+        logger.warn(
+          { filename, size: Buffer.byteLength(part.data, "utf-8") },
+          "[KnowledgeGraph] Skipping document that exceeds size limit",
+        );
+        return null;
+      }
       return {
         content: part.data,
         filename: filename || "unknown",

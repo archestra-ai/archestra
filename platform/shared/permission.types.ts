@@ -19,6 +19,7 @@ export const actions = [
 ] as const;
 
 export const resources = [
+  "user",
   "profile",
   "tool",
   "policy",

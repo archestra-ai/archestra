@@ -36,6 +36,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["create", "read", "update", "delete"],
   prompt: ["create", "read", "update", "delete"],
+  user: ["create", "read", "update", "delete", "admin"],
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -64,6 +65,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["create", "read", "update", "delete"],
   prompt: ["create", "read", "update", "delete"],
+  user: ["read", "update"],
   // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
   invitation: [],
@@ -89,6 +91,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   tokenPrice: ["read"],
   chatSettings: ["read"],
   prompt: ["read"],
+  user: ["read"],
   // Empty arrays required for Record<Resource, Action[]> type compatibility
   member: [],
   invitation: [],
@@ -97,11 +100,11 @@ export const memberPermissions: Record<Resource, Action[]> = {
 };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
-  {
-    [ADMIN_ROLE_NAME]: allAvailableActions,
-    [EDITOR_ROLE_NAME]: editorPermissions,
-    [MEMBER_ROLE_NAME]: memberPermissions,
-  };
+{
+  [ADMIN_ROLE_NAME]: allAvailableActions,
+  [EDITOR_ROLE_NAME]: editorPermissions,
+  [MEMBER_ROLE_NAME]: memberPermissions,
+};
 
 /**
  * Available resources and actions
@@ -119,6 +122,9 @@ export const requiredEndpointPermissionsMap: Partial<
 > = {
   [RouteId.GetAgents]: {
     profile: ["read"],
+  },
+  [RouteId.GetUser]: {
+    user: ["read"],
   },
   [RouteId.GetAllAgents]: {
     profile: ["read"],

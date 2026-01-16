@@ -66,7 +66,6 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (uuidMatch) {
-       
         const remainingPath = uuidMatch[2] || "";
         const originalUrl = request.raw.url;
         request.raw.url = `${COHERE_PREFIX}${remainingPath}`;
@@ -96,7 +95,6 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       next();
     },
   });
-
 
   fastify.post(
     `${COHERE_PREFIX}${CHAT_SUFFIX}`,
@@ -134,7 +132,6 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       );
     },
   );
-
 
   fastify.post(
     `${COHERE_PREFIX}/:agentId${CHAT_SUFFIX}`,

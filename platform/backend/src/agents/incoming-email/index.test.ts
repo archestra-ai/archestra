@@ -12,9 +12,8 @@ import type { IncomingEmail } from "@/types";
 import { MAX_EMAIL_BODY_SIZE } from "./constants";
 import {
   createEmailProvider,
-  isEmailAlreadyProcessed,
-  markEmailAsProcessed,
   processIncomingEmail,
+  tryMarkEmailAsProcessed,
 } from "./index";
 import { OutlookEmailProvider } from "./outlook-provider";
 
@@ -497,31 +496,40 @@ describe("processIncomingEmail", () => {
 });
 
 describe("email deduplication helpers", () => {
-  test("isEmailAlreadyProcessed returns false for new messageId", async () => {
-    const messageId = `new-msg-${Date.now()}`;
-    const result = await isEmailAlreadyProcessed(messageId);
-    expect(result).toBe(false);
-  });
-
-  test("markEmailAsProcessed marks email as processed", async () => {
-    const messageId = `mark-msg-${Date.now()}`;
-
-    // Initially not processed
-    expect(await isEmailAlreadyProcessed(messageId)).toBe(false);
-
-    // Mark as processed
-    await markEmailAsProcessed(messageId);
-
-    // Now should be processed
-    expect(await isEmailAlreadyProcessed(messageId)).toBe(true);
-  });
-
-  test("isEmailAlreadyProcessed returns true for recently processed messageId", async () => {
-    const messageId = `recent-msg-${Date.now()}`;
-
-    await markEmailAsProcessed(messageId);
-    const result = await isEmailAlreadyProcessed(messageId);
+  test("tryMarkEmailAsProcessed returns true for new messageId", async () => {
+    const messageId = `new-msg-${Date.now()}-${Math.random()}`;
+    const result = await tryMarkEmailAsProcessed(messageId);
     expect(result).toBe(true);
+  });
+
+  test("tryMarkEmailAsProcessed returns false for already processed messageId", async () => {
+    const messageId = `dup-msg-${Date.now()}-${Math.random()}`;
+
+    // First call should succeed
+    const firstResult = await tryMarkEmailAsProcessed(messageId);
+    expect(firstResult).toBe(true);
+
+    // Second call should fail (already processed)
+    const secondResult = await tryMarkEmailAsProcessed(messageId);
+    expect(secondResult).toBe(false);
+  });
+
+  test("tryMarkEmailAsProcessed handles concurrent calls atomically", async () => {
+    const messageId = `concurrent-msg-${Date.now()}-${Math.random()}`;
+
+    // Call concurrently - only one should succeed
+    const results = await Promise.all([
+      tryMarkEmailAsProcessed(messageId),
+      tryMarkEmailAsProcessed(messageId),
+      tryMarkEmailAsProcessed(messageId),
+    ]);
+
+    // Exactly one should be true, the rest should be false
+    const successCount = results.filter((r) => r === true).length;
+    const failCount = results.filter((r) => r === false).length;
+
+    expect(successCount).toBe(1);
+    expect(failCount).toBe(2);
   });
 });
 

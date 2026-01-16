@@ -14,6 +14,22 @@ import {
 export { type EmailProviderType, EmailProviderTypeSchema };
 
 /**
+ * Database schemas for processed emails (deduplication)
+ */
+export const SelectProcessedEmailSchema = createSelectSchema(
+  schema.processedEmailsTable,
+);
+export const InsertProcessedEmailSchema = createInsertSchema(
+  schema.processedEmailsTable,
+).omit({
+  id: true,
+  processedAt: true,
+});
+
+export type SelectProcessedEmail = z.infer<typeof SelectProcessedEmailSchema>;
+export type InsertProcessedEmail = z.infer<typeof InsertProcessedEmailSchema>;
+
+/**
  * Database schemas for incoming email subscriptions
  */
 export const SelectIncomingEmailSubscriptionSchema = createSelectSchema(

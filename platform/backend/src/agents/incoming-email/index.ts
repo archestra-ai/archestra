@@ -1,9 +1,9 @@
 import { executeA2AMessage } from "@/agents/a2a-executor";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentTeamModel, PromptModel, TeamModel } from "@/models";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
+import ProcessedEmailModel from "@/models/processed-email";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
@@ -11,10 +11,7 @@ import type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
-import {
-  DEFAULT_AGENT_EMAIL_NAME,
-  EMAIL_DEDUP_CACHE_TTL_MS,
-} from "./constants";
+import { DEFAULT_AGENT_EMAIL_NAME } from "./constants";
 import { OutlookEmailProvider } from "./outlook-provider";
 
 export type {
@@ -27,30 +24,34 @@ export type {
   SubscriptionInfo,
 } from "@/types";
 export {
-  EMAIL_DEDUP_CACHE_TTL_MS,
   EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
   MAX_EMAIL_BODY_SIZE,
+  PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
+  PROCESSED_EMAIL_RETENTION_MS,
 } from "./constants";
 export { OutlookEmailProvider } from "./outlook-provider";
 
 /**
- * Check if an email has already been processed recently
- * Uses the shared CacheManager for TTL-based caching
+ * Atomically check and mark an email as processed using database.
+ * Uses INSERT with unique constraint for distributed deduplication across pods.
+ *
+ * @param messageId - The email provider's message ID
+ * @returns true if successfully marked (first to process), false if already processed
  */
-export async function isEmailAlreadyProcessed(
+export async function tryMarkEmailAsProcessed(
   messageId: string,
 ): Promise<boolean> {
-  const cacheKey = `${CacheKey.ProcessedEmail}-${messageId}` as const;
-  const cached = await cacheManager.get<boolean>(cacheKey);
-  return cached === true;
+  return ProcessedEmailModel.tryMarkAsProcessed(messageId);
 }
 
 /**
- * Mark an email as processed with TTL
+ * Clean up old processed email records.
+ * Should be called periodically to prevent unbounded table growth.
  */
-export async function markEmailAsProcessed(messageId: string): Promise<void> {
-  const cacheKey = `${CacheKey.ProcessedEmail}-${messageId}` as const;
-  await cacheManager.set(cacheKey, true, EMAIL_DEDUP_CACHE_TTL_MS);
+export async function cleanupOldProcessedEmails(): Promise<void> {
+  const { PROCESSED_EMAIL_RETENTION_MS } = await import("./constants");
+  const olderThan = new Date(Date.now() - PROCESSED_EMAIL_RETENTION_MS);
+  await ProcessedEmailModel.cleanupOldRecords(olderThan);
 }
 
 /**
@@ -466,18 +467,16 @@ export async function processIncomingEmail(
     throw new Error("No email provider configured");
   }
 
-  // Deduplication: check if we've already processed this email recently
-  // Microsoft Graph may send multiple notifications for the same email
-  if (await isEmailAlreadyProcessed(email.messageId)) {
+  // Atomic deduplication: try to mark email as processed using database unique constraint
+  // This prevents race conditions when multiple pods receive the same webhook notification
+  const isFirstToProcess = await tryMarkEmailAsProcessed(email.messageId);
+  if (!isFirstToProcess) {
     logger.info(
       { messageId: email.messageId },
-      "[IncomingEmail] Skipping duplicate email (already processed recently)",
+      "[IncomingEmail] Skipping duplicate email (already processed by another pod)",
     );
     return undefined;
   }
-
-  // Mark as processed immediately to prevent concurrent processing
-  await markEmailAsProcessed(email.messageId);
 
   logger.info(
     {

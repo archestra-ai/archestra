@@ -33,8 +33,10 @@ import {
 import { z } from "zod";
 import {
   cleanupEmailProvider,
+  cleanupOldProcessedEmails,
   EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
   initializeEmailProvider,
+  PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
@@ -482,6 +484,16 @@ const start = async () => {
       });
     }, EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL);
 
+    // Background job to clean up old processed email records
+    const processedEmailCleanupIntervalId = setInterval(() => {
+      cleanupOldProcessedEmails().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to run processed email cleanup",
+        );
+      });
+    }, PROCESSED_EMAIL_CLEANUP_INTERVAL_MS);
+
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
      * inside of this server instance. Metrics are actually exposed on a different port
@@ -537,7 +549,8 @@ const start = async () => {
       try {
         // Clear email subscription renewal interval
         clearInterval(emailRenewalIntervalId);
-        fastify.log.info("Email subscription renewal interval cleared");
+        clearInterval(processedEmailCleanupIntervalId);
+        fastify.log.info("Email background job intervals cleared");
 
         // Cleanup email provider (unsubscribe from Graph API if needed)
         await cleanupEmailProvider();

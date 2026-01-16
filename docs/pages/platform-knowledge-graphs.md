@@ -44,8 +44,8 @@ Enable the feature by setting environment variables. See [Deployment - Knowledge
 
 ```bash
 ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER=lightrag
-ARCHESTRA_LIGHTRAG_API_URL=http://lightrag:9621
-ARCHESTRA_LIGHTRAG_API_KEY=your-api-key  # Optional
+ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL=http://lightrag:9621
+ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY=your-api-key  # Optional
 ```
 
 LightRAG requires:

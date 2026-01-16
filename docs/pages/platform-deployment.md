@@ -750,13 +750,13 @@ These environment variables configure the Knowledge Graph feature, which automat
   - Options: `lightrag`
   - Required to enable the knowledge graph feature
 
-- **`ARCHESTRA_LIGHTRAG_API_URL`** - URL of the LightRAG API server.
+- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL`** - URL of the LightRAG API server.
 
   - Required when: `ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER=lightrag`
   - Example: `http://lightrag:9621`
   - The LightRAG server must be accessible from the Archestra backend
 
-- **`ARCHESTRA_LIGHTRAG_API_KEY`** - API key for authenticating with LightRAG.
+- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY`** - API key for authenticating with LightRAG.
 
   - Optional: Only required if your LightRAG server is configured with authentication
   - Note: Keep this value secure; do not commit to version control

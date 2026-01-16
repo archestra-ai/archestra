@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import { MAX_DOCUMENT_SIZE_BYTES } from "./constants";
+
 // Mock the knowledge graph index module
 vi.mock("./index", () => ({
   isKnowledgeGraphEnabled: vi.fn().mockReturnValue(false),
@@ -662,6 +664,90 @@ describe("extractAndIngestDocuments", () => {
     expect(ingestDocument).toHaveBeenCalledWith({
       content: content,
       filename: "main.rs",
+    });
+  });
+
+  test("skips documents exceeding MAX_DOCUMENT_SIZE_BYTES limit", async () => {
+    vi.mocked(isKnowledgeGraphEnabled).mockReturnValue(true);
+
+    // Create a content that exceeds the size limit (10MB + 1 byte)
+    const oversizedContent = "x".repeat(MAX_DOCUMENT_SIZE_BYTES + 1);
+    const base64Content = Buffer.from(oversizedContent).toString("base64");
+
+    await extractAndIngestDocuments([
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `data:text/plain;base64,${base64Content}`,
+            mediaType: "text/plain",
+            filename: "large-file.txt",
+          },
+        ],
+      },
+    ]);
+
+    // Should not ingest because document exceeds size limit
+    expect(ingestDocument).not.toHaveBeenCalled();
+  });
+
+  test("skips documents when estimated base64 size exceeds limit", async () => {
+    vi.mocked(isKnowledgeGraphEnabled).mockReturnValue(true);
+
+    // Create base64 content where the estimated decoded size would exceed the limit
+    // Base64 adds ~33% overhead, so create content that when base64 encoded,
+    // its estimated decoded size (length * 0.75) exceeds MAX_DOCUMENT_SIZE_BYTES
+    // To ensure estimated size > 10MB, we need base64Length * 0.75 > 10MB
+    // So base64Length > 10MB / 0.75 = ~13.33MB
+    // This will be caught by the early size check before decoding
+    const largeBase64 = "A".repeat(
+      Math.ceil(MAX_DOCUMENT_SIZE_BYTES / 0.75) + 1000,
+    );
+
+    await extractAndIngestDocuments([
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `data:text/plain;base64,${largeBase64}`,
+            mediaType: "text/plain",
+            filename: "estimated-large-file.txt",
+          },
+        ],
+      },
+    ]);
+
+    // Should not ingest because estimated size exceeds limit
+    expect(ingestDocument).not.toHaveBeenCalled();
+  });
+
+  test("ingests documents just under the size limit", async () => {
+    vi.mocked(isKnowledgeGraphEnabled).mockReturnValue(true);
+
+    // Create a document that's just under the size limit (1KB under to be safe)
+    const justUnderLimitContent = "x".repeat(MAX_DOCUMENT_SIZE_BYTES - 1024);
+    const base64Content = Buffer.from(justUnderLimitContent).toString("base64");
+
+    await extractAndIngestDocuments([
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `data:text/plain;base64,${base64Content}`,
+            mediaType: "text/plain",
+            filename: "acceptable-size.txt",
+          },
+        ],
+      },
+    ]);
+
+    // Should ingest because document is under size limit
+    expect(ingestDocument).toHaveBeenCalledWith({
+      content: justUnderLimitContent,
+      filename: "acceptable-size.txt",
     });
   });
 });

@@ -27,6 +27,13 @@ let knowledgeGraphProviderInstance: KnowledgeGraphProvider | null = null;
 let providerInitializationAttempted = false;
 
 /**
+ * Promise to track ongoing provider creation
+ * Prevents race conditions when multiple callers request the provider simultaneously
+ */
+let providerCreationPromise: Promise<KnowledgeGraphProvider | null> | null =
+  null;
+
+/**
  * Get the knowledge graph provider configuration from config
  */
 export function getKnowledgeGraphConfig(): KnowledgeGraphConfig {
@@ -70,20 +77,10 @@ export function createKnowledgeGraphProvider(
 }
 
 /**
- * Get the configured knowledge graph provider instance (singleton)
- * Returns null if no provider is configured
+ * Internal function to create the provider instance
+ * This handles the actual creation logic and is used by getKnowledgeGraphProviderAsync
  */
-export function getKnowledgeGraphProvider(): KnowledgeGraphProvider | null {
-  // Return cached instance if available
-  if (knowledgeGraphProviderInstance) {
-    return knowledgeGraphProviderInstance;
-  }
-
-  // If we've already tried and failed, don't retry
-  if (providerInitializationAttempted) {
-    return null;
-  }
-
+function createProviderInstance(): KnowledgeGraphProvider | null {
   const providerConfig = getKnowledgeGraphConfig();
   if (!providerConfig.provider) {
     providerInitializationAttempted = true;
@@ -123,10 +120,77 @@ export function getKnowledgeGraphProvider(): KnowledgeGraphProvider | null {
 }
 
 /**
+ * Get the configured knowledge graph provider instance (singleton) - async version
+ * This version is safe for concurrent calls during initialization
+ * Returns null if no provider is configured
+ */
+export async function getKnowledgeGraphProviderAsync(): Promise<KnowledgeGraphProvider | null> {
+  // Return cached instance if available
+  if (knowledgeGraphProviderInstance) {
+    return knowledgeGraphProviderInstance;
+  }
+
+  // If we've already tried and failed, don't retry
+  if (providerInitializationAttempted) {
+    return null;
+  }
+
+  // If creation is already in progress, wait for it to complete
+  if (providerCreationPromise) {
+    return providerCreationPromise;
+  }
+
+  // Start creation and store the promise to prevent concurrent creation attempts
+  providerCreationPromise = Promise.resolve().then(() => {
+    // Double-check after acquiring the "lock"
+    if (knowledgeGraphProviderInstance) {
+      return knowledgeGraphProviderInstance;
+    }
+    if (providerInitializationAttempted) {
+      return null;
+    }
+    return createProviderInstance();
+  });
+
+  try {
+    return await providerCreationPromise;
+  } finally {
+    // Clear the promise once creation is complete
+    providerCreationPromise = null;
+  }
+}
+
+/**
+ * Get the configured knowledge graph provider instance (singleton) - sync version
+ * Note: For race-condition-safe initialization, use getKnowledgeGraphProviderAsync()
+ * This synchronous version returns null if the provider hasn't been initialized yet
+ * Returns null if no provider is configured
+ */
+export function getKnowledgeGraphProvider(): KnowledgeGraphProvider | null {
+  // Return cached instance if available
+  if (knowledgeGraphProviderInstance) {
+    return knowledgeGraphProviderInstance;
+  }
+
+  // If we've already tried and failed, don't retry
+  if (providerInitializationAttempted) {
+    return null;
+  }
+
+  // If creation is in progress, return null (caller should use async version)
+  if (providerCreationPromise) {
+    return null;
+  }
+
+  return createProviderInstance();
+}
+
+/**
  * Initialize the knowledge graph provider (call on server startup)
+ * Uses the async version to handle potential race conditions during startup
  */
 export async function initializeKnowledgeGraphProvider(): Promise<void> {
-  const provider = getKnowledgeGraphProvider();
+  const provider = await getKnowledgeGraphProviderAsync();
   if (!provider) {
     logger.info(
       "[KnowledgeGraph] No knowledge graph provider configured, skipping initialization",
@@ -174,8 +238,9 @@ export async function cleanupKnowledgeGraphProvider(): Promise<void> {
     }
     knowledgeGraphProviderInstance = null;
   }
-  // Reset the initialization flag to allow reinitialization after cleanup
+  // Reset the initialization flags to allow reinitialization after cleanup
   providerInitializationAttempted = false;
+  providerCreationPromise = null;
 }
 
 /**

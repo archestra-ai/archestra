@@ -31,6 +31,8 @@ export interface QueryResult {
     documentId: string;
     content?: string;
   }>;
+  /** Error message if the query failed */
+  error?: string;
 }
 
 /**

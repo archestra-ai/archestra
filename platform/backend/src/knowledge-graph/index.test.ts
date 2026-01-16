@@ -68,6 +68,7 @@ import {
   createKnowledgeGraphProvider,
   getKnowledgeGraphConfig,
   getKnowledgeGraphProvider,
+  getKnowledgeGraphProviderAsync,
   getKnowledgeGraphProviderInfo,
   getKnowledgeGraphProviderType,
   ingestDocument,
@@ -237,6 +238,56 @@ describe("getKnowledgeGraphProvider", () => {
 
     const provider = getKnowledgeGraphProvider();
     expect(provider).toBeNull();
+  });
+});
+
+describe("getKnowledgeGraphProviderAsync", () => {
+  beforeEach(async () => {
+    resetMockProvider();
+    await cleanupKnowledgeGraphProvider();
+    mockKnowledgeGraphConfig.provider = undefined;
+    mockKnowledgeGraphConfig.lightrag = { apiUrl: "", apiKey: undefined };
+  });
+
+  afterEach(async () => {
+    await cleanupKnowledgeGraphProvider();
+  });
+
+  test("returns null when no provider is configured", async () => {
+    const provider = await getKnowledgeGraphProviderAsync();
+    expect(provider).toBeNull();
+  });
+
+  test("returns provider when configured", async () => {
+    mockKnowledgeGraphConfig.provider = "lightrag";
+    mockKnowledgeGraphConfig.lightrag = {
+      apiUrl: "http://localhost:9621",
+      apiKey: undefined,
+    };
+
+    const provider = await getKnowledgeGraphProviderAsync();
+    expect(provider).not.toBeNull();
+    expect(provider?.providerId).toBe("lightrag");
+  });
+
+  test("handles concurrent calls safely (returns same instance)", async () => {
+    mockKnowledgeGraphConfig.provider = "lightrag";
+    mockKnowledgeGraphConfig.lightrag = {
+      apiUrl: "http://localhost:9621",
+      apiKey: undefined,
+    };
+
+    // Make multiple concurrent calls
+    const [provider1, provider2, provider3] = await Promise.all([
+      getKnowledgeGraphProviderAsync(),
+      getKnowledgeGraphProviderAsync(),
+      getKnowledgeGraphProviderAsync(),
+    ]);
+
+    // All should return the same instance
+    expect(provider1).toBe(provider2);
+    expect(provider2).toBe(provider3);
+    expect(provider1).not.toBeNull();
   });
 });
 

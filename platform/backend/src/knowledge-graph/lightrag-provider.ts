@@ -249,7 +249,8 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
           "[KnowledgeGraph] Failed to query LightRAG",
         );
         return {
-          answer: `Error querying knowledge graph: ${errorText}`,
+          answer: "",
+          error: `LightRAG API error: ${response.status} - ${errorText}`,
         };
       }
 
@@ -266,7 +267,8 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
         "[KnowledgeGraph] Error querying LightRAG",
       );
       return {
-        answer: `Error querying knowledge graph: ${errorMessage}`,
+        answer: "",
+        error: errorMessage,
       };
     }
   }

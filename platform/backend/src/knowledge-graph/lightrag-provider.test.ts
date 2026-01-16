@@ -330,7 +330,7 @@ describe("LightRAGProvider", () => {
       });
     });
 
-    test("returns error message on API error", async () => {
+    test("returns structured error on API error", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
@@ -340,17 +340,19 @@ describe("LightRAGProvider", () => {
       const result = await provider.queryDocument("Invalid query");
 
       expect(result).toEqual({
-        answer: "Error querying knowledge graph: Bad request",
+        answer: "",
+        error: "LightRAG API error: 400 - Bad request",
       });
     });
 
-    test("returns error message on network error", async () => {
+    test("returns structured error on network error", async () => {
       mockFetch.mockRejectedValueOnce(new Error("Connection timeout"));
 
       const result = await provider.queryDocument("Any query");
 
       expect(result).toEqual({
-        answer: "Error querying knowledge graph: Connection timeout",
+        answer: "",
+        error: "Connection timeout",
       });
     });
   });

@@ -20,11 +20,11 @@ export const ChatRequestSchema = z.object({
   tool_choice: z.enum(["REQUIRED", "NONE"]).optional(),
   safety_mode: z.enum(["CONTEXTUAL", "STRICT", "OFF"]).optional(),
   response_format: z
-  .object({
-    type: z.enum(["json_object", "text"]),
-    json_schema: z.record(z.string(), z.unknown()).optional(),
-  })
-  .optional(),
+    .object({
+      type: z.enum(["json_object", "text"]),
+      json_schema: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
   frequency_penalty: z.number().optional(),
   presence_penalty: z.number().optional(),
   k: z.number().optional(),
@@ -33,7 +33,6 @@ export const ChatRequestSchema = z.object({
   stop_sequences: z.array(z.string()).optional(),
   logprobs: z.boolean().optional(),
 });
-
 
 export const UsageSchema = z.object({
   billed_units: z
@@ -49,7 +48,6 @@ export const UsageSchema = z.object({
     })
     .optional(),
 });
-
 
 export const ChatResponseSchema = z.object({
   id: z.string(),
@@ -67,7 +65,6 @@ export const ChatResponseSchema = z.object({
   ]),
   usage: UsageSchema.optional(),
 });
-
 
 export const ChatHeadersSchema = z
   .object({

@@ -656,9 +656,6 @@ for (const config of testConfigs) {
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-blocks-tool-untrusted-data`;
 
-      // 0. Ensure organization has restrictive policy (required for tool invocation policies to be evaluated)
-      await updateOrganization(request, { globalToolPolicy: "restrictive" });
-
       // 1. Create a test agent
       const createResponse = await createAgent(
         request,

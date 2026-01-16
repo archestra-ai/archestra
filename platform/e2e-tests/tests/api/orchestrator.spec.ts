@@ -1,4 +1,4 @@
-import { TEST_CATALOG_ITEM_NAME, WIREMOCK_BASE_URL } from "../../consts";
+import { TEST_CATALOG_ITEM_NAME, WIREMOCK_INTERNAL_URL } from "../../consts";
 import {
   findCatalogItem,
   findInstalledServer,
@@ -76,11 +76,13 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         }
 
         // Create a catalog item for context7 remote MCP server (mocked via WireMock)
+        // Use WIREMOCK_INTERNAL_URL because the backend needs to connect to WireMock
+        // (In CI, backend runs in a K8s pod and needs the service DNS name)
         const catalogResponse = await createMcpCatalogItem(request, {
           name: "Context7 - Remote",
           description: "Context7 MCP Server for testing remote installation",
           serverType: "remote",
-          serverUrl: `${WIREMOCK_BASE_URL}/mcp/context7`,
+          serverUrl: `${WIREMOCK_INTERNAL_URL}/mcp/context7`,
         });
         const catalogItem = await catalogResponse.json();
         catalogId = catalogItem.id;

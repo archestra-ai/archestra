@@ -13,11 +13,7 @@
     "headers": {
       "Content-Type": "application/json"
     },
-    "jsonBody": {
-      "jsonrpc": "2.0",
-      "id": "{{jsonPath request.body '$.id'}}",
-      "result": {}
-    },
-    "transformers": ["response-template"]
+    "transformers": ["response-template"],
+    "body": "{\"jsonrpc\": \"2.0\", \"id\": {{jsonPath request.body '$.id'}}, \"result\": {}}"
   }
 }

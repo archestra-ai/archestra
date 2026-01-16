@@ -728,8 +728,9 @@ for (const config of testConfigs) {
       const toolInvocationPolicy = await toolInvocationPolicyResponse.json();
       toolInvocationPolicyId = toolInvocationPolicy.id;
 
-      // Small buffer for database consistency
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Wait for policies to be fully active before testing
+      // Higher delay needed for CI stability due to database propagation time
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // 6. Send a request with untrusted data
       const response = await makeApiRequest({

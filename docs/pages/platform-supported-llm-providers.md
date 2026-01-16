@@ -143,8 +143,8 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 ### Supported Models
 
 All Cerebras models are supported, including:
-- **Llama models** (3.1, 3.3) - Fully supported with tool calling
-- **Qwen models** (e.g., `qwen-3-32b`) - Fully supported with tool calling
+
+> **Limitation:** Llama 3.3 models (including via Cerebras) are currently **not compatible with tool calling**. Attempts to use tool calls with Llama 3.3 will result in errors or invalid generations. Use a different model for workflows requiring tool calling. Other models (e.g., GPT-4, Claude, Gemini, Mistral, Qwen) are not affected and support tool calling as expected.
 
 
 ## vLLM

@@ -413,25 +413,21 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
     additionalProperties: false,
   };
 
-  // If schema is missing or invalid, return a minimal valid schema
-  if (!isRecord(schema)) {
-    return fallbackSchema;
-  }
+  if (!isRecord(schema)) return fallbackSchema;
 
-  const schemaType = schema.type;
-  if (typeof schemaType !== "string") {
-    return fallbackSchema;
-  }
-
-  if (schemaType === "None" || schemaType === "null") {
-    return fallbackSchema;
-  }
-
-  // Return the schema with additionalProperties: false added for strict validation
-  // This is required by some providers like Cerebras for proper tool calling
   const result = { ...schema } as JSONSchema7;
-  if (result.type === "object" && result.additionalProperties === undefined) {
-    result.additionalProperties = false;
+
+  if (result.type === "object") {
+    if (result.additionalProperties === undefined) result.additionalProperties = false;
+    if (result.properties && typeof result.properties === "object") {
+      for (const key in result.properties) {
+        if (Object.prototype.hasOwnProperty.call(result.properties, key)) {
+          result.properties[key] = normalizeJsonSchema(result.properties[key]);
+        }
+      }
+    }
+  } else if (result.type === "array" && result.items) {
+    result.items = normalizeJsonSchema(result.items);
   }
 
   return result;

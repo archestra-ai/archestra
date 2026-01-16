@@ -88,7 +88,7 @@ class McpToolCallModel {
       const searchCondition = or(
         ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
         sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
-        sql`${schema.mcpToolCallsTable.toolCall}->'arguments'::text ILIKE ${searchPattern}`,
+        sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
       );
       if (searchCondition) {
         conditions.push(searchCondition);
@@ -223,7 +223,7 @@ class McpToolCallModel {
       const searchCondition = or(
         ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
         sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
-        sql`${schema.mcpToolCallsTable.toolCall}->'arguments'::text ILIKE ${searchPattern}`,
+        sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
       );
       if (searchCondition) {
         conditions.push(searchCondition);

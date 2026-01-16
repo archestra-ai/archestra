@@ -62,10 +62,21 @@ function estimateDecodedSize(base64Length: number): number {
 }
 
 /**
- * Extract text content from a base64 data URL
- * Returns null if the content exceeds size limits or cannot be decoded
+ * Check if decoded content contains invalid UTF-8 sequences
+ * The Unicode replacement character (U+FFFD) appears when invalid bytes are encountered
  */
-function extractContentFromDataUrl(dataUrl: string): string | null {
+function containsInvalidUtf8(content: string): boolean {
+  return content.includes("\uFFFD");
+}
+
+/**
+ * Extract text content from a base64 data URL
+ * Returns null if the content exceeds size limits, cannot be decoded, or contains invalid UTF-8
+ */
+function extractContentFromDataUrl(
+  dataUrl: string,
+  filename?: string,
+): string | null {
   try {
     // Format: data:[<mediatype>][;base64],<data>
     const match = dataUrl.match(/^data:([^;,]+)?(?:;base64)?,(.*)$/);
@@ -86,6 +97,17 @@ function extractContentFromDataUrl(dataUrl: string): string | null {
 
     // Decode base64
     const decoded = Buffer.from(data, "base64").toString("utf-8");
+
+    // Validate UTF-8 content - skip files with invalid encoding
+    // (likely binary files incorrectly labeled as text)
+    if (containsInvalidUtf8(decoded)) {
+      logger.warn(
+        { filename },
+        "[KnowledgeGraph] Skipping file with invalid UTF-8 content",
+      );
+      return null;
+    }
+
     return decoded;
   } catch (error) {
     logger.warn(
@@ -123,7 +145,7 @@ function extractDocumentContent(part: MessagePart): {
 
   // Try to extract content from data URL
   if (part.url?.startsWith("data:")) {
-    const content = extractContentFromDataUrl(part.url);
+    const content = extractContentFromDataUrl(part.url, filename);
     if (content) {
       // Check document size limit
       if (Buffer.byteLength(content, "utf-8") > MAX_DOCUMENT_SIZE_BYTES) {
@@ -144,6 +166,16 @@ function extractDocumentContent(part: MessagePart): {
   if (part.data && typeof part.data === "string") {
     try {
       const content = Buffer.from(part.data, "base64").toString("utf-8");
+
+      // Validate UTF-8 content
+      if (containsInvalidUtf8(content)) {
+        logger.warn(
+          { filename },
+          "[KnowledgeGraph] Skipping file with invalid UTF-8 content",
+        );
+        return null;
+      }
+
       // Check document size limit
       if (Buffer.byteLength(content, "utf-8") > MAX_DOCUMENT_SIZE_BYTES) {
         logger.warn(
@@ -158,6 +190,15 @@ function extractDocumentContent(part: MessagePart): {
       };
     } catch {
       // Not valid base64, might be raw content
+      // Validate UTF-8 content
+      if (containsInvalidUtf8(part.data)) {
+        logger.warn(
+          { filename },
+          "[KnowledgeGraph] Skipping file with invalid UTF-8 content",
+        );
+        return null;
+      }
+
       // Check document size limit
       if (Buffer.byteLength(part.data, "utf-8") > MAX_DOCUMENT_SIZE_BYTES) {
         logger.warn(
@@ -247,8 +288,10 @@ export async function extractAndIngestDocuments(
 
   // Ingest documents asynchronously with concurrency limit
   // This prevents overwhelming the LightRAG service with too many parallel requests
+  // Using a Set instead of Array to avoid race conditions when multiple promises
+  // complete simultaneously (splice during iteration is unsafe)
   const ingestWithConcurrencyLimit = async () => {
-    const inProgress: Promise<void>[] = [];
+    const inProgress = new Set<Promise<void>>();
 
     for (const doc of documentsToIngest) {
       const promise: Promise<void> = ingestDocument({
@@ -268,17 +311,14 @@ export async function extractAndIngestDocuments(
           );
         })
         .finally(() => {
-          // Remove completed promise from tracking array
-          const index = inProgress.indexOf(promise);
-          if (index > -1) {
-            inProgress.splice(index, 1);
-          }
+          // Remove completed promise from tracking set
+          inProgress.delete(promise);
         });
 
-      inProgress.push(promise);
+      inProgress.add(promise);
 
       // Wait for one to complete if we've hit the concurrency limit
-      if (inProgress.length >= MAX_CONCURRENT_INGESTIONS) {
+      if (inProgress.size >= MAX_CONCURRENT_INGESTIONS) {
         await Promise.race(inProgress);
       }
     }

@@ -750,4 +750,83 @@ describe("extractAndIngestDocuments", () => {
       filename: "acceptable-size.txt",
     });
   });
+
+  test("skips files with invalid UTF-8 content (binary data)", async () => {
+    vi.mocked(isKnowledgeGraphEnabled).mockReturnValue(true);
+
+    // Create binary data that will produce replacement characters when decoded as UTF-8
+    // These are invalid UTF-8 byte sequences
+    const binaryData = Buffer.from([0x80, 0x81, 0x82, 0xff, 0xfe]);
+    const base64Content = binaryData.toString("base64");
+
+    await extractAndIngestDocuments([
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `data:text/plain;base64,${base64Content}`,
+            mediaType: "text/plain",
+            filename: "binary-file.txt",
+          },
+        ],
+      },
+    ]);
+
+    // Should not ingest because content contains invalid UTF-8
+    expect(ingestDocument).not.toHaveBeenCalled();
+  });
+
+  test("skips files with invalid UTF-8 in data field", async () => {
+    vi.mocked(isKnowledgeGraphEnabled).mockReturnValue(true);
+
+    // Create binary data that will produce replacement characters when decoded as UTF-8
+    const binaryData = Buffer.from([0x80, 0x81, 0x82, 0xff, 0xfe]);
+    const base64Content = binaryData.toString("base64");
+
+    await extractAndIngestDocuments([
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            data: base64Content,
+            mediaType: "text/plain",
+            filename: "binary-file.txt",
+          },
+        ],
+      },
+    ]);
+
+    // Should not ingest because content contains invalid UTF-8
+    expect(ingestDocument).not.toHaveBeenCalled();
+  });
+
+  test("ingests valid UTF-8 content with special characters", async () => {
+    vi.mocked(isKnowledgeGraphEnabled).mockReturnValue(true);
+
+    // Content with valid UTF-8 including emoji and international characters
+    const validUtf8Content = "Hello 世界! 🎉 Ñoño café";
+    const base64Content = Buffer.from(validUtf8Content).toString("base64");
+
+    await extractAndIngestDocuments([
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `data:text/plain;base64,${base64Content}`,
+            mediaType: "text/plain",
+            filename: "utf8-file.txt",
+          },
+        ],
+      },
+    ]);
+
+    // Should ingest because content is valid UTF-8
+    expect(ingestDocument).toHaveBeenCalledWith({
+      content: validUtf8Content,
+      filename: "utf8-file.txt",
+    });
+  });
 });

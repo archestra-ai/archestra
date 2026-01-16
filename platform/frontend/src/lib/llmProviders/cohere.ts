@@ -218,7 +218,9 @@ class CohereChatInteraction implements InteractionUtils {
           content = userMsg.content;
         } else if (Array.isArray(userMsg.content)) {
           content = userMsg.content
-            .filter((block): block is CohereTextContent => block.type === "text")
+            .filter(
+              (block): block is CohereTextContent => block.type === "text",
+            )
             .map((block) => block.text)
             .join("");
         }

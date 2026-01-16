@@ -44,6 +44,63 @@ const HEALTH_CHECK_TIMEOUT_MS = 10000;
 /** Timeout for document operations (30 seconds) */
 const DOCUMENT_OPERATION_TIMEOUT_MS = 30000;
 
+/** Maximum number of retry attempts for transient failures */
+const MAX_RETRIES = 3;
+
+/** Base delay for exponential backoff (milliseconds) */
+const RETRY_BASE_DELAY_MS = 1000;
+
+/** Maximum delay between retries (milliseconds) */
+const RETRY_MAX_DELAY_MS = 10000;
+
+/**
+ * Check if an error is retryable (transient failure)
+ */
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    // Retry on network errors, timeouts, and connection issues
+    return (
+      message.includes("fetch") ||
+      message.includes("network") ||
+      message.includes("timeout") ||
+      message.includes("aborted") ||
+      message.includes("econnrefused") ||
+      message.includes("econnreset") ||
+      message.includes("etimedout") ||
+      message.includes("socket")
+    );
+  }
+  return false;
+}
+
+/**
+ * Check if an HTTP status code is retryable
+ */
+function isRetryableStatus(status: number): boolean {
+  // Retry on 5xx server errors and 429 (rate limiting)
+  return status >= 500 || status === 429;
+}
+
+/**
+ * Calculate delay for exponential backoff with jitter
+ */
+function calculateBackoffDelay(attempt: number): number {
+  // Exponential backoff: baseDelay * 2^attempt
+  const exponentialDelay = RETRY_BASE_DELAY_MS * 2 ** attempt;
+  // Add random jitter (0-25% of delay) to prevent thundering herd
+  const jitter = Math.random() * 0.25 * exponentialDelay;
+  // Cap at max delay
+  return Math.min(exponentialDelay + jitter, RETRY_MAX_DELAY_MS);
+}
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Helper to create a fetch request with timeout
  */
@@ -60,6 +117,74 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Fetch with timeout and retry logic for transient failures
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+  context: string,
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, options, timeoutMs);
+
+      // If response is OK or a non-retryable error, return it
+      if (response.ok || !isRetryableStatus(response.status)) {
+        return response;
+      }
+
+      // For retryable HTTP errors, clone the response for potential retry
+      if (attempt < MAX_RETRIES) {
+        const delay = calculateBackoffDelay(attempt);
+        logger.warn(
+          {
+            context,
+            attempt: attempt + 1,
+            maxRetries: MAX_RETRIES,
+            status: response.status,
+            delayMs: Math.round(delay),
+          },
+          "[KnowledgeGraph] Retryable HTTP error, will retry",
+        );
+        await sleep(delay);
+        continue;
+      }
+
+      // Last attempt, return the error response
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Check if error is retryable
+      if (isRetryableError(error) && attempt < MAX_RETRIES) {
+        const delay = calculateBackoffDelay(attempt);
+        logger.warn(
+          {
+            context,
+            attempt: attempt + 1,
+            maxRetries: MAX_RETRIES,
+            error: lastError.message,
+            delayMs: Math.round(delay),
+          },
+          "[KnowledgeGraph] Transient error, will retry",
+        );
+        await sleep(delay);
+        continue;
+      }
+
+      // Non-retryable error or max retries reached
+      throw lastError;
+    }
+  }
+
+  // Should not reach here, but throw last error if we do
+  throw lastError || new Error("Unknown error during fetch retry");
 }
 
 /**
@@ -149,7 +274,7 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
         ...(filename && { filename }),
       };
 
-      const response = await fetchWithTimeout(
+      const response = await fetchWithRetry(
         url,
         {
           method: "POST",
@@ -163,6 +288,7 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
           }),
         },
         DOCUMENT_OPERATION_TIMEOUT_MS,
+        "insertDocument",
       );
 
       if (!response.ok) {
@@ -229,7 +355,7 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
       }
 
       const url = joinUrl(this.config.apiUrl, "/query");
-      const response = await fetchWithTimeout(
+      const response = await fetchWithRetry(
         url,
         {
           method: "POST",
@@ -240,6 +366,7 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
           }),
         },
         DOCUMENT_OPERATION_TIMEOUT_MS,
+        "queryDocument",
       );
 
       if (!response.ok) {
@@ -285,13 +412,14 @@ export class LightRAGProvider implements KnowledgeGraphProvider {
       }
 
       const url = joinUrl(this.config.apiUrl, "/health");
-      const response = await fetchWithTimeout(
+      const response = await fetchWithRetry(
         url,
         {
           method: "GET",
           headers,
         },
         HEALTH_CHECK_TIMEOUT_MS,
+        "healthCheck",
       );
 
       if (!response.ok) {

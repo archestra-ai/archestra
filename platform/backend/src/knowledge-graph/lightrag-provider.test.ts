@@ -79,9 +79,12 @@ describe("LightRAGProvider", () => {
     });
 
     test("throws error on network failure", async () => {
-      mockFetch.mockRejectedValueOnce(new Error("Network error"));
+      // Use a non-retryable error message to avoid retry behavior in this test
+      mockFetch.mockRejectedValueOnce(new Error("Invalid configuration"));
 
-      await expect(provider.initialize()).rejects.toThrow("Network error");
+      await expect(provider.initialize()).rejects.toThrow(
+        "Invalid configuration",
+      );
     });
   });
 
@@ -149,10 +152,11 @@ describe("LightRAGProvider", () => {
     });
 
     test("returns failed status on API error", async () => {
+      // Use a non-retryable status code (4xx) to avoid retry behavior in this test
       mockFetch.mockResolvedValueOnce({
         ok: false,
-        status: 500,
-        text: () => Promise.resolve("Internal server error"),
+        status: 400,
+        text: () => Promise.resolve("Bad request"),
       });
 
       const result = await provider.insertDocument({
@@ -163,12 +167,13 @@ describe("LightRAGProvider", () => {
       expect(result).toEqual({
         documentId: "",
         status: "failed",
-        error: "LightRAG API error: 500 - Internal server error",
+        error: "LightRAG API error: 400 - Bad request",
       });
     });
 
     test("returns failed status on network error", async () => {
-      mockFetch.mockRejectedValueOnce(new Error("Connection refused"));
+      // Use a non-retryable error message to avoid retry behavior in this test
+      mockFetch.mockRejectedValueOnce(new Error("Request body too large"));
 
       const result = await provider.insertDocument({
         content: "Test content",
@@ -178,7 +183,7 @@ describe("LightRAGProvider", () => {
       expect(result).toEqual({
         documentId: "",
         status: "failed",
-        error: "Connection refused",
+        error: "Request body too large",
       });
     });
 
@@ -346,13 +351,14 @@ describe("LightRAGProvider", () => {
     });
 
     test("returns structured error on network error", async () => {
-      mockFetch.mockRejectedValueOnce(new Error("Connection timeout"));
+      // Use a non-retryable error message to avoid retry behavior in this test
+      mockFetch.mockRejectedValueOnce(new Error("Invalid request body"));
 
       const result = await provider.queryDocument("Any query");
 
       expect(result).toEqual({
         answer: "",
-        error: "Connection timeout",
+        error: "Invalid request body",
       });
     });
   });
@@ -413,17 +419,18 @@ describe("LightRAGProvider", () => {
     });
 
     test("returns unhealthy status on HTTP error", async () => {
+      // Use a non-retryable status code (4xx) to avoid retry behavior in this test
       mockFetch.mockResolvedValueOnce({
         ok: false,
-        status: 503,
-        statusText: "Service Unavailable",
+        status: 404,
+        statusText: "Not Found",
       });
 
       const result = await provider.getHealth();
 
       expect(result).toEqual({
         status: "unhealthy",
-        message: "HTTP 503: Service Unavailable",
+        message: "HTTP 404: Not Found",
       });
     });
 
@@ -458,6 +465,122 @@ describe("LightRAGProvider", () => {
           headers: {},
         }),
       );
+    });
+  });
+
+  describe("retry logic", () => {
+    test("retries on 5xx server errors", async () => {
+      // First two calls return 503, third succeeds
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          statusText: "Service Unavailable",
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          statusText: "Service Unavailable",
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: "healthy" }),
+        });
+
+      const result = await provider.getHealth();
+
+      expect(result.status).toBe("healthy");
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    test("retries on 429 rate limiting", async () => {
+      // First call returns 429, second succeeds
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          statusText: "Too Many Requests",
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              status: "success",
+              message: "Document inserted",
+            }),
+        });
+
+      const result = await provider.insertDocument({
+        content: "Test content",
+        filename: "test.txt",
+      });
+
+      expect(result.status).toBe("pending");
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test("retries on transient network errors", async () => {
+      // First call throws network error, second succeeds
+      mockFetch
+        .mockRejectedValueOnce(new Error("ECONNREFUSED"))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ response: "Test answer" }),
+        });
+
+      const result = await provider.queryDocument("Test query");
+
+      expect(result.answer).toBe("Test answer");
+      expect(result.error).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test("does not retry on 4xx client errors", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: () => Promise.resolve("Bad request"),
+      });
+
+      const result = await provider.queryDocument("Invalid query");
+
+      expect(result.error).toContain("400");
+      // Should only be called once (no retry for 4xx)
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    test("gives up after max retries", async () => {
+      // All calls fail with 503
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        text: () => Promise.resolve("Service unavailable"),
+      });
+
+      const result = await provider.insertDocument({
+        content: "Test content",
+        filename: "test.txt",
+      });
+
+      expect(result.status).toBe("failed");
+      // Initial + 3 retries = 4 calls
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    test("does not retry non-transient errors", async () => {
+      // Non-transient error (e.g., invalid URL)
+      mockFetch.mockRejectedValueOnce(new Error("Invalid URL format"));
+
+      const result = await provider.insertDocument({
+        content: "Test content",
+        filename: "test.txt",
+      });
+
+      expect(result.status).toBe("failed");
+      expect(result.error).toBe("Invalid URL format");
+      // Should only be called once (no retry for non-transient errors)
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 });

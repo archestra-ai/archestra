@@ -2,7 +2,7 @@
 title: Prompts
 category: Archestra Platform
 subcategory: Concepts
-order: 2
+order: 4
 description: Automate chat bootstrapping with reusable prompts
 lastUpdated: 2025-11-28
 ---

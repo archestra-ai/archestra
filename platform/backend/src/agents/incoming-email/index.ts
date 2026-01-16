@@ -1,9 +1,11 @@
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentTeamModel, PromptModel, TeamModel } from "@/models";
+import AgentTeamModel from "@/models/agent-team";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
-import { executeA2AMessage } from "@/services/a2a-executor";
+import ProcessedEmailModel from "@/models/processed-email";
+import PromptModel from "@/models/prompt";
+import TeamModel from "@/models/team";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
@@ -11,41 +13,50 @@ import type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
-import { EMAIL_DEDUP_CACHE_TTL_MS } from "./constants";
+import {
+  DEFAULT_AGENT_EMAIL_NAME,
+  MAX_EMAIL_BODY_SIZE,
+  PROCESSED_EMAIL_RETENTION_MS,
+} from "./constants";
 import { OutlookEmailProvider } from "./outlook-provider";
 
 export type {
   AgentIncomingEmailProvider,
+  ConversationMessage,
   EmailProviderConfig,
   EmailProviderType,
+  EmailReplyOptions,
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
 export {
-  EMAIL_DEDUP_CACHE_TTL_MS,
   EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
   MAX_EMAIL_BODY_SIZE,
+  PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
+  PROCESSED_EMAIL_RETENTION_MS,
 } from "./constants";
 export { OutlookEmailProvider } from "./outlook-provider";
 
 /**
- * Check if an email has already been processed recently
- * Uses the shared CacheManager for TTL-based caching
+ * Atomically check and mark an email as processed using database.
+ * Uses INSERT with unique constraint for distributed deduplication across pods.
+ *
+ * @param messageId - The email provider's message ID
+ * @returns true if successfully marked (first to process), false if already processed
  */
-export async function isEmailAlreadyProcessed(
+export async function tryMarkEmailAsProcessed(
   messageId: string,
 ): Promise<boolean> {
-  const cacheKey = `${CacheKey.ProcessedEmail}-${messageId}` as const;
-  const cached = await cacheManager.get<boolean>(cacheKey);
-  return cached === true;
+  return ProcessedEmailModel.tryMarkAsProcessed(messageId);
 }
 
 /**
- * Mark an email as processed with TTL
+ * Clean up old processed email records.
+ * Should be called periodically to prevent unbounded table growth.
  */
-export async function markEmailAsProcessed(messageId: string): Promise<void> {
-  const cacheKey = `${CacheKey.ProcessedEmail}-${messageId}` as const;
-  await cacheManager.set(cacheKey, true, EMAIL_DEDUP_CACHE_TTL_MS);
+export async function cleanupOldProcessedEmails(): Promise<void> {
+  const olderThan = new Date(Date.now() - PROCESSED_EMAIL_RETENTION_MS);
+  await ProcessedEmailModel.cleanupOldRecords(olderThan);
 }
 
 /**
@@ -434,28 +445,43 @@ export function getEmailProviderInfo(): {
 }
 
 /**
+ * Options for processing incoming emails
+ */
+export interface ProcessIncomingEmailOptions {
+  /**
+   * Whether to send the agent's response back via email reply
+   * @default false
+   */
+  sendReply?: boolean;
+}
+
+/**
  * Process an incoming email and invoke the appropriate agent
+ * @param email - The incoming email to process
+ * @param provider - The email provider instance
+ * @param options - Optional processing options
+ * @returns The agent's response text if sendReply is enabled
  */
 export async function processIncomingEmail(
   email: IncomingEmail,
   provider: AgentIncomingEmailProvider | null,
-): Promise<void> {
+  options: ProcessIncomingEmailOptions = {},
+): Promise<string | undefined> {
+  const { sendReply: shouldSendReply = false } = options;
   if (!provider) {
     throw new Error("No email provider configured");
   }
 
-  // Deduplication: check if we've already processed this email recently
-  // Microsoft Graph may send multiple notifications for the same email
-  if (await isEmailAlreadyProcessed(email.messageId)) {
+  // Atomic deduplication: try to mark email as processed using database unique constraint
+  // This prevents race conditions when multiple pods receive the same webhook notification
+  const isFirstToProcess = await tryMarkEmailAsProcessed(email.messageId);
+  if (!isFirstToProcess) {
     logger.info(
       { messageId: email.messageId },
-      "[IncomingEmail] Skipping duplicate email (already processed recently)",
+      "[IncomingEmail] Skipping duplicate email (already processed by another pod)",
     );
-    return;
+    return undefined;
   }
-
-  // Mark as processed immediately to prevent concurrent processing
-  await markEmailAsProcessed(email.messageId);
 
   logger.info(
     {
@@ -499,19 +525,74 @@ export async function processIncomingEmail(
   }
   const organization = teams[0].organizationId;
 
+  // Fetch conversation history if this is part of a thread
+  let conversationContext = "";
+  if (email.conversationId && provider.getConversationHistory) {
+    try {
+      const history = await provider.getConversationHistory(
+        email.conversationId,
+        email.messageId,
+      );
+
+      if (history.length > 0) {
+        logger.info(
+          {
+            messageId: email.messageId,
+            conversationId: email.conversationId,
+            historyCount: history.length,
+          },
+          "[IncomingEmail] Including conversation history in agent context",
+        );
+
+        // Format conversation history for the agent
+        const formattedHistory = history
+          .map((msg) => {
+            const role = msg.isAgentMessage ? "You (Agent)" : "User";
+            const name = msg.fromName ? ` (${msg.fromName})` : "";
+            return `[${role}${name}]: ${msg.body.trim()}`;
+          })
+          .join("\n\n---\n\n");
+
+        conversationContext = `<conversation_history>
+The following is the previous conversation in this email thread. Use this context to understand the full conversation.
+
+${formattedHistory}
+</conversation_history>
+
+`;
+      }
+    } catch (error) {
+      logger.warn(
+        {
+          messageId: email.messageId,
+          conversationId: email.conversationId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[IncomingEmail] Failed to fetch conversation history, continuing without it",
+      );
+    }
+  }
+
   // Use email body as the message to invoke the agent
   // If body is empty, use the subject line
-  let message = email.body.trim() || email.subject || "No message content";
+  const currentMessage =
+    email.body.trim() || email.subject || "No message content";
+
+  // Combine conversation context with current message
+  let message = conversationContext
+    ? `${conversationContext}[Current message from user]: ${currentMessage}`
+    : currentMessage;
 
   // Truncate message if it exceeds the maximum size to prevent excessive LLM context usage
-  const { MAX_EMAIL_BODY_SIZE } = await import("./constants");
   if (Buffer.byteLength(message, "utf8") > MAX_EMAIL_BODY_SIZE) {
     // Truncate to MAX_EMAIL_BODY_SIZE bytes and add truncation notice
     const encoder = new TextEncoder();
     const decoder = new TextDecoder("utf8", { fatal: false });
     const encoded = encoder.encode(message);
     const truncated = decoder.decode(encoded.slice(0, MAX_EMAIL_BODY_SIZE));
-    message = `${truncated}\n\n[Message truncated - original size exceeded ${MAX_EMAIL_BODY_SIZE / 1024}KB limit]`;
+    message = `${truncated}\n\n[Message truncated - original size exceeded ${
+      MAX_EMAIL_BODY_SIZE / 1024
+    }KB limit]`;
     logger.warn(
       {
         messageId: email.messageId,
@@ -528,6 +609,7 @@ export async function processIncomingEmail(
       agentId: prompt.agentId,
       organizationId: organization,
       messageLength: message.length,
+      hasConversationHistory: conversationContext.length > 0,
     },
     "[IncomingEmail] Invoking agent with email content",
   );
@@ -550,6 +632,41 @@ export async function processIncomingEmail(
     "[IncomingEmail] Agent execution completed",
   );
 
-  // TODO: Optionally send the response back via email
-  // This would require implementing reply functionality in the provider
+  // Optionally send the agent's response back via email reply
+  if (shouldSendReply && result.text) {
+    try {
+      // Use the prompt (agent) name for the email reply
+      const agentName = prompt.name || DEFAULT_AGENT_EMAIL_NAME;
+
+      const replyId = await provider.sendReply({
+        originalEmail: email,
+        body: result.text,
+        agentName,
+      });
+
+      logger.info(
+        {
+          promptId,
+          originalMessageId: email.messageId,
+          replyId,
+        },
+        "[IncomingEmail] Sent email reply with agent response",
+      );
+    } catch (error) {
+      // Log but don't fail the entire operation if reply fails
+      logger.error(
+        {
+          promptId,
+          originalMessageId: email.messageId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[IncomingEmail] Failed to send email reply",
+      );
+    }
+
+    return result.text;
+  }
+
+  // No reply sent - return undefined explicitly for clarity
+  return undefined;
 }

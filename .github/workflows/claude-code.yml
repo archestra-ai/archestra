@@ -39,6 +39,9 @@ jobs:
           # use their oauth token, since otherwise Anthropic will ban accounts for abuse :(
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
+          # Use sticky comments to reduce notification clutter by updating one comment
+          use_sticky_comment: true
+
           # This is an optional setting that allows Claude to read CI results on PRs
           # See https://github.com/anthropics/claude-code-action?tab=readme-ov-file#additional-permissions-for-cicd-integration
           additional_permissions: |

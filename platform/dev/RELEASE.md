@@ -12,43 +12,27 @@ Archestra uses [Release Please](https://github.com/googleapis/release-please) to
 
 ## Standard Release Flow
 
-### 1. Develop and Merge
+### 1. Merge PR to `main`
 
-Create a PR targeting `main` with your changes. Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages:
-
-- `feat:` - New feature (bumps minor version)
-- `fix:` - Bug fix (bumps patch version)
-- `feat!:` or `fix!:` - Breaking change (bumps major version)
-- `docs:`, `chore:`, `ci:`, `test:` - No version bump
-
-Example:
-```bash
-git checkout -b feature/my-feature
-# make changes
-git commit -m "feat: add new dashboard widget"
-git push origin feature/my-feature
-# create PR, get review, merge
-```
-
-### 2. Automatic Staging Deployment
+Create a PR targeting `main` with your changes. Title of PR should follow [Conventional Commits](https://www.conventionalcommits.org/). Once you are ready, click Merge. You don't need to wait for all the checks to complete, they are optional on PR. Your PR will be put on Merge Queue where the same checks must pass in order for your PR to be merged.
 
 When your PR is merged to `main`:
 - A Docker image is built and pushed to Google Artifact Registry
 - The image is automatically deployed to the staging environment
 - You can verify your changes at `https://frontend.archestra.dev`
 
-### 3. Release Please PR
+### 2. Merge Release Please PR
 
-After merging to `main`, Release Please will:
-- Create a new PR (or update an existing one) titled "chore(main): release platform vX.Y.Z"
+After merging to `main`, Release Please will create a new PR (or update an existing one) titled "chore(main): release platform vX.Y.Z". It will commit the following additional changes:
 - Update version numbers in `package.json` files
+- Bump version in `openapi.json`
 - Generate/update `CHANGELOG.md`
 
-### 4. Create the Release
+[Example of PR](https://github.com/archestra-ai/archestra/pull/2143)
 
-When you're ready to release:
-1. Review the Release Please PR
-2. Merge it
+Merge it.
+
+### 3. Done 🎉
 
 This triggers:
 - GitHub Release creation with the new tag
@@ -95,53 +79,38 @@ When you merge to `release/v1.0.22`:
 After releasing the hotfix, apply the fix to `main`:
 
 ```bash
+# Checkout and pull latest `main`
 git checkout main
 git pull origin main
 
-# Option A: Cherry-pick specific commits
+# Cherry-pick specific commits
 git cherry-pick <commit-sha>
 
-# Option B: Merge the release branch
-git merge release/v1.0.22
-
+# Push to `main`
 git push origin main
-```
-
-### 5. Cleanup
-
-Delete the release branch after the hotfix is released and backported:
-
-```bash
-git push origin --delete release/v1.0.22
 ```
 
 ## Quick Reference
 
 ### Release a New Version
 
-```bash
-# 1. Merge your feature PRs to main
-# 2. Wait for Release Please PR to appear
-# 3. Review and merge the Release Please PR
-# Done! Check GitHub Releases for the new version.
-```
+1. Merge your feature PRs to main
+2. Review and merge the Release Please PR
+
 
 ### Release a Hotfix
 
+1. Create release branch from tag
 ```bash
-# 1. Create release branch from tag
 git checkout -b release/v1.0.22 v1.0.22
 git push origin release/v1.0.22
-
-# 2. Create and merge fix PR targeting release/v1.0.22
-
-# 3. Merge the Release Please PR that appears
-
-# 4. Backport to main
+```
+2. Create PR targeting `release/v1.0.22` branch
+3. Merge the PR
+4. Find the Release Please PR that appears and merge it
+5. Backport to main
+```bash
 git checkout main && git cherry-pick <sha> && git push
-
-# 5. Delete release branch
-git push origin --delete release/v1.0.22
 ```
 
 ## Release Freeze
@@ -160,13 +129,6 @@ When frozen, Release Please PRs cannot be merged.
 - Ensure your commits use conventional commit format
 - Check the "Release Please" workflow run for errors
 - Commits with `chore:`, `ci:`, `docs:`, `test:` prefixes don't trigger releases
-
-### Version not bumping as expected
-
-Release Please determines version bumps from commit messages:
-- `fix:` → patch bump (1.0.0 → 1.0.1)
-- `feat:` → minor bump (1.0.0 → 1.1.0)
-- `feat!:` or `BREAKING CHANGE:` → major bump (1.0.0 → 2.0.0)
 
 ### Staging deployment failed
 

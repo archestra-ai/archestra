@@ -7,9 +7,11 @@ import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
+  EmailReplyOptions,
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
+import { DEFAULT_AGENT_EMAIL_NAME } from "./constants";
 
 /**
  * Microsoft Outlook/Exchange email provider using Microsoft Graph API
@@ -149,7 +151,10 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     }
 
     // Reconstruct UUID: 8-4-4-4-12
-    return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
+    return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(
+      12,
+      16,
+    )}-${raw.slice(16, 20)}-${raw.slice(20)}`;
   }
 
   handleValidationChallenge(payload: unknown): string | null {
@@ -267,11 +272,11 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       }
 
       try {
-        // Fetch the full message
+        // Fetch the full message including conversationId for thread context
         const message = await client
           .api(`/users/${this.config.mailboxAddress}/messages/${messageId}`)
           .select(
-            "id,subject,body,bodyPreview,from,toRecipients,receivedDateTime",
+            "id,conversationId,subject,body,bodyPreview,from,toRecipients,receivedDateTime",
           )
           .get();
 
@@ -296,16 +301,19 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         }
 
         // Extract plain text body
+        // For email threads, we need the full body content including quoted replies
+        // bodyPreview is limited (~255 chars) and truncates conversation history
         let body = "";
         if (message.body?.contentType === "text") {
           body = message.body.content || "";
         } else if (message.body?.content) {
-          // HTML body - use bodyPreview for plain text
-          body = message.bodyPreview || this.stripHtml(message.body.content);
+          // HTML body - convert to plain text to preserve conversation thread
+          body = this.stripHtml(message.body.content);
         }
 
         emails.push({
           messageId: message.id,
+          conversationId: message.conversationId,
           toAddress: agentEmailAddress,
           fromAddress: message.from?.emailAddress?.address || "unknown",
           subject: message.subject || "",
@@ -582,6 +590,274 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     }
   }
 
+  /**
+   * Send a reply to an incoming email
+   * Uses Microsoft Graph API to send a reply that maintains the email thread
+   *
+   * **Threading**: The Graph API `/reply` endpoint automatically maintains proper
+   * email threading by setting conversationId, In-Reply-To, and References headers.
+   * This ensures replies appear in the same thread regardless of the `from` address.
+   *
+   * **Microsoft Graph API Limitation**: The Graph API does not support sending from
+   * dynamically generated plus-addressed aliases (e.g., mailbox+agent-xxx@domain.com)
+   * even with "Send As" permission configured in Exchange. The `from` address must be
+   * a primary email or explicitly configured proxy address on the mailbox.
+   *
+   * **Fallback behavior** (default for plus-addressed agent emails):
+   * - Reply is sent from the mailbox's primary address
+   * - `replyTo` is set to the agent's plus-addressed email
+   * - Recipients can reply directly to the agent using "Reply" in their email client
+   * - Threading is preserved via the Graph API's reply mechanism
+   */
+  async sendReply(options: EmailReplyOptions): Promise<string> {
+    const { originalEmail, body, htmlBody, agentName } = options;
+    const client = this.getGraphClient();
+    const displayName = agentName || DEFAULT_AGENT_EMAIL_NAME;
+
+    logger.info(
+      {
+        originalMessageId: originalEmail.messageId,
+        toAddress: originalEmail.fromAddress,
+        subject: originalEmail.subject,
+        agentName: displayName,
+      },
+      "[OutlookEmailProvider] Sending reply to email",
+    );
+
+    // Build the reply message body
+    const replyBody: {
+      contentType: "Text" | "HTML";
+      content: string;
+    } = htmlBody
+      ? { contentType: "HTML", content: htmlBody }
+      : { contentType: "Text", content: body };
+
+    // Use the agent's email address (the toAddress from the original email)
+    const agentEmailAddress = originalEmail.toAddress;
+
+    // Try to send with 'from' set to agent's email address
+    // Note: This will likely fail for plus-addressed aliases due to Graph API limitations
+    // (see JSDoc above). We try anyway in case the address is an explicit alias.
+    try {
+      await client
+        .api(
+          `/users/${this.config.mailboxAddress}/messages/${originalEmail.messageId}/reply`,
+        )
+        .post({
+          message: {
+            from: {
+              emailAddress: {
+                address: agentEmailAddress,
+                name: displayName,
+              },
+            },
+            body: replyBody,
+          },
+        });
+
+      // Graph API reply endpoint doesn't return the new message ID directly
+      // Generate a tracking ID for logging purposes
+      const replyTrackingId = `reply-${
+        originalEmail.messageId
+      }-${crypto.randomUUID()}`;
+
+      logger.info(
+        {
+          originalMessageId: originalEmail.messageId,
+          replyTrackingId,
+          recipient: originalEmail.fromAddress,
+          fromAddress: agentEmailAddress,
+        },
+        "[OutlookEmailProvider] Reply sent with agent as sender",
+      );
+
+      return replyTrackingId;
+    } catch (sendAsError) {
+      // Check if this is a "Send As" permission error
+      const errorMessage =
+        sendAsError instanceof Error
+          ? sendAsError.message
+          : String(sendAsError);
+      const isSendAsError =
+        errorMessage.includes("send mail on behalf of") ||
+        errorMessage.includes("SendAs");
+
+      if (!isSendAsError) {
+        // Re-throw non-permission errors
+        logger.error(
+          {
+            originalMessageId: originalEmail.messageId,
+            recipient: originalEmail.fromAddress,
+            error: errorMessage,
+          },
+          "[OutlookEmailProvider] Failed to send reply",
+        );
+        throw sendAsError;
+      }
+
+      // Fallback: Graph API rejected the plus-addressed 'from' address (expected behavior)
+      // Send from mailbox's primary address but set replyTo to agent's email
+      // Threading is still maintained via the Graph API's reply mechanism
+      logger.info(
+        {
+          originalMessageId: originalEmail.messageId,
+          agentEmailAddress,
+        },
+        "[OutlookEmailProvider] Using replyTo for plus-addressed agent email (Graph API limitation)",
+      );
+
+      await client
+        .api(
+          `/users/${this.config.mailboxAddress}/messages/${originalEmail.messageId}/reply`,
+        )
+        .post({
+          message: {
+            replyTo: [
+              {
+                emailAddress: {
+                  address: agentEmailAddress,
+                  name: displayName,
+                },
+              },
+            ],
+            body: replyBody,
+          },
+        });
+
+      const replyTrackingId = `reply-${
+        originalEmail.messageId
+      }-${crypto.randomUUID()}`;
+
+      logger.info(
+        {
+          originalMessageId: originalEmail.messageId,
+          replyTrackingId,
+          recipient: originalEmail.fromAddress,
+          replyTo: agentEmailAddress,
+        },
+        "[OutlookEmailProvider] Reply sent with replyTo fallback",
+      );
+
+      return replyTrackingId;
+    }
+  }
+
+  /**
+   * Get conversation history for an email thread
+   * Fetches all messages in the conversation except the current one
+   * @param conversationId - The conversation ID from the email
+   * @param currentMessageId - The current message ID to exclude from history
+   * @returns Array of previous messages in the conversation, oldest first
+   */
+  async getConversationHistory(
+    conversationId: string,
+    currentMessageId: string,
+  ): Promise<
+    Array<{
+      messageId: string;
+      fromAddress: string;
+      fromName?: string;
+      body: string;
+      receivedAt: Date;
+      isAgentMessage: boolean;
+    }>
+  > {
+    const client = this.getGraphClient();
+
+    try {
+      // Escape single quotes in conversationId for OData filter
+      // The conversationId may contain special characters that need escaping
+      const escapedConversationId = conversationId.replace(/'/g, "''");
+
+      // Fetch all messages in the conversation
+      // Note: Microsoft Graph API doesn't allow combining $filter on conversationId
+      // with $orderby on receivedDateTime, so we fetch without ordering and sort client-side
+      const response = await client
+        .api(`/users/${this.config.mailboxAddress}/messages`)
+        .filter(`conversationId eq '${escapedConversationId}'`)
+        .select("id,from,body,receivedDateTime,sender")
+        .top(50) // Limit to last 50 messages to avoid excessive context
+        .get();
+
+      const messages = response.value || [];
+      const history: Array<{
+        messageId: string;
+        fromAddress: string;
+        fromName?: string;
+        body: string;
+        receivedAt: Date;
+        isAgentMessage: boolean;
+      }> = [];
+
+      for (const message of messages) {
+        // Skip the current message
+        if (message.id === currentMessageId) {
+          continue;
+        }
+
+        const fromAddress = message.from?.emailAddress?.address || "unknown";
+        const fromName = message.from?.emailAddress?.name;
+
+        // Determine if this message was sent by the agent (from the mailbox)
+        const isAgentMessage =
+          fromAddress.toLowerCase() ===
+          this.config.mailboxAddress.toLowerCase();
+
+        // Extract plain text body
+        let body = "";
+        if (message.body?.contentType === "text") {
+          body = message.body.content || "";
+        } else if (message.body?.content) {
+          body = this.stripHtml(message.body.content);
+        }
+
+        history.push({
+          messageId: message.id,
+          fromAddress,
+          fromName,
+          body,
+          receivedAt: new Date(message.receivedDateTime),
+          isAgentMessage,
+        });
+      }
+
+      // Sort by receivedAt ascending (oldest first) since we couldn't use $orderby with $filter
+      history.sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime());
+
+      logger.debug(
+        {
+          conversationId,
+          currentMessageId,
+          historyCount: history.length,
+        },
+        "[OutlookEmailProvider] Fetched conversation history",
+      );
+
+      return history;
+    } catch (error) {
+      // Log detailed error information for debugging
+      const errorDetails =
+        error instanceof Error
+          ? {
+              message: error.message,
+              name: error.name,
+              stack: error.stack?.split("\n").slice(0, 3).join("\n"),
+            }
+          : { raw: String(error) };
+
+      logger.error(
+        {
+          conversationId,
+          currentMessageId,
+          errorDetails,
+        },
+        "[OutlookEmailProvider] Failed to fetch conversation history",
+      );
+      // Return empty history on error - allow processing to continue
+      return [];
+    }
+  }
+
   async cleanup(): Promise<void> {
     if (this.subscriptionId) {
       // Use deleteSubscription which handles both Graph API and database cleanup
@@ -593,12 +869,67 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
   }
 
   /**
-   * Simple HTML tag stripper for fallback plain text extraction
+   * Convert HTML to plain text while preserving conversation structure
+   * Handles email-specific HTML elements like blockquotes for email threads
    */
   private stripHtml(html: string): string {
-    return html
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    let result = html;
+
+    // Handle horizontal rules FIRST (often used as reply separators)
+    // Must be before tag stripping since <hr> may have attributes
+    result = result.replace(/<hr[^>]*\/?>/gi, "\n---\n");
+
+    // Replace common block elements with newlines
+    result = result.replace(/<br\s*\/?>/gi, "\n");
+    result = result.replace(/<\/p>/gi, "\n\n");
+    result = result.replace(/<\/div>/gi, "\n");
+    result = result.replace(/<\/h[1-6]>/gi, "\n\n");
+    result = result.replace(/<\/li>/gi, "\n");
+
+    // Handle blockquotes (common in email replies) with ">" prefix
+    // Process iteratively to handle nested blockquotes from outside-in
+    let previousResult = "";
+    while (previousResult !== result) {
+      previousResult = result;
+      result = result.replace(
+        /<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi,
+        (_match, content) => {
+          // Strip tags from content but don't process blockquotes yet
+          const strippedContent = content
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<\/p>/gi, "\n")
+            .replace(/<\/div>/gi, "\n")
+            .replace(/<[^>]*>/g, " ")
+            .replace(/&nbsp;/gi, " ")
+            .replace(/[ \t]+/g, " ")
+            .trim();
+          const lines = strippedContent.split("\n");
+          return `\n${lines
+            .map((line: string) => `> ${line.trim()}`)
+            .join("\n")}\n`;
+        },
+      );
+    }
+
+    // Strip remaining tags
+    result = result.replace(/<[^>]*>/g, " ");
+
+    // Decode common HTML entities
+    // Note: &amp; must be decoded LAST to prevent double-unescaping
+    // (e.g., &amp;lt; should become &lt; not <)
+    result = result.replace(/&nbsp;/gi, " ");
+    result = result.replace(/&lt;/gi, "<");
+    result = result.replace(/&gt;/gi, ">");
+    result = result.replace(/&quot;/gi, '"');
+    result = result.replace(/&#39;/gi, "'");
+    result = result.replace(/&amp;/gi, "&");
+
+    // Clean up whitespace while preserving intentional line breaks
+    result = result.replace(/[ \t]+/g, " ");
+    result = result.replace(/\n +/g, "\n");
+    result = result.replace(/ +\n/g, "\n");
+    result = result.replace(/\n{3,}/g, "\n\n");
+
+    return result.trim();
   }
 }

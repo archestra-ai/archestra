@@ -2,7 +2,7 @@
 title: Agents
 category: Archestra Platform
 subcategory: Concepts
-order: 3
+order: 1
 description: Agent invocation methods including A2A and incoming email
 lastUpdated: 2026-01-14
 ---
@@ -91,6 +91,19 @@ When an email arrives:
 2. Archestra extracts the Prompt ID from the recipient address
 3. The email body becomes the agent's input message
 4. The agent executes and generates a response
+5. Optionally, the agent's response is sent back as an email reply
+
+### Conversation History
+
+When processing emails that are part of a thread (replies), Archestra automatically fetches the conversation history and provides it to the agent. This allows the agent to understand the full context of the conversation and respond appropriately to follow-up messages.
+
+### Email Reply
+
+When email replies are enabled, the agent's response is automatically sent back to the original sender. The reply:
+
+- Maintains the email conversation thread
+- Uses the original message's "Re:" subject prefix
+- Displays the agent's name as the sender
 
 ### Prerequisites
 
@@ -101,8 +114,10 @@ When an email arrives:
 ### Azure AD Application Setup
 
 1. Create an App Registration in [Azure Portal](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
-2. Add `Mail.Read` **application** permission (not delegated) under Microsoft Graph
-3. Grant admin consent for the permission
+2. Add the following **application** permissions (not delegated) under Microsoft Graph:
+   - `Mail.Read` - Required for receiving emails
+   - `Mail.Send` - Required for sending reply emails (optional)
+3. Grant admin consent for the permissions
 4. Create a client secret and note the value
 
 ### Configuration

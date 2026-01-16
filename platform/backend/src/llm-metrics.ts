@@ -457,6 +457,17 @@ export function getObservableFetch(
             model,
             externalAgentId,
           );
+        } else if (provider === "zhipuai") {
+          const { input, output } = utils.adapters.zhipuai.getUsageTokens(
+            data.usage,
+          );
+          reportLLMTokens(
+            provider,
+            profile,
+            { input, output },
+            model,
+            externalAgentId,
+          );
         } else {
           throw new Error("Unknown provider when logging usage token metrics");
         }

@@ -365,6 +365,11 @@ export default {
       baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
       useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
     },
+    zhipuai: {
+      baseUrl:
+        process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
+        "https://api.z.ai/api/paas/v4",
+    },
   },
   chat: {
     openai: {
@@ -387,6 +392,12 @@ export default {
     },
     ollama: {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
+    },
+    zhipuai: {
+      apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_ZHIPUAI_BASE_URL ||
+        "https://api.z.ai/api/paas/v4",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

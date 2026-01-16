@@ -18,8 +18,21 @@ export const EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL = 6 * 60 * 60 * 1000; // 6 hour
 export const MAX_EMAIL_BODY_SIZE = 100 * 1024; // 100KB
 
 /**
- * TTL for processed email deduplication cache (5 minutes)
- * Microsoft Graph may send multiple notifications for the same email within seconds.
- * We track processed message IDs to prevent duplicate agent invocations.
+ * Retention period for processed email records in database (24 hours)
+ * Records older than this will be cleaned up to prevent unbounded table growth.
+ * This is much longer than needed for deduplication (which happens within seconds)
+ * to provide a safety margin and allow for debugging.
  */
-export const EMAIL_DEDUP_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+export const PROCESSED_EMAIL_RETENTION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Interval for cleaning up old processed email records (1 hour)
+ * Should be shorter than the retention period.
+ */
+export const PROCESSED_EMAIL_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Default display name for agent email replies
+ * Used when the agent's name is not available
+ */
+export const DEFAULT_AGENT_EMAIL_NAME = "Archestra Agent";

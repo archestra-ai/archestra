@@ -14,6 +14,22 @@ import {
 export { type EmailProviderType, EmailProviderTypeSchema };
 
 /**
+ * Database schemas for processed emails (deduplication)
+ */
+export const SelectProcessedEmailSchema = createSelectSchema(
+  schema.processedEmailsTable,
+);
+export const InsertProcessedEmailSchema = createInsertSchema(
+  schema.processedEmailsTable,
+).omit({
+  id: true,
+  processedAt: true,
+});
+
+export type SelectProcessedEmail = z.infer<typeof SelectProcessedEmailSchema>;
+export type InsertProcessedEmail = z.infer<typeof InsertProcessedEmailSchema>;
+
+/**
  * Database schemas for incoming email subscriptions
  */
 export const SelectIncomingEmailSubscriptionSchema = createSelectSchema(
@@ -71,6 +87,8 @@ export type SubscriptionInfo = Omit<
 export interface IncomingEmail {
   /** The unique message ID from the email provider */
   messageId: string;
+  /** The conversation ID for threading (used to fetch conversation history) */
+  conversationId?: string;
   /** The email address that received the email (agent's email) */
   toAddress: string;
   /** The sender's email address */
@@ -85,6 +103,38 @@ export interface IncomingEmail {
   receivedAt: Date;
   /** Any additional metadata from the provider */
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * A message in an email conversation thread
+ */
+export interface ConversationMessage {
+  /** The unique message ID */
+  messageId: string;
+  /** The sender's email address */
+  fromAddress: string;
+  /** The sender's display name */
+  fromName?: string;
+  /** The plain text body of the message */
+  body: string;
+  /** When the message was received */
+  receivedAt: Date;
+  /** Whether this message was sent by the agent (vs the user) */
+  isAgentMessage: boolean;
+}
+
+/**
+ * Options for sending an email reply
+ */
+export interface EmailReplyOptions {
+  /** The original email to reply to */
+  originalEmail: IncomingEmail;
+  /** The reply message body (plain text) */
+  body: string;
+  /** Optional HTML body for rich formatting */
+  htmlBody?: string;
+  /** The name of the agent sending the reply (for display in email client) */
+  agentName?: string;
 }
 
 /**
@@ -186,6 +236,24 @@ export interface AgentIncomingEmailProvider {
    * Called on graceful shutdown
    */
   cleanup(): Promise<void>;
+
+  /**
+   * Send a reply to an incoming email
+   * @param options - The reply options including original email and response body
+   * @returns The message ID of the sent reply
+   */
+  sendReply(options: EmailReplyOptions): Promise<string>;
+
+  /**
+   * Get conversation history for an email thread
+   * @param conversationId - The conversation ID from the email
+   * @param currentMessageId - The current message ID to exclude from history
+   * @returns Array of previous messages in the conversation, oldest first
+   */
+  getConversationHistory(
+    conversationId: string,
+    currentMessageId: string,
+  ): Promise<ConversationMessage[]>;
 }
 
 /**

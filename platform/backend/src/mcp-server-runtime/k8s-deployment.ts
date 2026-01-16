@@ -14,6 +14,15 @@ const {
 } = config;
 
 /**
+ * Result of processing container environment configuration.
+ * Contains both environment variables and mounted secrets information.
+ */
+interface ContainerEnvResult {
+  envVars: k8s.V1EnvVar[];
+  mountedSecrets: Array<{ key: string }>;
+}
+
+/**
  * Cached nodeSelector from the archestra-platform pod.
  * This is fetched once on first use and reused for all MCP server deployments.
  */
@@ -489,6 +498,34 @@ export default class K8sDeployment {
       "mcp-server-name": this.mcpServer.name,
     });
 
+    // Get environment variables and mounted secrets
+    const { envVars, mountedSecrets } = this.createContainerEnvFromConfig();
+    const k8sSecretName = K8sDeployment.constructK8sSecretName(
+      this.mcpServer.id,
+    );
+
+    // Build volume mounts for mounted secrets (read-only files at /secrets/<key>)
+    const volumeMounts: k8s.V1VolumeMount[] = mountedSecrets.map(({ key }) => ({
+      name: "mounted-secrets",
+      mountPath: `/secrets/${key}`,
+      subPath: key,
+      readOnly: true,
+    }));
+
+    // Build volumes for mounted secrets (single volume with all secret keys)
+    const volumes: k8s.V1Volume[] =
+      mountedSecrets.length > 0
+        ? [
+            {
+              name: "mounted-secrets",
+              secret: {
+                secretName: k8sSecretName,
+                items: mountedSecrets.map(({ key }) => ({ key, path: key })),
+              },
+            },
+          ]
+        : [];
+
     const podSpec: k8s.V1PodSpec = {
       // Fast shutdown for stateless MCP servers (default is 30s)
       terminationGracePeriodSeconds: 5,
@@ -502,6 +539,8 @@ export default class K8sDeployment {
       ...(nodeSelector && Object.keys(nodeSelector).length > 0
         ? { nodeSelector }
         : {}),
+      // Add volumes for mounted secrets
+      ...(volumes.length > 0 ? { volumes } : {}),
       containers: [
         {
           name: "mcp-server",
@@ -512,7 +551,7 @@ export default class K8sDeployment {
             dockerImage.includes("/") || dockerImage.includes(".")
               ? undefined // Let K8s decide (defaults to Always for :latest, IfNotPresent for others)
               : ("Never" as k8s.V1Container["imagePullPolicy"]), // For local images like "gaggimate-mcp:latest" without registry
-          env: this.createContainerEnvFromConfig(),
+          env: envVars,
           ...(localConfig.command
             ? {
                 command: [localConfig.command],
@@ -547,6 +586,8 @@ export default class K8sDeployment {
                 },
               ]
             : undefined,
+          // Add volume mounts for mounted secrets
+          ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
           // Set resource requests for the container
           resources: {
             requests: {
@@ -632,13 +673,17 @@ export default class K8sDeployment {
    * will use valueFrom.secretKeyRef to reference the Kubernetes Secret instead of
    * including the value directly in the pod spec.
    *
+   * For secrets marked with "mounted: true", they will be skipped from env vars
+   * and instead returned in mountedSecrets array for volume mounting.
+   *
    * For Docker Desktop Kubernetes environments, localhost URLs are automatically
    * rewritten to host.docker.internal to allow pods to access services on the host.
    */
-  createContainerEnvFromConfig(): k8s.V1EnvVar[] {
+  createContainerEnvFromConfig(): ContainerEnvResult {
     const env: k8s.V1EnvVar[] = [];
     const envMap = new Map<string, string>();
     const secretEnvVars = new Set<string>();
+    const mountedSecretKeys = new Set<string>();
 
     // Process all environment variables from catalog
     if (this.catalogItem?.localConfig?.environment) {
@@ -646,6 +691,10 @@ export default class K8sDeployment {
         // Track secret-type env vars
         if (envDef.type === "secret") {
           secretEnvVars.add(envDef.key);
+          // Track mounted secrets (only applicable to secret type)
+          if (envDef.mounted) {
+            mountedSecretKeys.add(envDef.key);
+          }
         }
 
         // Add env var value to envMap based on prompting behavior
@@ -695,8 +744,19 @@ export default class K8sDeployment {
       });
     }
 
+    // Track mounted secrets for volume mounting
+    const mountedSecrets: Array<{ key: string }> = [];
+
     // Convert map to k8s env vars, using conditional logic for secrets
     envMap.forEach((value, key) => {
+      // If this is a mounted secret, skip env var injection - will be volume mounted
+      if (mountedSecretKeys.has(key)) {
+        if (value && value.trim() !== "") {
+          mountedSecrets.push({ key });
+        }
+        return;
+      }
+
       // If this env var is marked as "secret" type, use valueFrom.secretKeyRef
       if (secretEnvVars.has(key)) {
         // Skip secret-type env vars with empty values (no K8s Secret will be created)
@@ -745,7 +805,7 @@ export default class K8sDeployment {
       }
     });
 
-    return env;
+    return { envVars: env, mountedSecrets };
   }
 
   /**

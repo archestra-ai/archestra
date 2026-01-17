@@ -739,3 +739,24 @@ These environment variables configure the Incoming Email feature, which allows e
   - Optional: If set, subscription is created automatically on server startup
   - Example: `https://api.yourcompany.com/api/webhooks/incoming-email`
   - If not set, configure the subscription manually via Settings > Incoming Email
+
+### Knowledge Graph Configuration
+
+These environment variables configure the Knowledge Graph feature, which automatically ingests documents uploaded via chat into a knowledge graph for enhanced retrieval. See [Knowledge Graphs](/docs/platform-knowledge-graphs) for setup instructions.
+
+- **`ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER`** - Knowledge graph provider to use.
+
+  - Default: Not set (feature disabled)
+  - Options: `lightrag`
+  - Required to enable the knowledge graph feature
+
+- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL`** - URL of the LightRAG API server.
+
+  - Required when: `ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER=lightrag`
+  - Example: `http://lightrag:9621`
+  - The LightRAG server must be accessible from the Archestra backend
+
+- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY`** - API key for authenticating with LightRAG.
+
+  - Optional: Only required if your LightRAG server is configured with authentication
+  - Note: Keep this value secure; do not commit to version control

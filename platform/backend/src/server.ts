@@ -46,6 +46,10 @@ import {
 import { fastifyAuthPlugin } from "@/auth";
 import config from "@/config";
 import { seedRequiredStartingData } from "@/database/seed";
+import {
+  cleanupKnowledgeGraphProvider,
+  initializeKnowledgeGraphProvider,
+} from "@/knowledge-graph";
 import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
@@ -481,6 +485,10 @@ const start = async () => {
     // Initialize chatops providers (MS Teams, Slack, etc.)
     await initializeChatOpsProviders();
 
+    // Initialize knowledge graph provider (if configured)
+    // This enables automatic document ingestion from chat uploads
+    await initializeKnowledgeGraphProvider();
+
     // Background job to renew email subscriptions before they expire
     const emailRenewalIntervalId = setInterval(() => {
       renewEmailSubscriptionIfNeeded().catch((error) => {
@@ -566,6 +574,10 @@ const start = async () => {
         // Cleanup chatops providers
         await cleanupChatOpsProviders();
         fastify.log.info("ChatOps provider cleanup completed");
+
+        // Cleanup knowledge graph provider
+        await cleanupKnowledgeGraphProvider();
+        fastify.log.info("Knowledge graph provider cleanup completed");
 
         // Close WebSocket server
         websocketService.stop();

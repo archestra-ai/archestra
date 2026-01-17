@@ -16,6 +16,10 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
+import {
+  type KnowledgeGraphProviderType,
+  KnowledgeGraphProviderTypeSchema,
+} from "@/types/knowledge-graph";
 import packageJson from "../../package.json";
 
 /**
@@ -216,6 +220,18 @@ const parseIncomingEmailProvider = (): EmailProviderType | undefined => {
 };
 
 /**
+ * Parse knowledge graph provider from environment variable
+ */
+const parseKnowledgeGraphProvider = ():
+  | KnowledgeGraphProviderType
+  | undefined => {
+  const provider =
+    process.env.ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER?.toLowerCase();
+  const result = KnowledgeGraphProviderTypeSchema.safeParse(provider);
+  return result.success ? result.data : undefined;
+};
+
+/**
  * Parse body limit from environment variable.
  * Supports numeric bytes (e.g., "52428800") or human-readable format (e.g., "50MB", "100KB").
  */
@@ -318,6 +334,13 @@ export default {
         clientSecret:
           process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET || "",
       },
+    },
+  },
+  knowledgeGraph: {
+    provider: parseKnowledgeGraphProvider(),
+    lightrag: {
+      apiUrl: process.env.ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL || "",
+      apiKey: process.env.ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY,
     },
   },
   auth: {

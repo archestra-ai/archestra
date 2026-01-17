@@ -41,6 +41,7 @@ import {
 } from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
 import config from "@/config";
+import { isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import {
   cleanupKnowledgeGraphProvider,
@@ -217,8 +218,7 @@ export function registerReadinessEndpoint(fastify: FastifyInstanceWithZod) {
         },
       },
     },
-    async (_request, reply) => {
-      const { isDatabaseHealthy } = await import("@/database");
+    async (request, reply) => {
       const dbHealthy = await isDatabaseHealthy();
 
       const response = {
@@ -229,6 +229,7 @@ export function registerReadinessEndpoint(fastify: FastifyInstanceWithZod) {
       };
 
       if (!dbHealthy) {
+        request.log.warn("Database health check failed for readiness probe");
         return reply.status(503).send(response);
       }
 

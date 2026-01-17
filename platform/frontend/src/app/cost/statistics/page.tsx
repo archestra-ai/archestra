@@ -527,7 +527,7 @@ export default function StatisticsPage() {
           <CardContent>
             <ChartContainer
               config={costSavingsChartConfig}
-              className="aspect-auto h-80 w-full"
+              className="aspect-auto h-80 w-full relative"
             >
               {costSavingsChartData.length > 0 ? (
                 <LineChart
@@ -572,7 +572,7 @@ export default function StatisticsPage() {
                   />
                 </LineChart>
               ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
+                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
                   No data available
                 </div>
               )}
@@ -587,7 +587,7 @@ export default function StatisticsPage() {
           <CardContent>
             <ChartContainer
               config={savingsBreakdownChartConfig}
-              className="aspect-auto h-80 w-full"
+              className="aspect-auto h-80 w-full relative"
             >
               {savingsBreakdownChartData.length > 0 ? (
                 <LineChart
@@ -636,7 +636,7 @@ export default function StatisticsPage() {
                   />
                 </LineChart>
               ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
+                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
                   No data available
                 </div>
               )}
@@ -654,7 +654,7 @@ export default function StatisticsPage() {
             <div className="order-2 lg:order-1">
               <ChartContainer
                 config={teamChartConfig}
-                className="aspect-auto h-80 w-full"
+                className="aspect-auto h-80 w-full relative"
               >
                 {teamChartData.length > 0 ? (
                   <LineChart
@@ -694,7 +694,7 @@ export default function StatisticsPage() {
                     ))}
                   </LineChart>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
                     No team data available
                   </div>
                 )}
@@ -764,7 +764,7 @@ export default function StatisticsPage() {
             <div className="order-2 lg:order-1">
               <ChartContainer
                 config={profileChartConfig}
-                className="aspect-auto h-80 w-full"
+                className="aspect-auto h-80 w-full relative"
               >
                 {profileChartData.length > 0 ? (
                   <LineChart
@@ -804,7 +804,7 @@ export default function StatisticsPage() {
                     ))}
                   </LineChart>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
                     No profile data available
                   </div>
                 )}
@@ -874,7 +874,7 @@ export default function StatisticsPage() {
             <div className="order-2 lg:order-1">
               <ChartContainer
                 config={modelChartConfig}
-                className="aspect-auto h-80 w-full"
+                className="aspect-auto h-80 w-full relative"
               >
                 {modelChartData.length > 0 ? (
                   <LineChart
@@ -914,7 +914,7 @@ export default function StatisticsPage() {
                     ))}
                   </LineChart>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
                     No model data available
                   </div>
                 )}

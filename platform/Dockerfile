@@ -82,6 +82,16 @@ ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 RUN apk --no-cache upgrade && \
     # Install PostgreSQL 17, supervisord, and wget (needed for KinD download and health checks)
     apk add --no-cache postgresql17 postgresql17-contrib su-exec wget && \
+    # Patch CVE-2026-23745: Update tar@7.5.2 to tar@7.5.3 in npm's bundled node_modules
+    # This fixes the HIGH severity path traversal vulnerability (CVSS 8.2) before removing npm
+    # The update ensures the patched version exists even in Docker layer history
+    cd /usr/local/lib/node_modules/npm/node_modules && \
+    rm -rf tar && \
+    wget -q https://registry.npmjs.org/tar/-/tar-7.5.3.tgz -O /tmp/tar.tgz && \
+    tar -xzf /tmp/tar.tgz -C . && \
+    mv package tar && \
+    rm /tmp/tar.tgz && \
+    cd / && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625
     rm -rf /usr/local/lib/node_modules/npm && \

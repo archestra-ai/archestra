@@ -2,7 +2,7 @@
 title: Profiles
 category: Archestra Platform
 subcategory: Concepts
-order: 1
+order: 2
 description: Understanding and configuring profiles in Archestra Platform
 lastUpdated: 2025-10-17
 ---

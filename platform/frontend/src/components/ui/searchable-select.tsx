@@ -14,20 +14,24 @@ interface SearchableSelectProps {
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
+  searchPlaceholder?: string;
   items: Array<{ value: string; label: string }>;
   className?: string;
   disabled?: boolean;
   allowCustom?: boolean;
+  showSearchIcon?: boolean;
 }
 
 export function SearchableSelect({
   value,
   onValueChange,
   placeholder = "Select...",
+  searchPlaceholder = "Search...",
   items,
   className,
   disabled = false,
   allowCustom = false,
+  showSearchIcon = true,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -71,14 +75,16 @@ export function SearchableSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[200px] p-0" align="start">
-        <div className="flex items-center border-b px-3 pb-2 pt-3">
-          <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+        <div className="flex items-center border-b px-3 py-2">
+          {showSearchIcon && (
+            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+          )}
           <input
-            placeholder="Search..."
+            placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="flex h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
         <div className="max-h-[300px] overflow-y-auto p-1">
@@ -107,17 +113,17 @@ export function SearchableSelect({
                   setSearchQuery("");
                 }}
                 className={cn(
-                  "relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+                  "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
                   value === item.value && "bg-accent text-accent-foreground",
                 )}
               >
+                <span className="truncate">{item.label}</span>
                 <Check
                   className={cn(
-                    "mr-2 h-4 w-4",
+                    "ml-2 h-4 w-4 shrink-0",
                     value === item.value ? "opacity-100" : "opacity-0",
                   )}
                 />
-                <span className="truncate">{item.label}</span>
               </button>
             ))
           )}

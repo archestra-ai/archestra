@@ -648,6 +648,136 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * Zhipuai implementation of DualLlmClient
+ * Zhipuai exposes an OpenAI-compatible API, so we use the OpenAI SDK with Zhipuai's base URL
+ */
+export class ZhipuaiDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "glm-4.5-flash") {
+    logger.debug({ model }, "[dualLlmClient] Zhipuai: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.zhipuai.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] Zhipuai: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Zhipuai: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] Zhipuai: starting chat with schema",
+    );
+
+    // Zhipuai supports JSON schema via response_format for some models
+    // Try OpenAI-compatible structured output first
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages,
+        response_format: {
+          type: "json_schema",
+          json_schema: schema,
+        },
+        temperature,
+      });
+
+      const content = response.choices[0].message.content || "";
+      logger.debug(
+        { model: this.model, responseLength: content.length },
+        "[dualLlmClient] Zhipuai: chat with schema complete, parsing response",
+      );
+      return JSON.parse(content) as T;
+    } catch (error) {
+      // Fallback to prompt-based approach if structured output not supported
+      logger.debug(
+        {
+          model: this.model,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[dualLlmClient] Zhipuai: structured output not supported, using prompt fallback",
+      );
+
+      const systemPrompt = `You must respond with valid JSON matching this schema:
+${JSON.stringify(schema.schema, null, 2)}
+
+Return only the JSON object, no other text.`;
+
+      const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
+        if (idx === 0 && msg.role === "user") {
+          return {
+            ...msg,
+            content: `${systemPrompt}\n\n${msg.content}`,
+          };
+        }
+        return msg;
+      });
+
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages: enhancedMessages,
+        temperature,
+      });
+
+      const content = response.choices[0].message.content || "";
+      // Strip markdown code blocks if present
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
+        null,
+        content,
+      ];
+      const jsonText = jsonMatch[1].trim();
+
+      try {
+        return JSON.parse(jsonText) as T;
+      } catch (parseError) {
+        logger.error(
+          { model: this.model, content: jsonText, parseError },
+          "[dualLlmClient] Zhipuai: failed to parse JSON response",
+        );
+        throw parseError;
+      }
+    }
+  }
+}
+
+/**
  * Factory function to create the appropriate LLM client
  *
  * @param provider - The LLM provider
@@ -695,6 +825,11 @@ export function createDualLlmClient(
         throw new Error("Model name required for Ollama dual LLM");
       }
       return new OllamaDualLlmClient(apiKey, model);
+    case "zhipuai":
+      if (!apiKey) {
+        throw new Error("API key required for Zhipuai dual LLM");
+      }
+      return new ZhipuaiDualLlmClient(apiKey, model);
     default:
       logger.debug(
         { provider },

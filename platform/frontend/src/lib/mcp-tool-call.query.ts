@@ -8,6 +8,9 @@ const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 
 export function useMcpToolCalls({
   agentId,
+  startDate,
+  endDate,
+  search,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -15,6 +18,9 @@ export function useMcpToolCalls({
   initialData,
 }: {
   agentId?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -24,17 +30,38 @@ export function useMcpToolCalls({
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
 } = {}) {
   return useSuspenseQuery({
-    queryKey: ["mcpToolCalls", agentId, limit, offset, sortBy, sortDirection],
+    queryKey: [
+      "mcpToolCalls",
+      agentId,
+      startDate,
+      endDate,
+      search,
+      limit,
+      offset,
+      sortBy,
+      sortDirection,
+    ],
     queryFn: async () => {
       const response = await getMcpToolCalls({
         query: {
           ...(agentId ? { agentId } : {}),
+          ...(startDate ? { startDate } : {}),
+          ...(endDate ? { endDate } : {}),
+          ...(search ? { search } : {}),
           limit,
           offset,
           ...(sortBy ? { sortBy } : {}),
           sortDirection,
         },
       });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch MCP tool calls",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch MCP tool calls");
+      }
       return response.data;
     },
     // Only use initialData for the first page (offset 0) with default sorting and default limit
@@ -42,7 +69,10 @@ export function useMcpToolCalls({
       offset === 0 &&
       limit === DEFAULT_TABLE_LIMIT &&
       sortBy === "createdAt" &&
-      sortDirection === "desc"
+      sortDirection === "desc" &&
+      !startDate &&
+      !endDate &&
+      !search
         ? initialData
         : undefined,
   });
@@ -59,6 +89,14 @@ export function useMcpToolCall({
     queryKey: ["mcpToolCalls", mcpToolCallId],
     queryFn: async () => {
       const response = await getMcpToolCall({ path: { mcpToolCallId } });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch MCP tool call",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch MCP tool call");
+      }
       return response.data;
     },
     initialData,

@@ -7,6 +7,7 @@ import {
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
@@ -23,7 +24,6 @@ import {
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
 import type { TokenAuthResult } from "@/routes/mcp-gateway.utils";
-import { executeA2AMessage } from "@/services/a2a-executor";
 import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,

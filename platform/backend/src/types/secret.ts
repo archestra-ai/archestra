@@ -9,7 +9,8 @@ import { schema } from "@/database";
 /**
  * The secret column stores authentication data in flexible JSON format:
  * - For OAuth: { "access_token": "...", "refresh_token": "...", "expires_in": ..., "token_type": "Bearer" }
- * - For Personal Access Tokens: { "access_token": "token_value" }
+ * - For Bearer Tokens: { "access_token": "token_value" } (sent as "Authorization: Bearer <token>")
+ * - For Raw Tokens: { "raw_access_token": "token_value" } (sent as "Authorization: <token>")
  *
  * TODO: we should make this a strongly typed discriminated union of the possible secret types...
  */

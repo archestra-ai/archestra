@@ -8,6 +8,7 @@ import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
+import zhipuaiProxyRoutesV2 from "./proxy/routesv2/zhipuai";
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -21,6 +22,7 @@ export { default as chatModelsRoutes } from "./chat/routes.models";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";
+export { default as incomingEmailRoutes } from "./incoming-email";
 export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";
@@ -32,6 +34,7 @@ export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as oauthRoutes } from "./oauth";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
+export { default as organizationRoleRoutes } from "./organization-role";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
 export { default as promptAgentRoutes } from "./prompt-agents";
 export { default as promptRoutes } from "./prompts";
@@ -57,10 +60,13 @@ export const vllmProxyRoutes = config.llm.vllm.useV2Routes
 export const ollamaProxyRoutes = config.llm.ollama.useV2Routes
   ? ollamaProxyRoutesV2
   : ollamaProxyRoutesV2; // Ollama only has V2 since it was added after the unified handler
+// Zhipu AI proxy routes - V2 only (new provider, no legacy v1)
+export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
 export { default as tokenRoutes } from "./token";
 export { default as tokenPriceRoutes } from "./token-price";
 export { default as toolRoutes } from "./tool";
+export { default as userRoutes } from "./user";
 export { default as userTokenRoutes } from "./user-token";

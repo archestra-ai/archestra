@@ -1,9 +1,8 @@
+import { policyConfigSubagent } from "@/agents/subagents";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import { policyConfigSubagent } from "@/subagents";
-import AgentToolModel from "./agent-tool";
 import ChatApiKeyModel from "./chat-api-key";
-import McpServerModel from "./mcp-server";
+import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -23,15 +22,15 @@ interface BulkAutoPolicyResult {
   success: boolean;
   results: Array<
     {
-      agentToolId: string;
+      toolId: string;
     } & AutoPolicyResult
   >;
 }
 
 /**
- * Auto-configure security policies for agent-tool assignments using LLM analysis
+ * Auto-configure security policies tools using LLM analysis
  */
-export class AgentToolAutoPolicyService {
+export class ToolAutoPolicyService {
   /**
    * Check if auto-policy service is available for an organization
    * Requires Anthropic API key to be configured (org-wide scope)
@@ -146,73 +145,59 @@ export class AgentToolAutoPolicyService {
   }
 
   /**
-   * Auto-configure policies for a specific agent-tool assignment
+   * Auto-configure policies for a specific tool
    */
-  async configurePoliciesForAgentTool(
-    agentToolId: string,
+  async configurePoliciesForTool(
+    toolId: string,
     organizationId: string,
   ): Promise<AutoPolicyResult> {
     logger.info(
-      { agentToolId, organizationId },
-      "configurePoliciesForAgentTool: starting",
+      { toolId, organizationId },
+      "configurePoliciesForTool: starting",
     );
 
     // Check if API key is available
     const anthropicApiKey = await this.getAnthropicApiKey(organizationId);
     if (!anthropicApiKey) {
       logger.warn(
-        { agentToolId, organizationId },
-        "configurePoliciesForAgentTool: no API key",
+        { toolId, organizationId },
+        "configurePoliciesForTool: no API key",
       );
       return {
         success: false,
         error:
-          "Default Anthropic chat API key not configured for this organization",
+          "Organization-wide Anthropic API key not configured in LLM API Keys settings",
       };
     }
 
     try {
-      // Get agent-tool assignment with tool details
-      const agentTools = await AgentToolModel.findAll({ skipPagination: true });
-      const assignment = agentTools.data.find((at) => at.id === agentToolId);
+      // Get all tools as admin to bypass access control
+      const tools = await ToolModel.findAll(undefined, true);
+      const tool = tools.find((t) => t.id === toolId);
 
-      if (!assignment) {
-        logger.warn(
-          { agentToolId },
-          "configurePoliciesForAgentTool: assignment not found",
-        );
+      if (!tool) {
+        logger.warn({ toolId }, "configurePoliciesForTool: tool not found");
         return {
           success: false,
-          error: "Agent-tool assignment not found",
+          error: "Tool not found",
         };
       }
 
-      // Get MCP server name if available
-      let mcpServerName: string | null = null;
-      if (assignment.tool.mcpServerId) {
-        const mcpServer = await McpServerModel.findById(
-          assignment.tool.mcpServerId,
-        );
-        mcpServerName = mcpServer?.name || null;
-      }
+      // Get MCP server name from joined data
+      const mcpServerName = tool.mcpServer?.name || null;
 
       logger.debug(
-        { agentToolId, toolName: assignment.tool.name, mcpServerName },
-        "configurePoliciesForAgentTool: fetched tool details",
+        { toolId, toolName: tool.name, mcpServerName },
+        "configurePoliciesForTool: fetched tool details",
       );
 
       // Analyze tool and get policy configuration using PolicyConfigSubagent
       const policyConfig = await this.analyzeTool(
-        {
-          ...assignment.tool,
-          agentId: null, // Tools from agent assignments don't have agentId field
-        },
+        tool,
         mcpServerName,
         anthropicApiKey,
         organizationId,
       );
-
-      const toolId = assignment.tool.id;
 
       // Create/upsert call policy (tool invocation policy)
       const callPolicyAction = policyConfig.allowUsageWhenUntrustedDataIsPresent
@@ -236,15 +221,15 @@ export class AgentToolAutoPolicyService {
         resultPolicyAction,
       );
 
-      // Update agent-tool with timestamps and reasoning for tracking
-      await AgentToolModel.update(agentToolId, {
+      // Update tool with timestamps and reasoning for tracking
+      await ToolModel.update(toolId, {
         policiesAutoConfiguredAt: new Date(),
         policiesAutoConfiguredReasoning: policyConfig.reasoning,
       });
 
       logger.info(
-        { agentToolId, toolId, policyConfig },
-        "configurePoliciesForAgentTool: policies created successfully",
+        { toolId, policyConfig },
+        "configurePoliciesForTool: policies created successfully",
       );
 
       return {
@@ -257,12 +242,12 @@ export class AgentToolAutoPolicyService {
       const errorStack = error instanceof Error ? error.stack : undefined;
       logger.error(
         {
-          agentToolId,
+          toolId,
           organizationId,
           error: errorMessage,
           stack: errorStack,
         },
-        "configurePoliciesForAgentTool: failed to auto-configure policies",
+        "configurePoliciesForTool: failed to auto-configure policies",
       );
       return {
         success: false,
@@ -272,11 +257,11 @@ export class AgentToolAutoPolicyService {
   }
 
   /**
-   * Configure a single agent-tool with timeout and loading state management
+   * Configure a single tool with timeout and loading state management
    * This is the unified method used by both manual button clicks and automatic tool assignment
    */
-  async configurePoliciesForAgentToolWithTimeout(
-    agentToolId: string,
+  async configurePoliciesForToolWithTimeout(
+    toolId: string,
     organizationId: string,
   ): Promise<AutoPolicyResult & { timedOut?: boolean }> {
     const db = (await import("@/database")).default;
@@ -284,16 +269,16 @@ export class AgentToolAutoPolicyService {
     const { eq } = await import("drizzle-orm");
 
     logger.info(
-      { agentToolId, organizationId },
-      "configurePoliciesForAgentToolWithTimeout: starting",
+      { toolId, organizationId },
+      "configurePoliciesForToolWithTimeout: starting",
     );
 
     try {
       // Set loading timestamp to show loading state in UI
       await db
-        .update(schema.agentToolsTable)
+        .update(schema.toolsTable)
         .set({ policiesAutoConfiguringStartedAt: new Date() })
-        .where(eq(schema.agentToolsTable.id, agentToolId));
+        .where(eq(schema.toolsTable.id, toolId));
 
       // Create a 10-second timeout promise
       const timeoutPromise = new Promise<{
@@ -312,9 +297,10 @@ export class AgentToolAutoPolicyService {
 
       // Race between auto-configure and timeout
       const result = await Promise.race([
-        this.configurePoliciesForAgentTool(agentToolId, organizationId).then(
-          (res) => ({ ...res, timedOut: false }),
-        ),
+        this.configurePoliciesForTool(toolId, organizationId).then((res) => ({
+          ...res,
+          timedOut: false,
+        })),
         timeoutPromise,
       ]);
 
@@ -322,43 +308,43 @@ export class AgentToolAutoPolicyService {
       if (result.timedOut) {
         // Just clear the loading timestamp, let background operation continue
         await db
-          .update(schema.agentToolsTable)
+          .update(schema.toolsTable)
           .set({ policiesAutoConfiguringStartedAt: null })
-          .where(eq(schema.agentToolsTable.id, agentToolId));
+          .where(eq(schema.toolsTable.id, toolId));
 
         logger.warn(
-          { agentToolId, organizationId },
-          "configurePoliciesForAgentToolWithTimeout: timed out, continuing in background",
+          { toolId, organizationId },
+          "configurePoliciesForToolWithTimeout: timed out, continuing in background",
         );
       } else if (result.success) {
-        // Success - clear loading timestamp (policiesAutoConfiguredAt already set by configurePoliciesForAgentTool)
+        // Success - clear loading timestamp (policiesAutoConfiguredAt already set by configurePoliciesForTool)
         await db
-          .update(schema.agentToolsTable)
+          .update(schema.toolsTable)
           .set({ policiesAutoConfiguringStartedAt: null })
-          .where(eq(schema.agentToolsTable.id, agentToolId));
+          .where(eq(schema.toolsTable.id, toolId));
 
         logger.info(
-          { agentToolId, organizationId },
-          "configurePoliciesForAgentToolWithTimeout: completed successfully",
+          { toolId, organizationId },
+          "configurePoliciesForToolWithTimeout: completed successfully",
         );
       } else {
         // Failed - clear both timestamps and reasoning
         await db
-          .update(schema.agentToolsTable)
+          .update(schema.toolsTable)
           .set({
             policiesAutoConfiguringStartedAt: null,
             policiesAutoConfiguredAt: null,
             policiesAutoConfiguredReasoning: null,
           })
-          .where(eq(schema.agentToolsTable.id, agentToolId));
+          .where(eq(schema.toolsTable.id, toolId));
 
         logger.warn(
           {
-            agentToolId,
+            toolId,
             organizationId,
             error: result.error,
           },
-          "configurePoliciesForAgentToolWithTimeout: failed",
+          "configurePoliciesForToolWithTimeout: failed",
         );
       }
 
@@ -366,13 +352,13 @@ export class AgentToolAutoPolicyService {
     } catch (error) {
       // On error, clear both timestamps and reasoning
       await db
-        .update(schema.agentToolsTable)
+        .update(schema.toolsTable)
         .set({
           policiesAutoConfiguringStartedAt: null,
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.agentToolsTable.id, agentToolId))
+        .where(eq(schema.toolsTable.id, toolId))
         .catch(() => {
           /* ignore cleanup errors */
         });
@@ -380,8 +366,8 @@ export class AgentToolAutoPolicyService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       logger.error(
-        { agentToolId, organizationId, error: errorMessage },
-        "configurePoliciesForAgentToolWithTimeout: unexpected error",
+        { toolId, organizationId, error: errorMessage },
+        "configurePoliciesForToolWithTimeout: unexpected error",
       );
 
       return {
@@ -392,16 +378,16 @@ export class AgentToolAutoPolicyService {
   }
 
   /**
-   * Auto-configure policies for multiple agent-tool assignments in bulk
+   * Auto-configure policies for multiple tools in bulk
    * Uses the unified timeout logic for consistent behavior
    */
-  async configurePoliciesForAgentTools(
-    agentToolIds: string[],
+  async configurePoliciesForTools(
+    toolIds: string[],
     organizationId: string,
   ): Promise<BulkAutoPolicyResult> {
     logger.info(
-      { organizationId, count: agentToolIds.length },
-      "configurePoliciesForAgentTools: starting bulk auto-configure",
+      { organizationId, count: toolIds.length },
+      "configurePoliciesForTools: starting bulk auto-configure",
     );
 
     // Check if API key is available
@@ -409,32 +395,32 @@ export class AgentToolAutoPolicyService {
     if (!available) {
       logger.warn(
         { organizationId },
-        "configurePoliciesForAgentTools: service not available",
+        "configurePoliciesForTools: service not available",
       );
       return {
         success: false,
-        results: agentToolIds.map((id) => ({
-          agentToolId: id,
+        results: toolIds.map((id) => ({
+          toolId: id,
           success: false,
           error:
-            "Default Anthropic chat API key not configured for this organization",
+            "Organization-wide Anthropic API key not configured in LLM API Keys settings",
         })),
       };
     }
 
     // Process all tools in parallel using the unified timeout logic
     logger.info(
-      { organizationId, count: agentToolIds.length },
-      "configurePoliciesForAgentTools: processing tools in parallel",
+      { organizationId, count: toolIds.length },
+      "configurePoliciesForTools: processing tools in parallel",
     );
     const results = await Promise.all(
-      agentToolIds.map(async (agentToolId) => {
-        const result = await this.configurePoliciesForAgentToolWithTimeout(
-          agentToolId,
+      toolIds.map(async (toolId) => {
+        const result = await this.configurePoliciesForToolWithTimeout(
+          toolId,
           organizationId,
         );
         return {
-          agentToolId,
+          toolId,
           ...result,
         };
       }),
@@ -452,7 +438,7 @@ export class AgentToolAutoPolicyService {
         failureCount,
         allSuccess,
       },
-      "configurePoliciesForAgentTools: bulk auto-configure completed",
+      "configurePoliciesForTools: bulk auto-configure completed",
     );
 
     return {
@@ -463,4 +449,4 @@ export class AgentToolAutoPolicyService {
 }
 
 // Singleton instance
-export const agentToolAutoPolicyService = new AgentToolAutoPolicyService();
+export const toolAutoPolicyService = new ToolAutoPolicyService();

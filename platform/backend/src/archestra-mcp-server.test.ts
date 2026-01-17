@@ -158,8 +158,7 @@ describe("executeArchestraTool", () => {
       expect((result.content[0] as any).text).toContain("Test Server");
     });
 
-    test("should return empty message when no items found", async () => {
-      // No items created, so search should return empty
+    test("should return empty result when no catalog items exist", async () => {
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         undefined,
@@ -167,8 +166,26 @@ describe("executeArchestraTool", () => {
       );
 
       expect(result.isError).toBe(false);
-
       expect((result.content[0] as any).text).toContain("No MCP servers found");
+    });
+
+    test("should include Archestra catalog when seeded", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      // Seed Archestra catalog
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        undefined,
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain("Archestra");
+      expect((result.content[0] as any).text).toContain("builtin");
     });
 
     test("should handle search with query parameter", async ({

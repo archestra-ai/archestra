@@ -54,6 +54,8 @@ interface ChatApiKeySelectorProps {
   onProviderChange?: (provider: SupportedChatProvider) => void;
   /** Current provider (derived from selected model) - used to detect provider changes */
   currentProvider?: SupportedChatProvider;
+  /** Callback when the selector opens or closes */
+  onOpenChange?: (open: boolean) => void;
 }
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
@@ -76,6 +78,7 @@ export function ChatApiKeySelector({
   onApiKeyChange,
   onProviderChange,
   currentProvider,
+  onOpenChange,
 }: ChatApiKeySelectorProps) {
   // Fetch ALL available API keys (no provider filter)
   const { data: availableKeys = [], isLoading } = useAvailableChatApiKeys();
@@ -97,6 +100,10 @@ export function ChatApiKeySelector({
 
   const [pendingKeyId, setPendingKeyId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen);
+    onOpenChange?.(newOpen);
+  };
   // Track if we've already auto-selected to prevent infinite loops
   const hasAutoSelectedRef = useRef(false);
 
@@ -227,7 +234,7 @@ export function ChatApiKeySelector({
 
   const handleSelectKey = (keyId: string) => {
     if (keyId === currentConversationChatApiKeyId) {
-      setOpen(false);
+      handleOpenChange(false);
       return;
     }
 
@@ -237,7 +244,7 @@ export function ChatApiKeySelector({
     } else {
       applyKeyChange(keyId);
     }
-    setOpen(false);
+    handleOpenChange(false);
   };
 
   const applyKeyChange = (keyId: string) => {
@@ -296,7 +303,7 @@ export function ChatApiKeySelector({
 
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <PromptInputButton disabled={disabled}>
             <Key className="h-3.5 w-3.5" />
@@ -371,7 +378,12 @@ export function ChatApiKeySelector({
       {/* Mid-conversation warning dialog */}
       <AlertDialog
         open={!!pendingKeyId}
-        onOpenChange={(open) => !open && handleCancelChange()}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancelChange();
+            onOpenChange?.(false);
+          }
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>

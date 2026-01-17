@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "allow_chat_file_uploads" boolean DEFAULT true NOT NULL;

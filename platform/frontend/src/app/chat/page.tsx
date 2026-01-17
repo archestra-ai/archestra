@@ -58,6 +58,7 @@ import {
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
+import { useOrganization } from "@/lib/organization.query";
 import {
   applyPendingActions,
   clearPendingActions,
@@ -98,9 +99,13 @@ export default function ChatPage() {
   });
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
+  const pendingFilesRef = useRef<
+    Array<{ url: string; mediaType: string; filename?: string }>
+  >([]);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const autoSendTriggeredRef = useRef(false);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -210,6 +215,7 @@ export default function ChatPage() {
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   // vLLM/Ollama may not require an API key either
@@ -236,6 +242,11 @@ export default function ChatPage() {
       }
     }
   }, [searchParams, conversationId]);
+
+  // Get user_prompt from URL for auto-sending
+  const initialUserPrompt = useMemo(() => {
+    return searchParams.get("user_prompt") || undefined;
+  }, [searchParams]);
 
   // Update URL when conversation changes
   const selectConversation = useCallback(
@@ -492,13 +503,38 @@ export default function ChatPage() {
       setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
 
-      // If there's a pending prompt and the conversation is empty, send it
-      if (pendingPromptRef.current && conversation.messages.length === 0) {
+      // If there's a pending prompt/files and the conversation is empty, send it
+      if (
+        (pendingPromptRef.current || pendingFilesRef.current.length > 0) &&
+        conversation.messages.length === 0
+      ) {
         const promptToSend = pendingPromptRef.current;
+        const filesToSend = pendingFilesRef.current;
         pendingPromptRef.current = undefined;
+        pendingFilesRef.current = [];
+
+        // Build message parts
+        const parts: Array<
+          | { type: "text"; text: string }
+          | { type: "file"; url: string; mediaType: string; filename?: string }
+        > = [];
+
+        if (promptToSend) {
+          parts.push({ type: "text", text: promptToSend });
+        }
+
+        for (const file of filesToSend) {
+          parts.push({
+            type: "file",
+            url: file.url,
+            mediaType: file.mediaType,
+            filename: file.filename,
+          });
+        }
+
         sendMessage({
           role: "user",
-          parts: [{ type: "text", text: promptToSend }],
+          parts,
         });
       }
     }
@@ -587,18 +623,43 @@ export default function ChatPage() {
       stop?.();
     }
 
+    const hasText = message.text?.trim();
+    const hasFiles = message.files && message.files.length > 0;
+
     if (
       !sendMessage ||
-      !message.text?.trim() ||
+      (!hasText && !hasFiles) ||
       status === "submitted" ||
       status === "streaming"
     ) {
       return;
     }
 
+    // Build message parts: text first, then file attachments
+    const parts: Array<
+      | { type: "text"; text: string }
+      | { type: "file"; url: string; mediaType: string; filename?: string }
+    > = [];
+
+    if (hasText) {
+      parts.push({ type: "text", text: message.text as string });
+    }
+
+    // Add file parts
+    if (hasFiles) {
+      for (const file of message.files) {
+        parts.push({
+          type: "file",
+          url: file.url,
+          mediaType: file.mediaType,
+          filename: file.filename,
+        });
+      }
+    }
+
     sendMessage?.({
       role: "user",
-      parts: [{ type: "text", text: message.text }],
+      parts,
     });
   };
 
@@ -615,17 +676,21 @@ export default function ChatPage() {
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
     (message, e) => {
       e.preventDefault();
+      const hasText = message.text?.trim();
+      const hasFiles = message.files && message.files.length > 0;
+
       if (
-        !message.text?.trim() ||
+        (!hasText && !hasFiles) ||
         !initialAgentId ||
-        !initialModel ||
+        // !initialModel ||
         createConversationMutation.isPending
       ) {
         return;
       }
 
-      // Store the message to send after conversation is created
-      pendingPromptRef.current = message.text;
+      // Store the message (text and files) to send after conversation is created
+      pendingPromptRef.current = message.text || "";
+      pendingFilesRef.current = message.files || [];
 
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(
@@ -701,6 +766,62 @@ export default function ChatPage() {
     ],
   );
 
+  // Auto-send message from URL when conditions are met (deep link support)
+  useEffect(() => {
+    // Skip if already triggered or no user_prompt in URL
+    if (autoSendTriggeredRef.current || !initialUserPrompt) return;
+
+    // Skip if conversation already exists
+    if (conversationId) return;
+
+    // Wait for agent to be ready.
+    if (!initialAgentId) return;
+
+    // Skip if mutation is already in progress
+    if (createConversationMutation.isPending) return;
+
+    // Mark as triggered to prevent duplicate sends
+    autoSendTriggeredRef.current = true;
+
+    // Store the message to send after conversation is created
+    pendingPromptRef.current = initialUserPrompt;
+
+    // Find the provider for the initial model
+    const modelInfo = chatModels.find((m) => m.id === initialModel);
+    const selectedProvider = modelInfo?.provider as
+      | SupportedChatProvider
+      | undefined;
+
+    // Create conversation and send message
+    createConversationMutation.mutate(
+      {
+        agentId: initialAgentId,
+        selectedModel: initialModel,
+        selectedProvider,
+        promptId: initialPromptId ?? undefined,
+        chatApiKeyId: initialApiKeyId,
+      },
+      {
+        onSuccess: (newConversation) => {
+          if (newConversation) {
+            newlyCreatedConversationRef.current = newConversation.id;
+            selectConversation(newConversation.id);
+          }
+        },
+      },
+    );
+  }, [
+    initialUserPrompt,
+    conversationId,
+    initialAgentId,
+    initialModel,
+    initialPromptId,
+    initialApiKeyId,
+    chatModels,
+    createConversationMutation,
+    selectConversation,
+  ]);
+
   // Determine which agent ID to use for prompt input
   const activeAgentId = conversationId
     ? conversation?.agent?.id
@@ -765,26 +886,33 @@ export default function ChatPage() {
           <StreamTimeoutWarning status={status} messages={messages} />
           <PermissivePolicyBar />
 
-          <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {/* Agent/Profile selector */}
-              {conversationId ? (
-                <AgentSelector
-                  currentPromptId={conversation?.promptId ?? null}
-                  currentAgentId={conversation?.agentId ?? ""}
-                  currentModel={conversation?.selectedModel ?? ""}
-                />
-              ) : (
-                <InitialAgentSelector
-                  currentPromptId={initialPromptId}
-                  onPromptChange={handleInitialPromptChange}
-                  defaultAgentId={initialAgentId ?? allProfiles[0]?.id ?? ""}
-                />
-              )}
+          <div className="sticky top-0 z-10 bg-background border-b p-2">
+            <div className="flex items-start justify-between gap-2">
+              {/* Left side - agent selector stays fixed, tools wrap internally */}
+              <div className="flex items-start gap-2 min-w-0 flex-1">
+                {/* Agent/Profile selector - fixed width */}
+                <div className="flex-shrink-0">
+                  {conversationId ? (
+                    <AgentSelector
+                      currentPromptId={conversation?.promptId ?? null}
+                      currentAgentId={conversation?.agentId ?? ""}
+                      currentModel={conversation?.selectedModel ?? ""}
+                    />
+                  ) : (
+                    <InitialAgentSelector
+                      currentPromptId={initialPromptId}
+                      onPromptChange={handleInitialPromptChange}
+                      defaultAgentId={
+                        initialAgentId ?? allProfiles[0]?.id ?? ""
+                      }
+                    />
+                  )}
+                </div>
 
-              {/* Agent tools display - pending actions stored in localStorage until first message */}
-              {(conversationId ? conversation?.promptId : initialPromptId) && (
-                <>
+                {/* Agent tools display - wraps internally, takes remaining space */}
+                {(conversationId
+                  ? conversation?.promptId
+                  : initialPromptId) && (
                   <AgentToolsDisplay
                     agentId={
                       conversationId
@@ -797,68 +925,71 @@ export default function ChatPage() {
                         : initialPromptId
                     }
                     conversationId={conversationId}
+                    addAgentsButton={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 gap-1.5 text-xs border-dashed"
+                        onClick={() => {
+                          const promptIdToEdit = conversationId
+                            ? conversation?.promptId
+                            : initialPromptId;
+                          if (promptIdToEdit) {
+                            setEditingPromptId(promptIdToEdit);
+                            setIsPromptDialogOpen(true);
+                          }
+                        }}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add agents
+                      </Button>
+                    }
                   />
+                )}
+              </div>
+              {/* Right side - controls stay fixed in first row */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {hasPlaywrightMcp && isBrowserStreamingEnabled && (
                   <Button
-                    variant="outline"
+                    variant={isBrowserPanelOpen ? "secondary" : "ghost"}
                     size="sm"
-                    className="h-7 px-2 gap-1.5 text-xs border-dashed"
-                    onClick={() => {
-                      const promptIdToEdit = conversationId
-                        ? conversation?.promptId
-                        : initialPromptId;
-                      if (promptIdToEdit) {
-                        setEditingPromptId(promptIdToEdit);
-                        setIsPromptDialogOpen(true);
-                      }
-                    }}
+                    onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
+                    className="text-xs"
                   >
-                    <Plus className="h-3 w-3" />
-                    Add agents
+                    <Globe className="h-3 w-3 mr-1" />
+                    Browser
                   </Button>
-                </>
-              )}
-            </div>
-            <div className="flex-1 flex justify-end gap-2 items-center">
-              {hasPlaywrightMcp && isBrowserStreamingEnabled && (
-                <Button
-                  variant={isBrowserPanelOpen ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
-                  className="text-xs"
-                >
-                  <Globe className="h-3 w-3 mr-1" />
-                  Browser
-                </Button>
-              )}
-              {!isArtifactOpen && (
+                )}
+                {!isArtifactOpen && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleArtifactPanel}
+                    className="text-xs"
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    Show Artifact
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={toggleArtifactPanel}
+                  onClick={toggleHideToolCalls}
                   className="text-xs"
                 >
-                  <FileText className="h-3 w-3 mr-1" />
-                  Show Artifact
+                  {hideToolCalls ? (
+                    <>
+                      <Eye className="h-3 w-3 mr-1" />
+                      Show tool calls
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      Hide tool calls
+                    </>
+                  )}
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleHideToolCalls}
-                className="text-xs"
-              >
-                {hideToolCalls ? (
-                  <>
-                    <Eye className="h-3 w-3 mr-1" />
-                    Show tool calls
-                  </>
-                ) : (
-                  <>
-                    <EyeOff className="h-3 w-3 mr-1" />
-                    Hide tool calls
-                  </>
-                )}
-              </Button>
+              </div>
             </div>
           </div>
 
@@ -1092,6 +1223,7 @@ export default function ChatPage() {
                       ? (conversation?.promptId ?? null)
                       : initialPromptId
                   }
+                  allowFileUploads={organization?.allowChatFileUploads ?? false}
                 />
                 <div className="text-center">
                   <Version inline />

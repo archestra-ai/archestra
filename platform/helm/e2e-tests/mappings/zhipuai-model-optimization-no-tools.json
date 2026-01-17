@@ -1,0 +1,43 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/zhipuai/v4/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "zhipuai-model-optimization-no-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-zhipuai-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "20260114011737450622882b094142",
+      "object": "chat.completion",
+      "created": 1768324666,
+      "model": "e2e-test-zhipuai-baseline",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Response without tools."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 150,
+        "completion_tokens": 8,
+        "total_tokens": 158
+      }
+    }
+  }
+}

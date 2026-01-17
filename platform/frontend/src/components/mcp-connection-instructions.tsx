@@ -542,8 +542,10 @@ export function McpConnectionInstructions({
         </div>
 
         <p className="text-sm text-muted-foreground">
-          The host/port is configurable via the{" "}
-          <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText>{" "}
+          The URL is configurable via the{" "}
+          <CodeText className="text-xs">
+            ARCHESTRA_API_EXTERNAL_BASE_URL
+          </CodeText>{" "}
           environment variable. See{" "}
           <a
             href="https://archestra.ai/docs/platform-deployment#environment-variables"

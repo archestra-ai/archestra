@@ -1,4 +1,5 @@
 import { expect, test } from "./fixtures";
+import { assignArchestraToolsToProfile } from "./mcp-gateway-utils";
 
 test.describe("Agent Tools API", () => {
   test.describe("GET /api/agent-tools", () => {
@@ -68,6 +69,13 @@ test.describe("Agent Tools API", () => {
       );
       const agent = await agentResponse.json();
 
+      // Assign Archestra tools to the agent so we have tools to test with
+      const assignedTools = await assignArchestraToolsToProfile(
+        request,
+        agent.id,
+      );
+      expect(assignedTools.length).toBeGreaterThan(0);
+
       // Query agent tools with skipPagination=true
       const response = await makeApiRequest({
         request,
@@ -84,6 +92,8 @@ test.describe("Agent Tools API", () => {
       expect(result.pagination.hasNext).toBe(false);
       // All data should be returned
       expect(result.pagination.total).toBe(result.data.length);
+      // Verify we have the tools we assigned
+      expect(result.data.length).toBe(assignedTools.length);
     });
 
     test("skipPagination respects other filters like agentId", async ({

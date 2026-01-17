@@ -1,5 +1,6 @@
 "use client";
 
+import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
 import { ChevronDown, ChevronRight, Layers, User } from "lucide-react";
 import { useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
@@ -50,11 +51,14 @@ export function ToolDetailsDialog({
     (item) => item.id === tool.catalogId,
   );
 
+  // Check if this is a built-in Archestra tool (no credentials required)
+  const isBuiltinArchestraTool = tool.catalogId === ARCHESTRA_MCP_CATALOG_ID;
+
   // Helper to get credential display text
   // Backend returns null for emails when user doesn't have access to the credential's MCP server
   const getCredentialDisplay = (assignment: (typeof tool.assignments)[0]) => {
     if (assignment.useDynamicTeamCredential) {
-      return "Team Credential";
+      return "Resolve at call time";
     }
 
     // Get the credential server ID (remote or local)
@@ -62,9 +66,9 @@ export function ToolDetailsDialog({
       assignment.credentialSourceMcpServerId ||
       assignment.executionSourceMcpServerId;
 
-    // If no credential server, no credential is set
+    // If no credential server, check if it's a built-in tool
     if (!credentialServerId) {
-      return "—";
+      return isBuiltinArchestraTool ? "Not required" : "—";
     }
 
     // Backend returns email if user has access, null if not

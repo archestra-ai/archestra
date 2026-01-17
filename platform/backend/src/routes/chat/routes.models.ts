@@ -1,13 +1,7 @@
-import {
-  RouteId,
-  type SupportedProvider,
-  SupportedProviders,
-  TimeInMs,
-} from "@shared";
+import { RouteId, type SupportedProvider, SupportedProviders } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
@@ -23,10 +17,6 @@ import {
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
-
-/** TTL for caching chat models from provider APIs */
-const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
-const CHAT_MODELS_CACHE_TTL_HOURS = CHAT_MODELS_CACHE_TTL_MS / TimeInMs.Hour;
 
 // Response schema for models
 const ChatModelSchema = z.object({
@@ -328,6 +318,93 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Zhipuai API
+ */
+async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.zhipuai.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Zhipuai models",
+    );
+    throw new Error(`Failed to fetch Zhipuai models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  // Filter to chat-compatible models
+  // Include: glm-, chatglm- models (including vision variants)
+  // Exclude: -embedding models only
+  const chatModelPrefixes = ["glm-", "chatglm-"];
+  const excludePatterns = ["-embedding"];
+
+  const apiModels = data.data
+    .filter((model) => {
+      const id = model.id.toLowerCase();
+      // Must start with a chat model prefix
+      const hasValidPrefix = chatModelPrefixes.some((prefix) =>
+        id.startsWith(prefix),
+      );
+      if (!hasValidPrefix) return false;
+
+      // Must not contain excluded patterns
+      const hasExcludedPattern = excludePatterns.some((pattern) =>
+        id.includes(pattern),
+      );
+      return !hasExcludedPattern;
+    })
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "zhipuai" as const,
+      createdAt: new Date(model.created * 1000).toISOString(),
+    }));
+
+  // Add common free/flash models that may not be listed in /models endpoint
+  // These models are available for use but sometimes not returned by the API
+  const freeModels: ModelInfo[] = [
+    {
+      id: "glm-4.5-flash",
+      displayName: "glm-4.5-flash",
+      provider: "zhipuai" as const,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  // Combine API models with free models, avoiding duplicates
+  // Free models go first since they're the fastest/lightest
+  const existingIds = new Set(apiModels.map((m) => m.id.toLowerCase()));
+  const allModels = [];
+
+  // Add free models first (they appear at the top)
+  for (const freeModel of freeModels) {
+    if (!existingIds.has(freeModel.id.toLowerCase())) {
+      allModels.push(freeModel);
+    }
+  }
+
+  // Then add API models
+  allModels.push(...apiModels);
+
+  return allModels;
+}
+
+/**
  * Fetch models from Gemini API via Vertex AI SDK
  * Uses Application Default Credentials (ADC) for authentication
  *
@@ -444,6 +521,8 @@ async function getProviderApiKey({
     case "ollama":
       // Ollama typically doesn't require API keys, return empty or configured key
       return config.chat.ollama.apiKey || "";
+    case "zhipuai":
+      return config.chat.zhipuai?.apiKey || null;
     default:
       return null;
   }
@@ -460,6 +539,7 @@ const modelFetchers: Record<
   openai: fetchOpenAiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
+  zhipuai: fetchZhipuaiModels,
 };
 
 /**
@@ -506,16 +586,6 @@ export async function fetchModelsForProvider({
     return [];
   }
 
-  // Cache key for Vertex AI doesn't include API key since it uses ADC
-  const cacheKey = vertexAiEnabled
-    ? (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-vertexai` as const)
-    : (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-${apiKey?.slice(0, 6)}` as const);
-  const cachedModels = await cacheManager.get<ModelInfo[]>(cacheKey);
-
-  if (cachedModels) {
-    return cachedModels;
-  }
-
   try {
     let models: ModelInfo[] = [];
     if (["anthropic", "cerebras", "openai"].includes(provider)) {
@@ -536,13 +606,25 @@ export async function fetchModelsForProvider({
     } else if (provider === "ollama") {
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
+    } else if (provider === "zhipuai") {
+      if (apiKey) {
+        models = await modelFetchers[provider](apiKey);
+      }
     }
-    await cacheManager.set(cacheKey, models, CHAT_MODELS_CACHE_TTL_MS);
+    logger.info(
+      { provider, modelCount: models.length },
+      "fetchModelsForProvider:fetched models from provider",
+    );
     return models;
   } catch (error) {
     logger.error(
-      { provider, organizationId, error },
-      "Error fetching models from provider",
+      {
+        provider,
+        organizationId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      },
+      "fetchModelsForProvider:error fetching models from provider",
     );
     return [];
   }
@@ -555,7 +637,8 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetChatModels,
-        description: `Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for ${CHAT_MODELS_CACHE_TTL_HOURS} hours.`,
+        description:
+          "Get available LLM models from all configured providers. Models are fetched directly from provider APIs.",
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedChatProviderSchema.optional(),

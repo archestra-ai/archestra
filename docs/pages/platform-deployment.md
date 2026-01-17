@@ -486,11 +486,25 @@ The following environment variables can be used to configure Archestra Platform:
   - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
   - Required for production deployments with external database
 
-- **`ARCHESTRA_API_BASE_URL`** - Base URL for the Archestra API proxy. This is where your agents should connect to instead of the LLM provider directly.
+- **`ARCHESTRA_API_BASE_URL`** - Internal URL where the frontend connects to the backend API server.
 
   - Default: `http://localhost:9000`
-  - Example: `http://localhost:9001` or `https://api.example.com`
-  - Note: This configures both the port where the backend API server listens (parsed from the URL) and the base URL that the frontend uses to connect to the backend
+  - Example: `http://localhost:9001` or `https://api.internal.example.com`
+  - Note: The backend parses the port from this URL to determine its listening port. In Kubernetes deployments, this is typically the internal service URL (e.g., `http://archestra-backend:9000`). For external access URLs shown in the UI, use `ARCHESTRA_API_EXTERNAL_BASE_URL` instead.
+
+- **`ARCHESTRA_API_EXTERNAL_BASE_URL`** - Public URL for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway from outside the Kubernetes cluster.
+
+  This URL is displayed in the UI connection instructions to help users configure their agents. It does not affect internal routing.
+
+  - Default: Falls back to `ARCHESTRA_API_BASE_URL`
+  - Example: `https://api.archestra.com`
+  - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
+
+- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
+
+  - Default: `50MB` (52428800 bytes)
+  - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
+  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
 
 - **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
 
@@ -675,5 +689,74 @@ The following environment variables can be used to configure Archestra Platform:
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
+- **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Default LLM provider for Chat and A2A features.
+
+  - Default: `anthropic`
+  - Options: `anthropic`, `openai`, `gemini`
+  - Used when no profile-specific provider is configured
+
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
   - Please reach out to <sales@archestra.ai> to learn more about the license.
+
+### Incoming Email Configuration
+
+These environment variables configure the Incoming Email feature, which allows external users to invoke agents by sending emails. See [Agents - Incoming Email](/docs/platform-agents#incoming-email) for setup instructions.
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER`** - Email provider to use for incoming email.
+
+  - Default: Not set (feature disabled)
+  - Options: `outlook`
+  - Required to enable the incoming email feature
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID`** - Azure AD tenant ID for Microsoft Graph API.
+
+  - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
+  - Example: `e6ec2dea-2205-4e2f-afb6-f83e5f588f40`
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID`** - Azure AD application (client) ID.
+
+  - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
+  - Example: `8d184f86-d6a1-4fd6-8783-b2f4931be17b`
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET`** - Azure AD application client secret.
+
+  - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
+  - Note: Keep this value secure; do not commit to version control
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS`** - Email address of the mailbox to monitor.
+
+  - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
+  - Example: `agents@yourcompany.com`
+  - This mailbox receives all agent-bound emails via plus-addressing
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN`** - Override the email domain for agent addresses.
+
+  - Optional: Defaults to domain extracted from `ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS`
+  - Example: `yourcompany.com`
+
+- **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL`** - Public webhook URL for Microsoft Graph notifications.
+
+  - Optional: If set, subscription is created automatically on server startup
+  - Example: `https://api.yourcompany.com/api/webhooks/incoming-email`
+  - If not set, configure the subscription manually via Settings > Incoming Email
+
+### Knowledge Graph Configuration
+
+These environment variables configure the Knowledge Graph feature, which automatically ingests documents uploaded via chat into a knowledge graph for enhanced retrieval. See [Knowledge Graphs](/docs/platform-knowledge-graphs) for setup instructions.
+
+- **`ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER`** - Knowledge graph provider to use.
+
+  - Default: Not set (feature disabled)
+  - Options: `lightrag`
+  - Required to enable the knowledge graph feature
+
+- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL`** - URL of the LightRAG API server.
+
+  - Required when: `ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER=lightrag`
+  - Example: `http://lightrag:9621`
+  - The LightRAG server must be accessible from the Archestra backend
+
+- **`ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY`** - API key for authenticating with LightRAG.
+
+  - Optional: Only required if your LightRAG server is configured with authentication
+  - Note: Keep this value secure; do not commit to version control

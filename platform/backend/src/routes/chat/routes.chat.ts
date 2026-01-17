@@ -11,7 +11,12 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import {
+  createLLMModelForAgent,
+  detectProviderFromModel,
+} from "@/clients/llm-client";
 import config from "@/config";
+import { extractAndIngestDocuments } from "@/knowledge-graph/chat-document-extractor";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -29,10 +34,6 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { browserStreamFeature } from "@/services/browser-stream-feature";
-import {
-  createLLMModelForAgent,
-  detectProviderFromModel,
-} from "@/services/llm-client";
 import {
   ApiError,
   constructResponseSchema,
@@ -107,6 +108,9 @@ async function getSmartDefaultModel(
 
   // Check if Vertex AI is enabled - use Gemini without API key
   if (isVertexAiEnabled()) {
+    logger.info(
+      "getSmartDefaultModel:Vertex AI is enabled, using gemini-2.5-pro",
+    );
     return { model: "gemini-2.5-pro", provider: "gemini" };
   }
 
@@ -121,6 +125,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/chat",
     {
+      bodyLimit: config.api.bodyLimit,
       schema: {
         operationId: RouteId.StreamChat,
         description: "Stream chat response with MCP tools (useChat format)",
@@ -138,6 +143,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { body: { id: conversationId, messages }, user, organizationId, headers },
       reply,
     ) => {
+      // Extract and ingest documents to knowledge graph (fire and forget)
+      // This runs asynchronously to avoid blocking the chat response
+      extractAndIngestDocuments(messages).catch((error) => {
+        logger.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[Chat] Background document ingestion failed",
+        );
+      });
+
       const { success: userIsProfileAdmin } = await hasPermission(
         { profile: ["admin"] },
         headers,

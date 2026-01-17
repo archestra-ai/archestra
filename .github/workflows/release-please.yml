@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - 'release/*'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +13,7 @@ permissions:
 jobs:
   release-please:
     name: Release Please
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
@@ -41,7 +42,7 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
           config-file: .github/release-please/release-please-config.json
           manifest-file: .github/release-please/.release-please-manifest.json
-          target-branch: main
+          target-branch: ${{ github.ref_name }}
 
       - name: Log release-please outputs
         # HACK to get toJson to sorta print the output to the console without failing this job
@@ -103,3 +104,16 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+  trigger-website-deploy:
+    name: Trigger Website Vercel Deploy
+    runs-on: ubuntu-latest
+    needs:
+      - release-please
+    if: needs.release-please.outputs.platform_release_created
+    steps:
+      - name: Trigger Vercel Deploy Hook
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          curl -X POST "$VERCEL_DEPLOY_HOOK_URL"

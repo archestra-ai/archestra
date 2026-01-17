@@ -6,6 +6,7 @@ import {
   TeamModel,
   ToolInvocationPolicyModel,
 } from "@/models";
+import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type { GlobalToolPolicy } from "@/types";
 
 /**
@@ -17,6 +18,7 @@ import type { GlobalToolPolicy } from "@/types";
  *
  * @param toolCalls - The tool calls to evaluate
  * @param agentId - The agent ID to evaluate policies for
+ * @param context - Policy evaluation context (profileId, teamId, headers)
  * @param contextIsTrusted - Whether the context is trusted
  * @param enabledToolNames - Optional set of tool names that are enabled in the request.
  *                          If provided, tool calls not in this set will be filtered and reported as disabled.
@@ -24,6 +26,7 @@ import type { GlobalToolPolicy } from "@/types";
 export const evaluatePolicies = async (
   toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
   agentId: string,
+  context: PolicyEvaluationContext,
   contextIsTrusted: boolean,
   enabledToolNames: Set<string>,
   globalToolPolicy: GlobalToolPolicy,
@@ -101,6 +104,7 @@ export const evaluatePolicies = async (
     await ToolInvocationPolicyModel.evaluateBatch(
       agentId,
       parsedToolCalls,
+      context,
       contextIsTrusted,
       globalToolPolicy,
     );

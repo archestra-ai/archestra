@@ -63,7 +63,7 @@ local_resource(
 local_resource(
   'lightrag-seed',
   cmd='node lightrag/seed_via_api.mjs',
-  serve_dir='.',
+  dir='.',
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,

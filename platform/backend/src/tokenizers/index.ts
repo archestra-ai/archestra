@@ -20,6 +20,8 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
     case "ollama":
       // vLLM and Ollama use tiktoken-compatible tokenization for most models
       return new TiktokenTokenizer();
+    case "zhipuai":
+      return new TiktokenTokenizer();
     default:
       // For any other provider including Gemini, use tiktoken as fallback
       return new TiktokenTokenizer();

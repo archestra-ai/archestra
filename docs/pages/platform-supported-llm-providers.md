@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: Archestra Platform
 order: 3
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2025-12-11
+lastUpdated: 2026-01-14
 ---
 
 <!--
@@ -195,3 +195,38 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
 - **No API key required**: Ollama typically doesn't require authentication for local deployments.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+
+## Zhipu AI
+
+[Zhipu AI (Z.ai)](https://z.ai/) is a Chinese AI company offering the GLM (General Language Model) series of large language models. The platform provides both free and commercial models with strong performance in Chinese and English language tasks.
+
+### Supported Zhipu AI APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Zhipu AI Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/zhipuai/{profile-id}`
+- **Authentication**: Pass your Zhipu AI API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                                    |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_ZHIPUAI_BASE_URL`      | No       | Zhipu AI API base URL (default: `https://api.z.ai/api/paas/v4`)       |
+| `ARCHESTRA_CHAT_ZHIPUAI_API_KEY`  | No       | Default API key for Zhipu AI (can be overridden per conversation/team/org)    |
+
+### Popular Models
+
+- **GLM-4.5-Flash** (Free tier) - Fast inference model with good performance
+- **GLM-4.5** - Balanced model for general use
+- **GLM-4.5-Air** - Lightweight model optimized for speed
+- **GLM-4.6** - Enhanced version with improved capabilities
+- **GLM-4.7** - Latest model with advanced features
+
+### Important Notes
+
+- **OpenAI-compatible API**: Zhipu AI's API follows the OpenAI Chat Completions format, making it easy to switch between providers
+- **API Key format**: Obtain your API key from the [Zhipu AI Platform](https://z.ai/)
+- **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
+- **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities

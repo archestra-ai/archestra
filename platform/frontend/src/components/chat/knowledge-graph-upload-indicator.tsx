@@ -28,7 +28,6 @@ export function KnowledgeGraphUploadIndicator({
   }
 
   const displayName = knowledgeGraph.displayName ?? "Knowledge Graph";
-  const fileWord = attachmentCount === 1 ? "file" : "files";
 
   return (
     <Tooltip>
@@ -41,8 +40,8 @@ export function KnowledgeGraphUploadIndicator({
       <TooltipContent side="top" className="max-w-xs">
         <p>
           {attachmentCount === 1
-            ? `This document will be ingested into ${displayName} for enhanced search and retrieval.`
-            : `These ${attachmentCount} ${fileWord} will be ingested into ${displayName} for enhanced search and retrieval.`}
+            ? `This file will be ingested into ${displayName} for enhanced search and retrieval.`
+            : `These ${attachmentCount} files will be ingested into ${displayName} for enhanced search and retrieval.`}
         </p>
       </TooltipContent>
     </Tooltip>

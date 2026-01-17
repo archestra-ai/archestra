@@ -117,14 +117,6 @@ const PromptInputContent = ({
       <PromptInputAttachments className="px-3 pt-2 pb-0">
         {(attachment) => <PromptInputAttachment data={attachment} />}
       </PromptInputAttachments>
-      {/* Knowledge graph upload indicator - shown when KG is configured and files are attached */}
-      {controller.attachments.files.length > 0 && (
-        <div className="px-3 pt-1">
-          <KnowledgeGraphUploadIndicator
-            attachmentCount={controller.attachments.files.length}
-          />
-        </div>
-      )}
       <PromptInputBody>
         <PromptInputTextarea
           placeholder="Type a message..."
@@ -181,6 +173,9 @@ const PromptInputContent = ({
           )}
         </PromptInputTools>
         <div className="flex items-center gap-2">
+          <KnowledgeGraphUploadIndicator
+            attachmentCount={controller.attachments.files.length}
+          />
           <PromptInputSpeechButton
             textareaRef={textareaRef}
             onTranscriptionChange={handleTranscriptionChange}

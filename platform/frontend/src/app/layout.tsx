@@ -17,8 +17,8 @@ import {
   Source_Code_Pro,
   Source_Sans_3,
 } from "next/font/google";
-import { Suspense } from "react";
 import { PublicEnvScript } from "next-runtime-env";
+import { Suspense } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";

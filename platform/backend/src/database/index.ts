@@ -59,10 +59,18 @@ export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /**
  * Check if the database connection is healthy by executing a simple query.
  * Returns true if the database is reachable, false otherwise.
+ *
+ * Uses a 3-second timeout to prevent hanging probes under high load.
+ * This is called every 10 seconds by K8s readiness probes (per Helm config).
  */
 export async function isDatabaseHealthy(): Promise<boolean> {
   try {
-    await pool.query("SELECT 1");
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Health check timeout")), 3000),
+      ),
+    ]);
     return true;
   } catch {
     return false;

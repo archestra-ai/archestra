@@ -516,7 +516,7 @@ describe("ConversationModel", () => {
     expect(found?.messages[0].id).not.toBe("temp-ai-sdk-id");
   });
 
-  test("findById merges database UUIDs into message content", async ({
+  test("findById merges database UUIDs into multiple messages", async ({
     makeUser,
     makeOrganization,
     makeAgent,

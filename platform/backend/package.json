@@ -31,7 +31,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.9",
     "@ai-sdk/cerebras": "^2.0.5",
-    "@ai-sdk/cohere": "^0.1.8",
+    "@ai-sdk/cohere": "^3.0.8",
     "@ai-sdk/google": "^3.0.6",
     "@ai-sdk/openai": "^3.0.7",
     "@anthropic-ai/sdk": "^0.71.2",

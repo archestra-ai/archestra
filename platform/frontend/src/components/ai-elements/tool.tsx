@@ -1,331 +1,233 @@
-"use client";
-
-import type { ToolUIPart } from "ai";
-import {
-  CheckCircleIcon,
-  ChevronDownIcon,
-  CircleIcon,
-  ClockIcon,
-  WrenchIcon,
-  XCircleIcon,
-} from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
-import { createContext, useContext, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { ChevronDown, ChevronRight, Play, MessageSquare } from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
-import { CodeBlock } from "./code-block";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-export type ToolProps = ComponentProps<typeof Collapsible>;
-
-const ToolContext = createContext<{ hasOpened: boolean }>({ hasOpened: false });
-
-export const Tool = ({
-  className,
-  onOpenChange,
+export function Tool({
   children,
-  ...props
-}: ToolProps) => {
-  const [hasOpened, setHasOpened] = useState(
-    props.defaultOpen || props.open || false,
-  );
-
-  const handleOpenChange = (open: boolean) => {
-    if (open) setHasOpened(true);
-    onOpenChange?.(open);
-  };
-
-  return (
-    <ToolContext.Provider value={{ hasOpened }}>
-      <Collapsible
-        defaultOpen={false}
-        className={cn("not-prose mb-4 w-full rounded-md border", className)}
-        onOpenChange={handleOpenChange}
-        {...props}
-      >
-        {children}
-      </Collapsible>
-    </ToolContext.Provider>
-  );
-};
-
-export type ToolHeaderProps = {
-  title?: string;
-  type: ToolUIPart["type"];
-  state: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied";
-  className?: string;
-  icon?: React.ReactNode;
-  errorText?: ToolUIPart["errorText"];
-  isCollapsible?: boolean;
-};
-
-const getStatusBadge = (
-  status: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied",
-) => {
-  const labels = {
-    "input-streaming": "Pending",
-    "input-available": "Running",
-    "approval-requested": "Approval Requested",
-    "approval-responded": "Approval Responded",
-    "output-available": "Completed",
-    "output-available-dual-llm": "Completed with dual LLM",
-    "output-error": "Error",
-    "output-denied": "Denied",
-  } as const;
-
-  const icons = {
-    "input-streaming": <CircleIcon className="size-4" />,
-    "input-available": <ClockIcon className="size-4 animate-pulse" />,
-    "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
-    "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
-    "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
-    "output-available-dual-llm": (
-      <CheckCircleIcon className="size-4 text-green-600" />
-    ),
-    "output-error": <XCircleIcon className="size-4 text-destructive" />,
-    "output-denied": <XCircleIcon className="size-4 text-orange-600" />,
-  } as const;
-
-  return (
-    <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
-      {icons[status]}
-      {labels[status]}
-    </Badge>
-  );
-};
-
-export const ToolHeader = ({
   className,
-  title,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border bg-muted/50 overflow-hidden",
+        className,
+      )}
+      onClick={() => {
+        if (className?.includes("cursor-pointer")) {
+          setIsOpen(!isOpen);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (
+          className?.includes("cursor-pointer") &&
+          (e.key === "Enter" || e.key === " ")
+        ) {
+          e.preventDefault();
+          setIsOpen(!isOpen);
+        }
+      }}
+    >
+      <ToolContext.Provider value={{ isOpen, setIsOpen }}>
+        {children}
+      </ToolContext.Provider>
+    </div>
+  );
+}
+
+const ToolContext = React.createContext<{
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
+}>({
+  isOpen: false,
+  setIsOpen: () => {},
+});
+
+import React from "react";
+
+export function ToolHeader({
   type,
   state,
   errorText,
-  icon,
   isCollapsible = true,
-  ...props
-}: ToolHeaderProps) => (
-  <CollapsibleTrigger
-    className={cn(
-      "flex w-full items-center justify-between gap-4 p-3 cursor-pointer group",
-      isCollapsible ? "cursor-pointer" : "!cursor-default",
-      className,
-    )}
-    {...props}
-  >
-    <div>
-      <div className="flex items-center gap-2">
-        {icon ?? <WrenchIcon className={`size-4 text-muted-foreground`} />}
-        <span className="font-medium text-sm">
-          {title ?? type.split("-").slice(1).join("-")}
-        </span>
-        {getStatusBadge(state)}
-      </div>
-      {errorText && (
-        // biome-ignore lint/a11y/useSemanticElements: We need text selection within the button trigger
-        <div
-          className="text-destructive text-xs mt-2 text-left select-text"
-          style={{
-            userSelect: "text",
-            WebkitUserSelect: "text",
-            pointerEvents: "auto",
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-          role="button"
-          tabIndex={-1}
-        >
-          {errorText}
-        </div>
-      )}
-    </div>
-    {isCollapsible && (
-      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-    )}
-  </CollapsibleTrigger>
-);
+}: {
+  type: string;
+  state: "input-available" | "output-available" | "output-error";
+  errorText?: string;
+  isCollapsible?: boolean;
+}) {
+  const { isOpen, setIsOpen } = React.useContext(ToolContext);
 
-export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
+  const displayName = type.replace(/^tool-/, "").replace(/__/g, " › ");
 
-export const ToolContent = ({
-  className,
-  children,
-  ...props
-}: ToolContentProps) => {
-  const { hasOpened } = useContext(ToolContext);
+  const stateConfig = {
+    "input-available": {
+      icon: "⏳",
+      label: "Running",
+      color: "text-yellow-600 dark:text-yellow-400",
+    },
+    "output-available": {
+      icon: "✓",
+      label: "Complete",
+      color: "text-green-600 dark:text-green-400",
+    },
+    "output-error": {
+      icon: "✗",
+      label: "Error",
+      color: "text-red-600 dark:text-red-400",
+    },
+  };
+
+  const config = stateConfig[state];
 
   return (
-    <CollapsibleContent
+    <div
       className={cn(
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-        className,
+        "flex items-center gap-2 px-3 py-2 text-sm font-medium",
+        isCollapsible && "cursor-pointer hover:bg-muted/70",
       )}
-      {...props}
+      onClick={(e) => {
+        if (isCollapsible) {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (isCollapsible && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }
+      }}
     >
-      {hasOpened ? children : null}
-    </CollapsibleContent>
-  );
-};
-
-export type ToolInputProps = ComponentProps<"div"> & {
-  input: ToolUIPart["input"];
-};
-
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
-    <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-      Parameters
-    </h4>
-    <div className="rounded-md bg-muted/50">
-      <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+      {isCollapsible &&
+        (isOpen ? (
+          <ChevronDown className="h-4 w-4 flex-shrink-0" />
+        ) : (
+          <ChevronRight className="h-4 w-4 flex-shrink-0" />
+        ))}
+      <span className={cn("flex-shrink-0", config.color)}>{config.icon}</span>
+      <span className="font-mono text-xs truncate">{displayName}</span>
+      <span className={cn("text-xs ml-auto flex-shrink-0", config.color)}>
+        {errorText ? "Error" : config.label}
+      </span>
     </div>
-  </div>
-);
+  );
+}
 
-export type ToolOutputProps = ComponentProps<"div"> & {
-  output?: ToolUIPart["output"];
-  errorText?: ToolUIPart["errorText"];
-  label?: string;
-  conversations?: Array<{
-    role: "user" | "assistant";
-    content: string | unknown;
-  }>;
-};
+export function ToolContent({ children }: { children: ReactNode }) {
+  const { isOpen } = React.useContext(ToolContext);
 
-export const ToolOutput = ({
-  className,
+  if (!isOpen) return null;
+
+  return <div className="border-t">{children}</div>;
+}
+
+export function ToolInput({ input }: { input: Record<string, unknown> }) {
+  return (
+    <div className="px-3 py-2 space-y-1">
+      <div className="text-xs font-semibold text-muted-foreground mb-1">
+        Input
+      </div>
+      <pre className="text-xs bg-background/50 rounded p-2 overflow-x-auto">
+        {JSON.stringify(input, null, 2)}
+      </pre>
+    </div>
+  );
+}
+
+export function ToolOutput({
+  label = "Result",
   output,
   errorText,
-  label,
-  conversations,
-  ...props
-}: ToolOutputProps) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  onRunTool,
+  onUseAsPrompt,
+}: {
+  label?: string;
+  output: unknown;
+  errorText?: string;
+  onRunTool?: () => void;
+  onUseAsPrompt?: () => void;
+}) {
+  const outputText =
+    typeof output === "string" ? output : JSON.stringify(output, null, 2);
 
-  if (!(output || errorText || conversations)) {
-    return null;
-  }
-
-  // Render conversations as chat bubbles if provided
-  // Note: In Dual LLM context, "user" = Main Profile (questions), "assistant" = Quarantined Profile (answers)
-  if (conversations && conversations.length > 0) {
-    return (
-      <div className={cn("space-y-2 p-4", className)} {...props}>
-        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-          {label ?? "Conversation"}
-        </h4>
-        <div className="space-y-3 rounded-md bg-muted/50 p-3">
-          {conversations.map((conv, idx) => {
-            // Create a stable key combining index and content hash
-            const contentStr =
-              typeof conv.content === "string"
-                ? conv.content
-                : JSON.stringify(conv.content);
-            const key = `${idx}-${conv.role}-${contentStr.slice(0, 20)}`;
-
-            return (
-              <div
-                key={key}
-                className={cn(
-                  "flex gap-2 items-start",
-                  conv.role === "assistant" ? "justify-end" : "justify-start",
-                )}
-              >
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap",
-                    conv.role === "assistant"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground",
-                  )}
-                >
-                  {contentStr}
-                </div>
-              </div>
-            );
-          })}
+  return (
+    <div className="px-3 py-2 space-y-1">
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-xs font-semibold text-muted-foreground">
+          {label}
         </div>
-      </div>
-    );
-  }
-
-  let Output = <div>{output as ReactNode}</div>;
-
-  if (typeof output === "object" || typeof output === "string") {
-    // If output is a string, try to parse it as JSON for proper formatting
-    let formattedOutput = output;
-    if (typeof output === "string") {
-      try {
-        formattedOutput = JSON.parse(output);
-      } catch {
-        // Not valid JSON, use as-is
-      }
-    }
-    const codeString =
-      typeof formattedOutput === "object"
-        ? JSON.stringify(formattedOutput, null, 2)
-        : String(formattedOutput);
-    const lines = codeString.split("\n");
-    const MAX_LINES = 50;
-    const isLarge = lines.length > MAX_LINES;
-
-    const displayCode =
-      isExpanded || !isLarge
-        ? codeString
-        : `${lines.slice(0, MAX_LINES).join("\n")}\n... (${
-            lines.length - MAX_LINES
-          } more lines)`;
-
-    Output = (
-      <div className="relative group">
-        <CodeBlock code={displayCode} language="json" />
-        {isLarge && (
-          <div
-            className={cn(
-              "absolute bottom-4 left-0 right-0 flex justify-center transition-all duration-200",
-              !isExpanded &&
-                "pt-16 pb-2 bg-gradient-to-t from-background/80 to-transparent",
-            )}
-          >
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsExpanded(!isExpanded);
-              }}
-              className="h-7 text-xs shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
-            >
-              {isExpanded
-                ? "Show Less"
-                : `Show ${lines.length - MAX_LINES} more lines`}
-            </Button>
+        {!errorText && (onRunTool || onUseAsPrompt) && (
+          <div className="flex items-center gap-1">
+            <TooltipProvider>
+              {onRunTool && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRunTool();
+                      }}
+                    >
+                      <Play className="h-3 w-3 mr-1" />
+                      Run Tool
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Execute this tool again with the same parameters</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {onUseAsPrompt && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUseAsPrompt();
+                      }}
+                    >
+                      <MessageSquare className="h-3 w-3 mr-1" />
+                      Use as Prompt
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Copy this output to the chat input</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </TooltipProvider>
           </div>
         )}
       </div>
-    );
-  }
-
-  return (
-    <div className={cn("space-y-2 p-4", className)} {...props}>
-      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        {label ?? (errorText ? "Error" : "Result")}
-      </h4>
-      <div
+      <pre
         className={cn(
-          "overflow-x-auto rounded-md text-xs [&_table]:w-full",
+          "text-xs rounded p-2 overflow-x-auto select-text",
           errorText
-            ? "bg-destructive/10 text-destructive"
-            : "bg-muted/50 text-foreground",
+            ? "bg-red-50 dark:bg-red-950/20 text-red-900 dark:text-red-200"
+            : "bg-background/50",
         )}
       >
-        {Output}
-      </div>
+        {outputText}
+      </pre>
     </div>
   );
-};
+}

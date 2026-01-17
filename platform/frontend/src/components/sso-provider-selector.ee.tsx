@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
 import { usePublicSsoProviders } from "@/lib/sso-provider.query.ee";
+import { getValidatedCallbackURLWithDefault } from "@/lib/utils/redirect-validation";
 
 interface SsoProviderSelectorProps {
   /**
@@ -28,26 +29,7 @@ export function SsoProviderSelector({
   // Validates that the path is safe (relative path, no protocol) to prevent open redirect attacks
   const callbackURL = useMemo(() => {
     const redirectTo = searchParams.get("redirectTo");
-    if (!redirectTo) {
-      return `${window.location.origin}/`;
-    }
-
-    let decodedPath: string;
-    try {
-      decodedPath = decodeURIComponent(redirectTo);
-    } catch {
-      // Malformed URI encoding, fall back to home
-      return `${window.location.origin}/`;
-    }
-
-    // Validate: must be relative path starting with single /, no protocol to prevent open redirects
-    // Reject protocol-relative URLs (//evil.com) and URLs with protocols (https://evil.com)
-    const isRelativePath =
-      decodedPath.startsWith("/") &&
-      !decodedPath.startsWith("//") &&
-      !decodedPath.includes("://");
-
-    return `${window.location.origin}${isRelativePath ? decodedPath : "/"}`;
+    return getValidatedCallbackURLWithDefault(redirectTo);
   }, [searchParams]);
 
   const handleSsoSignIn = useCallback(

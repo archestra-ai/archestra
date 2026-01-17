@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
   return (
@@ -27,32 +28,6 @@ const isSpecialAuthPage = (pathname: string) => {
     pathname?.startsWith("/auth/sign-out")
   );
 };
-
-/**
- * Validates and decodes a redirectTo parameter to prevent open redirect attacks.
- * Returns the decoded path if valid, or "/" if invalid.
- */
-function getValidatedRedirectPath(redirectTo: string | null): string {
-  if (!redirectTo) {
-    return "/";
-  }
-
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(redirectTo);
-  } catch {
-    // Malformed URI encoding
-    return "/";
-  }
-
-  // Validate: must be relative path starting with single /, no protocol to prevent open redirects
-  const isRelativePath =
-    decodedPath.startsWith("/") &&
-    !decodedPath.startsWith("//") &&
-    !decodedPath.includes("://");
-
-  return isRelativePath ? decodedPath : "/";
-}
 
 export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   children,

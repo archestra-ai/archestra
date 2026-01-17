@@ -83,13 +83,9 @@ function SignUpWithInvitationContent() {
   // Show loading while checking if user exists
   if (isCheckingInvitation && invitationId) {
     return (
-      <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <main className="h-full flex items-center justify-center">
-            <LoadingSpinner />
-          </main>
-        </Suspense>
-      </ErrorBoundary>
+      <main className="h-full flex items-center justify-center">
+        <LoadingSpinner />
+      </main>
     );
   }
 

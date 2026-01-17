@@ -14,39 +14,7 @@ import {
 } from "@/components/ui/card";
 import config from "@/lib/config";
 import { useInvitationCheck } from "@/lib/invitation.query";
-
-/**
- * Validates and decodes a redirectTo parameter to prevent open redirect attacks.
- * Returns the full callback URL if valid, or undefined if invalid.
- */
-function getValidatedCallbackURL(
-  redirectTo: string | null,
-): string | undefined {
-  if (!redirectTo) {
-    return undefined;
-  }
-
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(redirectTo);
-  } catch {
-    // Malformed URI encoding
-    return undefined;
-  }
-
-  // Validate: must be relative path starting with single /, no protocol to prevent open redirects
-  const isRelativePath =
-    decodedPath.startsWith("/") &&
-    !decodedPath.startsWith("//") &&
-    !decodedPath.includes("://");
-
-  if (!isRelativePath) {
-    return undefined;
-  }
-
-  // Return full URL - AuthView expects absolute URLs for callbackURL
-  return `${window.location.origin}${decodedPath}`;
-}
+import { getValidatedCallbackURL } from "@/lib/utils/redirect-validation";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const router = useRouter();

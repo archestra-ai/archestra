@@ -158,39 +158,39 @@ will invoke that specific agent.
 
 ## ChatOps: Microsoft Teams
 
-Archestra can connect directly to Microsoft Teams channels without requiring a separate bot server. When users mention the bot in a channel, messages are routed to your configured agent, and responses appear directly in Teams.
+Archestra can connect directly to Microsoft Teams channels. When users mention the bot in a channel, messages are routed to your configured agent and responses appear directly in Teams.
 
 ### Prerequisites
 
-- Azure subscription with permissions to create Azure Bot resources
-- Teams tenant where you can install custom apps
-- Archestra deployment with external webhook access
+- **Azure subscription** with permissions to create Azure Bot resources
+- **Teams tenant** where you can install custom apps
+- **Archestra deployment** with external webhook access
 
 ### Setup Overview
 
-1. Create Azure Bot in Azure Portal
-2. Configure Archestra with bot credentials
-3. Enable Teams integration on your agent
-4. Install the Teams app and mention the bot in a channel
-5. Select which agent handles the channel (via Adaptive Card)
+1. **Create Azure Bot** in Azure Portal
+2. **Configure Archestra** with bot credentials
+3. **Enable Teams integration** on your agent
+4. **Install the Teams app** and mention the bot in a channel
+5. **Select which agent** handles the channel (via Adaptive Card)
 
 ### Create Azure Bot
 
-1. Go to [portal.azure.com](https://portal.azure.com) > **Create a resource** > **Azure Bot**
-2. Fill in bot handle, subscription, resource group
+1. Go to [portal.azure.com](https://portal.azure.com) → **Create a resource** → **Azure Bot**
+2. Fill in **bot handle**, **subscription**, **resource group**
 3. Under **Microsoft App ID**, select **Create new Microsoft App ID**
-4. After creation, go to **Settings** > **Configuration**
-5. Copy the **Microsoft App ID**
-6. Click **Manage Password** > **New client secret** > copy the secret value
+4. After creation, go to **Settings** → **Configuration**
+5. Copy the **Microsoft App ID** — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`
+6. Click **Manage Password** → **New client secret** → copy the secret value for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD`
 7. Set **Messaging endpoint** to `https://your-archestra-domain/api/webhooks/chatops/ms-teams`
-8. Go to **Channels** > add **Microsoft Teams**
+8. Go to **Channels** → add **Microsoft Teams**
 
 #### Graph API Permissions (Optional - for thread history)
 
 To include thread history in agent context:
 
-1. In Azure Portal, go to **App registrations** > find your bot's app
-2. Go to **API permissions** > **Add a permission** > **Microsoft Graph** > **Application permissions**
+1. In Azure Portal, go to **App registrations** → find your bot's app
+2. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions**
 3. Add `ChannelMessage.Read.All`
 4. Click **Grant admin consent**
 
@@ -212,16 +212,16 @@ ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET=<App Registration Secret>
 
 ### Enable Agent for Teams
 
-1. In Archestra, go to **Chat** and open the **Agent Library**
-2. Edit the agent you want to use with Teams
+1. In Archestra, go to **Chat** → open the **Agent Library**
+2. **Edit** the agent you want to use with Teams
 3. Under **ChatOps Integrations**, check **Microsoft Teams**
-4. Save
+4. **Save**
 
-Only agents with Microsoft Teams enabled will appear in the channel selection dropdown.
+Only agents with **Microsoft Teams enabled** will appear in the channel selection dropdown.
 
 ### Teams App Manifest
 
-Create a folder with [color.png](/docs/color.png) (192x192), [outline.png](/docs/outline.png) (32x32) and `manifest.json`:
+Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png](/docs/outline.png)** (32x32) and **`manifest.json`**:
 
 ```json
 {
@@ -263,25 +263,25 @@ Create a folder with [color.png](/docs/color.png) (192x192), [outline.png](/docs
 }
 ```
 
-Replace `{{BOT_MS_APP_ID}}` with your Microsoft App ID. Zip the folder contents.
+Replace `{{BOT_MS_APP_ID}}` with your **Microsoft App ID**. **Zip the folder contents**.
 
 ### Install in Teams
 
-1. In Teams: **Apps** > **Manage your apps** > **Upload an app**
-2. Select your manifest zip
-3. Add the app to a team/channel
+1. In Teams: **Apps** → **Manage your apps** → **Upload an app**
+2. Select your **manifest zip**
+3. **Add the app** to a team/channel
 
 ### Usage
 
 #### First Message
 
-When you first mention the bot in a channel with no binding:
+When you **first mention the bot** in a channel with no binding:
 
 ```
 @Archestra what's the status of service X?
 ```
 
-The bot responds with an Adaptive Card dropdown to select which agent handles this channel. After selection, the bot processes your message and all future messages in that channel.
+The bot responds with an **Adaptive Card dropdown** to select which agent handles this channel. After selection, the bot processes your message and **all future messages** in that channel.
 
 #### Commands
 
@@ -291,20 +291,13 @@ The bot responds with an Adaptive Card dropdown to select which agent handles th
 | `@Archestra /status` | Show current agent binding |
 | `@Archestra /help` | Show available commands |
 
-#### Trigger Patterns
-
-- **mention** (default): Bot only responds when @mentioned
-- **all**: Bot responds to all messages in the channel
-
-Configure via the Adaptive Card when selecting an agent.
-
 ### Architecture
 
-- Single Azure Bot shared across your deployment
-- Channel bindings stored in Archestra database
-- Messages validated via Bot Framework JWT verification
-- Thread history fetched via Microsoft Graph API (if configured)
-- Responses sent via Bot Framework SDK
+- **Single Azure Bot** shared across your deployment
+- **Channel bindings** stored in Archestra database
+- **Messages validated** via Bot Framework JWT verification
+- **Thread history** fetched via Microsoft Graph API (if configured)
+- **Responses sent** via Bot Framework SDK
 
 ### Troubleshooting
 
@@ -321,7 +314,3 @@ Configure via the Adaptive Card when selecting an agent.
 - Ensure Graph API credentials are configured
 - Verify `ChannelMessage.Read.All` permission is granted
 - Admin consent must be granted for the permission
-
-### Alternative: Standalone Bot
-
-For more control or custom logic, you can build your own bot that connects to Archestra via A2A protocol. See [Connect Agent to MS Teams](/docs/platform-example-teams-a2a) for the standalone approach.

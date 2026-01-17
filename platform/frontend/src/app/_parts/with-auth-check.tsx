@@ -90,7 +90,9 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
       router.push("/");
     } else if (!isAuthPage && !isLoggedIn) {
       // User is not logged in and not on any auth page, redirect to sign-in
-      router.push("/auth/sign-in");
+      // Preserve the original URL so we can redirect back after login
+      const redirectTo = encodeURIComponent(pathname);
+      router.push(`/auth/sign-in?redirectTo=${redirectTo}`);
     }
   }, [
     isAuthInitializing,
@@ -99,6 +101,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     isLoggedIn,
     router,
     isSpecialAuth,
+    pathname,
   ]);
 
   // Show loading while checking auth/permissions

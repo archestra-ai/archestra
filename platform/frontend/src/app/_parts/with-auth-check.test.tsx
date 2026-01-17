@@ -62,7 +62,7 @@ describe("WithAuthCheck", () => {
       } as ReturnType<typeof authClient.useSession>);
     });
 
-    it("should redirect to sign-in when accessing protected page", () => {
+    it("should redirect to sign-in with redirectTo param when accessing protected page", () => {
       vi.mocked(usePathname).mockReturnValue("/dashboard");
 
       render(
@@ -71,7 +71,23 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(mockRouterPush).toHaveBeenCalledWith("/auth/sign-in");
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fdashboard",
+      );
+    });
+
+    it("should redirect to sign-in with encoded redirectTo param for complex paths", () => {
+      vi.mocked(usePathname).mockReturnValue("/settings/teams/123");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fsettings%2Fteams%2F123",
+      );
     });
 
     it("should allow access to auth pages", () => {

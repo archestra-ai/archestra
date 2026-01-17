@@ -108,24 +108,40 @@ export function internalHelper() { ... }  // Not used outside!
 export const INTERNAL_CONSTANT = 42;      // Not used outside!
 ```
 
-## Module Code Order
+## Module Code Order (CRITICAL)
+
+**⚠️ ALWAYS structure files with exports at TOP, internal helpers at BOTTOM.**
 
 - Structure modules so the **public interface appears at the top**
-- Internal/private functions and constants go at the **bottom** of the file
+- Internal/private functions, interfaces, and constants go at the **bottom** of the file
+- Use section comments (`// ===`) to clearly separate public and private sections
 - This makes it immediately clear what the module exposes
+- Function declarations are hoisted in JavaScript, so helpers can be called before they're defined
 
 ```typescript
 // 1. Imports
 import { something } from "somewhere";
 
-// 2. Exported items (public interface) - at TOP
+// =============================================================================
+// Exported Items (Public Interface)
+// =============================================================================
+
 export function publicFunctionA() {
-  return helperB();
+  return helperB();  // Can call helper defined below (hoisting)
 }
 
 export const publicConstant = "value";
 
-// 3. Internal helpers - at BOTTOM (ordered by dependency)
+export default publicFunctionA;
+
+// =============================================================================
+// Internal Helpers (not exported)
+// =============================================================================
+
+interface InternalType {
+  value: number;
+}
+
 function helperB() {
   return helperC();
 }
@@ -134,7 +150,48 @@ function helperC() {
   return INTERNAL_CONFIG.value;
 }
 
-const INTERNAL_CONFIG = { value: 42 };
+const INTERNAL_CONFIG: InternalType = { value: 42 };
+```
+
+## Error Handling in Routes
+
+- **Always use `throw new ApiError(statusCode, message)`** for error responses
+- **Never use manual `reply.status().send({ error: ... })`** - this bypasses centralized error handling
+- The Fastify error handler formats all errors consistently and logs appropriately
+
+```typescript
+// ❌ Bad - manual error response
+if (!provider) {
+  return reply.status(400).send({ error: "Provider not configured" });
+}
+
+// ✅ Good - use ApiError
+if (!provider) {
+  throw new ApiError(400, "Provider not configured");
+}
+```
+
+## Protected Routes & Authentication
+
+- Routes under `/api/` are protected by the auth middleware which guarantees `request.user` and `request.organizationId` exist
+- **Never add redundant null checks** for authentication - the middleware handles it
+- Routes handle authorization and business logic, not authentication
+
+```typescript
+// ❌ Bad - redundant authentication check
+async (request, reply) => {
+  if (!request.organizationId) {
+    throw new ApiError(401, "Unauthorized");
+  }
+  const data = await Model.findByOrganization(request.organizationId);
+  return reply.send(data);
+}
+
+// ✅ Good - trust the middleware, use directly
+async (request, reply) => {
+  const data = await Model.findByOrganization(request.organizationId);
+  return reply.send(data);
+}
 ```
 
 ## Database Types via drizzle-zod

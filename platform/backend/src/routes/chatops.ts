@@ -15,70 +15,12 @@ import {
   PromptModel,
 } from "@/models";
 import { ApiError, constructResponseSchema } from "@/types";
-import type { ChatOpsProviderType, IncomingChatMessage } from "@/types/chatops";
-
-/**
- * ChatOps routes for webhook handling and management
- */
-
-interface RateLimitEntry {
-  count: number;
-  windowStart: number;
-}
-
-/**
- * Check if an IP is rate limited using the shared CacheManager
- */
-async function isRateLimited(ip: string): Promise<boolean> {
-  const now = Date.now();
-  const cacheKey = `${CacheKey.WebhookRateLimit}-chatops-${ip}` as const;
-  const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
-
-  if (!entry || now - entry.windowStart > CHATOPS_RATE_LIMIT.WINDOW_MS) {
-    await cacheManager.set(
-      cacheKey,
-      { count: 1, windowStart: now },
-      CHATOPS_RATE_LIMIT.WINDOW_MS * 2,
-    );
-    return false;
-  }
-
-  if (entry.count >= CHATOPS_RATE_LIMIT.MAX_REQUESTS) {
-    return true;
-  }
-
-  await cacheManager.set(
-    cacheKey,
-    { count: entry.count + 1, windowStart: entry.windowStart },
-    CHATOPS_RATE_LIMIT.WINDOW_MS * 2,
-  );
-  return false;
-}
-
-/**
- * Get the default organization ID (single-tenant mode)
- */
-async function getDefaultOrganizationId(): Promise<string> {
-  const org = await OrganizationModel.getFirst();
-  if (!org) {
-    throw new Error("No organizations found");
-  }
-  return org.id;
-}
-
-/**
- * Schema for binding list response
- */
-const BindingResponseSchema = z.object({
-  id: z.string().uuid(),
-  organizationId: z.string(),
-  provider: z.string(),
-  channelId: z.string(),
-  workspaceId: z.string().nullable(),
-  promptId: z.string().uuid(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-});
+import {
+  type ChatOpsProviderType,
+  ChatOpsProviderTypeSchema,
+  type IncomingChatMessage,
+} from "@/types/chatops";
+import { ChatOpsChannelBindingResponseSchema } from "@/types/chatops-channel-binding";
 
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -116,9 +58,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         logger.warn(
           "[ChatOps] MS Teams webhook called but provider not configured",
         );
-        return reply.status(400).send({
-          error: "MS Teams chatops provider not configured",
-        });
+        throw new ApiError(400, "MS Teams chatops provider not configured");
       }
 
       // Rate limiting
@@ -128,9 +68,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { ip: clientIp },
           "[ChatOps] Rate limit exceeded for MS Teams webhook",
         );
-        return reply.status(429).send({
-          error: "Too many requests",
-        });
+        throw new ApiError(429, "Too many requests");
       }
 
       // Extract headers
@@ -258,9 +196,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           "[ChatOps] Error processing MS Teams webhook",
         );
-        return reply.status(500).send({
-          error: "Internal server error",
-        });
+        throw new ApiError(500, "Internal server error");
       }
     },
   );
@@ -289,27 +225,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_, reply) => {
-      const providers: {
-        id: string;
-        displayName: string;
-        configured: boolean;
-      }[] = [];
-
-      // Check MS Teams
-      const msTeamsProvider = chatOpsManager.getMSTeamsProvider();
-      providers.push({
-        id: "ms-teams",
-        displayName: "Microsoft Teams",
-        configured: msTeamsProvider?.isConfigured() ?? false,
-      });
-
-      // Add more providers here as they're implemented
-      // const slackProvider = getSlackProvider();
-      // providers.push({
-      //   id: "slack",
-      //   displayName: "Slack",
-      //   configured: slackProvider?.isConfigured() ?? false,
-      // });
+      // Iterate through all provider types - automatically includes new providers
+      // TypeScript exhaustiveness in getProviderInfo() ensures new providers are handled
+      const providers = ChatOpsProviderTypeSchema.options.map(getProviderInfo);
 
       return reply.send({ providers });
     },
@@ -325,13 +243,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.ListChatOpsBindings,
         description: "List all chatops channel bindings",
         tags: ["ChatOps"],
-        response: constructResponseSchema(z.array(BindingResponseSchema)),
+        response: constructResponseSchema(
+          z.array(ChatOpsChannelBindingResponseSchema),
+        ),
       },
     },
     async (request, reply) => {
-      if (!request.organizationId) {
-        throw new ApiError(401, "Unauthorized");
-      }
       const bindings = await ChatOpsChannelBindingModel.findByOrganization(
         request.organizationId,
       );
@@ -364,9 +281,6 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
-      if (!request.organizationId) {
-        throw new ApiError(401, "Unauthorized");
-      }
 
       const deleted =
         await ChatOpsChannelBindingModel.deleteByIdAndOrganization(
@@ -382,6 +296,79 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+export default chatopsRoutes;
+
+// =============================================================================
+// Internal Helpers (not exported)
+// =============================================================================
+
+interface RateLimitEntry {
+  count: number;
+  windowStart: number;
+}
+
+/**
+ * Check if an IP is rate limited using the shared CacheManager
+ */
+async function isRateLimited(ip: string): Promise<boolean> {
+  const now = Date.now();
+  const cacheKey = `${CacheKey.WebhookRateLimit}-chatops-${ip}` as const;
+  const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
+
+  if (!entry || now - entry.windowStart > CHATOPS_RATE_LIMIT.WINDOW_MS) {
+    await cacheManager.set(
+      cacheKey,
+      { count: 1, windowStart: now },
+      CHATOPS_RATE_LIMIT.WINDOW_MS * 2,
+    );
+    return false;
+  }
+
+  if (entry.count >= CHATOPS_RATE_LIMIT.MAX_REQUESTS) {
+    return true;
+  }
+
+  await cacheManager.set(
+    cacheKey,
+    { count: entry.count + 1, windowStart: entry.windowStart },
+    CHATOPS_RATE_LIMIT.WINDOW_MS * 2,
+  );
+  return false;
+}
+
+/**
+ * Get the default organization ID (single-tenant mode)
+ */
+async function getDefaultOrganizationId(): Promise<string> {
+  const org = await OrganizationModel.getFirst();
+  if (!org) {
+    throw new Error("No organizations found");
+  }
+  return org.id;
+}
+
+/**
+ * Get provider info for status endpoint.
+ * Uses exhaustive switch to force updates when new providers are added.
+ */
+function getProviderInfo(providerType: ChatOpsProviderType): {
+  id: ChatOpsProviderType;
+  displayName: string;
+  configured: boolean;
+} {
+  switch (providerType) {
+    case "ms-teams": {
+      const provider = chatOpsManager.getMSTeamsProvider();
+      return {
+        id: "ms-teams",
+        displayName: "Microsoft Teams",
+        configured: provider?.isConfigured() ?? false,
+      };
+    }
+    // When adding new providers, TypeScript will error here until handled
+  }
+}
 
 /**
  * Send an Adaptive Card for agent selection
@@ -516,5 +503,3 @@ async function handleAgentSelection(
       "Send a message (with @mention) to start interacting!",
   );
 }
-
-export default chatopsRoutes;

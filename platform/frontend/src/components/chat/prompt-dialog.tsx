@@ -295,48 +295,45 @@ export function PromptDialog({
               className="min-h-[150px] font-mono"
             />
           </div>
-          {chatopsProviders.length > 0 && (
+          {chatopsProviders.filter((provider) => provider.configured).length >
+            0 && (
             <div className="space-y-2">
               <Label>ChatOps Integrations</Label>
               <p className="text-sm text-muted-foreground">
                 Select which chat platforms can trigger this agent
               </p>
-              <div className="space-y-2">
-                {chatopsProviders.map((provider) => (
-                  <div
-                    key={provider.id}
-                    className="flex items-center space-x-2"
-                  >
-                    <Checkbox
-                      id={`chatops-${provider.id}`}
-                      checked={allowedChatops.includes(provider.id)}
-                      disabled={!provider.configured}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setAllowedChatops([...allowedChatops, provider.id]);
-                        } else {
-                          setAllowedChatops(
-                            allowedChatops.filter((id) => id !== provider.id),
-                          );
-                        }
-                      }}
-                    />
-                    <Label
-                      htmlFor={`chatops-${provider.id}`}
-                      className={
-                        !provider.configured
-                          ? "text-muted-foreground cursor-not-allowed"
-                          : "cursor-pointer"
-                      }
-                    >
-                      {provider.displayName}
-                      {!provider.configured && " (not configured)"}
-                    </Label>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
+          {chatopsProviders
+            .filter((provider) => provider.configured)
+            .map((provider) => (
+              <div key={provider.id} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`chatops-${provider.id}`}
+                  checked={allowedChatops.includes(provider.id)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAllowedChatops([...allowedChatops, provider.id]);
+                    } else {
+                      setAllowedChatops(
+                        allowedChatops.filter((id) => id !== provider.id),
+                      );
+                    }
+                  }}
+                />
+                <Label
+                  htmlFor={`chatops-${provider.id}`}
+                  className={
+                    !provider.configured
+                      ? "text-muted-foreground cursor-not-allowed"
+                      : "cursor-pointer"
+                  }
+                >
+                  {provider.displayName}
+                  {!provider.configured && " (not configured)"}
+                </Label>
+              </div>
+            ))}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

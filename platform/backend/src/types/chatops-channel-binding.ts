@@ -3,7 +3,7 @@ import {
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
-import type { z } from "zod";
+import { z } from "zod";
 import { schema } from "@/database";
 import { ChatOpsProviderTypeSchema } from "./chatops";
 
@@ -30,6 +30,15 @@ export const UpdateChatOpsChannelBindingSchema = createUpdateSchema(
 ).pick({
   promptId: true,
 });
+
+/**
+ * Response schema for API - dates as ISO strings
+ */
+export const ChatOpsChannelBindingResponseSchema =
+  SelectChatOpsChannelBindingSchema.extend({
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  });
 
 export type ChatOpsChannelBinding = z.infer<
   typeof SelectChatOpsChannelBindingSchema

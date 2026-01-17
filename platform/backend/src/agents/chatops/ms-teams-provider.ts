@@ -20,40 +20,6 @@ import type {
 import { CHATOPS_THREAD_HISTORY } from "./constants";
 
 /**
- * Cleans bot mentions from message text.
- * Teams includes @mentions in the text as <at>BotName</at>, which we need to remove.
- */
-function cleanBotMention(text: string, botName?: string): string {
-  // Remove <at>...</at> tags (bot mentions)
-  let cleaned = text.replace(/<at>.*?<\/at>/gi, "").trim();
-
-  // Also remove any remaining @BotName patterns if we know the bot name
-  if (botName) {
-    const mentionPattern = new RegExp(`@${botName}\\s*`, "gi");
-    cleaned = cleaned.replace(mentionPattern, "").trim();
-  }
-
-  return cleaned;
-}
-
-/**
- * Extracts the conversation/thread ID from a Teams activity.
- * For thread replies, this is the parent message ID.
- */
-function extractThreadId(activity: {
-  conversation?: { id?: string };
-  replyToId?: string;
-}): string | undefined {
-  // If this is a reply to another message, use the parent message ID
-  if (activity.replyToId) {
-    return activity.replyToId;
-  }
-
-  // Otherwise, use the conversation ID as the thread ID
-  return activity.conversation?.id;
-}
-
-/**
  * MS Teams provider implementation using Bot Framework SDK.
  *
  * Security:
@@ -464,6 +430,40 @@ class MSTeamsProvider implements ChatOpsProvider {
       handler,
     );
   }
+}
+
+/**
+ * Cleans bot mentions from message text.
+ * Teams includes @mentions in the text as <at>BotName</at>, which we need to remove.
+ */
+function cleanBotMention(text: string, botName?: string): string {
+  // Remove <at>...</at> tags (bot mentions)
+  let cleaned = text.replace(/<at>.*?<\/at>/gi, "").trim();
+
+  // Also remove any remaining @BotName patterns if we know the bot name
+  if (botName) {
+    const mentionPattern = new RegExp(`@${botName}\\s*`, "gi");
+    cleaned = cleaned.replace(mentionPattern, "").trim();
+  }
+
+  return cleaned;
+}
+
+/**
+ * Extracts the conversation/thread ID from a Teams activity.
+ * For thread replies, this is the parent message ID.
+ */
+function extractThreadId(activity: {
+  conversation?: { id?: string };
+  replyToId?: string;
+}): string | undefined {
+  // If this is a reply to another message, use the parent message ID
+  if (activity.replyToId) {
+    return activity.replyToId;
+  }
+
+  // Otherwise, use the conversation ID as the thread ID
+  return activity.conversation?.id;
 }
 
 export default MSTeamsProvider;

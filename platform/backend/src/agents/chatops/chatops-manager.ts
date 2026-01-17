@@ -5,11 +5,12 @@ import {
   ChatOpsProcessedMessageModel,
   PromptModel,
 } from "@/models";
-import type {
-  ChatOpsProcessingResult,
-  ChatOpsProvider,
-  ChatOpsProviderType,
-  IncomingChatMessage,
+import {
+  type ChatOpsProcessingResult,
+  type ChatOpsProvider,
+  type ChatOpsProviderType,
+  ChatOpsProviderTypeSchema,
+  type IncomingChatMessage,
 } from "@/types/chatops";
 import { CHATOPS_MESSAGE_RETENTION } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
@@ -47,9 +48,29 @@ export class ChatOpsManager {
   }
 
   /**
+   * Check if any chatops provider is configured and enabled.
+   * Iterates through all provider types from the enum - TypeScript exhaustiveness
+   * in getChatOpsProvider() ensures new providers are implemented when added.
+   */
+  isAnyProviderConfigured(): boolean {
+    for (const providerType of ChatOpsProviderTypeSchema.options) {
+      const provider = this.getChatOpsProvider(providerType);
+      if (provider?.isConfigured()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Initialize all configured chatops providers
    */
   async initialize(): Promise<void> {
+    // True no-op if no providers configured
+    if (!this.isAnyProviderConfigured()) {
+      return;
+    }
+
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.getMSTeamsProvider() },
       // Add more providers here as they're implemented

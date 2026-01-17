@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import { UIResourceRenderer } from "./ui-resource-renderer";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -195,7 +196,38 @@ export type ToolOutputProps = ComponentProps<"div"> & {
     role: "user" | "assistant";
     content: string | unknown;
   }>;
+  onToolCall?: (toolName: string, params: Record<string, unknown>) => void;
+  onPrompt?: (prompt: string) => void;
 };
+
+/**
+ * Checks if the output is an MCP UI resource
+ */
+function isMCPUIResource(output: unknown): output is {
+  type: "resource";
+  resource: {
+    uri: string;
+    mimeType: "text/html" | "text/uri-list" | "application/vnd.mcp-ui.remote-dom";
+    text?: string;
+    blob?: string;
+  };
+} {
+  if (typeof output !== "object" || output === null) return false;
+  const obj = output as Record<string, unknown>;
+  
+  return (
+    obj.type === "resource" &&
+    typeof obj.resource === "object" &&
+    obj.resource !== null &&
+    typeof (obj.resource as Record<string, unknown>).uri === "string" &&
+    typeof (obj.resource as Record<string, unknown>).mimeType === "string" &&
+    (
+      (obj.resource as Record<string, unknown>).mimeType === "text/html" ||
+      (obj.resource as Record<string, unknown>).mimeType === "text/uri-list" ||
+      (obj.resource as Record<string, unknown>).mimeType === "application/vnd.mcp-ui.remote-dom"
+    )
+  );
+}
 
 export const ToolOutput = ({
   className,
@@ -203,12 +235,30 @@ export const ToolOutput = ({
   errorText,
   label,
   conversations,
+  onToolCall,
+  onPrompt,
   ...props
 }: ToolOutputProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!(output || errorText || conversations)) {
     return null;
+  }
+
+  // Check if output is an MCP UI resource
+  if (isMCPUIResource(output)) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {label ?? "UI Resource"}
+        </h4>
+        <UIResourceRenderer
+          resource={output.resource}
+          onToolCall={onToolCall}
+          onPrompt={onPrompt}
+        />
+      </div>
+    );
   }
 
   // Render conversations as chat bubbles if provided

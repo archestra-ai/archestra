@@ -45,6 +45,7 @@ const MockChild = () => (
 
 const mockSearchParams = {
   toString: vi.fn().mockReturnValue(""),
+  get: vi.fn().mockReturnValue(null),
 };
 
 describe("WithAuthCheck", () => {
@@ -140,6 +141,20 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).not.toHaveBeenCalled();
       expect(screen.getByTestId("protected-content")).toBeInTheDocument();
     });
+
+    it("should allow access to sign-out page without adding redirectTo", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-out");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      // Should not redirect at all - sign-out is an auth page
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
   });
 
   describe("when user is authenticated", () => {
@@ -153,8 +168,37 @@ describe("WithAuthCheck", () => {
       } as ReturnType<typeof authClient.useSession>);
     });
 
-    it("should redirect to home when accessing auth pages", () => {
+    it("should redirect to home when accessing auth pages without redirectTo", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+      mockSearchParams.get = vi.fn().mockReturnValue(null);
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith("/");
+    });
+
+    it("should redirect to redirectTo param when accessing auth pages after login", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+      mockSearchParams.get = vi.fn().mockReturnValue("%2Flogs%2Fllm-proxy");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith("/logs/llm-proxy");
+    });
+
+    it("should ignore malicious redirectTo param and redirect to home", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+      mockSearchParams.get = vi
+        .fn()
+        .mockReturnValue(encodeURIComponent("https://evil.com/phishing"));
 
       render(
         <WithAuthCheck>

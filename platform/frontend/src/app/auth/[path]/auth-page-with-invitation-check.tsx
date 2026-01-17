@@ -17,11 +17,13 @@ import { useInvitationCheck } from "@/lib/invitation.query";
 
 /**
  * Validates and decodes a redirectTo parameter to prevent open redirect attacks.
- * Returns the decoded path if valid, or "/" if invalid.
+ * Returns the full callback URL if valid, or undefined if invalid.
  */
-function getValidatedRedirectPath(redirectTo: string | null): string | null {
+function getValidatedCallbackURL(
+  redirectTo: string | null,
+): string | undefined {
   if (!redirectTo) {
-    return null;
+    return undefined;
   }
 
   let decodedPath: string;
@@ -29,7 +31,7 @@ function getValidatedRedirectPath(redirectTo: string | null): string | null {
     decodedPath = decodeURIComponent(redirectTo);
   } catch {
     // Malformed URI encoding
-    return null;
+    return undefined;
   }
 
   // Validate: must be relative path starting with single /, no protocol to prevent open redirects
@@ -38,7 +40,12 @@ function getValidatedRedirectPath(redirectTo: string | null): string | null {
     !decodedPath.startsWith("//") &&
     !decodedPath.includes("://");
 
-  return isRelativePath ? decodedPath : null;
+  if (!isRelativePath) {
+    return undefined;
+  }
+
+  // Return full URL - AuthView expects absolute URLs for callbackURL
+  return `${window.location.origin}${decodedPath}`;
 }
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
@@ -148,7 +155,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
               ? `${
                   path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
                 }?invitationId=${invitationId}`
-              : (getValidatedRedirectPath(redirectTo) ?? undefined)
+              : getValidatedCallbackURL(redirectTo)
           }
         />
       </div>

@@ -9,7 +9,8 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
   return (
     pathname?.startsWith("/auth/sign-in") ||
-    pathname?.startsWith("/auth/sign-up")
+    pathname?.startsWith("/auth/sign-up") ||
+    pathname?.startsWith("/auth/sign-out")
   );
 };
 
@@ -22,6 +23,32 @@ const pathCorrespondsToAnAuthPage = (pathname: string) => {
 const isSpecialAuthPage = (pathname: string) => {
   return pathname?.startsWith("/auth/two-factor");
 };
+
+/**
+ * Validates and decodes a redirectTo parameter to prevent open redirect attacks.
+ * Returns the decoded path if valid, or "/" if invalid.
+ */
+function getValidatedRedirectPath(redirectTo: string | null): string {
+  if (!redirectTo) {
+    return "/";
+  }
+
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(redirectTo);
+  } catch {
+    // Malformed URI encoding
+    return "/";
+  }
+
+  // Validate: must be relative path starting with single /, no protocol to prevent open redirects
+  const isRelativePath =
+    decodedPath.startsWith("/") &&
+    !decodedPath.startsWith("//") &&
+    !decodedPath.includes("://");
+
+  return isRelativePath ? decodedPath : "/";
+}
 
 export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   children,
@@ -87,8 +114,9 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
       // - During setup: user is setting up 2FA (logged in)
       return;
     } else if (isAuthPage && isLoggedIn) {
-      // User is logged in but on auth page (sign-in/sign-up), redirect to home
-      router.push("/");
+      // User is logged in but on auth page (sign-in/sign-up), redirect to redirectTo or home
+      const redirectTo = searchParams.get("redirectTo");
+      router.push(getValidatedRedirectPath(redirectTo));
     } else if (!isAuthPage && !isLoggedIn) {
       // User is not logged in and not on any auth page, redirect to sign-in
       // Preserve the original URL (including query params) so we can redirect back after login

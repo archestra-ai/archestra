@@ -663,6 +663,51 @@ export default function ChatPage() {
     });
   };
 
+  // Handle tool run action - sends a new message requesting to run the tool
+  const handleToolRun = useCallback(
+    (toolName: string, toolInput: Record<string, unknown>) => {
+      if (!sendMessage || status === "submitted" || status === "streaming") {
+        return;
+      }
+
+      // Create a message that requests running the tool with the given input
+      const toolMessage = `Run tool: ${toolName}\n\nInput:\n${JSON.stringify(toolInput, null, 2)}`;
+
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: toolMessage }],
+      });
+    },
+    [sendMessage, status],
+  );
+
+  // Handle tool output as prompt - populates textarea with tool output
+  const handleToolOutputAsPrompt = useCallback((output: unknown) => {
+    // Convert output to string format
+    let outputText: string;
+    if (typeof output === "string") {
+      try {
+        // Try to parse and pretty-print JSON
+        const parsed = JSON.parse(output);
+        outputText = JSON.stringify(parsed, null, 2);
+      } catch {
+        // Not JSON, use as-is
+        outputText = output;
+      }
+    } else {
+      outputText = JSON.stringify(output, null, 2);
+    }
+
+    // Set the textarea value
+    if (textareaRef.current) {
+      textareaRef.current.value = outputText;
+      textareaRef.current.focus();
+      // Trigger input event to update any controlled state
+      const event = new Event("input", { bubbles: true });
+      textareaRef.current.dispatchEvent(event);
+    }
+  }, []);
+
   // Handle initial prompt change (when no conversation exists)
   const handleInitialPromptChange = useCallback(
     (promptId: string | null, agentId: string) => {
@@ -1035,6 +1080,8 @@ export default function ChatPage() {
                   }
                 }}
                 error={error}
+                onToolRun={handleToolRun}
+                onToolOutputAsPrompt={handleToolOutputAsPrompt}
               />
             ) : (
               <div className="flex items-center justify-center h-full">

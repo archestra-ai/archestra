@@ -50,6 +50,53 @@ import {
   useTeamStatistics,
 } from "@/lib/statistics.query";
 
+/**
+ * Reusable tooltip component for cost charts.
+ * Shows a color dot indicator and formatted cost value for each data series.
+ */
+const CostChartTooltip = (
+  <ChartTooltipContent
+    indicator="dot"
+    formatter={(value, _name, item) => (
+      <>
+        <div
+          className="shrink-0 rounded-[2px] h-2.5 w-2.5"
+          style={{
+            backgroundColor: item.color || item.fill,
+          }}
+        />
+        <span className="text-foreground font-mono font-medium tabular-nums">
+          ${Number(value).toFixed(2)}
+        </span>
+      </>
+    )}
+  />
+);
+
+interface ChartContainerWrapperProps {
+  config: ChartConfig;
+  data: Record<string, string | number>[];
+  emptyMessage?: string;
+  children: React.ReactNode;
+}
+
+const ChartContainerWrapper = ({
+  config,
+  data,
+  emptyMessage = "No data available",
+  children,
+}: ChartContainerWrapperProps) => (
+  <ChartContainer config={config} className="aspect-auto h-80 w-full relative">
+    {data.length > 0 ? (
+      children
+    ) : (
+      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+        {emptyMessage}
+      </div>
+    )}
+  </ChartContainer>
+);
+
 const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
 
 export default function StatisticsPage() {
@@ -502,64 +549,52 @@ export default function StatisticsPage() {
             <CardTitle>Costs</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer
+            <ChartContainerWrapper
               config={costSavingsChartConfig}
-              className="aspect-auto h-80 w-full"
+              data={costSavingsChartData}
             >
-              {costSavingsChartData.length > 0 ? (
-                <LineChart
-                  accessibilityLayer
-                  data={costSavingsChartData}
-                  margin={{ top: 12, left: 12, right: 12 }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `$${value}`}
-                  />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => `$${Number(value).toFixed(2)}`}
-                      />
-                    }
-                  />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Line
-                    dataKey="nonOptimized"
-                    type="monotone"
-                    stroke="var(--color-nonOptimized)"
-                    strokeWidth={2}
-                    dot={{
-                      strokeWidth: 0,
-                      r: 3,
-                      fill: "var(--color-nonOptimized)",
-                    }}
-                    activeDot={{ strokeWidth: 0, r: 5 }}
-                  />
-                  <Line
-                    dataKey="actual"
-                    type="monotone"
-                    stroke="var(--color-actual)"
-                    strokeWidth={2}
-                    dot={{ strokeWidth: 0, r: 3, fill: "var(--color-actual)" }}
-                    activeDot={{ strokeWidth: 0, r: 5 }}
-                  />
-                </LineChart>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  No data available
-                </div>
-              )}
-            </ChartContainer>
+              <LineChart
+                accessibilityLayer
+                data={costSavingsChartData}
+                margin={{ top: 12, left: 12, right: 12 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tickFormatter={(value) => `$${value}`}
+                />
+                <ChartTooltip content={CostChartTooltip} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Line
+                  dataKey="nonOptimized"
+                  type="monotone"
+                  stroke="var(--color-nonOptimized)"
+                  strokeWidth={2}
+                  dot={{
+                    strokeWidth: 0,
+                    r: 3,
+                    fill: "var(--color-nonOptimized)",
+                  }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
+                <Line
+                  dataKey="actual"
+                  type="monotone"
+                  stroke="var(--color-actual)"
+                  strokeWidth={2}
+                  dot={{ strokeWidth: 0, r: 3, fill: "var(--color-actual)" }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
+              </LineChart>
+            </ChartContainerWrapper>
           </CardContent>
         </Card>
 
@@ -568,68 +603,56 @@ export default function StatisticsPage() {
             <CardTitle>Cost Savings</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer
+            <ChartContainerWrapper
               config={savingsBreakdownChartConfig}
-              className="aspect-auto h-80 w-full"
+              data={savingsBreakdownChartData}
             >
-              {savingsBreakdownChartData.length > 0 ? (
-                <LineChart
-                  accessibilityLayer
-                  data={savingsBreakdownChartData}
-                  margin={{ top: 12, left: 12, right: 12 }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `$${value}`}
-                  />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => `$${Number(value).toFixed(2)}`}
-                      />
-                    }
-                  />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Line
-                    dataKey="optimization"
-                    type="monotone"
-                    stroke="var(--color-optimization)"
-                    strokeWidth={2}
-                    dot={{
-                      strokeWidth: 0,
-                      r: 3,
-                      fill: "var(--color-optimization)",
-                    }}
-                    activeDot={{ strokeWidth: 0, r: 5 }}
-                  />
-                  <Line
-                    dataKey="compression"
-                    type="monotone"
-                    stroke="var(--color-compression)"
-                    strokeWidth={2}
-                    dot={{
-                      strokeWidth: 0,
-                      r: 3,
-                      fill: "var(--color-compression)",
-                    }}
-                    activeDot={{ strokeWidth: 0, r: 5 }}
-                  />
-                </LineChart>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  No data available
-                </div>
-              )}
-            </ChartContainer>
+              <LineChart
+                accessibilityLayer
+                data={savingsBreakdownChartData}
+                margin={{ top: 12, left: 12, right: 12 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tickFormatter={(value) => `$${value}`}
+                />
+                <ChartTooltip content={CostChartTooltip} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Line
+                  dataKey="optimization"
+                  type="monotone"
+                  stroke="var(--color-optimization)"
+                  strokeWidth={2}
+                  dot={{
+                    strokeWidth: 0,
+                    r: 3,
+                    fill: "var(--color-optimization)",
+                  }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
+                <Line
+                  dataKey="compression"
+                  type="monotone"
+                  stroke="var(--color-compression)"
+                  strokeWidth={2}
+                  dot={{
+                    strokeWidth: 0,
+                    r: 3,
+                    fill: "var(--color-compression)",
+                  }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
+              </LineChart>
+            </ChartContainerWrapper>
           </CardContent>
         </Card>
       </div>
@@ -641,59 +664,48 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <ChartContainer
+              <ChartContainerWrapper
                 config={teamChartConfig}
-                className="aspect-auto h-80 w-full"
+                data={teamChartData}
+                emptyMessage="No team data available"
               >
-                {teamChartData.length > 0 ? (
-                  <LineChart
-                    accessibilityLayer
-                    data={teamChartData}
-                    margin={{ top: 12, left: 12, right: 12 }}
-                  >
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
+                <LineChart
+                  accessibilityLayer
+                  data={teamChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip content={CostChartTooltip} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  {teamStatistics.slice(0, 5).map((team) => (
+                    <Line
+                      key={team.teamId}
+                      dataKey={team.teamId}
+                      type="monotone"
+                      stroke={`var(--color-${team.teamId})`}
+                      strokeWidth={2}
+                      dot={{
+                        strokeWidth: 0,
+                        r: 3,
+                        fill: `var(--color-${team.teamId})`,
+                      }}
+                      activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tickFormatter={(value) => `$${value}`}
-                    />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) => `$${Number(value).toFixed(2)}`}
-                        />
-                      }
-                    />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    {teamStatistics.slice(0, 5).map((team) => (
-                      <Line
-                        key={team.teamId}
-                        dataKey={team.teamId}
-                        type="monotone"
-                        stroke={`var(--color-${team.teamId})`}
-                        strokeWidth={2}
-                        dot={{
-                          strokeWidth: 0,
-                          r: 3,
-                          fill: `var(--color-${team.teamId})`,
-                        }}
-                        activeDot={{ strokeWidth: 0, r: 5 }}
-                      />
-                    ))}
-                  </LineChart>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    No team data available
-                  </div>
-                )}
-              </ChartContainer>
+                  ))}
+                </LineChart>
+              </ChartContainerWrapper>
               {teamStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   Chart shows top 5 by cost
@@ -757,59 +769,48 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <ChartContainer
+              <ChartContainerWrapper
                 config={profileChartConfig}
-                className="aspect-auto h-80 w-full"
+                data={profileChartData}
+                emptyMessage="No profile data available"
               >
-                {profileChartData.length > 0 ? (
-                  <LineChart
-                    accessibilityLayer
-                    data={profileChartData}
-                    margin={{ top: 12, left: 12, right: 12 }}
-                  >
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
+                <LineChart
+                  accessibilityLayer
+                  data={profileChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip content={CostChartTooltip} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  {agentStatistics.slice(0, 5).map((agent) => (
+                    <Line
+                      key={agent.agentId}
+                      dataKey={agent.agentId}
+                      type="monotone"
+                      stroke={`var(--color-${agent.agentId})`}
+                      strokeWidth={2}
+                      dot={{
+                        strokeWidth: 0,
+                        r: 3,
+                        fill: `var(--color-${agent.agentId})`,
+                      }}
+                      activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tickFormatter={(value) => `$${value}`}
-                    />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) => `$${Number(value).toFixed(2)}`}
-                        />
-                      }
-                    />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    {agentStatistics.slice(0, 5).map((agent) => (
-                      <Line
-                        key={agent.agentId}
-                        dataKey={agent.agentId}
-                        type="monotone"
-                        stroke={`var(--color-${agent.agentId})`}
-                        strokeWidth={2}
-                        dot={{
-                          strokeWidth: 0,
-                          r: 3,
-                          fill: `var(--color-${agent.agentId})`,
-                        }}
-                        activeDot={{ strokeWidth: 0, r: 5 }}
-                      />
-                    ))}
-                  </LineChart>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    No profile data available
-                  </div>
-                )}
-              </ChartContainer>
+                  ))}
+                </LineChart>
+              </ChartContainerWrapper>
               {agentStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   Chart shows top 5 by cost
@@ -873,59 +874,48 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <ChartContainer
+              <ChartContainerWrapper
                 config={modelChartConfig}
-                className="aspect-auto h-80 w-full"
+                data={modelChartData}
+                emptyMessage="No model data available"
               >
-                {modelChartData.length > 0 ? (
-                  <LineChart
-                    accessibilityLayer
-                    data={modelChartData}
-                    margin={{ top: 12, left: 12, right: 12 }}
-                  >
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
+                <LineChart
+                  accessibilityLayer
+                  data={modelChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip content={CostChartTooltip} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  {modelStatistics.slice(0, 5).map((model) => (
+                    <Line
+                      key={model.model}
+                      dataKey={model.model}
+                      type="monotone"
+                      stroke={`var(--color-${model.model})`}
+                      strokeWidth={2}
+                      dot={{
+                        strokeWidth: 0,
+                        r: 3,
+                        fill: `var(--color-${model.model})`,
+                      }}
+                      activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tickFormatter={(value) => `$${value}`}
-                    />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) => `$${Number(value).toFixed(2)}`}
-                        />
-                      }
-                    />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    {modelStatistics.slice(0, 5).map((model) => (
-                      <Line
-                        key={model.model}
-                        dataKey={model.model}
-                        type="monotone"
-                        stroke={`var(--color-${model.model})`}
-                        strokeWidth={2}
-                        dot={{
-                          strokeWidth: 0,
-                          r: 3,
-                          fill: `var(--color-${model.model})`,
-                        }}
-                        activeDot={{ strokeWidth: 0, r: 5 }}
-                      />
-                    ))}
-                  </LineChart>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    No model data available
-                  </div>
-                )}
-              </ChartContainer>
+                  ))}
+                </LineChart>
+              </ChartContainerWrapper>
               {modelStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   Chart shows top 5 by cost

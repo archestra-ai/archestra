@@ -9,6 +9,10 @@ import {
 import type { CommonToolCall } from "@/types";
 import agentsTable from "./agent";
 
+// Note: Additional pg_trgm GIN indexes for search are created in migration 0116_pg_trgm_indexes.sql:
+// - mcp_tool_calls_method_trgm_idx: GIN index on method column
+// - mcp_tool_calls_mcp_server_name_trgm_idx: GIN index on mcp_server_name column
+// - mcp_tool_calls_tool_result_trgm_idx: GIN index on (tool_result::text)
 const mcpToolCallsTable = pgTable(
   "mcp_tool_calls",
   {

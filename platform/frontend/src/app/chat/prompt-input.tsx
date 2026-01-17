@@ -25,6 +25,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
+import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ProfileSelector } from "@/components/chat/profile-selector";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
@@ -116,6 +117,14 @@ const PromptInputContent = ({
       <PromptInputAttachments className="px-3 pt-2 pb-0">
         {(attachment) => <PromptInputAttachment data={attachment} />}
       </PromptInputAttachments>
+      {/* Knowledge graph upload indicator - shown when KG is configured and files are attached */}
+      {controller.attachments.files.length > 0 && (
+        <div className="px-3 pt-1">
+          <KnowledgeGraphUploadIndicator
+            attachmentCount={controller.attachments.files.length}
+          />
+        </div>
+      )}
       <PromptInputBody>
         <PromptInputTextarea
           placeholder="Type a message..."

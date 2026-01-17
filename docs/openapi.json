@@ -37822,6 +37822,27 @@
                         "enabled"
                       ],
                       "additionalProperties": false
+                    },
+                    "knowledgeGraph": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "lightrag"
+                          ]
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "enabled"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -37833,7 +37854,8 @@
                     "ollamaEnabled",
                     "globalToolPolicy",
                     "browserStreamingEnabled",
-                    "incomingEmail"
+                    "incomingEmail",
+                    "knowledgeGraph"
                   ],
                   "additionalProperties": false
                 }

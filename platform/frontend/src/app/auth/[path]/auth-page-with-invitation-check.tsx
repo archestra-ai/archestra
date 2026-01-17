@@ -15,10 +15,37 @@ import {
 import config from "@/lib/config";
 import { useInvitationCheck } from "@/lib/invitation.query";
 
+/**
+ * Validates and decodes a redirectTo parameter to prevent open redirect attacks.
+ * Returns the decoded path if valid, or "/" if invalid.
+ */
+function getValidatedRedirectPath(redirectTo: string | null): string | null {
+  if (!redirectTo) {
+    return null;
+  }
+
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(redirectTo);
+  } catch {
+    // Malformed URI encoding
+    return null;
+  }
+
+  // Validate: must be relative path starting with single /, no protocol to prevent open redirects
+  const isRelativePath =
+    decodedPath.startsWith("/") &&
+    !decodedPath.startsWith("//") &&
+    !decodedPath.includes("://");
+
+  return isRelativePath ? decodedPath : null;
+}
+
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitationId = searchParams.get("invitationId");
+  const redirectTo = searchParams.get("redirectTo");
 
   const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
 
@@ -121,7 +148,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
               ? `${
                   path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
                 }?invitationId=${invitationId}`
-              : undefined
+              : (getValidatedRedirectPath(redirectTo) ?? undefined)
           }
         />
       </div>

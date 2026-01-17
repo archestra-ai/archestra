@@ -1,5 +1,4 @@
 import {
-  boolean,
   index,
   pgTable,
   text,
@@ -8,10 +7,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type {
-  ChatOpsProviderType,
-  ChatOpsTriggerPattern,
-} from "@/types/chatops";
+import type { ChatOpsProviderType } from "@/types/chatops";
 import promptsTable from "./prompt";
 
 /**
@@ -41,15 +37,6 @@ const chatopsChannelBindingsTable = pgTable(
     promptId: uuid("prompt_id")
       .notNull()
       .references(() => promptsTable.id, { onDelete: "cascade" }),
-    /** User-friendly name for the binding */
-    name: varchar("name", { length: 256 }),
-    /** Whether this binding is active */
-    enabled: boolean("enabled").notNull().default(true),
-    /** When the bot should respond (mention = only when @mentioned, all = all messages) */
-    triggerPattern: varchar("trigger_pattern", { length: 32 })
-      .$type<ChatOpsTriggerPattern>()
-      .notNull()
-      .default("mention"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

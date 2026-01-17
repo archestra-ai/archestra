@@ -1,50 +1,11 @@
 import { and, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { ChatOpsProviderType } from "@/types/chatops";
 import type {
-  ChatOpsProviderType,
-  ChatOpsTriggerPattern,
-} from "@/types/chatops";
-
-/**
- * Represents a channel binding record from the database
- */
-export interface ChatOpsChannelBinding {
-  id: string;
-  organizationId: string;
-  provider: ChatOpsProviderType;
-  channelId: string;
-  workspaceId: string | null;
-  promptId: string;
-  name: string | null;
-  enabled: boolean;
-  triggerPattern: ChatOpsTriggerPattern;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-/**
- * Input for creating a channel binding
- */
-export interface CreateChannelBindingInput {
-  organizationId: string;
-  provider: ChatOpsProviderType;
-  channelId: string;
-  workspaceId?: string | null;
-  promptId: string;
-  name?: string | null;
-  enabled?: boolean;
-  triggerPattern?: ChatOpsTriggerPattern;
-}
-
-/**
- * Input for updating a channel binding
- */
-export interface UpdateChannelBindingInput {
-  promptId?: string;
-  name?: string | null;
-  enabled?: boolean;
-  triggerPattern?: ChatOpsTriggerPattern;
-}
+  ChatOpsChannelBinding,
+  InsertChatOpsChannelBinding,
+  UpdateChatOpsChannelBinding,
+} from "@/types/chatops-channel-binding";
 
 /**
  * Model for managing chatops channel bindings.
@@ -55,7 +16,7 @@ class ChatOpsChannelBindingModel {
    * Create a new channel binding
    */
   static async create(
-    input: CreateChannelBindingInput,
+    input: InsertChatOpsChannelBinding,
   ): Promise<ChatOpsChannelBinding> {
     const [binding] = await db
       .insert(schema.chatopsChannelBindingsTable)
@@ -65,9 +26,6 @@ class ChatOpsChannelBindingModel {
         channelId: input.channelId,
         workspaceId: input.workspaceId ?? null,
         promptId: input.promptId,
-        name: input.name ?? null,
-        enabled: input.enabled ?? true,
-        triggerPattern: input.triggerPattern ?? "mention",
       })
       .returning();
 
@@ -193,17 +151,12 @@ class ChatOpsChannelBindingModel {
    */
   static async update(
     id: string,
-    input: UpdateChannelBindingInput,
+    input: UpdateChatOpsChannelBinding,
   ): Promise<ChatOpsChannelBinding | null> {
     const [binding] = await db
       .update(schema.chatopsChannelBindingsTable)
       .set({
         ...(input.promptId !== undefined && { promptId: input.promptId }),
-        ...(input.name !== undefined && { name: input.name }),
-        ...(input.enabled !== undefined && { enabled: input.enabled }),
-        ...(input.triggerPattern !== undefined && {
-          triggerPattern: input.triggerPattern,
-        }),
       })
       .where(eq(schema.chatopsChannelBindingsTable.id, id))
       .returning();
@@ -216,7 +169,7 @@ class ChatOpsChannelBindingModel {
    * Creates if not exists, updates if exists
    */
   static async upsertByChannel(
-    input: CreateChannelBindingInput,
+    input: InsertChatOpsChannelBinding,
   ): Promise<ChatOpsChannelBinding> {
     const existing = await ChatOpsChannelBindingModel.findByChannel({
       provider: input.provider,
@@ -227,9 +180,6 @@ class ChatOpsChannelBindingModel {
     if (existing) {
       const updated = await ChatOpsChannelBindingModel.update(existing.id, {
         promptId: input.promptId,
-        name: input.name,
-        enabled: input.enabled,
-        triggerPattern: input.triggerPattern,
       });
       if (!updated) {
         throw new Error("Failed to update binding");

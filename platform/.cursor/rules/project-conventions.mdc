@@ -52,3 +52,123 @@ async function validateScope(
   userId: string
 ): Promise<void> { ... }
 ```
+
+## Classes vs Module Functions
+
+- **Prefer classes for stateful modules**: When encapsulating functionality that involves state (cached values, intervals, connections), use a class with a singleton instance instead of module-level variables with loose functions
+- This improves encapsulation, testability, and makes state management explicit
+
+```typescript
+// Good - class with singleton
+class ChatOpsManager {
+  private provider: Provider | null = null;
+
+  initialize() { ... }
+  cleanup() { ... }
+}
+export const chatOpsManager = new ChatOpsManager();
+
+// Avoid - module-level state with loose functions
+let provider: Provider | null = null;
+export function initialize() { ... }
+export function cleanup() { ... }
+```
+
+## Private Methods
+
+- **Mark methods as `private`** if they are only used within the class
+- **Place private methods at the bottom** of the class, after all public methods
+- This keeps the "public interface" visible at the top of the class
+
+```typescript
+class MyService {
+  // Public methods first
+  doSomething() {
+    this.helperA();
+  }
+
+  // Private methods at bottom
+  private helperA() { ... }
+  private helperB() { ... }
+}
+```
+
+## Export Discipline
+
+- **CRITICAL: Only export what is actually used outside the module**
+- If a function, constant, or type is only used within the module, do NOT export it
+- Avoid "just in case" exports - they pollute the public API and create unnecessary coupling
+
+```typescript
+// Good - only export what's needed externally
+export const myService = new MyService();
+
+// Bad - exporting internal helpers
+export function internalHelper() { ... }  // Not used outside!
+export const INTERNAL_CONSTANT = 42;      // Not used outside!
+```
+
+## Module Code Order
+
+- Structure modules so the **public interface appears at the top**
+- Internal/private functions and constants go at the **bottom** of the file
+- This makes it immediately clear what the module exposes
+
+```typescript
+// 1. Imports
+import { something } from "somewhere";
+
+// 2. Exported items (public interface) - at TOP
+export function publicFunctionA() {
+  return helperB();
+}
+
+export const publicConstant = "value";
+
+// 3. Internal helpers - at BOTTOM (ordered by dependency)
+function helperB() {
+  return helperC();
+}
+
+function helperC() {
+  return INTERNAL_CONFIG.value;
+}
+
+const INTERNAL_CONFIG = { value: 42 };
+```
+
+## Database Types via drizzle-zod
+
+- **Never manually define TypeScript interfaces for database entities**
+- Use `drizzle-zod` to generate Zod schemas from Drizzle table definitions
+- Infer types with `z.infer<>` to keep types in sync with the schema automatically
+- Place these in `backend/src/types/<entity>.ts`
+
+```typescript
+// In types/<entity>.ts
+import { createSelectSchema, createInsertSchema, createUpdateSchema } from "drizzle-zod";
+import type { z } from "zod";
+import { schema } from "@/database";
+
+// Generate schemas from Drizzle table
+export const SelectEntitySchema = createSelectSchema(schema.entityTable);
+export const InsertEntitySchema = createInsertSchema(schema.entityTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const UpdateEntitySchema = createUpdateSchema(schema.entityTable).pick({
+  fieldToUpdate: true,
+});
+
+// Infer types from schemas
+export type Entity = z.infer<typeof SelectEntitySchema>;
+export type InsertEntity = z.infer<typeof InsertEntitySchema>;
+export type UpdateEntity = z.infer<typeof UpdateEntitySchema>;
+```
+
+**Benefits:**
+- Single source of truth (Drizzle schema)
+- Types automatically stay in sync with database schema
+- Zod schemas can be used for runtime validation
+- No manual type maintenance required

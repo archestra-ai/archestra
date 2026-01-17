@@ -2,7 +2,7 @@ import { RouteId } from "@shared";
 import type { TurnContext } from "botbuilder";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getMSTeamsProvider, processChatOpsMessage } from "@/agents/chatops";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
@@ -76,9 +76,6 @@ const BindingResponseSchema = z.object({
   channelId: z.string(),
   workspaceId: z.string().nullable(),
   promptId: z.string().uuid(),
-  name: z.string().nullable(),
-  enabled: z.boolean(),
-  triggerPattern: z.string(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -113,7 +110,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const provider = getMSTeamsProvider();
+      const provider = chatOpsManager.getMSTeamsProvider();
 
       if (!provider) {
         logger.warn(
@@ -241,7 +238,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
 
             // Process message through bound agent
-            await processChatOpsMessage({
+            await chatOpsManager.processMessage({
               message,
               provider,
               sendReply: true,
@@ -299,7 +296,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }[] = [];
 
       // Check MS Teams
-      const msTeamsProvider = getMSTeamsProvider();
+      const msTeamsProvider = chatOpsManager.getMSTeamsProvider();
       providers.push({
         id: "ms-teams",
         displayName: "Microsoft Teams",
@@ -512,9 +509,6 @@ async function handleAgentSelection(
     channelId: channelId || message.channelId,
     workspaceId: workspaceId || message.workspaceId,
     promptId,
-    name: prompt.name,
-    enabled: true,
-    triggerPattern: "mention",
   });
 
   await context.sendActivity(

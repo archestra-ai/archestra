@@ -31,10 +31,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  cleanupChatOpsProviders,
-  initializeChatOpsProviders,
-} from "@/agents/chatops";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   cleanupEmailProvider,
   cleanupOldProcessedEmails,
@@ -483,7 +480,7 @@ const start = async () => {
     await initializeEmailProvider();
 
     // Initialize chatops providers (MS Teams, Slack, etc.)
-    await initializeChatOpsProviders();
+    await chatOpsManager.initialize();
 
     // Initialize knowledge graph provider (if configured)
     // This enables automatic document ingestion from chat uploads
@@ -572,7 +569,7 @@ const start = async () => {
         fastify.log.info("Email provider cleanup completed");
 
         // Cleanup chatops providers
-        await cleanupChatOpsProviders();
+        await chatOpsManager.cleanup();
         fastify.log.info("ChatOps provider cleanup completed");
 
         // Cleanup knowledge graph provider

@@ -30,33 +30,6 @@ describe("ChatOpsChannelBindingModel", () => {
       expect(binding.channelId).toBe("channel-123");
       expect(binding.workspaceId).toBe("workspace-456");
       expect(binding.promptId).toBe(prompt.id);
-      expect(binding.enabled).toBe(true); // default
-      expect(binding.triggerPattern).toBe("mention"); // default
-    });
-
-    test("creates a binding with custom trigger pattern", async ({
-      makeAgent,
-      makeOrganization,
-      makePrompt,
-    }) => {
-      const org = await makeOrganization();
-      const agent = await makeAgent();
-      const prompt = await makePrompt({
-        organizationId: org.id,
-        agentId: agent.id,
-      });
-
-      const binding = await ChatOpsChannelBindingModel.create({
-        organizationId: org.id,
-        provider: "ms-teams",
-        channelId: "channel-123",
-        promptId: prompt.id,
-        triggerPattern: "all",
-        enabled: false,
-      });
-
-      expect(binding.triggerPattern).toBe("all");
-      expect(binding.enabled).toBe(false);
     });
   });
 
@@ -115,20 +88,20 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
-        provider: "slack",
-        channelId: "channel-slack",
+        provider: "ms-teams",
+        channelId: "channel-ms-teams",
         workspaceId: null,
         promptId: prompt.id,
       });
 
       const binding = await ChatOpsChannelBindingModel.findByChannel({
-        provider: "slack",
-        channelId: "channel-slack",
+        provider: "ms-teams",
+        channelId: "channel-ms-teams",
         workspaceId: null,
       });
 
       expect(binding).toBeDefined();
-      expect(binding?.channelId).toBe("channel-slack");
+      expect(binding?.channelId).toBe("channel-ms-teams");
     });
   });
 
@@ -250,7 +223,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
-        provider: "slack",
+        provider: "ms-teams",
         channelId: "channel-2",
         promptId: prompt2.id,
       });
@@ -295,7 +268,7 @@ describe("ChatOpsChannelBindingModel", () => {
 
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
-        provider: "slack",
+        provider: "ms-teams",
         channelId: "channel-2",
         promptId: prompt.id,
       });
@@ -330,25 +303,20 @@ describe("ChatOpsChannelBindingModel", () => {
         provider: "ms-teams",
         channelId: "channel-123",
         promptId: prompt1.id,
-        enabled: true,
       });
 
       const updated = await ChatOpsChannelBindingModel.update(created.id, {
         promptId: prompt2.id,
-        enabled: false,
-        triggerPattern: "all",
       });
 
       expect(updated).toBeDefined();
       expect(updated?.promptId).toBe(prompt2.id);
-      expect(updated?.enabled).toBe(false);
-      expect(updated?.triggerPattern).toBe("all");
     });
 
     test("returns null for nonexistent binding", async () => {
       const updated = await ChatOpsChannelBindingModel.update(
         "00000000-0000-0000-0000-000000000000",
-        { enabled: false },
+        { promptId: "00000000-0000-0000-0000-000000000001" },
       );
       expect(updated).toBeNull();
     });
@@ -411,11 +379,9 @@ describe("ChatOpsChannelBindingModel", () => {
         channelId: "channel-123",
         workspaceId: "workspace-456",
         promptId: prompt2.id,
-        triggerPattern: "all",
       });
 
       expect(binding.promptId).toBe(prompt2.id);
-      expect(binding.triggerPattern).toBe("all");
 
       // Verify only one binding exists
       const allBindings = await ChatOpsChannelBindingModel.findByOrganization(

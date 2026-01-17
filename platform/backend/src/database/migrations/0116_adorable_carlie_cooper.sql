@@ -5,9 +5,6 @@ CREATE TABLE "chatops_channel_binding" (
 	"channel_id" varchar(256) NOT NULL,
 	"workspace_id" varchar(256),
 	"prompt_id" uuid NOT NULL,
-	"name" varchar(256),
-	"enabled" boolean DEFAULT true NOT NULL,
-	"trigger_pattern" varchar(32) DEFAULT 'mention' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );

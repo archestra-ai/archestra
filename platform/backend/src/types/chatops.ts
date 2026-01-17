@@ -4,20 +4,8 @@ import { z } from "zod";
  * ChatOps provider types enum
  * Used for PG ENUM in database schema
  */
-export const ChatOpsProviderTypeSchema = z.enum([
-  "ms-teams",
-  "slack",
-  "discord",
-]);
+export const ChatOpsProviderTypeSchema = z.enum(["ms-teams"]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
-
-/**
- * Trigger patterns for when the bot responds
- * - mention: Only respond when @mentioned
- * - all: Respond to all messages in the channel
- */
-export const ChatOpsTriggerPatternSchema = z.enum(["mention", "all"]);
-export type ChatOpsTriggerPattern = z.infer<typeof ChatOpsTriggerPatternSchema>;
 
 /**
  * Represents an incoming chat message from a chatops provider

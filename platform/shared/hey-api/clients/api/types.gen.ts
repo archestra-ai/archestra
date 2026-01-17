@@ -11059,6 +11059,11 @@ export type GetFeaturesResponses = {
             displayName?: string;
             emailDomain?: string;
         };
+        knowledgeGraph: {
+            enabled: boolean;
+            provider?: 'lightrag';
+            displayName?: string;
+        };
     };
 };
 

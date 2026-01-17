@@ -25,6 +25,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
+import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ProfileSelector } from "@/components/chat/profile-selector";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
@@ -172,6 +173,9 @@ const PromptInputContent = ({
           )}
         </PromptInputTools>
         <div className="flex items-center gap-2">
+          <KnowledgeGraphUploadIndicator
+            attachmentCount={controller.attachments.files.length}
+          />
           <PromptInputSpeechButton
             textareaRef={textareaRef}
             onTranscriptionChange={handleTranscriptionChange}

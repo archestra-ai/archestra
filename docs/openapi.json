@@ -35827,29 +35827,24 @@
                         "type": "string"
                       },
                       "provider": {
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                          "ms-teams"
+                        ]
                       },
                       "channelId": {
-                        "type": "string"
+                        "type": "string",
+                        "maxLength": 256
                       },
                       "workspaceId": {
                         "nullable": true,
-                        "type": "string"
+                        "type": "string",
+                        "maxLength": 256
                       },
                       "promptId": {
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "name": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "enabled": {
-                        "type": "boolean"
-                      },
-                      "triggerPattern": {
-                        "type": "string"
                       },
                       "createdAt": {
                         "type": "string",
@@ -35869,9 +35864,6 @@
                       "channelId",
                       "workspaceId",
                       "promptId",
-                      "name",
-                      "enabled",
-                      "triggerPattern",
                       "createdAt",
                       "updatedAt"
                     ],

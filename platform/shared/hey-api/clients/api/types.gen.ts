@@ -10543,13 +10543,10 @@ export type ListChatOpsBindingsResponses = {
     200: Array<{
         id: string;
         organizationId: string;
-        provider: string;
+        provider: 'ms-teams';
         channelId: string;
         workspaceId: string | null;
         promptId: string;
-        name: string | null;
-        enabled: boolean;
-        triggerPattern: string;
         createdAt: string;
         updatedAt: string;
     }>;

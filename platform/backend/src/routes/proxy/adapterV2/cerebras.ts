@@ -964,27 +964,43 @@ async function convertToolResultsToToon(
             { role: "user", content: compressed },
           ]);
 
-          totalTokensBefore += tokensBefore;
-          totalTokensAfter += tokensAfter;
           toolResultCount++;
 
+          // Only apply compression if it actually saves tokens
+          if (tokensAfter < tokensBefore) {
+            totalTokensBefore += tokensBefore;
+            totalTokensAfter += tokensAfter;
+
+            logger.info(
+              {
+                toolCallId: message.tool_call_id,
+                beforeLength: noncompressed.length,
+                afterLength: compressed.length,
+                tokensBefore,
+                tokensAfter,
+                toonPreview: compressed.substring(0, 150),
+                provider: "cerebras",
+              },
+              "convertToolResultsToToon: compressed",
+            );
+
+            return {
+              ...message,
+              content: compressed,
+            };
+          }
+
+          // Compression would increase tokens - keep original
           logger.info(
             {
               toolCallId: message.tool_call_id,
-              beforeLength: noncompressed.length,
-              afterLength: compressed.length,
               tokensBefore,
               tokensAfter,
-              toonPreview: compressed.substring(0, 150),
               provider: "cerebras",
             },
-            "convertToolResultsToToon: compressed",
+            "Skipping TOON compression - compressed output has more tokens",
           );
-
-          return {
-            ...message,
-            content: compressed,
-          };
+          return message;
         } catch {
           logger.info(
             {

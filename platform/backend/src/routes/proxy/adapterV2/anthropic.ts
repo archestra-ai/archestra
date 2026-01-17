@@ -880,36 +880,52 @@ export async function convertToolResultsToToon(
               const tokensAfter = tokenizer.countTokens([
                 { role: "user", content: compressed },
               ]);
-              totalTokensBefore += tokensBefore;
-              totalTokensAfter += tokensAfter;
 
+              // Only apply compression if it actually saves tokens
+              if (tokensAfter < tokensBefore) {
+                totalTokensBefore += tokensBefore;
+                totalTokensAfter += tokensAfter;
+
+                logger.info(
+                  {
+                    toolCallId: contentBlock.tool_use_id,
+                    beforeLength: noncompressed.length,
+                    afterLength: compressed.length,
+                    tokensBefore,
+                    tokensAfter,
+                    toonPreview: compressed.substring(0, 150),
+                    provider: "anthropic",
+                  },
+                  "convertToolResultsToToon: compressed (string content)",
+                );
+                logger.debug(
+                  {
+                    toolCallId: contentBlock.tool_use_id,
+                    before: noncompressed,
+                    after: compressed,
+                    provider: "anthropic",
+                    supposedToBeJson: parsed,
+                  },
+                  "convertToolResultsToToon: before/after",
+                );
+
+                return {
+                  ...contentBlock,
+                  content: compressed,
+                };
+              }
+
+              // Compression would increase tokens - keep original
               logger.info(
                 {
                   toolCallId: contentBlock.tool_use_id,
-                  beforeLength: noncompressed.length,
-                  afterLength: compressed.length,
                   tokensBefore,
                   tokensAfter,
-                  toonPreview: compressed.substring(0, 150),
                   provider: "anthropic",
                 },
-                "convertToolResultsToToon: compressed (string content)",
+                "Skipping TOON compression - compressed output has more tokens",
               );
-              logger.debug(
-                {
-                  toolCallId: contentBlock.tool_use_id,
-                  before: noncompressed,
-                  after: compressed,
-                  provider: "anthropic",
-                  supposedToBeJson: parsed,
-                },
-                "convertToolResultsToToon: before/after",
-              );
-
-              return {
-                ...contentBlock,
-                content: compressed,
-              };
+              return contentBlock;
             } catch {
               logger.info(
                 {
@@ -945,36 +961,50 @@ export async function convertToolResultsToToon(
                     { role: "user", content: compressed },
                   ]);
 
-                  // Track compression stats in tokens
-                  totalTokensBefore += tokensBefore;
-                  totalTokensAfter += tokensAfter;
+                  // Only apply compression if it actually saves tokens
+                  if (tokensAfter < tokensBefore) {
+                    totalTokensBefore += tokensBefore;
+                    totalTokensAfter += tokensAfter;
 
+                    logger.info(
+                      {
+                        toolCallId: contentBlock.tool_use_id,
+                        beforeLength: noncompressed.length,
+                        afterLength: compressed.length,
+                        tokensBefore,
+                        tokensAfter,
+                        toonPreview: compressed.substring(0, 150),
+                      },
+                      "convertToolResultsToToon: compressed (array content)",
+                    );
+                    logger.debug(
+                      {
+                        toolCallId: contentBlock.tool_use_id,
+                        before: noncompressed,
+                        after: compressed,
+                        provider: "anthropic",
+                        supposedToBeJson: parsed,
+                      },
+                      "convertToolResultsToToon: before/after",
+                    );
+
+                    return {
+                      ...block,
+                      text: compressed,
+                    };
+                  }
+
+                  // Compression would increase tokens - keep original
                   logger.info(
                     {
                       toolCallId: contentBlock.tool_use_id,
-                      beforeLength: noncompressed.length,
-                      afterLength: compressed.length,
                       tokensBefore,
                       tokensAfter,
-                      toonPreview: compressed.substring(0, 150),
-                    },
-                    "convertToolResultsToToon: compressed (array content)",
-                  );
-                  logger.debug(
-                    {
-                      toolCallId: contentBlock.tool_use_id,
-                      before: noncompressed,
-                      after: compressed,
                       provider: "anthropic",
-                      supposedToBeJson: parsed,
                     },
-                    "convertToolResultsToToon: before/after",
+                    "Skipping TOON compression - compressed output has more tokens",
                   );
-
-                  return {
-                    ...block,
-                    text: compressed,
-                  };
+                  return block;
                 } catch {
                   // Not JSON, keep as-is
                   logger.info(

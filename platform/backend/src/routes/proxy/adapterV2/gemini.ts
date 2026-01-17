@@ -687,44 +687,63 @@ async function convertToolResultsToToon(
               const tokensAfter = tokenizer.countTokens([
                 { role: "user", content: compressed },
               ]);
-              totalTokensBefore += tokensBefore;
-              totalTokensAfter += tokensAfter;
 
+              // Only apply compression if it actually saves tokens
+              if (tokensAfter < tokensBefore) {
+                totalTokensBefore += tokensBefore;
+                totalTokensAfter += tokensAfter;
+
+                logger.info(
+                  {
+                    functionName:
+                      "name" in functionResponse
+                        ? functionResponse.name
+                        : "unknown",
+                    beforeLength: noncompressed.length,
+                    afterLength: compressed.length,
+                    tokensBefore,
+                    tokensAfter,
+                    toonPreview: compressed.substring(0, 150),
+                    provider: "gemini",
+                  },
+                  "convertToolResultsToToon: compressed",
+                );
+                logger.debug(
+                  {
+                    functionName:
+                      "name" in functionResponse
+                        ? functionResponse.name
+                        : "unknown",
+                    before: noncompressed,
+                    after: compressed,
+                    provider: "gemini",
+                  },
+                  "convertToolResultsToToon: before/after",
+                );
+
+                // Return updated part with compressed response
+                return {
+                  functionResponse: {
+                    ...functionResponse,
+                    response: { toon: compressed } as Record<string, unknown>,
+                  },
+                };
+              }
+
+              // Compression would increase tokens - keep original
               logger.info(
                 {
                   functionName:
                     "name" in functionResponse
                       ? functionResponse.name
                       : "unknown",
-                  beforeLength: noncompressed.length,
-                  afterLength: compressed.length,
                   tokensBefore,
                   tokensAfter,
-                  toonPreview: compressed.substring(0, 150),
                   provider: "gemini",
                 },
-                "convertToolResultsToToon: compressed",
+                "Skipping TOON compression - compressed output has more tokens",
               );
-              logger.debug(
-                {
-                  functionName:
-                    "name" in functionResponse
-                      ? functionResponse.name
-                      : "unknown",
-                  before: noncompressed,
-                  after: compressed,
-                  provider: "gemini",
-                },
-                "convertToolResultsToToon: before/after",
-              );
-
-              // Return updated part with compressed response
-              return {
-                functionResponse: {
-                  ...functionResponse,
-                  response: { toon: compressed } as Record<string, unknown>,
-                },
-              };
+              return part;
             } catch {
               logger.info(
                 {

@@ -269,6 +269,7 @@ export function ArchestraCatalogTab({
         localConfig = {
           command: server.server.command,
           arguments: server.server.args,
+          dockerImage: server.server.docker_image,
           serviceAccount: serviceAccount
             ? serviceAccount.replace(
                 /\{\{ARCHESTRA_RELEASE_NAME\}\}/g,

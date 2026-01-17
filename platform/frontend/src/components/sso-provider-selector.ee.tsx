@@ -25,11 +25,29 @@ export function SsoProviderSelector({
   const { data: ssoProviders = [], isLoading } = usePublicSsoProviders();
 
   // Get the redirectTo URL from search params, defaulting to "/"
+  // Validates that the path is safe (relative path, no protocol) to prevent open redirect attacks
   const callbackURL = useMemo(() => {
     const redirectTo = searchParams.get("redirectTo");
-    return redirectTo
-      ? `${window.location.origin}${decodeURIComponent(redirectTo)}`
-      : `${window.location.origin}/`;
+    if (!redirectTo) {
+      return `${window.location.origin}/`;
+    }
+
+    let decodedPath: string;
+    try {
+      decodedPath = decodeURIComponent(redirectTo);
+    } catch {
+      // Malformed URI encoding, fall back to home
+      return `${window.location.origin}/`;
+    }
+
+    // Validate: must be relative path starting with single /, no protocol to prevent open redirects
+    // Reject protocol-relative URLs (//evil.com) and URLs with protocols (https://evil.com)
+    const isRelativePath =
+      decodedPath.startsWith("/") &&
+      !decodedPath.startsWith("//") &&
+      !decodedPath.includes("://");
+
+    return `${window.location.origin}${isRelativePath ? decodedPath : "/"}`;
   }, [searchParams]);
 
   const handleSsoSignIn = useCallback(

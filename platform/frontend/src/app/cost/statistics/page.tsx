@@ -73,6 +73,33 @@ const CostChartTooltip = (
   />
 );
 
+interface ChartContainerWrapperProps {
+  config: ChartConfig;
+  data: any[];
+  emptyMessage?: string;
+  children: React.ReactNode;
+}
+
+const ChartContainerWrapper = ({
+  config,
+  data,
+  emptyMessage = "No data available",
+  children,
+}: ChartContainerWrapperProps) => (
+  <ChartContainer
+    config={config}
+    className="aspect-auto h-80 w-full relative"
+  >
+    {data.length > 0 ? (
+      children
+    ) : (
+      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+        {emptyMessage}
+      </div>
+    )}
+  </ChartContainer>
+);
+
 const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
 
 export default function StatisticsPage() {
@@ -525,12 +552,11 @@ export default function StatisticsPage() {
             <CardTitle>Costs</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer
+            <ChartContainerWrapper
               config={costSavingsChartConfig}
-              className="aspect-auto h-80 w-full relative"
+              data={costSavingsChartData}
             >
-              {costSavingsChartData.length > 0 ? (
-                <LineChart
+              <LineChart
                   accessibilityLayer
                   data={costSavingsChartData}
                   margin={{ top: 12, left: 12, right: 12 }}
@@ -571,12 +597,7 @@ export default function StatisticsPage() {
                     activeDot={{ strokeWidth: 0, r: 5 }}
                   />
                 </LineChart>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                  No data available
-                </div>
-              )}
-            </ChartContainer>
+            </ChartContainerWrapper>
           </CardContent>
         </Card>
 
@@ -585,12 +606,11 @@ export default function StatisticsPage() {
             <CardTitle>Cost Savings</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer
+            <ChartContainerWrapper
               config={savingsBreakdownChartConfig}
-              className="aspect-auto h-80 w-full relative"
+              data={savingsBreakdownChartData}
             >
-              {savingsBreakdownChartData.length > 0 ? (
-                <LineChart
+              <LineChart
                   accessibilityLayer
                   data={savingsBreakdownChartData}
                   margin={{ top: 12, left: 12, right: 12 }}
@@ -635,12 +655,7 @@ export default function StatisticsPage() {
                     activeDot={{ strokeWidth: 0, r: 5 }}
                   />
                 </LineChart>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                  No data available
-                </div>
-              )}
-            </ChartContainer>
+            </ChartContainerWrapper>
           </CardContent>
         </Card>
       </div>
@@ -652,12 +667,12 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <ChartContainer
+              <ChartContainerWrapper
                 config={teamChartConfig}
-                className="aspect-auto h-80 w-full relative"
+                data={teamChartData}
+                emptyMessage="No team data available"
               >
-                {teamChartData.length > 0 ? (
-                  <LineChart
+                <LineChart
                     accessibilityLayer
                     data={teamChartData}
                     margin={{ top: 12, left: 12, right: 12 }}
@@ -693,12 +708,7 @@ export default function StatisticsPage() {
                       />
                     ))}
                   </LineChart>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                    No team data available
-                  </div>
-                )}
-              </ChartContainer>
+              </ChartContainerWrapper>
               {teamStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   Chart shows top 5 by cost
@@ -762,12 +772,12 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <ChartContainer
+              <ChartContainerWrapper
                 config={profileChartConfig}
-                className="aspect-auto h-80 w-full relative"
+                data={profileChartData}
+                emptyMessage="No profile data available"
               >
-                {profileChartData.length > 0 ? (
-                  <LineChart
+                <LineChart
                     accessibilityLayer
                     data={profileChartData}
                     margin={{ top: 12, left: 12, right: 12 }}
@@ -803,12 +813,7 @@ export default function StatisticsPage() {
                       />
                     ))}
                   </LineChart>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                    No profile data available
-                  </div>
-                )}
-              </ChartContainer>
+              </ChartContainerWrapper>
               {agentStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   Chart shows top 5 by cost
@@ -872,12 +877,12 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <ChartContainer
+              <ChartContainerWrapper
                 config={modelChartConfig}
-                className="aspect-auto h-80 w-full relative"
+                data={modelChartData}
+                emptyMessage="No model data available"
               >
-                {modelChartData.length > 0 ? (
-                  <LineChart
+                <LineChart
                     accessibilityLayer
                     data={modelChartData}
                     margin={{ top: 12, left: 12, right: 12 }}
@@ -913,12 +918,7 @@ export default function StatisticsPage() {
                       />
                     ))}
                   </LineChart>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                    No model data available
-                  </div>
-                )}
-              </ChartContainer>
+              </ChartContainerWrapper>
               {modelStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   Chart shows top 5 by cost

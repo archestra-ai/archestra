@@ -75,7 +75,7 @@ const CostChartTooltip = (
 
 interface ChartContainerWrapperProps {
   config: ChartConfig;
-  data: any[];
+  data: Record<string, string | number>[];
   emptyMessage?: string;
   children: React.ReactNode;
 }
@@ -86,10 +86,7 @@ const ChartContainerWrapper = ({
   emptyMessage = "No data available",
   children,
 }: ChartContainerWrapperProps) => (
-  <ChartContainer
-    config={config}
-    className="aspect-auto h-80 w-full relative"
-  >
+  <ChartContainer config={config} className="aspect-auto h-80 w-full relative">
     {data.length > 0 ? (
       children
     ) : (
@@ -557,46 +554,46 @@ export default function StatisticsPage() {
               data={costSavingsChartData}
             >
               <LineChart
-                  accessibilityLayer
-                  data={costSavingsChartData}
-                  margin={{ top: 12, left: 12, right: 12 }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `$${value}`}
-                  />
-                  <ChartTooltip content={CostChartTooltip} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Line
-                    dataKey="nonOptimized"
-                    type="monotone"
-                    stroke="var(--color-nonOptimized)"
-                    strokeWidth={2}
-                    dot={{
-                      strokeWidth: 0,
-                      r: 3,
-                      fill: "var(--color-nonOptimized)",
-                    }}
-                    activeDot={{ strokeWidth: 0, r: 5 }}
-                  />
-                  <Line
-                    dataKey="actual"
-                    type="monotone"
-                    stroke="var(--color-actual)"
-                    strokeWidth={2}
-                    dot={{ strokeWidth: 0, r: 3, fill: "var(--color-actual)" }}
-                    activeDot={{ strokeWidth: 0, r: 5 }}
-                  />
-                </LineChart>
+                accessibilityLayer
+                data={costSavingsChartData}
+                margin={{ top: 12, left: 12, right: 12 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tickFormatter={(value) => `$${value}`}
+                />
+                <ChartTooltip content={CostChartTooltip} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Line
+                  dataKey="nonOptimized"
+                  type="monotone"
+                  stroke="var(--color-nonOptimized)"
+                  strokeWidth={2}
+                  dot={{
+                    strokeWidth: 0,
+                    r: 3,
+                    fill: "var(--color-nonOptimized)",
+                  }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
+                <Line
+                  dataKey="actual"
+                  type="monotone"
+                  stroke="var(--color-actual)"
+                  strokeWidth={2}
+                  dot={{ strokeWidth: 0, r: 3, fill: "var(--color-actual)" }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
+              </LineChart>
             </ChartContainerWrapper>
           </CardContent>
         </Card>
@@ -611,50 +608,50 @@ export default function StatisticsPage() {
               data={savingsBreakdownChartData}
             >
               <LineChart
-                  accessibilityLayer
-                  data={savingsBreakdownChartData}
-                  margin={{ top: 12, left: 12, right: 12 }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `$${value}`}
-                  />
-                  <ChartTooltip content={CostChartTooltip} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Line
-                    dataKey="optimization"
-                    type="monotone"
-                    stroke="var(--color-optimization)"
-                    strokeWidth={2}
-                    dot={{
-                      strokeWidth: 0,
-                      r: 3,
-                      fill: "var(--color-optimization)",
-                    }}
-                    activeDot={{ strokeWidth: 0, r: 5 }}
-                  />
-                  <Line
-                    dataKey="compression"
-                    type="monotone"
-                    stroke="var(--color-compression)"
-                    strokeWidth={2}
-                    dot={{
-                      strokeWidth: 0,
-                      r: 3,
-                      fill: "var(--color-compression)",
-                    }}
-                    activeDot={{ strokeWidth: 0, r: 5 }}
-                  />
-                </LineChart>
+                accessibilityLayer
+                data={savingsBreakdownChartData}
+                margin={{ top: 12, left: 12, right: 12 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tickFormatter={(value) => `$${value}`}
+                />
+                <ChartTooltip content={CostChartTooltip} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Line
+                  dataKey="optimization"
+                  type="monotone"
+                  stroke="var(--color-optimization)"
+                  strokeWidth={2}
+                  dot={{
+                    strokeWidth: 0,
+                    r: 3,
+                    fill: "var(--color-optimization)",
+                  }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
+                <Line
+                  dataKey="compression"
+                  type="monotone"
+                  stroke="var(--color-compression)"
+                  strokeWidth={2}
+                  dot={{
+                    strokeWidth: 0,
+                    r: 3,
+                    fill: "var(--color-compression)",
+                  }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
+              </LineChart>
             </ChartContainerWrapper>
           </CardContent>
         </Card>
@@ -673,41 +670,41 @@ export default function StatisticsPage() {
                 emptyMessage="No team data available"
               >
                 <LineChart
-                    accessibilityLayer
-                    data={teamChartData}
-                    margin={{ top: 12, left: 12, right: 12 }}
-                  >
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
+                  accessibilityLayer
+                  data={teamChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip content={CostChartTooltip} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  {teamStatistics.slice(0, 5).map((team) => (
+                    <Line
+                      key={team.teamId}
+                      dataKey={team.teamId}
+                      type="monotone"
+                      stroke={`var(--color-${team.teamId})`}
+                      strokeWidth={2}
+                      dot={{
+                        strokeWidth: 0,
+                        r: 3,
+                        fill: `var(--color-${team.teamId})`,
+                      }}
+                      activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tickFormatter={(value) => `$${value}`}
-                    />
-                    <ChartTooltip content={CostChartTooltip} />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    {teamStatistics.slice(0, 5).map((team) => (
-                      <Line
-                        key={team.teamId}
-                        dataKey={team.teamId}
-                        type="monotone"
-                        stroke={`var(--color-${team.teamId})`}
-                        strokeWidth={2}
-                        dot={{
-                          strokeWidth: 0,
-                          r: 3,
-                          fill: `var(--color-${team.teamId})`,
-                        }}
-                        activeDot={{ strokeWidth: 0, r: 5 }}
-                      />
-                    ))}
-                  </LineChart>
+                  ))}
+                </LineChart>
               </ChartContainerWrapper>
               {teamStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
@@ -778,41 +775,41 @@ export default function StatisticsPage() {
                 emptyMessage="No profile data available"
               >
                 <LineChart
-                    accessibilityLayer
-                    data={profileChartData}
-                    margin={{ top: 12, left: 12, right: 12 }}
-                  >
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
+                  accessibilityLayer
+                  data={profileChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip content={CostChartTooltip} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  {agentStatistics.slice(0, 5).map((agent) => (
+                    <Line
+                      key={agent.agentId}
+                      dataKey={agent.agentId}
+                      type="monotone"
+                      stroke={`var(--color-${agent.agentId})`}
+                      strokeWidth={2}
+                      dot={{
+                        strokeWidth: 0,
+                        r: 3,
+                        fill: `var(--color-${agent.agentId})`,
+                      }}
+                      activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tickFormatter={(value) => `$${value}`}
-                    />
-                    <ChartTooltip content={CostChartTooltip} />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    {agentStatistics.slice(0, 5).map((agent) => (
-                      <Line
-                        key={agent.agentId}
-                        dataKey={agent.agentId}
-                        type="monotone"
-                        stroke={`var(--color-${agent.agentId})`}
-                        strokeWidth={2}
-                        dot={{
-                          strokeWidth: 0,
-                          r: 3,
-                          fill: `var(--color-${agent.agentId})`,
-                        }}
-                        activeDot={{ strokeWidth: 0, r: 5 }}
-                      />
-                    ))}
-                  </LineChart>
+                  ))}
+                </LineChart>
               </ChartContainerWrapper>
               {agentStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
@@ -883,41 +880,41 @@ export default function StatisticsPage() {
                 emptyMessage="No model data available"
               >
                 <LineChart
-                    accessibilityLayer
-                    data={modelChartData}
-                    margin={{ top: 12, left: 12, right: 12 }}
-                  >
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
+                  accessibilityLayer
+                  data={modelChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip content={CostChartTooltip} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  {modelStatistics.slice(0, 5).map((model) => (
+                    <Line
+                      key={model.model}
+                      dataKey={model.model}
+                      type="monotone"
+                      stroke={`var(--color-${model.model})`}
+                      strokeWidth={2}
+                      dot={{
+                        strokeWidth: 0,
+                        r: 3,
+                        fill: `var(--color-${model.model})`,
+                      }}
+                      activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tickFormatter={(value) => `$${value}`}
-                    />
-                    <ChartTooltip content={CostChartTooltip} />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    {modelStatistics.slice(0, 5).map((model) => (
-                      <Line
-                        key={model.model}
-                        dataKey={model.model}
-                        type="monotone"
-                        stroke={`var(--color-${model.model})`}
-                        strokeWidth={2}
-                        dot={{
-                          strokeWidth: 0,
-                          r: 3,
-                          fill: `var(--color-${model.model})`,
-                        }}
-                        activeDot={{ strokeWidth: 0, r: 5 }}
-                      />
-                    ))}
-                  </LineChart>
+                  ))}
+                </LineChart>
               </ChartContainerWrapper>
               {modelStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">

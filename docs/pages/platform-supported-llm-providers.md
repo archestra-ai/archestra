@@ -230,3 +230,30 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **API Key format**: Obtain your API key from the [Zhipu AI Platform](https://z.ai/)
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
+
+## MiniMax
+
+[MiniMax](https://www.minimax.chat/) is a Chinese AI company providing large language models through an OpenAI-compatible API. MiniMax offers models like MiniMax-M2.1, MiniMax-M2, and Hailuo-2.3.
+
+### Supported MiniMax APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### MiniMax Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/minimax/{profile-id}`
+- **Authentication**: Pass your MiniMax API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                                      |
+| --------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `ARCHESTRA_MINIMAX_BASE_URL`      | Yes      | MiniMax API base URL (default: `https://api.minimax.io/v1`)                      |
+| `ARCHESTRA_CHAT_MINIMAX_API_KEY`  | Yes      | MiniMax API key for chat functionality                                           |
+
+### Important Notes
+
+- **Configure base URL to enable MiniMax**: The MiniMax provider is only available when `ARCHESTRA_MINIMAX_BASE_URL` is set. Without it, MiniMax won't appear as an option in the platform.
+- **API key required**: MiniMax requires a valid API key for authentication. You can obtain an API key from the [MiniMax Platform](https://platform.minimax.io/).
+- **Supported models**: MiniMax-M2.1, MiniMax-M2, MiniMax-M1, MiniMax-01, and Hailuo-2.3 are supported. Model availability may vary based on your account plan.
+- **OpenAI-compatible**: MiniMax uses the OpenAI API format, so it's compatible with OpenAI SDK and similar libraries.

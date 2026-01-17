@@ -308,6 +308,41 @@ const zhipuaiConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const minimaxConfig: ModelOptimizationTestConfig = {
+  providerName: "MiniMax",
+  provider: "minimax",
+
+  endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-minimax-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-minimax-baseline",
+  optimizedModel: "e2e-test-minimax-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -340,6 +375,7 @@ const testConfigs: ModelOptimizationTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  minimaxConfig,
 ];
 
 test.describe("LLMProxy-ModelOptimization", () => {

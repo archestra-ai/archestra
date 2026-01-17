@@ -412,46 +412,138 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
 
 /**
  * Fetch models from MiniMax API
- * MiniMax exposes an OpenAI-compatible /models endpoint
+ * MiniMax exposes an OpenAI-compatible API
+ * Note: MiniMax may not have a /models endpoint, so we validate the API key
+ * by making a lightweight request and return default models if successful
  * See: https://platform.minimax.io/docs/api-reference/text-openai-api
  */
 async function fetchMiniMaxModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.chat.minimax.baseUrl || config.llm.minimax.baseUrl;
-  const url = `${baseUrl}/models`;
-
-  const response = await fetch(url, {
+  
+  // Try /models endpoint first (OpenAI-compatible)
+  let url = `${baseUrl}/models`;
+  let response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${apiKey}`,
     },
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    logger.error(
-      { status: response.status, error: errorText },
-      "Failed to fetch MiniMax models",
-    );
-    throw new Error(`Failed to fetch MiniMax models: ${response.status}`);
+  // If /models endpoint exists, use it
+  if (response.ok) {
+    const data = (await response.json()) as {
+      data: Array<{
+        id: string;
+        object: string;
+        created?: number;
+        owned_by?: string;
+      }>;
+    };
+
+    return data.data.map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "minimax" as const,
+      createdAt: model.created
+        ? new Date(model.created * 1000).toISOString()
+        : undefined,
+    }));
   }
 
-  const data = (await response.json()) as {
-    data: Array<{
-      id: string;
-      object: string;
-      created?: number;
-      owned_by?: string;
-    }>;
-  };
+  // If /models doesn't exist (404), validate API key and return default models
+  // MiniMax uses model names like "MiniMax-M2.1", "Hailuo-2.3", etc.
+  if (response.status === 404) {
+    logger.debug(
+      "MiniMax /models endpoint not available, validating API key with chat completion test",
+    );
+    
+    // Try to validate API key with a known valid model name
+    // MiniMax-M2.1 is a commonly available model
+    url = `${baseUrl}/chat/completions`;
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "MiniMax-M2.1",
+        messages: [{ role: "user", content: "test" }],
+        max_tokens: 1,
+      }),
+    });
 
-  // MiniMax returns all available models
-  return data.data.map((model) => ({
-    id: model.id,
-    displayName: model.id,
-    provider: "minimax" as const,
-    createdAt: model.created
-      ? new Date(model.created * 1000).toISOString()
-      : undefined,
-  }));
+    // If API key is invalid, throw error
+    if (response.status === 401 || response.status === 403) {
+      const errorText = await response.text();
+      logger.error(
+        { status: response.status, error: errorText },
+        "Failed to validate MiniMax API key",
+      );
+      throw new Error(`Invalid MiniMax API key: ${response.status}`);
+    }
+
+    // If validation fails due to model name, try alternative models
+    if (response.status === 400) {
+      const errorText = await response.text();
+      logger.debug(
+        { status: response.status, error: errorText },
+        "MiniMax-M2.1 not available, trying alternative models",
+      );
+      
+      // Try Hailuo-2.3 as an alternative
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "Hailuo-2.3",
+          messages: [{ role: "user", content: "test" }],
+          max_tokens: 1,
+        }),
+      });
+
+      // If still invalid, the API key might be valid but no models are accessible
+      if (response.status === 401 || response.status === 403) {
+        const errorText = await response.text();
+        logger.error(
+          { status: response.status, error: errorText },
+          "Failed to validate MiniMax API key",
+        );
+        throw new Error(`Invalid MiniMax API key: ${response.status}`);
+      }
+    }
+
+    // If validation succeeds (or model not found but API key is valid),
+    // return common MiniMax models based on official documentation
+    // Users may need to adjust based on their account/plan
+    return [
+      {
+        id: "MiniMax-M2.1",
+        displayName: "MiniMax-M2.1",
+        provider: "minimax" as const,
+      },
+      {
+        id: "Hailuo-2.3",
+        displayName: "Hailuo-2.3",
+        provider: "minimax" as const,
+      },
+      {
+        id: "MiniMax-M2",
+        displayName: "MiniMax-M2",
+        provider: "minimax" as const,
+      },
+    ];
+  }
+
+  // For other errors, throw
+  const errorText = await response.text();
+  logger.error(
+    { status: response.status, error: errorText },
+    "Failed to fetch MiniMax models",
+  );
+  throw new Error(`Failed to fetch MiniMax models: ${response.status}`);
 }
 
 /**

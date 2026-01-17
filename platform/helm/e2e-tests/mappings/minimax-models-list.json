@@ -1,0 +1,34 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/minimax/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "MiniMax-M2.1",
+          "name": "MiniMax M2.1"
+        },
+        {
+          "id": "MiniMax-M2",
+          "name": "MiniMax M2"
+        },
+        {
+          "id": "Hailuo-2.3",
+          "name": "Hailuo 2.3"
+        }
+      ]
+    }
+  }
+}

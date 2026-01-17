@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { render, screen } from "@testing-library/react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -15,6 +15,7 @@ vi.mock("@sentry/nextjs", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(),
   usePathname: vi.fn(),
+  useSearchParams: vi.fn(),
 }));
 
 // Mock auth client
@@ -42,12 +43,19 @@ const MockChild = () => (
   <div data-testid="protected-content">Protected Content</div>
 );
 
+const mockSearchParams = {
+  toString: vi.fn().mockReturnValue(""),
+};
+
 describe("WithAuthCheck", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      mockSearchParams as unknown as ReturnType<typeof useSearchParams>,
+    );
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -87,6 +95,36 @@ describe("WithAuthCheck", () => {
 
       expect(mockRouterPush).toHaveBeenCalledWith(
         "/auth/sign-in?redirectTo=%2Fsettings%2Fteams%2F123",
+      );
+    });
+
+    it("should preserve query parameters in redirectTo param", () => {
+      vi.mocked(usePathname).mockReturnValue("/search");
+      mockSearchParams.toString.mockReturnValue("q=hello&filter=active");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fsearch%3Fq%3Dhello%26filter%3Dactive",
+      );
+    });
+
+    it("should not add ? when there are no query parameters", () => {
+      vi.mocked(usePathname).mockReturnValue("/dashboard");
+      mockSearchParams.toString.mockReturnValue("");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fdashboard",
       );
     });
 

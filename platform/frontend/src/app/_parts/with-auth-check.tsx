@@ -1,7 +1,7 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -28,6 +28,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 }) => {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isMounted, setIsMounted] = useState(false);
 
   const {
@@ -90,8 +91,10 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
       router.push("/");
     } else if (!isAuthPage && !isLoggedIn) {
       // User is not logged in and not on any auth page, redirect to sign-in
-      // Preserve the original URL so we can redirect back after login
-      const redirectTo = encodeURIComponent(pathname);
+      // Preserve the original URL (including query params) so we can redirect back after login
+      const queryString = searchParams.toString();
+      const fullPath = queryString ? `${pathname}?${queryString}` : pathname;
+      const redirectTo = encodeURIComponent(fullPath);
       router.push(`/auth/sign-in?redirectTo=${redirectTo}`);
     }
   }, [
@@ -102,6 +105,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     router,
     isSpecialAuth,
     pathname,
+    searchParams,
   ]);
 
   // Show loading while checking auth/permissions

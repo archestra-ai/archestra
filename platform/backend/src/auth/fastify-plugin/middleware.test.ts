@@ -93,6 +93,7 @@ describe("Authnz", () => {
         ...llmProxyPaths,
         "/openapi.json",
         "/health",
+        "/ready",
         "/api/features",
       ];
 

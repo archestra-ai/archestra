@@ -221,6 +221,20 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).not.toHaveBeenCalled();
       expect(screen.getByTestId("protected-content")).toBeInTheDocument();
     });
+
+    it("should allow access to sign-out page when authenticated", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-out");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      // Sign-out is a special auth page - should not redirect
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
   });
 
   describe("when auth check is pending", () => {

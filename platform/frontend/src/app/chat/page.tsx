@@ -236,7 +236,7 @@ export default function ChatPage() {
     useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
   const { data: organization } = useOrganization();
-  const { data: chatModels = [] } = useChatModelsQuery(conversationId);
+  const { data: chatModels = [] } = useChatModelsQuery();
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   // vLLM/Ollama may not require an API key either
   const hasAnyApiKey =

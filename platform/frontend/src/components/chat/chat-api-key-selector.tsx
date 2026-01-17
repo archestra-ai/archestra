@@ -61,6 +61,9 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   org_wide: <Building2 className="h-3 w-3" />,
 };
 
+// Note: This stores the API key's database ID (UUID), NOT the actual API key secret.
+// The actual API key value is never exposed to the frontend - it's stored securely on the server.
+// This ID is just a reference to select which key configuration to use, similar to a userId.
 const LOCAL_STORAGE_KEY = "selected-chat-api-key-id";
 
 /**

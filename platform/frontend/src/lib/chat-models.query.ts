@@ -63,11 +63,13 @@ export function useModelsByProvider() {
 /**
  * Non-suspense version for fetching chat models.
  * Use in components without Suspense boundaries.
+ *
+ * Note: Chat models are globally cached and shared across all conversations
+ * since the available models don't change per conversation.
  */
-export function useChatModelsQuery(conversationId?: string) {
+export function useChatModelsQuery() {
   return useQuery({
-    // Include conversationId in cache key for invalidation when conversation changes
-    queryKey: ["chat-models", conversationId],
+    queryKey: ["chat-models"],
     queryFn: async () => {
       const { data, error } = await getChatModels();
       if (error) {

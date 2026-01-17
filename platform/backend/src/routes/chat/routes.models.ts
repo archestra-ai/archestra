@@ -481,15 +481,17 @@ async function getProviderApiKey({
   provider,
   organizationId,
   userId,
+  userTeamIds,
 }: {
   provider: SupportedProvider;
   organizationId: string;
   userId: string;
+  userTeamIds: string[];
 }): Promise<string | null> {
   const apiKey = await ChatApiKeyModel.getCurrentApiKey({
     organizationId,
     userId,
-    userTeamIds: await TeamModel.getUserTeamIds(userId),
+    userTeamIds,
     provider,
     // set null to autoresolve the api key
     conversationId: null,
@@ -560,15 +562,18 @@ export async function fetchModelsForProvider({
   provider,
   organizationId,
   userId,
+  userTeamIds,
 }: {
   provider: SupportedProvider;
   organizationId: string;
   userId: string;
+  userTeamIds: string[];
 }): Promise<ModelInfo[]> {
   const apiKey = await getProviderApiKey({
     provider,
     organizationId,
     userId,
+    userTeamIds,
   });
 
   const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
@@ -650,12 +655,16 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { provider } = query;
       const providersToFetch = provider ? [provider] : SupportedProviders;
 
+      // Fetch user team IDs once to avoid N+1 queries when fetching models for multiple providers
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
       const results = await Promise.all(
         providersToFetch.map((p) =>
           fetchModelsForProvider({
             provider: p as SupportedProvider,
             organizationId,
             userId: user.id,
+            userTeamIds,
           }),
         ),
       );

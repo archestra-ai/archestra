@@ -79,6 +79,16 @@ const interactionsTable = pgTable(
       table.sessionId,
       table.createdAt.desc(),
     ),
+    // GIN indexes for efficient JSONB search on request/response columns
+    // Enables fast full-text search instead of slow ILIKE on ::text cast
+    requestGinIdx: index("interactions_request_gin_idx").using(
+      "gin",
+      table.request,
+    ),
+    responseGinIdx: index("interactions_response_gin_idx").using(
+      "gin",
+      table.response,
+    ),
   }),
 );
 

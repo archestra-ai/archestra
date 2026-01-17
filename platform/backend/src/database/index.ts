@@ -56,5 +56,18 @@ instrumentDrizzleClient(db, { dbSystem: "postgresql" });
 
 export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/**
+ * Check if the database connection is healthy by executing a simple query.
+ * Returns true if the database is reachable, false otherwise.
+ */
+export async function isDatabaseHealthy(): Promise<boolean> {
+  try {
+    await pool.query("SELECT 1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default db;
 export { schema };

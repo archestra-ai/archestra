@@ -108,12 +108,7 @@ function OAuthCallbackContent() {
 
     handleOAuthCallback();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    searchParams,
-    installMutation.mutateAsync, // The mutation's onError handler will show the error toast
-    // Redirect back to catalog
-    router.push,
-  ]);
+  }, [searchParams, installMutation.mutateAsync, router.push]);
 
   // This component always redirects on success or error, so just show loading state
   return (

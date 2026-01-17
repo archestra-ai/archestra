@@ -7,6 +7,16 @@ import { useEffect, useState } from "react";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
+type SentryUser = Parameters<typeof Sentry.setUser>[0];
+
+const safeSetSentryUser = (user: SentryUser) => {
+  try {
+    Sentry.setUser(user);
+  } catch {
+    // Silently fail if Sentry is not configured
+  }
+};
+
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
   return (
     pathname?.startsWith("/auth/sign-in") ||
@@ -63,22 +73,14 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   // Set Sentry user context when user is authenticated
   useEffect(() => {
     if (session?.user) {
-      try {
-        Sentry.setUser({
-          id: session.user.id,
-          email: session.user.email,
-          username: session.user.name || session.user.email,
-        });
-      } catch (_error) {
-        // Silently fail if Sentry is not configured
-      }
+      safeSetSentryUser({
+        id: session.user.id,
+        email: session.user.email,
+        username: session.user.name || session.user.email,
+      });
     } else {
       // Clear user context when not authenticated
-      try {
-        Sentry.setUser(null);
-      } catch (_error) {
-        // Silently fail if Sentry is not configured
-      }
+      safeSetSentryUser(null);
     }
   }, [session?.user]);
 

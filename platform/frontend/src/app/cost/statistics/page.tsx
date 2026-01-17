@@ -50,6 +50,29 @@ import {
   useTeamStatistics,
 } from "@/lib/statistics.query";
 
+/**
+ * Reusable tooltip component for cost charts.
+ * Shows a color dot indicator and formatted cost value for each data series.
+ */
+const CostChartTooltip = (
+  <ChartTooltipContent
+    indicator="dot"
+    formatter={(value, _name, item) => (
+      <>
+        <div
+          className="shrink-0 rounded-[2px] h-2.5 w-2.5"
+          style={{
+            backgroundColor: item.color || item.fill,
+          }}
+        />
+        <span className="text-foreground font-mono font-medium tabular-nums">
+          ${Number(value).toFixed(2)}
+        </span>
+      </>
+    )}
+  />
+);
+
 const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
 
 export default function StatisticsPage() {
@@ -525,13 +548,7 @@ export default function StatisticsPage() {
                     tickMargin={8}
                     tickFormatter={(value) => `$${value}`}
                   />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => `$${Number(value).toFixed(2)}`}
-                      />
-                    }
-                  />
+                  <ChartTooltip content={CostChartTooltip} />
                   <ChartLegend content={<ChartLegendContent />} />
                   <Line
                     dataKey="nonOptimized"
@@ -591,13 +608,7 @@ export default function StatisticsPage() {
                     tickMargin={8}
                     tickFormatter={(value) => `$${value}`}
                   />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => `$${Number(value).toFixed(2)}`}
-                      />
-                    }
-                  />
+                  <ChartTooltip content={CostChartTooltip} />
                   <ChartLegend content={<ChartLegendContent />} />
                   <Line
                     dataKey="optimization"
@@ -664,13 +675,7 @@ export default function StatisticsPage() {
                       tickMargin={8}
                       tickFormatter={(value) => `$${value}`}
                     />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) => `$${Number(value).toFixed(2)}`}
-                        />
-                      }
-                    />
+                    <ChartTooltip content={CostChartTooltip} />
                     <ChartLegend content={<ChartLegendContent />} />
                     {teamStatistics.slice(0, 5).map((team) => (
                       <Line
@@ -780,13 +785,7 @@ export default function StatisticsPage() {
                       tickMargin={8}
                       tickFormatter={(value) => `$${value}`}
                     />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) => `$${Number(value).toFixed(2)}`}
-                        />
-                      }
-                    />
+                    <ChartTooltip content={CostChartTooltip} />
                     <ChartLegend content={<ChartLegendContent />} />
                     {agentStatistics.slice(0, 5).map((agent) => (
                       <Line
@@ -896,13 +895,7 @@ export default function StatisticsPage() {
                       tickMargin={8}
                       tickFormatter={(value) => `$${value}`}
                     />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) => `$${Number(value).toFixed(2)}`}
-                        />
-                      }
-                    />
+                    <ChartTooltip content={CostChartTooltip} />
                     <ChartLegend content={<ChartLegendContent />} />
                     {modelStatistics.slice(0, 5).map((model) => (
                       <Line

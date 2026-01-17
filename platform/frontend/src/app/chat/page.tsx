@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/card";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
-import { useProfiles } from "@/lib/agent.query";
+import { useProfilesQuery } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
   useConversation,
@@ -49,7 +49,7 @@ import {
 } from "@/lib/chat.query";
 import {
   useChatModelsQuery,
-  useModelsByProvider,
+  useModelsByProviderQuery,
 } from "@/lib/chat-models.query";
 import {
   type SupportedChatProvider,
@@ -64,7 +64,7 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/pending-tool-state";
-import { usePrompt, usePrompts } from "@/lib/prompts.query";
+import { usePrompt, usePromptsQuery } from "@/lib/prompts.query";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -121,11 +121,13 @@ export default function ChatPage() {
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(false);
 
   // Fetch prompts for conversation prompt name lookup
-  const { data: prompts = [] } = usePrompts();
+  const { data: prompts = [] } = usePromptsQuery();
 
   // Fetch profiles and models for initial chat (no conversation)
-  const { data: allProfiles = [] } = useProfiles();
-  const { modelsByProvider } = useModelsByProvider();
+  // Using non-suspense queries to avoid blocking page render
+  const { data: allProfiles = [] } = useProfilesQuery();
+  const { modelsByProvider, isLoading: isModelsLoading } =
+    useModelsByProviderQuery();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
@@ -184,8 +186,20 @@ export default function ChatPage() {
     }
   }, [allProfiles, initialAgentId, searchParams, prompts]);
 
+  // Initialize model from localStorage or default to first available
   useEffect(() => {
     if (!initialModel) {
+      const allModels = Object.values(modelsByProvider).flat();
+      if (allModels.length === 0) return;
+
+      // Try to restore from localStorage
+      const savedModelId = localStorage.getItem("selected-chat-model");
+      if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
+        setInitialModel(savedModelId);
+        return;
+      }
+
+      // Fall back to first available model
       const providers = Object.keys(modelsByProvider);
       if (providers.length > 0) {
         const firstProvider = providers[0];
@@ -197,6 +211,12 @@ export default function ChatPage() {
       }
     }
   }, [modelsByProvider, initialModel]);
+
+  // Save model to localStorage when changed
+  const handleInitialModelChange = useCallback((modelId: string) => {
+    setInitialModel(modelId);
+    localStorage.setItem("selected-chat-model", modelId);
+  }, []);
 
   // Derive provider from initial model for API key filtering
   const initialProvider = useMemo((): SupportedChatProvider | undefined => {
@@ -216,7 +236,7 @@ export default function ChatPage() {
     useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
   const { data: organization } = useOrganization();
-  const { data: chatModels = [] } = useChatModelsQuery(conversationId);
+  const { data: chatModels = [] } = useChatModelsQuery();
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   // vLLM/Ollama may not require an API key either
   const hasAnyApiKey =
@@ -300,28 +320,6 @@ export default function ChatPage() {
       );
     },
     [conversation, chatModels, updateConversationMutation],
-  );
-
-  // Handle provider change for existing conversation - switch to first model of new provider
-  const handleProviderChange = useCallback(
-    (provider: SupportedChatProvider) => {
-      const models = modelsByProvider[provider];
-      if (models && models.length > 0) {
-        handleModelChange(models[0].id);
-      }
-    },
-    [modelsByProvider, handleModelChange],
-  );
-
-  // Handle provider change for initial chat - switch to first model of new provider
-  const handleInitialProviderChange = useCallback(
-    (provider: SupportedChatProvider) => {
-      const models = modelsByProvider[provider];
-      if (models && models.length > 0) {
-        setInitialModel(models[0].id);
-      }
-    },
-    [modelsByProvider],
   );
 
   // Find the specific prompt for this conversation (if any)
@@ -1174,7 +1172,7 @@ export default function ChatPage() {
                   onModelChange={
                     conversationId && conversation?.agent.id
                       ? handleModelChange
-                      : setInitialModel
+                      : handleInitialModelChange
                   }
                   messageCount={
                     conversationId && conversation?.agent.id
@@ -1196,11 +1194,6 @@ export default function ChatPage() {
                     conversationId && conversation?.agent.id
                       ? currentProvider
                       : initialProvider
-                  }
-                  onProviderChange={
-                    conversationId && conversation?.agent.id
-                      ? handleProviderChange
-                      : handleInitialProviderChange
                   }
                   textareaRef={textareaRef}
                   onProfileChange={
@@ -1224,6 +1217,7 @@ export default function ChatPage() {
                       : initialPromptId
                   }
                   allowFileUploads={organization?.allowChatFileUploads ?? false}
+                  isModelsLoading={isModelsLoading}
                 />
                 <div className="text-center">
                   <Version inline />

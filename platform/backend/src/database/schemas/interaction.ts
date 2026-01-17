@@ -79,9 +79,10 @@ const interactionsTable = pgTable(
       table.sessionId,
       table.createdAt.desc(),
     ),
-    // Note: Trigram indexes for ILIKE text search are created via custom migration
-    // (0116) using pg_trgm extension with gin_trgm_ops operator class.
-    // These can't be defined in Drizzle schema as they require ::text cast and custom ops.
+    // Note: Additional pg_trgm GIN indexes for search are created in migration 0116_pg_trgm_indexes.sql:
+    // - interactions_request_trgm_idx: GIN index on (request::text)
+    // - interactions_response_trgm_idx: GIN index on (response::text)
+    // These can't be defined in Drizzle schema as they require ::text cast and gin_trgm_ops operator class.
   }),
 );
 

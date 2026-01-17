@@ -297,6 +297,129 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data[0].toolCall?.name).toBe("searchTool");
     });
 
+    test("searches by method field (case insensitive)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server1",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "someTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server2",
+        method: "tools/list",
+        toolCall: null,
+        toolResult: { tools: [{ name: "tool1" }] },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server3",
+        method: "initialize",
+        toolCall: null,
+        toolResult: { capabilities: {} },
+      });
+
+      // Search with mixed case
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "TOOLS/LIST" },
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].method).toBe("tools/list");
+    });
+
+    test("searches by toolResult content (case insensitive)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server1",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "searchTool", arguments: {} },
+        toolResult: {
+          isError: false,
+          content: "Found UniqueResultContent12345 in the database",
+        },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server2",
+        method: "tools/call",
+        toolCall: { id: "test-id-2", name: "otherTool", arguments: {} },
+        toolResult: { isError: false, content: "Normal result" },
+      });
+
+      // Search by tool result content
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "uniqueresultcontent12345" },
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].toolCall?.name).toBe("searchTool");
+    });
+
+    test("searches by toolResult with structured data", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server1",
+        method: "tools/list",
+        toolCall: null,
+        toolResult: {
+          tools: [
+            { name: "SearchableToolInResult999", description: "A tool" },
+            { name: "AnotherTool", description: "Another tool" },
+          ],
+        },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server2",
+        method: "tools/list",
+        toolCall: null,
+        toolResult: {
+          tools: [{ name: "RegularTool", description: "Regular tool" }],
+        },
+      });
+
+      // Search for a tool name that appears in the result structure
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "SearchableToolInResult999" },
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].mcpServerName).toBe("server1");
+    });
+
     test("search returns multiple matches", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
       const agent = await AgentModel.create({ name: "Agent", teams: [] });

@@ -51,14 +51,14 @@ interface ArchestraPromptInputProps {
   initialApiKeyId?: string | null;
   /** Callback for API key change in initial chat mode (no conversation) */
   onApiKeyChange?: (apiKeyId: string) => void;
-  /** Callback when user switches to a different provider's API key - should switch to first model of that provider */
-  onProviderChange?: (provider: SupportedChatProvider) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Callback for profile change in initial chat mode (no conversation) */
   onProfileChange?: (agentId: string) => void;
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
+  /** Whether models are still loading - passed to API key selector */
+  isModelsLoading?: boolean;
 }
 
 // Inner component that has access to the controller context
@@ -75,10 +75,10 @@ const PromptInputContent = ({
   currentProvider,
   initialApiKeyId,
   onApiKeyChange,
-  onProviderChange,
   textareaRef: externalTextareaRef,
   onProfileChange,
   allowFileUploads = false,
+  isModelsLoading = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -160,7 +160,7 @@ const PromptInputContent = ({
               }
               messageCount={messageCount}
               onApiKeyChange={onApiKeyChange}
-              onProviderChange={onProviderChange}
+              isModelsLoading={isModelsLoading}
               onOpenChange={(open) => {
                 if (!open) {
                   setTimeout(() => {
@@ -196,10 +196,10 @@ const ArchestraPromptInput = ({
   currentProvider,
   initialApiKeyId,
   onApiKeyChange,
-  onProviderChange,
   textareaRef,
   onProfileChange,
   allowFileUploads = false,
+  isModelsLoading = false,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -217,10 +217,10 @@ const ArchestraPromptInput = ({
           currentProvider={currentProvider}
           initialApiKeyId={initialApiKeyId}
           onApiKeyChange={onApiKeyChange}
-          onProviderChange={onProviderChange}
           textareaRef={textareaRef}
           onProfileChange={onProfileChange}
           allowFileUploads={allowFileUploads}
+          isModelsLoading={isModelsLoading}
         />
       </PromptInputProvider>
     </div>

@@ -755,8 +755,7 @@ class InteractionModel {
     }
 
     // Free-text search filter (case-insensitive)
-    // Searches across: request messages content, response content (for titles)
-    // Also searches conversation titles via the joined table
+    // Searches across: request messages content, response content (for titles), and conversation titles
     if (filters?.search) {
       const searchPattern = `%${escapeLikePattern(filters.search)}%`;
       const searchCondition = or(
@@ -764,6 +763,8 @@ class InteractionModel {
         sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
         // Search in response content (for Claude Code titles)
         sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
+        // Search in conversation title (for Archestra Chat sessions)
+        sql`${schema.conversationsTable.title} ILIKE ${searchPattern}`,
       );
       if (searchCondition) {
         conditions.push(searchCondition);
@@ -855,6 +856,11 @@ class InteractionModel {
       db
         .select({ total: sql<number>`COUNT(DISTINCT ${sessionGroupExpr})` })
         .from(schema.interactionsTable)
+        .leftJoin(
+          schema.conversationsTable,
+          // Only join when session_id is a valid UUID format (conversation IDs are UUIDs)
+          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
+        )
         .where(whereClause),
     ]);
 

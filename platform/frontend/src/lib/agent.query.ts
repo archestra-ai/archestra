@@ -23,7 +23,7 @@ const {
   getLabelValues,
 } = archestraApiSdk;
 
-// For backward compatibility - returns all agents as an array
+// For backward compatibility - returns all agents as an array (suspense version)
 export function useProfiles(
   params: {
     initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
@@ -37,6 +37,22 @@ export function useProfiles(
       return response.data ?? [];
     },
     initialData: params?.initialData,
+  });
+}
+
+/**
+ * Non-suspense version of useProfiles.
+ * Use in components that need to show loading states instead of suspense boundaries.
+ */
+export function useProfilesQuery(
+  params: { filters?: archestraApiTypes.GetAllAgentsData["query"] } = {},
+) {
+  return useQuery({
+    queryKey: ["agents", "all", params?.filters],
+    queryFn: async () => {
+      const response = await getAllAgents({ query: params?.filters });
+      return response.data ?? [];
+    },
   });
 }
 

@@ -34,14 +34,16 @@ function escapeLikePattern(value: string): string {
 }
 
 /**
- * Builds a search condition for MCP tool calls across server name, tool name, and arguments.
+ * Builds a search condition for MCP tool calls across server name, method, tool name, arguments, and result.
  */
 function buildMcpToolCallSearchCondition(search: string) {
   const searchPattern = `%${escapeLikePattern(search)}%`;
   return or(
     ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
+    ilike(schema.mcpToolCallsTable.method, searchPattern),
     sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
     sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
+    sql`${schema.mcpToolCallsTable.toolResult}::text ILIKE ${searchPattern}`,
   );
 }
 

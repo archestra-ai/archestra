@@ -81,3 +81,44 @@ export function useChatModelsQuery(conversationId?: string) {
     },
   });
 }
+
+/**
+ * Non-suspense version of useModelsByProvider.
+ * Returns models grouped by provider with loading/error states.
+ */
+export function useModelsByProviderQuery() {
+  const query = useQuery({
+    queryKey: ["chat-models"],
+    queryFn: async () => {
+      const { data, error } = await getChatModels();
+      if (error) {
+        throw new Error(
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || "Failed to fetch chat models",
+        );
+      }
+      return (data ?? []) as ChatModel[];
+    },
+  });
+
+  // Memoize to prevent creating new object reference on every render
+  const modelsByProvider = useMemo(() => {
+    if (!query.data) return {} as Record<SupportedProvider, ChatModel[]>;
+    return query.data.reduce(
+      (acc, model) => {
+        if (!acc[model.provider]) {
+          acc[model.provider] = [];
+        }
+        acc[model.provider].push(model);
+        return acc;
+      },
+      {} as Record<SupportedProvider, ChatModel[]>,
+    );
+  }, [query.data]);
+
+  return {
+    ...query,
+    modelsByProvider,
+  };
+}

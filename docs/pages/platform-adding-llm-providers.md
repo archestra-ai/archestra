@@ -219,10 +219,10 @@ Allows users to select this provider's models in the Chat UI.
 
 Each provider has a different API for listing available models.
 
-| File                                | Description                                                            |
-| ----------------------------------- | ---------------------------------------------------------------------- |
-| `backend/src/routes/chat-models.ts` | Add `fetch{Provider}Models()` function and register in `modelFetchers` |
-| `backend/src/routes/chat-models.ts` | Add case to `getProviderApiKey()` switch                               |
+| File                                         | Description                                                            |
+| -------------------------------------------- | ---------------------------------------------------------------------- |
+| `backend/src/routes/chat/routes.models.ts`   | Add `fetch{Provider}Models()` function and register in `modelFetchers` |
+| `backend/src/routes/chat/routes.models.ts`   | Add case to `getProviderApiKey()` switch                               |
 
 ### LLM Client
 
@@ -230,9 +230,9 @@ Chat uses Vercel AI SDK which requires provider-specific model creation.
 
 | File                                 | Description                                                                                      |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `backend/src/services/llm-client.ts` | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
-| `backend/src/services/llm-client.ts` | Add case to `resolveProviderApiKey()` switch                                                     |
-| `backend/src/services/llm-client.ts` | Add case to `createLLMModel()` - AI SDK requires provider-specific initialization                |
+| `backend/src/clients/llm-client.ts`  | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
+| `backend/src/clients/llm-client.ts`  | Add case to `resolveProviderApiKey()` switch                                                     |
+| `backend/src/clients/llm-client.ts`  | Add case to `createLLMModel()` - AI SDK requires provider-specific initialization                |
 
 ### Error Handling
 

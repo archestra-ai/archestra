@@ -49,6 +49,9 @@ interface ChatMessagesProps {
   agentName?: string;
   suggestedPrompt?: string | null;
   onSuggestedPromptClick?: () => void;
+  // Tool action callbacks
+  onToolRun?: (toolName: string, toolInput: Record<string, unknown>) => void;
+  onToolOutputAsPrompt?: (output: unknown) => void;
 }
 
 // Type guards for tool parts
@@ -81,6 +84,8 @@ export function ChatMessages({
   onMessagesUpdate,
   onUserMessageEdit,
   error = null,
+  onToolRun,
+  onToolOutputAsPrompt,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   // Track editing by messageId-partIndex to support multiple text parts per message
@@ -520,6 +525,8 @@ export function ChatMessages({
                           toolResultPart={toolResultPart}
                           toolName={toolName}
                           agentId={agentId}
+                          onToolRun={onToolRun}
+                          onToolOutputAsPrompt={onToolOutputAsPrompt}
                         />
                       );
                     }
@@ -550,6 +557,8 @@ export function ChatMessages({
                             toolResultPart={toolResultPart}
                             toolName={toolName}
                             agentId={agentId}
+                            onToolRun={onToolRun}
+                            onToolOutputAsPrompt={onToolOutputAsPrompt}
                           />
                         );
                       }
@@ -627,11 +636,15 @@ function MessageTool({
   toolResultPart,
   toolName,
   agentId,
+  onToolRun,
+  onToolOutputAsPrompt,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   agentId?: string;
+  onToolRun?: (toolName: string, toolInput: Record<string, unknown>) => void;
+  onToolOutputAsPrompt?: (output: unknown) => void;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -666,6 +679,15 @@ function MessageTool({
     );
   }
 
+  // Create handlers for tool actions
+  const handleRunTool = onToolRun && part.input
+    ? () => onToolRun(toolName, part.input)
+    : undefined;
+
+  const handleUseAsPrompt = onToolOutputAsPrompt && (toolResultPart || part.output)
+    ? () => onToolOutputAsPrompt(toolResultPart?.output || part.output)
+    : undefined;
+
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
@@ -692,6 +714,8 @@ function MessageTool({
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
+            onRunTool={handleRunTool}
+            onUseAsPrompt={handleUseAsPrompt}
           />
         )}
         {!toolResultPart && Boolean(part.output) && (
@@ -699,6 +723,8 @@ function MessageTool({
             label={errorText ? "Error" : "Result"}
             output={part.output}
             errorText={errorText}
+            onRunTool={handleRunTool}
+            onUseAsPrompt={handleUseAsPrompt}
           />
         )}
       </ToolContent>

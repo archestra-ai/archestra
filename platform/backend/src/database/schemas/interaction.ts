@@ -79,16 +79,9 @@ const interactionsTable = pgTable(
       table.sessionId,
       table.createdAt.desc(),
     ),
-    // GIN indexes for efficient JSONB containment queries on request/response columns
-    // Enables fast @> and ? operators instead of slow ILIKE on ::text cast
-    requestGinIdx: index("interactions_request_gin_idx").using(
-      "gin",
-      table.request,
-    ),
-    responseGinIdx: index("interactions_response_gin_idx").using(
-      "gin",
-      table.response,
-    ),
+    // Note: Trigram indexes for ILIKE text search are created via custom migration
+    // (0116) using pg_trgm extension with gin_trgm_ops operator class.
+    // These can't be defined in Drizzle schema as they require ::text cast and custom ops.
   }),
 );
 

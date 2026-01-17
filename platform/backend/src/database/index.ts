@@ -72,7 +72,8 @@ export async function isDatabaseHealthy(): Promise<boolean> {
       ),
     ]);
     return true;
-  } catch {
+  } catch (error) {
+    logger.warn({ error }, "Database health check failed");
     return false;
   }
 }

@@ -631,17 +631,23 @@ const start = async () => {
         clearInterval(processedEmailCleanupIntervalId);
         fastify.log.info("Email background job intervals cleared");
 
+        // Track which cleanup operations have completed
+        const completedCleanups = new Set<string>();
+
         // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
         const cleanupPromise = Promise.allSettled([
-          cleanupEmailProvider().then(() =>
-            fastify.log.info("Email provider cleanup completed"),
-          ),
-          cleanupKnowledgeGraphProvider().then(() =>
-            fastify.log.info("Knowledge graph provider cleanup completed"),
-          ),
+          cleanupEmailProvider().then(() => {
+            completedCleanups.add("emailProvider");
+            fastify.log.info("Email provider cleanup completed");
+          }),
+          cleanupKnowledgeGraphProvider().then(() => {
+            completedCleanups.add("knowledgeGraph");
+            fastify.log.info("Knowledge graph provider cleanup completed");
+          }),
         ]).then(() => "completed" as const);
 
         // Wait for cleanup with timeout, then exit anyway
+        const allCleanupNames = ["emailProvider", "knowledgeGraph"];
         const result = await Promise.race([
           cleanupPromise,
           new Promise<"timeout">((resolve) =>
@@ -650,7 +656,13 @@ const start = async () => {
         ]);
 
         if (result === "timeout") {
-          fastify.log.warn("Cleanup timed out, proceeding with shutdown");
+          const pendingCleanups = allCleanupNames.filter(
+            (name) => !completedCleanups.has(name),
+          );
+          fastify.log.warn(
+            { pendingCleanups },
+            "Cleanup timed out, proceeding with shutdown",
+          );
         }
 
         process.exit(0);

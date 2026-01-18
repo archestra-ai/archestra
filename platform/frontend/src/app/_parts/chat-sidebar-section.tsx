@@ -197,7 +197,7 @@ export function ChatSidebarSection() {
                 const menuButton =
                   editingId !== conv.id ? (
                     <div
-                      className={`absolute right-0 left-1/2 inset-y-0 flex items-center justify-end pr-1 transition-opacity ${
+                      className={`absolute right-0 left-1/2 inset-y-0 flex items-center justify-end pr-1 pointer-events-none transition-opacity ${
                         isMenuOpen
                           ? "opacity-100"
                           : "opacity-0 group-hover/menu-item:opacity-100"
@@ -215,7 +215,7 @@ export function ChatSidebarSection() {
                             size="icon-sm"
                             variant="ghost"
                             onClick={(e) => e.stopPropagation()}
-                            className="h-6 w-6 p-0"
+                            className="h-6 w-6 p-0 pointer-events-auto"
                           >
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>

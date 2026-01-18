@@ -1,9 +1,20 @@
 /**
- * Validates a path to ensure it's a safe relative path.
- * Prevents open redirect attacks by rejecting:
- * - Absolute URLs with protocols (https://evil.com)
- * - Protocol-relative URLs (//evil.com)
- * - URLs containing protocol markers (://)
+ * Validates a path to ensure it's a safe relative path for client-side redirects.
+ *
+ * Accepted patterns:
+ * - Simple paths: /dashboard, /settings/teams/123
+ * - Paths with query strings: /search?q=hello
+ * - Paths with fragments: /docs#api-section
+ * - Path traversal sequences: /../foo (browser normalizes these safely)
+ *
+ * Rejected patterns (open redirect vectors):
+ * - Absolute URLs with protocols: https://evil.com, javascript:alert(1)
+ * - Protocol-relative URLs: //evil.com (browser treats as https://evil.com)
+ * - Paths containing protocol markers: /redirect?url=https://evil.com
+ *
+ * Note: Path traversal (/../) is allowed because browser normalization ensures
+ * the final path stays within the application. Double-encoded characters are
+ * safe since we decode once and pass directly to router.push().
  *
  * @param path - The path to validate (already decoded)
  * @returns true if the path is a safe relative path

@@ -283,8 +283,8 @@ export function ChatSidebarSection() {
                               <span className="truncate">
                                 <TypingText
                                   text={
-                                    displayTitle.length > 17
-                                      ? `${displayTitle.slice(0, 17)}...`
+                                    displayTitle.length > 27
+                                      ? `${displayTitle.slice(0, 27)}...`
                                       : displayTitle
                                   }
                                   typingSpeed={35}
@@ -295,7 +295,7 @@ export function ChatSidebarSection() {
                             ) : (
                               <TruncatedText
                                 message={displayTitle}
-                                maxLength={20}
+                                maxLength={30}
                                 className="truncate"
                                 showTooltip={false}
                               />

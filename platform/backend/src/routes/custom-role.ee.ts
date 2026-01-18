@@ -54,6 +54,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      logger.info({ request }, "Creating custom role");
       const { name, permission } = request.body;
       const { organizationId, user } = request;
 
@@ -134,7 +135,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update a custom role",
         tags: ["Roles"],
         params: z.object({
-          roleId: PredefinedRoleNameOrCustomRoleIdSchema,
+          roleId: z.string(),
         }),
         body: z.object({
           name: CreateUpdateRoleNameSchema.optional(),

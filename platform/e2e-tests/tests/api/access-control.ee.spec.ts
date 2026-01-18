@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-test.describe("@enterprise Organization Roles API - Custom Role CRUD Operations", () => {
+test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
   test("should create a new custom role", async ({ request, createRole }) => {
     const roleData = {
       name: `test_role_${Date.now()}`,
@@ -227,7 +227,7 @@ test.describe("@enterprise Organization Roles API - Custom Role CRUD Operations"
   });
 });
 
-test.describe("@enterprise Organization Roles API - Permission Validation", () => {
+test.describe("Organization Roles API - Permission Validation", () => {
   test("should create role with multiple permissions", async ({
     request,
     makeApiRequest,
@@ -273,7 +273,7 @@ test.describe("@enterprise Organization Roles API - Permission Validation", () =
   });
 });
 
-test.describe("@enterprise Organization Roles API - Role Lifecycle", () => {
+test.describe("Organization Roles API - Role Lifecycle", () => {
   test("should handle complete role lifecycle: create, read, update, delete", async ({
     request,
     makeApiRequest,

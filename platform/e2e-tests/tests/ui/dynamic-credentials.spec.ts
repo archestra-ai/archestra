@@ -10,7 +10,7 @@ import {
   verifyToolCallResultViaApi,
 } from "../../utils";
 
-test("@enterprise Verify tool calling using dynamic credentials", async ({
+test("Verify tool calling using dynamic credentials", async ({
   request,
   adminPage,
   editorPage,

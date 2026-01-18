@@ -111,7 +111,7 @@ pnpm test:e2e                        # Run Playwright tests
 # Local: docker-compose setup (Tiltfile.test)
 # CI: kind cluster + helm deployment
 #   - kind config: .github/kind.yaml
-#   - helm values: .github/values-ci-base.yaml + .github/values-ci-enterprise.yaml (or values-ci-oss.yaml for OSS mode)
+#   - helm values: .github/values-ci.yaml
 #   - NodePort services: frontend:3000, backend:9000, metrics:9050
 #   - CI checks in e2e job: drizzle-kit check, codegen, db migrations
 

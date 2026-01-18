@@ -1,7 +1,7 @@
 import { API_BASE_URL, UI_BASE_URL } from "../../consts";
 import { expect, test } from "./fixtures";
 
-test.describe("@enterprise SSO Providers API", () => {
+test.describe("SSO Providers API", () => {
   test("should list SSO providers (authenticated)", async ({
     request,
     createApiKey,

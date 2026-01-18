@@ -308,7 +308,7 @@ function extractCertFromMetadata(metadata: string): string {
   return match[1];
 }
 
-test.describe("@enterprise SSO Team Sync E2E", () => {
+test.describe("SSO Team Sync E2E", () => {
   test("should sync user to team based on SSO group membership", async ({
     page,
     browser,
@@ -553,7 +553,7 @@ test.describe("@enterprise SSO Team Sync E2E", () => {
   });
 });
 
-test.describe("@enterprise SSO OIDC E2E Flow with Keycloak", () => {
+test.describe("SSO OIDC E2E Flow with Keycloak", () => {
   test("should configure OIDC provider, login via SSO, update, and delete", async ({
     page,
     browser,
@@ -663,7 +663,7 @@ test.describe("@enterprise SSO OIDC E2E Flow with Keycloak", () => {
   });
 });
 
-test.describe("@enterprise SSO Role Mapping E2E", () => {
+test.describe("SSO Role Mapping E2E", () => {
   test("should map admin group to admin role via OIDC", async ({
     page,
     browser,
@@ -772,7 +772,7 @@ test.describe("@enterprise SSO Role Mapping E2E", () => {
   });
 });
 
-test.describe("@enterprise SSO SAML E2E Flow with Keycloak", () => {
+test.describe("SSO SAML E2E Flow with Keycloak", () => {
   test("should configure SAML provider, login via SSO, update, and delete", async ({
     page,
     browser,

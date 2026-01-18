@@ -8,7 +8,7 @@ import { expect, test } from "../../fixtures";
 
 test.describe(
   "Multi-user authentication",
-  { tag: ["@enterprise"] },
+  { tag: ["@firefox", "@webkit"] },
   () => {
     test("each user sees their own email in the sidebar", async ({
       adminPage,

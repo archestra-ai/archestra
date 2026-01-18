@@ -21,7 +21,7 @@ const secretValue = "Admin-personal-credential";
 
 test.describe.configure({ mode: "serial" });
 
-test("@enterprise At the beginning of tests, we change secrets manager to BYOS_VAULT", async ({
+test("At the beginning of tests, we change secrets manager to BYOS_VAULT", async ({
   adminPage,
   extractCookieHeaders,
 }) => {
@@ -37,7 +37,7 @@ test("@enterprise At the beginning of tests, we change secrets manager to BYOS_V
   expect(data?.type).toBe(SecretsManagerType.BYOS_VAULT);
 });
 
-test("@enterprise Then we create folder in Vault for Default Team and exemplary secret", async () => {
+test("Then we create folder in Vault for Default Team and exemplary secret", async () => {
   // Define the path for Default Team secrets
   // Using the format: secret/data/teams/default-team
   const fullSecretPath = `${teamFolderPath}/${secretName}`;
@@ -77,7 +77,7 @@ test("@enterprise Then we create folder in Vault for Default Team and exemplary 
   expect(readData.data.data[secretKey]).toBe(secretValue);
 });
 
-test("@enterprise Then we configure vault for Default Team", async ({ adminPage }) => {
+test("Then we configure vault for Default Team", async ({ adminPage }) => {
   await goToPage(adminPage, "/settings/teams");
   await adminPage
     .getByTestId(`${E2eTestId.ConfigureVaultFolderButton}-${DEFAULT_TEAM_NAME}`)
@@ -100,7 +100,7 @@ test("@enterprise Then we configure vault for Default Team", async ({ adminPage 
   }
 });
 
-test.describe("@enterprise Chat API Keys with Readonly Vault", () => {
+test.describe("Chat API Keys with Readonly Vault", () => {
   ["team", "personal"].forEach((scope) => {
     test(`should create a ${scope} scoped chat API key with vault secret`, async ({
       adminPage,
@@ -174,7 +174,7 @@ test.describe("@enterprise Chat API Keys with Readonly Vault", () => {
   });
 });
 
-test.describe("@enterprise Test self-hosted MCP server with Readonly Vault", () => {
+test.describe("Test self-hosted MCP server with Readonly Vault", () => {
   test("Test self-hosted MCP server with Vault - with prompt on installation", async ({
     adminPage,
     extractCookieHeaders,
@@ -333,7 +333,7 @@ test.describe("@enterprise Test self-hosted MCP server with Readonly Vault", () 
   });
 });
 
-test("@enterprise At the end of tests, we change secrets manager to DB because all other tests rely on it", async ({
+test("At the end of tests, we change secrets manager to DB because all other tests rely on it", async ({
   adminPage,
   extractCookieHeaders,
 }) => {

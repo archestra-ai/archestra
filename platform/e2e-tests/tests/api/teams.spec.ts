@@ -2,7 +2,7 @@ import { ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME } from "../../consts";
 import { expect, test } from "./fixtures";
 
 test.describe("Teams API", () => {
-  test.describe("@enterprise Permission-based Team Visibility", () => {
+  test.describe("Permission-based Team Visibility", () => {
     test("Admin sees all teams in the organization", async ({
       request,
       makeApiRequest,

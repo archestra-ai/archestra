@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import config from "@/lib/config";
 import { useInvitationCheck } from "@/lib/invitation.query";
-import { getValidatedCallbackURL } from "@/lib/utils/redirect-validation";
+import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const router = useRouter();
@@ -123,7 +123,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
               ? `${
                   path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
                 }?invitationId=${invitationId}`
-              : getValidatedCallbackURL(redirectTo)
+              : getValidatedRedirectPath(redirectTo)
           }
         />
       </div>

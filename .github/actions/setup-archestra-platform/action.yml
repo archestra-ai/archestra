@@ -112,6 +112,19 @@ runs:
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
       run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
 
+    - name: Build Helm values flags
+      id: helm-values
+      shell: bash
+      env:
+        HELM_VALUES_PATHS: ${{ inputs.helm-values-paths }}
+      run: |
+        # Build --values flags from space-separated paths
+        VALUES_FLAGS=""
+        for values_file in ${HELM_VALUES_PATHS}; do
+          VALUES_FLAGS="${VALUES_FLAGS} --values ${values_file}"
+        done
+        echo "flags=${VALUES_FLAGS}" >> $GITHUB_OUTPUT
+
     - name: Deploy e2e dependencies and platform in parallel
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       shell: bash
@@ -119,7 +132,7 @@ runs:
         HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
         HELM_CHART_VERSION: ${{ inputs.helm-chart-version }}
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
-        HELM_VALUES_PATHS: ${{ inputs.helm-values-paths }}
+        HELM_VALUES_FLAGS: ${{ steps.helm-values.outputs.flags }}
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
       run: |
         # Start e2e-tests Helm install in background
@@ -139,17 +152,11 @@ runs:
           VERSION_FLAG=""
         fi
 
-        # Build --values flags from space-separated paths
-        VALUES_FLAGS=""
-        for values_file in ${HELM_VALUES_PATHS}; do
-          VALUES_FLAGS="${VALUES_FLAGS} --values ${values_file}"
-        done
-
         # Deploy platform (this takes longer, so e2e-tests will finish during this)
         echo "Deploying Archestra Platform..."
         helm install archestra-platform "${CHART_REF}" \
           ${VERSION_FLAG} \
-          ${VALUES_FLAGS} \
+          ${HELM_VALUES_FLAGS} \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
           --atomic --timeout=4m
 
@@ -169,7 +176,7 @@ runs:
         HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
         HELM_CHART_VERSION: ${{ inputs.helm-chart-version }}
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
-        HELM_VALUES_PATHS: ${{ inputs.helm-values-paths }}
+        HELM_VALUES_FLAGS: ${{ steps.helm-values.outputs.flags }}
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
       run: |
         # Determine chart reference: use helm-chart-ref if set, otherwise use local path
@@ -184,15 +191,9 @@ runs:
           VERSION_FLAG=""
         fi
 
-        # Build --values flags from space-separated paths
-        VALUES_FLAGS=""
-        for values_file in ${HELM_VALUES_PATHS}; do
-          VALUES_FLAGS="${VALUES_FLAGS} --values ${values_file}"
-        done
-
         helm install archestra-platform "${CHART_REF}" \
           ${VERSION_FLAG} \
-          ${VALUES_FLAGS} \
+          ${HELM_VALUES_FLAGS} \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
           --atomic --timeout=4m
 

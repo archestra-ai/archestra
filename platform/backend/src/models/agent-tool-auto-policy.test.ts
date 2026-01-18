@@ -49,19 +49,27 @@ vi.mock("./trusted-data-policy", () => ({
   },
 }));
 
-vi.mock("@/database", () => ({
-  default: {
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/database", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/database")>();
+  return {
+    ...actual,
+    default: {
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn().mockResolvedValue(undefined),
+        })),
       })),
-    })),
-  },
-}));
+    },
+  };
+});
 
-vi.mock("@/database/schemas", () => ({
-  toolsTable: { id: "id" },
-}));
+vi.mock("@/database/schemas", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/database/schemas")>();
+  return {
+    ...actual,
+    toolsTable: { id: "id" },
+  };
+});
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((a, b) => ({ field: a, value: b })),

@@ -76,7 +76,7 @@ test.describe("Chat API Keys", () => {
   });
 
   test.describe("Scope creation restrictions and visibility", () => {
-    test("One personal scope can be created for each user for each provider and other user cannot see them", async ({
+    test("@enterprise One personal scope can be created for each user for each provider and other user cannot see them", async ({
       adminPage,
       editorPage,
       goToPage,

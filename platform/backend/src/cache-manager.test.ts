@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "@/test";
 import { CacheKey, cacheManager } from "./cache-manager";
 
 describe("CacheManager", () => {

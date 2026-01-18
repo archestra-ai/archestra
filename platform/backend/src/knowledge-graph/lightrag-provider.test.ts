@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 import { type LightRAGConfig, LightRAGProvider } from "./lightrag-provider";
 

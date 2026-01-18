@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@/test";
 import { detectProviderFromModel } from "./llm-client";
 
 describe("detectProviderFromModel", () => {

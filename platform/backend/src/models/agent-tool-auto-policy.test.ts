@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { vi } from "vitest";
+import { beforeEach, describe, expect, it } from "@/test";
 import { ToolAutoPolicyService } from "./agent-tool-auto-policy";
 
 // Mock dependencies

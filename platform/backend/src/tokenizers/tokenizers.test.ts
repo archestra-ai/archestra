@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@/test";
 import { AnthropicTokenizer } from "./anthropic";
 import type { ProviderMessage } from "./base";
 import { getTokenizer } from "./index";

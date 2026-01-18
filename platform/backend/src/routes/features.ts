@@ -53,6 +53,16 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
               provider: KnowledgeGraphProviderTypeSchema.optional(),
               displayName: z.string().optional(),
             }),
+            /** List of LLM providers configured via environment variables (not database) */
+            envConfiguredChatProviders: z.array(
+              z.enum([
+                "openai",
+                "gemini",
+                "anthropic",
+                "cerebras",
+                "zhipuai",
+              ]),
+            ),
           }),
         },
       },
@@ -62,6 +72,20 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const org = await OrganizationModel.getFirst();
       const globalToolPolicy: GlobalToolPolicy =
         org?.globalToolPolicy ?? "permissive";
+
+      // Check which providers have API keys configured via environment variables
+      const envConfiguredChatProviders = (
+        [
+          config.chat.openai.apiKey ? "openai" : null,
+          config.chat.gemini.apiKey ? "gemini" : null,
+          config.chat.anthropic.apiKey ? "anthropic" : null,
+          config.chat.cerebras.apiKey ? "cerebras" : null,
+          config.chat.zhipuai?.apiKey ? "zhipuai" : null,
+        ] as const
+      ).filter(
+        (p): p is "openai" | "gemini" | "anthropic" | "cerebras" | "zhipuai" =>
+          p !== null,
+      );
 
       return reply.send({
         ...config.features,
@@ -74,6 +98,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         globalToolPolicy,
         incomingEmail: getEmailProviderInfo(),
         knowledgeGraph: getKnowledgeGraphProviderInfo(),
+        envConfiguredChatProviders,
       });
     },
   );

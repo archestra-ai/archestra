@@ -606,31 +606,43 @@ const start = async () => {
       fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
       try {
-        // Clear email subscription renewal interval
-        clearInterval(emailRenewalIntervalId);
-        clearInterval(processedEmailCleanupIntervalId);
-        fastify.log.info("Email background job intervals cleared");
+        // PRIORITY: Close servers FIRST to release ports immediately
+        // This prevents EADDRINUSE errors during hot-reload when the new server starts
+        // before cleanup operations complete
 
-        // Cleanup email provider (unsubscribe from Graph API if needed)
-        await cleanupEmailProvider();
-        fastify.log.info("Email provider cleanup completed");
-
-        // Cleanup knowledge graph provider
-        await cleanupKnowledgeGraphProvider();
-        fastify.log.info("Knowledge graph provider cleanup completed");
-
-        // Close WebSocket server
-        websocketService.stop();
-
-        // Close metrics server
+        // Close metrics server (releases port 9050)
         if (metricsServerInstance) {
           await metricsServerInstance.close();
           fastify.log.info("Metrics server closed");
         }
 
-        // Close main server
+        // Close main server (releases port 9000)
         await fastify.close();
         fastify.log.info("Main server closed");
+
+        // Close WebSocket server
+        websocketService.stop();
+
+        // Clear email subscription renewal interval
+        clearInterval(emailRenewalIntervalId);
+        clearInterval(processedEmailCleanupIntervalId);
+        fastify.log.info("Email background job intervals cleared");
+
+        // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
+        const cleanupPromise = Promise.allSettled([
+          cleanupEmailProvider().then(() =>
+            fastify.log.info("Email provider cleanup completed"),
+          ),
+          cleanupKnowledgeGraphProvider().then(() =>
+            fastify.log.info("Knowledge graph provider cleanup completed"),
+          ),
+        ]);
+
+        // Wait max 3 seconds for cleanup, then exit anyway
+        await Promise.race([
+          cleanupPromise,
+          new Promise((resolve) => setTimeout(resolve, 3000)),
+        ]);
 
         process.exit(0);
       } catch (error) {

@@ -1,5 +1,6 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
 import { type ChildProcess, spawn } from "node:child_process";
+import { rmSync } from "node:fs";
 import { defineConfig, type UserConfig } from "tsdown";
 
 /**
@@ -97,6 +98,13 @@ const onSuccessHandler: UserConfig["onSuccess"] = async () => {
 };
 
 export default defineConfig((options: UserConfig) => {
+  // Clean dist directory once at startup in watch mode.
+  // This runs here (instead of in package.json) to keep the logic self-contained
+  // and avoid platform-specific shell commands.
+  if (options.watch) {
+    rmSync("dist", { recursive: true, force: true });
+  }
+
   return {
     // Spread CLI options first so our config takes precedence
     ...options,
@@ -109,7 +117,7 @@ export default defineConfig((options: UserConfig) => {
 
     // Only clean if NOT in watch mode, to avoid race conditions during rebuilds where
     // the output directory is deleted while the server process is trying to restart.
-    // In dev mode, we handle cleaning explicitly in the package.json script.
+    // In watch mode, we clean once at startup (see above) instead of on every rebuild.
     clean: !options.watch,
     format: ["esm" as const],
 

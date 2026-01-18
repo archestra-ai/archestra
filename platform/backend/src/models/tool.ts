@@ -3,6 +3,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   slugify,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import {
@@ -27,6 +28,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { getKnowledgeGraphProviderType } from "@/knowledge-graph";
 import type {
   ExtendedTool,
   InsertTool,
@@ -601,17 +603,25 @@ class ToolModel {
   }
 
   /**
-   * Assign default Archestra tools (artifact_write, todo_write) to an agent.
-   * These tools are automatically assigned to new profiles for task tracking and artifact management.
+   * Assign default Archestra tools to an agent.
+   * These tools are automatically assigned to new profiles:
+   * - artifact_write: for artifact management
+   * - todo_write: for task tracking
+   * - query_knowledge_graph: for querying the knowledge graph (only if configured)
    */
   static async assignDefaultArchestraToolsToAgent(
     agentId: string,
   ): Promise<void> {
-    // Find the default tools by name
+    // Build the list of default tools
     const defaultToolNames = [
       TOOL_ARTIFACT_WRITE_FULL_NAME,
       TOOL_TODO_WRITE_FULL_NAME,
     ];
+
+    // Add query_knowledge_graph if knowledge graph provider is configured
+    if (getKnowledgeGraphProviderType()) {
+      defaultToolNames.push(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+    }
 
     const defaultTools = await db
       .select({ id: schema.toolsTable.id })

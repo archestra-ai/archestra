@@ -43,8 +43,7 @@ export function SsoProviderSelector({
            */
           errorCallbackURL: `${window.location.origin}/auth/sign-in`,
         });
-      } catch (error) {
-        console.error("SSO sign-in error:", error);
+      } catch {
         toast.error("Failed to initiate SSO sign-in");
       }
     },

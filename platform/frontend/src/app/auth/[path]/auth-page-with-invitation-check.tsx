@@ -116,6 +116,13 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
             </CardHeader>
           </Card>
         )}
+        {/*
+          callbackURL behavior differs by flow:
+          - Invitation flow: Points back to auth page with invitationId preserved.
+            After OAuth/SSO completes, user returns here to trigger invitation acceptance.
+          - Normal flow: Points to final destination (from redirectTo param or /).
+            After auth completes, user goes directly to their intended page.
+        */}
         <AuthViewWithErrorHandling
           path={path}
           callbackURL={

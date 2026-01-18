@@ -181,6 +181,19 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).toHaveBeenCalledWith("/");
     });
 
+    it("should redirect to home when redirectTo is empty string", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+      mockSearchParams.get = vi.fn().mockReturnValue("");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith("/");
+    });
+
     it("should redirect to redirectTo param when accessing auth pages after login", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
       mockSearchParams.get = vi.fn().mockReturnValue("%2Flogs%2Fllm-proxy");

@@ -25,7 +25,7 @@ export const makeHasPermissionsRequest = async ({
   });
 };
 
-test.describe("Auth Permissions API - Custom Roles", () => {
+test.describe("@enterprise Auth Permissions API - Custom Roles", () => {
   test("should work with custom roles", async ({
     request,
     makeApiRequest,

@@ -1,7 +1,13 @@
-import { RouteId, type SupportedProvider, SupportedProviders } from "@shared";
+import {
+  RouteId,
+  type SupportedProvider,
+  SupportedProviders,
+  TimeInMs,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
@@ -412,66 +418,83 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
  * - Model names are "publishers/google/models/xxx" not "models/xxx"
  * - No supportedActions or displayName fields available
  * - We filter by model name pattern to get chat-capable Gemini models
+ *
+ * This function is cached globally since Vertex AI models are the same for all users
+ * (authentication is via ADC, not user-specific API keys)
  */
 export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
-  logger.debug(
-    {
-      project: config.llm.gemini.vertexAi.project,
-      location: config.llm.gemini.vertexAi.location,
+  // Use a global cache key since Vertex AI models are the same for everyone
+  const cacheKey = `${CacheKey.GetChatModels}-vertex-ai-global` as const;
+
+  return cacheManager.wrap(
+    cacheKey,
+    async () => {
+      logger.debug(
+        {
+          project: config.llm.gemini.vertexAi.project,
+          location: config.llm.gemini.vertexAi.location,
+        },
+        "Fetching Gemini models via Vertex AI SDK (cache miss)",
+      );
+
+      // Create a client without API key (uses ADC for Vertex AI)
+      const ai = createGoogleGenAIClient(undefined, "[ChatModels]");
+
+      const pager = await ai.models.list({ config: { pageSize: 100 } });
+
+      const models: ModelInfo[] = [];
+
+      // Patterns to exclude non-chat models
+      const excludePatterns = [
+        "embedding",
+        "imagen",
+        "text-bison",
+        "code-bison",
+      ];
+
+      for await (const model of pager) {
+        const modelName = model.name ?? "";
+
+        // Only include Gemini models that are chat-capable
+        // Vertex AI returns names like "publishers/google/models/gemini-2.0-flash-001"
+        if (!modelName.includes("gemini")) {
+          continue;
+        }
+
+        // Exclude embedding and other non-chat models
+        const isExcluded = excludePatterns.some((pattern) =>
+          modelName.toLowerCase().includes(pattern),
+        );
+        if (isExcluded) {
+          continue;
+        }
+
+        // Extract model ID from "publishers/google/models/gemini-xxx" format
+        const modelId = modelName.replace("publishers/google/models/", "");
+
+        // Generate a readable display name from the model ID
+        // e.g., "gemini-2.0-flash-001" -> "Gemini 2.0 Flash 001"
+        const displayName = modelId
+          .split("-")
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(" ");
+
+        models.push({
+          id: modelId,
+          displayName,
+          provider: "gemini" as const,
+        });
+      }
+
+      logger.debug(
+        { modelCount: models.length },
+        "Fetched Gemini models via Vertex AI SDK",
+      );
+
+      return models;
     },
-    "Fetching Gemini models via Vertex AI SDK",
+    { ttl: 5 * TimeInMs.Minute },
   );
-
-  // Create a client without API key (uses ADC for Vertex AI)
-  const ai = createGoogleGenAIClient(undefined, "[ChatModels]");
-
-  const pager = await ai.models.list({ config: { pageSize: 100 } });
-
-  const models: ModelInfo[] = [];
-
-  // Patterns to exclude non-chat models
-  const excludePatterns = ["embedding", "imagen", "text-bison", "code-bison"];
-
-  for await (const model of pager) {
-    const modelName = model.name ?? "";
-
-    // Only include Gemini models that are chat-capable
-    // Vertex AI returns names like "publishers/google/models/gemini-2.0-flash-001"
-    if (!modelName.includes("gemini")) {
-      continue;
-    }
-
-    // Exclude embedding and other non-chat models
-    const isExcluded = excludePatterns.some((pattern) =>
-      modelName.toLowerCase().includes(pattern),
-    );
-    if (isExcluded) {
-      continue;
-    }
-
-    // Extract model ID from "publishers/google/models/gemini-xxx" format
-    const modelId = modelName.replace("publishers/google/models/", "");
-
-    // Generate a readable display name from the model ID
-    // e.g., "gemini-2.0-flash-001" -> "Gemini 2.0 Flash 001"
-    const displayName = modelId
-      .split("-")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
-
-    models.push({
-      id: modelId,
-      displayName,
-      provider: "gemini" as const,
-    });
-  }
-
-  logger.debug(
-    { modelCount: models.length },
-    "Fetched Gemini models via Vertex AI SDK",
-  );
-
-  return models;
 }
 
 /**
@@ -481,15 +504,17 @@ async function getProviderApiKey({
   provider,
   organizationId,
   userId,
+  userTeamIds,
 }: {
   provider: SupportedProvider;
   organizationId: string;
   userId: string;
+  userTeamIds: string[];
 }): Promise<string | null> {
   const apiKey = await ChatApiKeyModel.getCurrentApiKey({
     organizationId,
     userId,
-    userTeamIds: await TeamModel.getUserTeamIds(userId),
+    userTeamIds,
     provider,
     // set null to autoresolve the api key
     conversationId: null,
@@ -560,25 +585,28 @@ export async function fetchModelsForProvider({
   provider,
   organizationId,
   userId,
+  userTeamIds,
 }: {
   provider: SupportedProvider;
   organizationId: string;
   userId: string;
+  userTeamIds: string[];
 }): Promise<ModelInfo[]> {
   const apiKey = await getProviderApiKey({
     provider,
     organizationId,
     userId,
+    userTeamIds,
   });
 
   const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
-  // vLLM and Ollama typically don't require API keys
-  const isVllm = provider === "vllm";
-  const isOllama = provider === "ollama";
+  // vLLM and Ollama typically don't require API keys, but need base URL configured
+  const isVllmEnabled = provider === "vllm" && config.llm.vllm.enabled;
+  const isOllamaEnabled = provider === "ollama" && config.llm.ollama.enabled;
 
   // For Gemini with Vertex AI, we don't need an API key - authentication is via ADC
-  // For vLLM and Ollama, API key is optional
-  if (!apiKey && !vertexAiEnabled && !isVllm && !isOllama) {
+  // For vLLM and Ollama, API key is optional but base URL must be configured
+  if (!apiKey && !vertexAiEnabled && !isVllmEnabled && !isOllamaEnabled) {
     logger.debug(
       { provider, organizationId },
       "No API key available for provider",
@@ -600,10 +628,10 @@ export async function fetchModelsForProvider({
         // Use standard Gemini API with API key
         models = await modelFetchers[provider](apiKey);
       }
-    } else if (provider === "vllm") {
+    } else if (provider === "vllm" && isVllmEnabled) {
       // vLLM doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
-    } else if (provider === "ollama") {
+    } else if (provider === "ollama" && isOllamaEnabled) {
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     } else if (provider === "zhipuai") {
@@ -650,21 +678,37 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { provider } = query;
       const providersToFetch = provider ? [provider] : SupportedProviders;
 
-      const results = await Promise.all(
-        providersToFetch.map((p) =>
-          fetchModelsForProvider({
-            provider: p as SupportedProvider,
-            organizationId,
-            userId: user.id,
-          }),
-        ),
-      );
+      // Cache key includes user ID since API keys can be personal, team, or org-wide
+      const cacheKey =
+        `${CacheKey.GetChatModels}-${organizationId}-${user.id}-${provider ?? "all"}` as const;
 
-      const models = results.flat();
+      const models = await cacheManager.wrap(
+        cacheKey,
+        async () => {
+          // Fetch user team IDs once to avoid N+1 queries when fetching models for multiple providers
+          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-      logger.info(
-        { organizationId, provider, modelCount: models.length },
-        "Fetched and cached chat models",
+          const results = await Promise.all(
+            providersToFetch.map((p) =>
+              fetchModelsForProvider({
+                provider: p as SupportedProvider,
+                organizationId,
+                userId: user.id,
+                userTeamIds,
+              }),
+            ),
+          );
+
+          const flatModels = results.flat();
+
+          logger.info(
+            { organizationId, provider, modelCount: flatModels.length },
+            "Fetched chat models from providers",
+          );
+
+          return uniqBy(flatModels, (model) => `${model.provider}:${model.id}`);
+        },
+        { ttl: 5 * TimeInMs.Minute },
       );
 
       logger.debug(
@@ -672,9 +716,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning chat models",
       );
 
-      return reply.send(
-        uniqBy(models, (model) => `${model.provider}:${model.id}`),
-      );
+      return reply.send(models);
     },
   );
 };

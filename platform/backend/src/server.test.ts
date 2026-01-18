@@ -1,7 +1,27 @@
+import { vi } from "vitest";
 import { z } from "zod";
-import { describe, expect, test, vi } from "@/test";
+import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
-import { createFastifyInstance } from "./server";
+
+// Create a hoisted mock function that defaults to returning true (healthy)
+const mockIsDatabaseHealthy = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+
+// Mock the database module before any imports that depend on it
+vi.mock("@/database", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/database")>();
+  return {
+    ...actual,
+    isDatabaseHealthy: mockIsDatabaseHealthy,
+  };
+});
+
+// Import after mock setup
+import { isDatabaseHealthy } from "@/database";
+import {
+  createFastifyInstance,
+  registerHealthEndpoint,
+  registerReadinessEndpoint,
+} from "./server";
 
 // Mock process.exit to prevent it from actually exiting during tests
 const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
@@ -517,6 +537,74 @@ describe("createFastifyInstance", () => {
         message: "Compilers working",
         query: "value",
       });
+    });
+  });
+});
+
+describe("isDatabaseHealthy", () => {
+  test("returns true when database is reachable", async () => {
+    // Using PGlite in tests, the database should be healthy
+    const result = await isDatabaseHealthy();
+    expect(result).toBe(true);
+  });
+});
+
+describe("health endpoints", () => {
+  describe("/health endpoint", () => {
+    test("returns 200 with application info", async () => {
+      const app = createFastifyInstance();
+      registerHealthEndpoint(app);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/health",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toHaveProperty("name");
+      expect(body).toHaveProperty("status");
+      expect(body).toHaveProperty("version");
+      expect(body.status).toBe("ok");
+    });
+  });
+
+  describe("/ready endpoint", () => {
+    test("returns 200 when database is healthy", async () => {
+      const app = createFastifyInstance();
+      registerReadinessEndpoint(app);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/ready",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toHaveProperty("name");
+      expect(body).toHaveProperty("status");
+      expect(body).toHaveProperty("version");
+      expect(body).toHaveProperty("database");
+      expect(body.status).toBe("ok");
+      expect(body.database).toBe("connected");
+    });
+
+    test("returns 503 when database is unhealthy", async () => {
+      const app = createFastifyInstance();
+      registerReadinessEndpoint(app);
+
+      // Mock isDatabaseHealthy to return false
+      mockIsDatabaseHealthy.mockResolvedValueOnce(false);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/ready",
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = response.json();
+      expect(body.status).toBe("degraded");
+      expect(body.database).toBe("disconnected");
     });
   });
 });

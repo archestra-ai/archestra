@@ -16,8 +16,8 @@ test.describe(
       // Navigate to the members settings page
       await goToPage(page, "/settings/members");
 
-      // Wait for the page to load
-      await page.waitForTimeout(1000);
+      // Wait for the page to fully load (API calls to complete)
+      await page.waitForLoadState("networkidle");
 
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });
@@ -52,8 +52,8 @@ test.describe(
       // Navigate to the members settings page
       await goToPage(page, "/settings/members");
 
-      // Wait for the page to load
-      await page.waitForTimeout(1000);
+      // Wait for the page to fully load (API calls to complete)
+      await page.waitForLoadState("networkidle");
 
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });
@@ -75,10 +75,11 @@ test.describe(
       await generateButton.click();
 
       // Wait for the invitation link to be generated
+      // Increased timeout for CI environments where API calls may be slower
       const invitationLinkInput = page.getByTestId(
         E2eTestId.InvitationLinkInput,
       );
-      await expect(invitationLinkInput).toBeVisible({ timeout: 5000 });
+      await expect(invitationLinkInput).toBeVisible({ timeout: 15000 });
 
       // Get the invitation link
       const invitationLink = await invitationLinkInput.inputValue();

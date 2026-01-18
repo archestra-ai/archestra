@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Info, ShieldCheck, User } from "lucide-react";
-import { lazy, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -283,18 +283,28 @@ export function RemoteServerInstallDialog({
                   {fieldConfig.type ===
                   "boolean" ? null : fieldConfig.sensitive &&
                     useVaultSecrets ? (
-                    <InlineVaultSecretSelector
-                      teamId={selectedTeamId}
-                      selectedSecretPath={vaultSecrets[fieldName]?.path ?? null}
-                      selectedSecretKey={vaultSecrets[fieldName]?.key ?? null}
-                      onSecretPathChange={(path) =>
-                        updateVaultSecret(fieldName, "path", path)
+                    <Suspense
+                      fallback={
+                        <div className="text-sm text-muted-foreground">
+                          Loading...
+                        </div>
                       }
-                      onSecretKeyChange={(key) =>
-                        updateVaultSecret(fieldName, "key", key)
-                      }
-                      disabled={isInstalling}
-                    />
+                    >
+                      <InlineVaultSecretSelector
+                        teamId={selectedTeamId}
+                        selectedSecretPath={
+                          vaultSecrets[fieldName]?.path ?? null
+                        }
+                        selectedSecretKey={vaultSecrets[fieldName]?.key ?? null}
+                        onSecretPathChange={(path) =>
+                          updateVaultSecret(fieldName, "path", path)
+                        }
+                        onSecretKeyChange={(key) =>
+                          updateVaultSecret(fieldName, "key", key)
+                        }
+                        disabled={isInstalling}
+                      />
+                    </Suspense>
                   ) : (
                     <Input
                       id={fieldName}

@@ -34,6 +34,12 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .datetime()
               .optional()
               .describe("Filter by end date (ISO 8601 format)"),
+            search: z
+              .string()
+              .optional()
+              .describe(
+                "Free-text search across MCP server name, tool name, and arguments (case-insensitive)",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -55,6 +61,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           startDate,
           endDate,
+          search,
           limit,
           offset,
           sortBy,
@@ -67,9 +74,10 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
-      const dateFilters = {
+      const filters = {
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
+        search: search || undefined,
       };
 
       if (agentId) {
@@ -79,7 +87,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
             pagination,
             sorting,
             undefined,
-            dateFilters,
+            filters,
           ),
         );
       }
@@ -95,7 +103,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sorting,
           user.id,
           isMcpServerAdmin,
-          dateFilters,
+          filters,
         ),
       );
     },

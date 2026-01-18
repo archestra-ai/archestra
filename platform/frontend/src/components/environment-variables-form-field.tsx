@@ -1,8 +1,15 @@
 "use client";
 
 import { E2eTestId, parseVaultReference } from "@shared";
-import { CheckCircle2, Key, Plus, Trash2 } from "lucide-react";
-import { lazy, useCallback, useEffect, useRef, useState } from "react";
+import { CheckCircle2, Key, Loader2, Plus, Trash2 } from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type {
   Control,
   ControllerRenderProps,
@@ -821,14 +828,23 @@ function ExternalSecretDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ExternalSecretSelector
-          selectedTeamId={teamId}
-          selectedSecretPath={secretPath}
-          selectedSecretKey={secretKey}
-          onTeamChange={setTeamId}
-          onSecretChange={setSecretPath}
-          onSecretKeyChange={setSecretKey}
-        />
+        <Suspense
+          fallback={
+            <div className="h-24 flex items-center justify-center text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Loading...
+            </div>
+          }
+        >
+          <ExternalSecretSelector
+            selectedTeamId={teamId}
+            selectedSecretPath={secretPath}
+            selectedSecretKey={secretKey}
+            onTeamChange={setTeamId}
+            onSecretChange={setSecretPath}
+            onSecretKeyChange={setSecretKey}
+          />
+        </Suspense>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>

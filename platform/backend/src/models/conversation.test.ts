@@ -516,7 +516,7 @@ describe("ConversationModel", () => {
     expect(found?.messages[0].id).not.toBe("temp-ai-sdk-id");
   });
 
-  test("findAll merges database UUIDs into message content", async ({
+  test("findById merges database UUIDs into multiple messages", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -554,15 +554,19 @@ describe("ConversationModel", () => {
       },
     });
 
-    const conversations = await ConversationModel.findAll(user.id, org.id);
+    // Use findById instead of findAll since findAll no longer returns messages for performance
+    const found = await ConversationModel.findById({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
-    expect(conversations).toHaveLength(1);
-    const found = conversations[0];
-    expect(found.messages).toHaveLength(2);
-    expect(found.messages[0].id).toBe(message1.id);
-    expect(found.messages[1].id).toBe(message2.id);
-    expect(found.messages[0].id).not.toBe("temp-id-1");
-    expect(found.messages[1].id).not.toBe("temp-id-2");
+    expect(found).toBeDefined();
+    expect(found?.messages).toHaveLength(2);
+    expect(found?.messages[0].id).toBe(message1.id);
+    expect(found?.messages[1].id).toBe(message2.id);
+    expect(found?.messages[0].id).not.toBe("temp-id-1");
+    expect(found?.messages[1].id).not.toBe("temp-id-2");
   });
 
   test("findById returns messages ordered by createdAt ascending", async ({
@@ -630,7 +634,7 @@ describe("ConversationModel", () => {
     expect(found?.messages[2].parts[0].text).toBe("Third");
   });
 
-  test("findAll returns messages ordered by createdAt ascending within each conversation", async ({
+  test("findById returns messages ordered by createdAt ascending for multiple conversations", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -700,12 +704,17 @@ describe("ConversationModel", () => {
       },
     });
 
-    const conversations = await ConversationModel.findAll(user.id, org.id);
-
-    expect(conversations).toHaveLength(2);
-
-    const conv1 = conversations.find((c) => c.id === conversation1.id);
-    const conv2 = conversations.find((c) => c.id === conversation2.id);
+    // Use findById instead of findAll since findAll no longer returns messages for performance
+    const conv1 = await ConversationModel.findById({
+      id: conversation1.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+    const conv2 = await ConversationModel.findById({
+      id: conversation2.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(conv1?.messages).toHaveLength(2);
     expect(conv1?.messages[0].parts[0].text).toBe("C1 First");

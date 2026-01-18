@@ -10,6 +10,7 @@ export * from "./dual-llm";
 export * from "./incoming-email";
 export * from "./interaction";
 export * from "./invitation";
+export * from "./knowledge-graph";
 export * from "./label";
 export * from "./limit";
 export * from "./llm-provider";

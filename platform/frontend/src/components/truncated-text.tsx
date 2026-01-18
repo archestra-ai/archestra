@@ -40,7 +40,7 @@ export function TruncatedText({
     <div
       className={cn(
         isTruncated ? "relative pr-8" : "",
-        "overflow-hidden group",
+        "overflow-hidden whitespace-nowrap group",
         className,
       )}
     >

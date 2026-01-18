@@ -193,7 +193,7 @@ export function ChatSidebarSection() {
                 const isConfirmingDelete = confirmingDeleteId === conv.id;
                 const buttons =
                   editingId !== conv.id ? (
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover/menu-item:opacity-100 has-[[data-confirm-open]]:opacity-100 transition-opacity">
+                    <div className="absolute right-0 left-1/2 inset-y-0 flex items-center justify-end gap-0.5 pr-1 opacity-0 group-hover/menu-item:opacity-100 has-[[data-confirm-open]]:opacity-100 transition-opacity">
                       {!isConfirmingDelete && (
                         <PermissionButton
                           permissions={{ conversation: ["update"] }}
@@ -299,7 +299,7 @@ export function ChatSidebarSection() {
                                 Generating...
                               </span>
                             ) : hasRecentlyGeneratedTitle ? (
-                              <span className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all overflow-hidden">
+                              <span className="flex-1 group-hover/menu-item:pr-14 transition-all overflow-hidden whitespace-nowrap">
                                 <TypingText
                                   text={
                                     displayTitle.length > 17
@@ -315,7 +315,7 @@ export function ChatSidebarSection() {
                               <TruncatedText
                                 message={displayTitle}
                                 maxLength={20}
-                                className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all"
+                                className="flex-1 group-hover/menu-item:pr-14 transition-all"
                                 tooltipContentProps={{
                                   side: "right",
                                   className:

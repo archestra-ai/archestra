@@ -5,24 +5,40 @@ import {
 } from "@/components/ui/tooltip";
 import { formatCost } from "./cost";
 
+export interface ToonSkipReasonCounts {
+  applied: number;
+  notEnabled: number;
+  notEffective: number;
+  noToolResults: number;
+}
+
 export function Savings({
   cost,
   baselineCost,
   toonCostSavings,
   toonTokensSaved,
+  toonSkipReason,
+  toonSkipReasonCounts,
   format = "percent",
   tooltip = "never",
   className,
-  showUnifiedTooltip = false,
+  variant = "default",
+  inputTokens,
+  outputTokens,
 }: {
   cost: string;
   baselineCost: string;
   toonCostSavings?: string | null;
   toonTokensSaved?: number | null;
+  toonSkipReason?: string | null;
+  /** Aggregated skip reason counts for session view */
+  toonSkipReasonCounts?: ToonSkipReasonCounts;
   format?: "percent" | "number";
   tooltip?: "never" | "always" | "hover";
   className?: string;
-  showUnifiedTooltip?: boolean;
+  variant?: "default" | "session" | "interaction";
+  inputTokens?: number;
+  outputTokens?: number;
 }) {
   const costNum = Number.parseFloat(cost);
   const baselineCostNum = Number.parseFloat(baselineCost);
@@ -61,11 +77,136 @@ export function Savings({
   }
 
   if (tooltip !== "never") {
-    // Check if this is a unified view (explicitly set or has TOON data) or simple view
-    const isUnifiedView =
-      showUnifiedTooltip ||
-      (toonCostSavings !== undefined && toonCostSavings !== null);
+    // Session/Interaction variants: cost with savings percentage, detailed tooltip
+    if (variant === "session" || variant === "interaction") {
+      const hasTokens = inputTokens !== undefined && outputTokens !== undefined;
+      const isSession = variant === "session";
 
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className={`${className || ""} cursor-default`}>
+              {formatCost(actualCost)}
+              {totalSavings > 0 && (
+                <span className="text-green-600 dark:text-green-400">
+                  {" "}
+                  (-{savingsPercent}%)
+                </span>
+              )}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <div className="space-y-0.5 text-sm">
+              {hasTokens && (
+                <div>
+                  Tokens: {inputTokens.toLocaleString()} in /{" "}
+                  {outputTokens.toLocaleString()} out
+                </div>
+              )}
+
+              <div
+                className={`${hasTokens ? "border-t border-border pt-1 mt-1" : ""} space-y-0.5`}
+              >
+                {totalSavings > 0 ? (
+                  <>
+                    <div>Estimated Cost: {formatCost(baselineCostNum)}</div>
+                    <div>Actual Cost: {formatCost(actualCost)}</div>
+                    <div className="font-semibold">
+                      Savings: {formatCost(totalSavings)} (-{savingsPercent}%)
+                    </div>
+                  </>
+                ) : (
+                  <div>Cost: {formatCost(actualCost)}</div>
+                )}
+              </div>
+
+              <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
+                {costOptimizationSavings > 0 ? (
+                  <div>
+                    Model optimization: -{formatCost(costOptimizationSavings)}
+                  </div>
+                ) : (
+                  <div>Model optimization: No matching rule</div>
+                )}
+
+                {toonCostSavingsNum > 0 ? (
+                  <div>
+                    Tool result compression: -{formatCost(toonCostSavingsNum)}
+                    {toonTokensSaved
+                      ? ` (${toonTokensSaved.toLocaleString()} tokens saved)`
+                      : ""}
+                  </div>
+                ) : isSession && toonSkipReasonCounts ? (
+                  (() => {
+                    const hasAnyCounts =
+                      toonSkipReasonCounts.applied > 0 ||
+                      toonSkipReasonCounts.notEnabled > 0 ||
+                      toonSkipReasonCounts.notEffective > 0 ||
+                      toonSkipReasonCounts.noToolResults > 0;
+
+                    if (!hasAnyCounts) {
+                      return <div>Tool result compression: Not applied</div>;
+                    }
+
+                    return (
+                      <div>
+                        Tool result compression:
+                        <ul className="list-disc list-inside ml-2 mt-0.5">
+                          {toonSkipReasonCounts.applied > 0 && (
+                            <li>
+                              Applied: {toonSkipReasonCounts.applied}{" "}
+                              interaction
+                              {toonSkipReasonCounts.applied !== 1 ? "s" : ""}
+                            </li>
+                          )}
+                          {toonSkipReasonCounts.notEnabled > 0 && (
+                            <li>
+                              Not enabled: {toonSkipReasonCounts.notEnabled}{" "}
+                              interaction
+                              {toonSkipReasonCounts.notEnabled !== 1 ? "s" : ""}
+                            </li>
+                          )}
+                          {toonSkipReasonCounts.notEffective > 0 && (
+                            <li>
+                              Did not reduce tokens:{" "}
+                              {toonSkipReasonCounts.notEffective} interaction
+                              {toonSkipReasonCounts.notEffective !== 1
+                                ? "s"
+                                : ""}
+                            </li>
+                          )}
+                          {toonSkipReasonCounts.noToolResults > 0 && (
+                            <li>
+                              No tool results:{" "}
+                              {toonSkipReasonCounts.noToolResults} interaction
+                              {toonSkipReasonCounts.noToolResults !== 1
+                                ? "s"
+                                : ""}
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    );
+                  })()
+                ) : isSession ? (
+                  <div>Tool result compression: Not applied</div>
+                ) : toonSkipReason === "not_enabled" ? (
+                  <div>Tool result compression: Not enabled</div>
+                ) : toonSkipReason === "not_effective" ? (
+                  <div>Tool result compression: Did not reduce tokens</div>
+                ) : toonSkipReason === "no_tool_results" ? (
+                  <div>Tool result compression: No tool results</div>
+                ) : (
+                  <div>Tool result compression: Not applied</div>
+                )}
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    // Default variant: full breakdown with baseline/actual costs
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -73,61 +214,47 @@ export function Savings({
             {content}
           </span>
         </TooltipTrigger>
-        <TooltipContent className="max-w-xs">
-          {isUnifiedView ? (
-            // UCS (Unified Cost Savings) tooltip format
-            <div className="space-y-0.5 text-sm">
-              {totalSavings === 0 ? (
-                <div className={colorClass}>No cost savings available</div>
+        <TooltipContent className="max-w-sm">
+          <div className="space-y-0.5 text-sm">
+            {totalSavings > 0 && (
+              <>
+                <div>Estimated Cost: {formatCost(baselineCostNum)}</div>
+                <div>Actual Cost: {formatCost(actualCost)}</div>
+                <div className="font-semibold">
+                  Savings: {formatCost(totalSavings)} (-{savingsPercent}%)
+                </div>
+              </>
+            )}
+
+            <div
+              className={`${totalSavings > 0 ? "border-t border-border pt-1 mt-1" : ""} space-y-0.5 text-muted-foreground`}
+            >
+              {costOptimizationSavings > 0 ? (
+                <div>
+                  Model optimization: -{formatCost(costOptimizationSavings)}
+                </div>
               ) : (
-                <>
-                  <div>Baseline Cost: {formatCost(baselineCostNum)}</div>
-                  <div>Actual Cost: {formatCost(actualCost)}</div>
-                  <div className="font-semibold">
-                    Savings: {formatCost(totalSavings)} (-
-                    {savingsPercent}%)
-                  </div>
+                <div>Model optimization: No matching rule</div>
+              )}
 
-                  <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
-                    {costOptimizationSavings > 0 && (
-                      <div>
-                        <div>Model cost optimization:</div>
-                        <div>-{formatCost(costOptimizationSavings)}</div>
-                      </div>
-                    )}
-
-                    {toonCostSavingsNum > 0 && toonTokensSaved && (
-                      <div>
-                        <div>Tool result compression:</div>
-                        <div>
-                          -{formatCost(toonCostSavingsNum)} (
-                          {toonTokensSaved.toLocaleString()} tokens saved)
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
+              {toonCostSavingsNum > 0 ? (
+                <div>
+                  Tool results compression: -{formatCost(toonCostSavingsNum)}
+                  {toonTokensSaved
+                    ? ` (${toonTokensSaved.toLocaleString()} tokens saved)`
+                    : ""}
+                </div>
+              ) : toonSkipReason === "not_enabled" ? (
+                <div>Tool results compression: Not enabled</div>
+              ) : toonSkipReason === "not_effective" ? (
+                <div>Tool results compression: Did not reduce tokens</div>
+              ) : toonSkipReason === "no_tool_results" ? (
+                <div>Tool results compression: No tool results</div>
+              ) : (
+                <div>Tool result compression: Not applied</div>
               )}
             </div>
-          ) : (
-            // Original simple tooltip format (for Cost Savings column)
-            <div className="space-y-2">
-              {totalSavings === 0 ? (
-                <div className={colorClass}>No cost optimization possible</div>
-              ) : (
-                <>
-                  <div>Baseline: {formatCost(baselineCostNum)}</div>
-                  <div className={colorClass}>
-                    Savings: {formatCost(Math.abs(totalSavings))} (
-                    {totalSavings > 0
-                      ? `-${savingsPercent}%`
-                      : `${savingsPercent}%`}
-                    )
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+          </div>
         </TooltipContent>
       </Tooltip>
     );

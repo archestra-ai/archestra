@@ -11,6 +11,7 @@ import {
   Vllm,
   Zhipuai,
 } from "./llm-providers";
+import { ToonSkipReasonSchema } from "./tool-result-compression";
 
 export const UserInfoSchema = z.object({
   id: z.string(),
@@ -130,6 +131,7 @@ export const InsertInteractionSchema = createInsertSchema(
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),
     response: InteractionResponseSchema,
+    toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
   },
 );
 

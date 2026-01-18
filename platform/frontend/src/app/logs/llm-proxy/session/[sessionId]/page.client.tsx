@@ -21,7 +21,10 @@ import {
   useInteractionSessions,
   useInteractions,
 } from "@/lib/interaction.query";
-import { DynamicInteraction } from "@/lib/interaction.utils";
+import {
+  calculateCostSavings,
+  DynamicInteraction,
+} from "@/lib/interaction.utils";
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 
 export default function SessionDetailPage({
@@ -237,7 +240,7 @@ export default function SessionDetailPage({
               <TableHead className="w-[120px]">Time</TableHead>
               <TableHead className="w-[115px]">Agent</TableHead>
               <TableHead className="w-[140px]">Model</TableHead>
-              <TableHead className="w-[115px]">Tokens / Savings</TableHead>
+              <TableHead className="w-[140px]">Cost</TableHead>
               <TableHead className="w-[30%]">User Message</TableHead>
               <TableHead className="w-[120px]">Tools</TableHead>
             </TableRow>
@@ -299,22 +302,29 @@ export default function SessionDetailPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      <div className="flex flex-col gap-0.5">
-                        <span>
-                          {(interaction.inputTokens ?? 0).toLocaleString()} /{" "}
-                          {(interaction.outputTokens ?? 0).toLocaleString()}
-                        </span>
-                        {interaction.cost && interaction.baselineCost ? (
+                      {(() => {
+                        const savings = calculateCostSavings(interaction);
+                        return (
                           <TooltipProvider>
                             <Savings
-                              cost={interaction.cost}
-                              baselineCost={interaction.baselineCost}
+                              cost={interaction.cost || "0"}
+                              baselineCost={
+                                interaction.baselineCost ||
+                                interaction.cost ||
+                                "0"
+                              }
+                              toonCostSavings={interaction.toonCostSavings}
+                              toonTokensSaved={savings.toonTokensSaved}
+                              toonSkipReason={interaction.toonSkipReason}
                               format="percent"
                               tooltip="hover"
+                              variant="interaction"
+                              inputTokens={interaction.inputTokens ?? 0}
+                              outputTokens={interaction.outputTokens ?? 0}
                             />
                           </TooltipProvider>
-                        ) : null}
-                      </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-xs overflow-hidden">
                       <TruncatedText

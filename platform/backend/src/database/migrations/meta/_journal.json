@@ -820,6 +820,13 @@
       "when": 1768665280339,
       "tag": "0116_pg_trgm_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1768764550811,
+      "tag": "0117_pretty_jackal",
+      "breakpoints": true
     }
   ]
 }

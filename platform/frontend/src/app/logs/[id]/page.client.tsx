@@ -169,8 +169,6 @@ function LogDetail({
               </div>
               {(() => {
                 const savings = calculateCostSavings(dynamicInteraction);
-                if (!savings.hasSavings) return null;
-
                 const effectiveCost = dynamicInteraction.cost || "0";
                 const effectiveBaselineCost =
                   dynamicInteraction.baselineCost ||
@@ -188,9 +186,9 @@ function LogDetail({
                         baselineCost={effectiveBaselineCost}
                         toonCostSavings={dynamicInteraction.toonCostSavings}
                         toonTokensSaved={savings.toonTokensSaved}
+                        toonSkipReason={dynamicInteraction.toonSkipReason}
                         format="percent"
                         tooltip="always"
-                        showUnifiedTooltip={true}
                       />
                     </div>
                   </div>

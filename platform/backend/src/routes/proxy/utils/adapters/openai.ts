@@ -22,9 +22,9 @@ import type {
   CommonToolCall,
   CommonToolResult,
   OpenAi,
+  ToolCompressionStats,
   ToolResultUpdates,
 } from "@/types";
-import type { CompressionStats } from "../toon-conversion";
 import { unwrapToolContent } from "../unwrap-tool-content";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
@@ -280,7 +280,7 @@ export async function convertToolResultsToToon(
   model: string,
 ): Promise<{
   messages: OpenAiMessages;
-  stats: CompressionStats;
+  stats: ToolCompressionStats;
 }> {
   const tokenizer = getTokenizer("openai");
   let toolResultCount = 0;
@@ -375,25 +375,25 @@ export async function convertToolResultsToToon(
   );
 
   // Calculate cost savings
-  let toonCostSavings: number | null = null;
-  if (toolResultCount > 0) {
-    const tokensSaved = totalTokensBefore - totalTokensAfter;
-    if (tokensSaved > 0) {
-      const tokenPrice = await TokenPriceModel.findByModel(model);
-      if (tokenPrice) {
-        const inputPricePerToken =
-          Number(tokenPrice.pricePerMillionOutput) / 1000000;
-        toonCostSavings = tokensSaved * inputPricePerToken;
-      }
+  let toonCostSavings = 0;
+  const tokensSaved = totalTokensBefore - totalTokensAfter;
+  if (tokensSaved > 0) {
+    const tokenPrice = await TokenPriceModel.findByModel(model);
+    if (tokenPrice) {
+      const inputPricePerToken =
+        Number(tokenPrice.pricePerMillionOutput) / 1000000;
+      toonCostSavings = tokensSaved * inputPricePerToken;
     }
   }
 
   return {
     messages: result,
     stats: {
-      toonTokensBefore: toolResultCount > 0 ? totalTokensBefore : null,
-      toonTokensAfter: toolResultCount > 0 ? totalTokensAfter : null,
-      toonCostSavings,
+      tokensBefore: totalTokensBefore,
+      tokensAfter: totalTokensAfter,
+      costSavings: toonCostSavings,
+      wasEffective: totalTokensAfter < totalTokensBefore,
+      hadToolResults: toolResultCount > 0,
     },
   };
 }

@@ -242,22 +242,21 @@ function SessionRow({
         </div>
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
-        <div className="flex flex-col gap-0.5">
-          <span>
-            {session.totalInputTokens.toLocaleString()} /{" "}
-            {session.totalOutputTokens.toLocaleString()}
-          </span>
-          {session.totalCost && session.totalBaselineCost && (
-            <TooltipProvider>
-              <Savings
-                cost={session.totalCost}
-                baselineCost={session.totalBaselineCost}
-                format="percent"
-                tooltip="hover"
-              />
-            </TooltipProvider>
-          )}
-        </div>
+        {session.totalCost && session.totalBaselineCost && (
+          <TooltipProvider>
+            <Savings
+              cost={session.totalCost}
+              baselineCost={session.totalBaselineCost}
+              toonCostSavings={session.totalToonCostSavings}
+              toonSkipReasonCounts={session.toonSkipReasonCounts}
+              format="percent"
+              tooltip="hover"
+              variant="session"
+              inputTokens={session.totalInputTokens}
+              outputTokens={session.totalOutputTokens}
+            />
+          </TooltipProvider>
+        )}
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
         <div className="flex flex-col gap-0.5">
@@ -530,7 +529,7 @@ function SessionsTable({
                 </TableHead>
                 <TableHead className="w-[200px]">Models</TableHead>
                 <TableHead className="w-[140px] whitespace-nowrap">
-                  Tokens / Savings
+                  Cost
                 </TableHead>
                 <TableHead className="w-[160px]">Time</TableHead>
                 <TableHead className="min-w-[100px]">Details</TableHead>

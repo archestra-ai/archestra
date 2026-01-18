@@ -454,9 +454,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const { messages: convertedMessages, stats } =
           await convertToolResultsToToon(filteredMessages, model);
         filteredMessages = convertedMessages;
-        toonTokensBefore = stats.toonTokensBefore;
-        toonTokensAfter = stats.toonTokensAfter;
-        toonCostSavings = stats.toonCostSavings;
+        toonTokensBefore = stats.tokensBefore;
+        toonTokensAfter = stats.tokensAfter;
+        toonCostSavings = stats.costSavings;
       }
 
       fastify.log.info(

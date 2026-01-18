@@ -19,7 +19,7 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   StreamAccumulatorState,
-  ToonCompressionResult,
+  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import { MockAnthropicClient } from "../mock-anthropic-client";
@@ -28,7 +28,6 @@ import {
   isImageTooLarge,
   isMcpImageBlock,
 } from "../utils/mcp-image";
-import type { CompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 // =============================================================================
@@ -181,7 +180,7 @@ class AnthropicRequestAdapter
     Object.assign(this.toolResultUpdates, updates);
   }
 
-  async applyToonCompression(model: string): Promise<ToonCompressionResult> {
+  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
     const { messages: compressedMessages, stats } =
       await convertToolResultsToToon(this.request.messages, model);
     // Update internal messages state
@@ -189,11 +188,7 @@ class AnthropicRequestAdapter
       ...this.request,
       messages: compressedMessages,
     };
-    return {
-      tokensBefore: stats.toonTokensBefore,
-      tokensAfter: stats.toonTokensAfter,
-      costSavings: stats.toonCostSavings,
-    };
+    return stats;
   }
 
   convertToolResultContent(messages: AnthropicMessages): AnthropicMessages {
@@ -842,7 +837,7 @@ export async function convertToolResultsToToon(
   model: string,
 ): Promise<{
   messages: AnthropicMessages;
-  stats: CompressionStats;
+  stats: ToolCompressionStats;
 }> {
   const tokenizer = getTokenizer("anthropic");
   let toolResultCount = 0;
@@ -881,9 +876,11 @@ export async function convertToolResultsToToon(
                 { role: "user", content: compressed },
               ]);
 
+              // Always count tokens
+              totalTokensBefore += tokensBefore;
+
               // Only apply compression if it actually saves tokens
               if (tokensAfter < tokensBefore) {
-                totalTokensBefore += tokensBefore;
                 totalTokensAfter += tokensAfter;
 
                 logger.info(
@@ -915,7 +912,8 @@ export async function convertToolResultsToToon(
                 };
               }
 
-              // Compression would increase tokens - keep original
+              // Compression not applied - count non-compressed tokens to track total tokens anyway
+              totalTokensAfter += tokensBefore;
               logger.info(
                 {
                   toolCallId: contentBlock.tool_use_id,
@@ -961,9 +959,11 @@ export async function convertToolResultsToToon(
                     { role: "user", content: compressed },
                   ]);
 
+                  // Always count tokens
+                  totalTokensBefore += tokensBefore;
+
                   // Only apply compression if it actually saves tokens
                   if (tokensAfter < tokensBefore) {
-                    totalTokensBefore += tokensBefore;
                     totalTokensAfter += tokensAfter;
 
                     logger.info(
@@ -994,7 +994,8 @@ export async function convertToolResultsToToon(
                     };
                   }
 
-                  // Compression would increase tokens - keep original
+                  // Compression not applied - count non-compressed tokens to track total tokens anyway
+                  totalTokensAfter += tokensBefore;
                   logger.info(
                     {
                       toolCallId: contentBlock.tool_use_id,
@@ -1044,26 +1045,26 @@ export async function convertToolResultsToToon(
     "convertToolResultsToToon completed",
   );
 
-  // Calculate cost savings
-  let toonCostSavings: number | null = null;
-  if (toolResultCount > 0) {
-    const tokensSaved = totalTokensBefore - totalTokensAfter;
-    if (tokensSaved > 0) {
-      const tokenPrice = await TokenPriceModel.findByModel(model);
-      if (tokenPrice) {
-        const inputPricePerToken =
-          Number(tokenPrice.pricePerMillionInput) / 1000000;
-        toonCostSavings = tokensSaved * inputPricePerToken;
-      }
+  // Calculate cost savings (always a number, 0 if no savings)
+  let toonCostSavings = 0;
+  const tokensSaved = totalTokensBefore - totalTokensAfter;
+  if (tokensSaved > 0) {
+    const tokenPrice = await TokenPriceModel.findByModel(model);
+    if (tokenPrice) {
+      const inputPricePerToken =
+        Number(tokenPrice.pricePerMillionInput) / 1000000;
+      toonCostSavings = tokensSaved * inputPricePerToken;
     }
   }
 
   return {
     messages: result,
     stats: {
-      toonTokensBefore: toolResultCount > 0 ? totalTokensBefore : null,
-      toonTokensAfter: toolResultCount > 0 ? totalTokensAfter : null,
-      toonCostSavings,
+      tokensBefore: totalTokensBefore,
+      tokensAfter: totalTokensAfter,
+      costSavings: toonCostSavings,
+      wasEffective: totalTokensAfter < totalTokensBefore,
+      hadToolResults: toolResultCount > 0,
     },
   };
 }

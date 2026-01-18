@@ -11978,6 +11978,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
+            toonSkipReason: string | null;
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -12000,6 +12001,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
+            toonSkipReason: string | null;
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -12022,6 +12024,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
+            toonSkipReason: string | null;
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -12044,6 +12047,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
+            toonSkipReason: string | null;
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
@@ -12066,6 +12070,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
+            toonSkipReason: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -12086,6 +12091,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
+            toonSkipReason: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -12106,6 +12112,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
+            toonSkipReason: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -12228,6 +12235,13 @@ export type GetInteractionSessionsResponses = {
             totalOutputTokens: number;
             totalCost: string | null;
             totalBaselineCost: string | null;
+            totalToonCostSavings: string | null;
+            toonSkipReasonCounts: {
+                applied: number;
+                notEnabled: number;
+                notEffective: number;
+                noToolResults: number;
+            };
             firstRequestTime: string;
             lastRequestTime: string;
             models: Array<string>;
@@ -12498,6 +12512,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
+        toonSkipReason: string | null;
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -12520,6 +12535,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
+        toonSkipReason: string | null;
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -12542,6 +12558,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
+        toonSkipReason: string | null;
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -12564,6 +12581,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
+        toonSkipReason: string | null;
         createdAt: string;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
@@ -12586,6 +12604,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
+        toonSkipReason: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -12606,6 +12625,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
+        toonSkipReason: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -12626,6 +12646,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
+        toonSkipReason: string | null;
         createdAt: string;
     };
 };

@@ -162,23 +162,45 @@ export type ModelSelectorLogoProps = Omit<
     | "scaleway"
     | "amazon-bedrock"
     | "cerebras"
+    | "minimax"
+    | "ollama"
+    | "vllm"
+    | "gemini"
     | (string & {});
 };
+
+// Providers that have local icons available
+const LOCAL_ICON_PROVIDERS = new Set([
+  "anthropic",
+  "cerebras",
+  "gemini",
+  "minimax",
+  "ollama",
+  "openai",
+  "vllm",
+]);
 
 export const ModelSelectorLogo = ({
   provider,
   className,
   ...props
-}: ModelSelectorLogoProps) => (
-  <img
-    {...props}
-    alt={`${provider} logo`}
-    className={cn("size-3 dark:invert", className)}
-    height={12}
-    src={`https://models.dev/logos/${provider}.svg`}
-    width={12}
-  />
-);
+}: ModelSelectorLogoProps) => {
+  // Use local icon if available, otherwise use external URL
+  const logoSrc = LOCAL_ICON_PROVIDERS.has(provider)
+    ? `/icons/${provider}.png`
+    : `https://models.dev/logos/${provider}.svg`;
+
+  return (
+    <img
+      {...props}
+      alt={`${provider} logo`}
+      className={cn("size-3 dark:invert", className)}
+      height={12}
+      src={logoSrc}
+      width={12}
+    />
+  );
+};
 
 export type ModelSelectorLogoGroupProps = ComponentProps<"div">;
 

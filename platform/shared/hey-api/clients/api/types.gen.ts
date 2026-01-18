@@ -11971,6 +11971,7 @@ export type GetInteractionsResponses = {
             response: OpenAiChatCompletionResponse;
             type: 'openai:chatCompletions';
             model: string | null;
+            baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
             baselineCost: string | null;
@@ -11994,6 +11995,7 @@ export type GetInteractionsResponses = {
             response: GeminiGenerateContentResponse;
             type: 'gemini:generateContent';
             model: string | null;
+            baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
             baselineCost: string | null;
@@ -12017,6 +12019,7 @@ export type GetInteractionsResponses = {
             response: AnthropicMessagesResponse;
             type: 'anthropic:messages';
             model: string | null;
+            baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
             baselineCost: string | null;
@@ -12040,6 +12043,7 @@ export type GetInteractionsResponses = {
             response: CerebrasChatCompletionResponse;
             type: 'cerebras:chatCompletions';
             model: string | null;
+            baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
             baselineCost: string | null;
@@ -12063,6 +12067,7 @@ export type GetInteractionsResponses = {
             response: VllmChatCompletionResponse;
             type: 'vllm:chatCompletions';
             model: string | null;
+            baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
             baselineCost: string | null;
@@ -12084,6 +12089,7 @@ export type GetInteractionsResponses = {
             response: OllamaChatCompletionResponse;
             type: 'ollama:chatCompletions';
             model: string | null;
+            baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
             baselineCost: string | null;
@@ -12105,6 +12111,7 @@ export type GetInteractionsResponses = {
             response: ZhipuaiChatCompletionResponse;
             type: 'zhipuai:chatCompletions';
             model: string | null;
+            baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
             baselineCost: string | null;
@@ -12505,6 +12512,7 @@ export type GetInteractionResponses = {
         response: OpenAiChatCompletionResponse;
         type: 'openai:chatCompletions';
         model: string | null;
+        baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
         baselineCost: string | null;
@@ -12528,6 +12536,7 @@ export type GetInteractionResponses = {
         response: GeminiGenerateContentResponse;
         type: 'gemini:generateContent';
         model: string | null;
+        baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
         baselineCost: string | null;
@@ -12551,6 +12560,7 @@ export type GetInteractionResponses = {
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
         model: string | null;
+        baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
         baselineCost: string | null;
@@ -12574,6 +12584,7 @@ export type GetInteractionResponses = {
         response: CerebrasChatCompletionResponse;
         type: 'cerebras:chatCompletions';
         model: string | null;
+        baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
         baselineCost: string | null;
@@ -12597,6 +12608,7 @@ export type GetInteractionResponses = {
         response: VllmChatCompletionResponse;
         type: 'vllm:chatCompletions';
         model: string | null;
+        baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
         baselineCost: string | null;
@@ -12618,6 +12630,7 @@ export type GetInteractionResponses = {
         response: OllamaChatCompletionResponse;
         type: 'ollama:chatCompletions';
         model: string | null;
+        baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
         baselineCost: string | null;
@@ -12639,6 +12652,7 @@ export type GetInteractionResponses = {
         response: ZhipuaiChatCompletionResponse;
         type: 'zhipuai:chatCompletions';
         model: string | null;
+        baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
         baselineCost: string | null;

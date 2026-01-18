@@ -670,6 +670,7 @@ async function handleStreaming<
         response:
           streamAdapter.toProviderResponse() as unknown as InteractionResponse,
         model: actualModel,
+        baselineModel,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cost: actualCost?.toFixed(10) ?? null,
@@ -816,6 +817,7 @@ async function handleNonStreaming<
         processedRequest: request as unknown as InteractionRequest,
         response: refusalResponse as unknown as InteractionResponse,
         model: actualModel,
+        baselineModel,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cost: actualCost?.toFixed(10) ?? null,
@@ -871,6 +873,7 @@ async function handleNonStreaming<
     response:
       responseAdapter.getOriginalResponse() as unknown as InteractionResponse,
     model: actualModel,
+    baselineModel,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     cost: actualCost?.toFixed(10) ?? null,

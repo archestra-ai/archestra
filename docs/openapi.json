@@ -40521,6 +40521,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -40588,6 +40592,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -40653,6 +40658,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -40720,6 +40729,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -40785,6 +40795,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -40852,6 +40866,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -40917,6 +40932,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -40984,6 +41003,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -41049,6 +41069,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -41105,6 +41129,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -41170,6 +41195,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -41226,6 +41255,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -41291,6 +41321,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -41347,6 +41381,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -42692,6 +42727,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -42759,6 +42798,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -42824,6 +42864,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -42891,6 +42935,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -42956,6 +43001,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -43023,6 +43072,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -43088,6 +43138,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -43155,6 +43209,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -43220,6 +43275,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -43276,6 +43335,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -43341,6 +43401,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -43397,6 +43461,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -43462,6 +43527,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -43518,6 +43587,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",

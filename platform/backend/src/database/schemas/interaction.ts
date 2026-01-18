@@ -56,6 +56,12 @@ const interactionsTable = pgTable(
     response: jsonb("response").$type<InteractionResponse>().notNull(),
     type: varchar("type").$type<SupportedProviderDiscriminator>().notNull(),
     model: varchar("model"),
+    /**
+     * The original requested model before cost optimization.
+     * When model optimization applies: baselineModel ≠ model
+     * When no optimization: baselineModel = model (or null for backward compatibility)
+     */
+    baselineModel: varchar("baseline_model"),
     inputTokens: integer("input_tokens"),
     outputTokens: integer("output_tokens"),
     baselineCost: numeric("baseline_cost", { precision: 13, scale: 10 }),

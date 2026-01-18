@@ -248,7 +248,6 @@ function SessionRow({
               cost={session.totalCost}
               baselineCost={session.totalBaselineCost}
               toonCostSavings={session.totalToonCostSavings}
-              toonSkipReasonCounts={session.toonSkipReasonCounts}
               format="percent"
               tooltip="hover"
               variant="session"

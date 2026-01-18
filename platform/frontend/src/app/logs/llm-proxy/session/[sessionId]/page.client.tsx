@@ -321,6 +321,8 @@ export default function SessionDetailPage({
                               variant="interaction"
                               inputTokens={interaction.inputTokens ?? 0}
                               outputTokens={interaction.outputTokens ?? 0}
+                              baselineModel={interaction.baselineModel}
+                              actualModel={interaction.model}
                             />
                           </TooltipProvider>
                         );

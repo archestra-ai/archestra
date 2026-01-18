@@ -5,40 +5,36 @@ import {
 } from "@/components/ui/tooltip";
 import { formatCost } from "./cost";
 
-export interface ToonSkipReasonCounts {
-  applied: number;
-  notEnabled: number;
-  notEffective: number;
-  noToolResults: number;
-}
-
 export function Savings({
   cost,
   baselineCost,
   toonCostSavings,
   toonTokensSaved,
   toonSkipReason,
-  toonSkipReasonCounts,
   format = "percent",
   tooltip = "never",
   className,
   variant = "default",
   inputTokens,
   outputTokens,
+  baselineModel,
+  actualModel,
 }: {
   cost: string;
   baselineCost: string;
   toonCostSavings?: string | null;
   toonTokensSaved?: number | null;
   toonSkipReason?: string | null;
-  /** Aggregated skip reason counts for session view */
-  toonSkipReasonCounts?: ToonSkipReasonCounts;
   format?: "percent" | "number";
   tooltip?: "never" | "always" | "hover";
   className?: string;
   variant?: "default" | "session" | "interaction";
   inputTokens?: number;
   outputTokens?: number;
+  /** The original requested model before cost optimization */
+  baselineModel?: string | null;
+  /** The actual model used after cost optimization */
+  actualModel?: string | null;
 }) {
   const costNum = Number.parseFloat(cost);
   const baselineCostNum = Number.parseFloat(baselineCost);
@@ -124,6 +120,11 @@ export function Savings({
                 {costOptimizationSavings > 0 ? (
                   <div>
                     Model optimization: -{formatCost(costOptimizationSavings)}
+                    {baselineModel &&
+                    actualModel &&
+                    baselineModel !== actualModel
+                      ? ` (${baselineModel} \u2192 ${actualModel})`
+                      : ""}
                   </div>
                 ) : (
                   <div>Model optimization: No matching rule</div>
@@ -136,58 +137,6 @@ export function Savings({
                       ? ` (${toonTokensSaved.toLocaleString()} tokens saved)`
                       : ""}
                   </div>
-                ) : isSession && toonSkipReasonCounts ? (
-                  (() => {
-                    const hasAnyCounts =
-                      toonSkipReasonCounts.applied > 0 ||
-                      toonSkipReasonCounts.notEnabled > 0 ||
-                      toonSkipReasonCounts.notEffective > 0 ||
-                      toonSkipReasonCounts.noToolResults > 0;
-
-                    if (!hasAnyCounts) {
-                      return <div>Tool result compression: Not applied</div>;
-                    }
-
-                    return (
-                      <div>
-                        Tool result compression:
-                        <ul className="list-disc list-inside ml-2 mt-0.5">
-                          {toonSkipReasonCounts.applied > 0 && (
-                            <li>
-                              Applied: {toonSkipReasonCounts.applied}{" "}
-                              interaction
-                              {toonSkipReasonCounts.applied !== 1 ? "s" : ""}
-                            </li>
-                          )}
-                          {toonSkipReasonCounts.notEnabled > 0 && (
-                            <li>
-                              Not enabled: {toonSkipReasonCounts.notEnabled}{" "}
-                              interaction
-                              {toonSkipReasonCounts.notEnabled !== 1 ? "s" : ""}
-                            </li>
-                          )}
-                          {toonSkipReasonCounts.notEffective > 0 && (
-                            <li>
-                              Did not reduce tokens:{" "}
-                              {toonSkipReasonCounts.notEffective} interaction
-                              {toonSkipReasonCounts.notEffective !== 1
-                                ? "s"
-                                : ""}
-                            </li>
-                          )}
-                          {toonSkipReasonCounts.noToolResults > 0 && (
-                            <li>
-                              No tool results:{" "}
-                              {toonSkipReasonCounts.noToolResults} interaction
-                              {toonSkipReasonCounts.noToolResults !== 1
-                                ? "s"
-                                : ""}
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-                    );
-                  })()
                 ) : isSession ? (
                   <div>Tool result compression: Not applied</div>
                 ) : toonSkipReason === "not_enabled" ? (
@@ -232,6 +181,9 @@ export function Savings({
               {costOptimizationSavings > 0 ? (
                 <div>
                   Model optimization: -{formatCost(costOptimizationSavings)}
+                  {baselineModel && actualModel && baselineModel !== actualModel
+                    ? ` (${baselineModel} \u2192 ${actualModel})`
+                    : ""}
                 </div>
               ) : (
                 <div>Model optimization: No matching rule</div>

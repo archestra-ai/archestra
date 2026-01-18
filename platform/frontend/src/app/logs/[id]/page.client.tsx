@@ -189,6 +189,8 @@ function LogDetail({
                         toonSkipReason={dynamicInteraction.toonSkipReason}
                         format="percent"
                         tooltip="always"
+                        baselineModel={dynamicInteraction.baselineModel}
+                        actualModel={dynamicInteraction.model}
                       />
                     </div>
                   </div>

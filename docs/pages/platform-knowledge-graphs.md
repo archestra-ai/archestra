@@ -1,7 +1,7 @@
 ---
 title: Knowledge Graphs
 category: Archestra Platform
-order: 8
+order: 7
 description: Automatic document ingestion into knowledge graphs for enhanced retrieval
 lastUpdated: 2025-01-15
 ---
@@ -55,8 +55,29 @@ LightRAG requires:
 
 ## Using the Knowledge Graph
 
-Once configured, documents are automatically ingested. To query the knowledge graph from agents, add the [LightRAG MCP server](https://github.com/hnykda/mcp-server-lightrag) to your profiles.
+Once configured, documents are automatically ingested. There are two ways to query the knowledge graph from agents:
 
-The MCP server provides tools for:
-- Querying documents using natural language
-- Searching with different retrieval modes (local, global, hybrid)
+### Built-in Query Tool (Recommended)
+
+Archestra includes a built-in `query_knowledge_graph` tool. To use it:
+
+1. Go to **MCP Catalog** and find "Archestra"
+2. Assign the `query_knowledge_graph` tool to your profile
+3. The tool will be available to agents using that profile
+
+The tool is also automatically assigned to new profiles when a knowledge graph provider is configured.
+
+### External MCP Server
+
+Alternatively, add the [LightRAG MCP server](https://github.com/hnykda/mcp-server-lightrag) to your profiles for direct LightRAG access.
+
+## Query Modes
+
+The `query_knowledge_graph` tool supports different query modes:
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| `hybrid` | Combines local and global context (default) | General queries |
+| `local` | Uses only local context from the knowledge graph | Specific document lookups |
+| `global` | Uses global context across all documents | Broad topic exploration |
+| `naive` | Simple RAG without graph-based retrieval | Basic similarity search |

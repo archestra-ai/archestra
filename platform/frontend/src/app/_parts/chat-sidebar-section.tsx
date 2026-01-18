@@ -423,18 +423,20 @@ export function ChatSidebarSection() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteConversationMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
                 if (deleteConfirmId) {
-                  const id = deleteConfirmId;
-                  setDeleteConfirmId(null); // Close dialog first for better UX
-                  await handleDeleteConversation(id);
+                  await handleDeleteConversation(deleteConfirmId);
+                  setDeleteConfirmId(null); // Close dialog only after successful deletion
                 }
               }}
+              disabled={deleteConversationMutation.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {deleteConversationMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

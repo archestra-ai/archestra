@@ -39,36 +39,6 @@ export function getValidatedRedirectPath(redirectTo: string | null): string {
 
 /**
  * Validates and decodes a redirectTo parameter, returning a full URL with origin.
- * Used when an absolute URL is required (e.g., for OAuth callbackURL).
- *
- * @param redirectTo - URL-encoded redirect path from query params
- * @returns Full URL with origin if valid, or undefined if invalid
- */
-export function getValidatedCallbackURL(
-  redirectTo: string | null,
-): string | undefined {
-  if (!redirectTo) {
-    return undefined;
-  }
-
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(redirectTo);
-  } catch {
-    // Malformed URI encoding
-    return undefined;
-  }
-
-  if (!isValidRelativePath(decodedPath)) {
-    return undefined;
-  }
-
-  // Return full URL - OAuth libraries expect absolute URLs for callbackURL
-  return `${window.location.origin}${decodedPath}`;
-}
-
-/**
- * Validates and decodes a redirectTo parameter, returning a full URL with origin.
  * Falls back to home page URL if redirectTo is invalid or not provided.
  * Used for SSO flows where a callback URL is always required.
  *

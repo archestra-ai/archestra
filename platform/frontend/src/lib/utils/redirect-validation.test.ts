@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  getValidatedCallbackURL,
   getValidatedCallbackURLWithDefault,
   getValidatedRedirectPath,
 } from "./redirect-validation";
@@ -89,38 +88,6 @@ describe("redirect-validation", () => {
       expect(
         getValidatedRedirectPath(encodeURIComponent("evil.com/path")),
       ).toBe("/");
-    });
-  });
-
-  describe("getValidatedCallbackURL", () => {
-    it("should return undefined when redirectTo is null", () => {
-      expect(getValidatedCallbackURL(null)).toBeUndefined();
-    });
-
-    it("should return undefined when redirectTo is empty string", () => {
-      expect(getValidatedCallbackURL("")).toBeUndefined();
-    });
-
-    it("should return full URL for valid relative paths", () => {
-      expect(getValidatedCallbackURL("%2Fdashboard")).toBe(
-        `${mockOrigin}/dashboard`,
-      );
-      expect(getValidatedCallbackURL("%2Fsettings%2Fteams")).toBe(
-        `${mockOrigin}/settings/teams`,
-      );
-    });
-
-    it("should return undefined for malformed URI encoding", () => {
-      expect(getValidatedCallbackURL("%ZZ")).toBeUndefined();
-    });
-
-    it("should return undefined for malicious URLs", () => {
-      expect(
-        getValidatedCallbackURL(encodeURIComponent("https://evil.com")),
-      ).toBeUndefined();
-      expect(
-        getValidatedCallbackURL(encodeURIComponent("//evil.com")),
-      ).toBeUndefined();
     });
   });
 

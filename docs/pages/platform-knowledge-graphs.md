@@ -1,7 +1,7 @@
 ---
 title: Knowledge Graphs
 category: Archestra Platform
-order: 8
+order: 7
 description: Automatic document ingestion into knowledge graphs for enhanced retrieval
 lastUpdated: 2025-01-15
 ---

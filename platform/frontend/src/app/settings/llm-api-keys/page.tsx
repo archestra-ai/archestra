@@ -24,10 +24,8 @@ import {
   PLACEHOLDER_KEY,
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
-import {
-  EnvConfiguredProviderAlert,
-  GeminiVertexAiAlert,
-} from "@/components/gemini-vertex-ai-alert";
+import { EnvConfiguredProviderAlert } from "@/components/env-configured-provider-alert";
+import { GeminiVertexAiAlert } from "@/components/gemini-vertex-ai-alert";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

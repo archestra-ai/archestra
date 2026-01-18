@@ -1,4 +1,8 @@
-import { RouteId } from "@shared";
+import {
+  RouteId,
+  type SupportedProvider,
+  SupportedProvidersSchema,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
@@ -54,15 +58,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
               displayName: z.string().optional(),
             }),
             /** List of LLM providers configured via environment variables (not database) */
-            envConfiguredChatProviders: z.array(
-              z.enum([
-                "openai",
-                "gemini",
-                "anthropic",
-                "cerebras",
-                "zhipuai",
-              ]),
-            ),
+            envConfiguredChatProviders: z.array(SupportedProvidersSchema),
           }),
         },
       },
@@ -74,18 +70,25 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         org?.globalToolPolicy ?? "permissive";
 
       // Check which providers have API keys configured via environment variables
+      // Using Record<SupportedProvider, boolean> ensures TypeScript errors when new providers are added
+      const envConfiguredChatProvidersMap: Record<SupportedProvider, boolean> =
+        {
+          openai: !!config.chat.openai.apiKey,
+          gemini: !!config.chat.gemini.apiKey,
+          anthropic: !!config.chat.anthropic.apiKey,
+          cerebras: !!config.chat.cerebras.apiKey,
+          zhipuai: !!config.chat.zhipuai?.apiKey,
+          vllm: config.llm.vllm.enabled,
+          ollama: config.llm.ollama.enabled,
+        };
       const envConfiguredChatProviders = (
-        [
-          config.chat.openai.apiKey ? "openai" : null,
-          config.chat.gemini.apiKey ? "gemini" : null,
-          config.chat.anthropic.apiKey ? "anthropic" : null,
-          config.chat.cerebras.apiKey ? "cerebras" : null,
-          config.chat.zhipuai?.apiKey ? "zhipuai" : null,
-        ] as const
-      ).filter(
-        (p): p is "openai" | "gemini" | "anthropic" | "cerebras" | "zhipuai" =>
-          p !== null,
-      );
+        Object.entries(envConfiguredChatProvidersMap) as [
+          SupportedProvider,
+          boolean,
+        ][]
+      )
+        .filter(([, enabled]) => enabled)
+        .map(([provider]) => provider);
 
       return reply.send({
         ...config.features,

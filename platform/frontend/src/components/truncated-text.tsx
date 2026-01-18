@@ -13,6 +13,7 @@ export function TruncatedText({
   tooltipContentProps,
   tooltipProps,
   showTooltip = true,
+  noWrap = true,
 }: {
   message: string | undefined;
   maxLength?: number;
@@ -20,6 +21,8 @@ export function TruncatedText({
   tooltipProps?: ComponentProps<typeof Tooltip>;
   tooltipContentProps?: ComponentProps<typeof TooltipContent>;
   showTooltip?: boolean;
+  /** Prevent text from wrapping. Defaults to true. */
+  noWrap?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -40,7 +43,8 @@ export function TruncatedText({
     <div
       className={cn(
         isTruncated ? "relative pr-8" : "",
-        "overflow-hidden whitespace-nowrap group",
+        "overflow-hidden group",
+        noWrap && "whitespace-nowrap",
         className,
       )}
     >

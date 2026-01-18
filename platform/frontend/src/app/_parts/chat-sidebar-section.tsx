@@ -297,72 +297,71 @@ export function ChatSidebarSection() {
                                 message={displayTitle}
                                 maxLength={20}
                                 className="truncate"
-                                tooltipContentProps={{
-                                  side: "right",
-                                  sideOffset: 8,
-                                }}
+                                showTooltip={false}
                               />
                             )}
                           </span>
-                          <DropdownMenu
-                            open={isMenuOpen}
-                            onOpenChange={(open) =>
-                              setOpenMenuId(open ? conv.id : null)
-                            }
-                          >
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                type="button"
-                                size="icon-sm"
-                                variant="ghost"
-                                onClick={(e) => e.stopPropagation()}
-                                className={`h-6 w-6 p-0 shrink-0 transition-opacity ${
-                                  isMenuOpen
-                                    ? "opacity-100"
-                                    : "opacity-0 group-hover/menu-item:opacity-100"
-                                }`}
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" side="right">
-                              {canUpdateConversation && (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStartEdit(conv.id, displayTitle);
-                                    }}
-                                  >
-                                    <Pencil className="h-4 w-4 mr-2" />
-                                    Rename
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRegenerateTitle(conv.id);
-                                    }}
-                                    disabled={generateTitleMutation.isPending}
-                                  >
-                                    <Sparkles className="h-4 w-4 mr-2" />
-                                    Regenerate title
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              {canDeleteConversation && (
-                                <DropdownMenuItem
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDeleteConfirmId(conv.id);
-                                  }}
-                                  className="text-destructive focus:text-destructive"
+                          {(canUpdateConversation || canDeleteConversation) && (
+                            <DropdownMenu
+                              open={isMenuOpen}
+                              onOpenChange={(open) =>
+                                setOpenMenuId(open ? conv.id : null)
+                              }
+                            >
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className={`h-6 w-6 p-0 shrink-0 transition-opacity ${
+                                    isMenuOpen
+                                      ? "opacity-100"
+                                      : "opacity-0 group-hover/menu-item:opacity-100"
+                                  }`}
                                 >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" side="right">
+                                {canUpdateConversation && (
+                                  <>
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStartEdit(conv.id, displayTitle);
+                                      }}
+                                    >
+                                      <Pencil className="h-4 w-4 mr-2" />
+                                      Rename
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRegenerateTitle(conv.id);
+                                      }}
+                                      disabled={generateTitleMutation.isPending}
+                                    >
+                                      <Sparkles className="h-4 w-4 mr-2" />
+                                      Regenerate title
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                {canDeleteConversation && (
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeleteConfirmId(conv.id);
+                                    }}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </SidebarMenuButton>
                       )}
                     </div>

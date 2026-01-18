@@ -147,14 +147,23 @@ export function ChatSidebarSection() {
   };
 
   const handleSaveEdit = async (id: string) => {
-    if (editingTitle.trim()) {
+    if (!editingTitle.trim()) {
+      setEditingId(null);
+      setEditingTitle("");
+      return;
+    }
+
+    try {
       await updateConversationMutation.mutateAsync({
         id,
         title: editingTitle.trim(),
       });
+      setEditingId(null);
+      setEditingTitle("");
+    } catch {
+      // Error is handled by the mutation's onError callback
+      // Keep editing state so user can retry
     }
-    setEditingId(null);
-    setEditingTitle("");
   };
 
   const handleCancelEdit = () => {
@@ -163,12 +172,17 @@ export function ChatSidebarSection() {
   };
 
   const handleDeleteConversation = async (id: string) => {
-    // If we're deleting the current conversation, navigate to new chat
-    if (currentConversationId === id) {
-      router.push("/chat");
-    }
+    const shouldNavigate = currentConversationId === id;
 
-    await deleteConversationMutation.mutateAsync(id);
+    try {
+      await deleteConversationMutation.mutateAsync(id);
+      // Navigate only after successful deletion
+      if (shouldNavigate) {
+        router.push("/chat");
+      }
+    } catch {
+      // Error is handled by the mutation's onError callback
+    }
   };
 
   const handleRegenerateTitle = async (id: string) => {

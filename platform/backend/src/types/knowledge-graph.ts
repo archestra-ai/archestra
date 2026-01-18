@@ -31,25 +31,11 @@ export const QueryModeSchema = z.enum(["local", "global", "hybrid", "naive"]);
 export type QueryMode = z.infer<typeof QueryModeSchema>;
 
 /**
- * Label for access control filtering
- */
-export interface QueryLabel {
-  key: string;
-  value: string;
-}
-
-/**
  * Options for querying the knowledge graph
  */
 export interface QueryOptions {
   /** Query mode (local, global, hybrid, naive). Defaults to hybrid. */
   mode?: QueryMode;
-  /**
-   * Labels for Label-Based Access Control (LBAC) filtering.
-   * When provided, only documents matching these labels will be included in results.
-   * Note: Currently stored for future use when LightRAG supports metadata filtering.
-   */
-  labels?: QueryLabel[];
 }
 
 /**
@@ -130,7 +116,7 @@ export interface KnowledgeGraphProvider {
   /**
    * Query the knowledge graph
    * @param query - Natural language query
-   * @param options - Query options including mode and labels for LBAC filtering
+   * @param options - Query options
    * @returns The answer and optional source references
    */
   queryDocument(query: string, options?: QueryOptions): Promise<QueryResult>;

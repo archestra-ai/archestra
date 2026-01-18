@@ -22,7 +22,7 @@ import {
 
 const CONNECT_BUTTON_TIMEOUT = 25_000;
 
-test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
+test.describe("@enterprise Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
   const MATRIX: { user: "Admin" | "Editor" | "Member" }[] = [
     {
@@ -214,7 +214,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
   });
 });
 
-test("Verify Manage Credentials dialog shows correct other users credentials", async ({
+test("@enterprise Verify Manage Credentials dialog shows correct other users credentials", async ({
   adminPage,
   editorPage,
   memberPage,
@@ -294,7 +294,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   });
 });
 
-test("Verify tool calling using different static credentials", async ({
+test("@enterprise Verify tool calling using different static credentials", async ({
   request,
   adminPage,
   editorPage,

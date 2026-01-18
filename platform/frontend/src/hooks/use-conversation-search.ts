@@ -9,30 +9,15 @@ export function useConversationSearch() {
     const handleOpenPalette = () => setIsOpen(true);
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      const isInputElement =
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable;
-
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
       const isModKey = isMac ? event.metaKey : event.ctrlKey;
 
-      if (
-        isModKey &&
-        event.key === "k" &&
-        !event.shiftKey &&
-        !event.altKey &&
-        !isInputElement
-      ) {
-        // Prevent default browser behavior (like opening search bar)
+      // Cmd/Ctrl+K should work even when focused on input elements
+      // This is standard behavior for "quick open" shortcuts (VS Code, Slack, etc.)
+      if (isModKey && event.key === "k" && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         event.stopPropagation();
         setIsOpen((prev) => !prev);
-      }
-
-      if (event.key === "Escape" && isOpen && !isInputElement) {
-        setIsOpen(false);
       }
     };
 
@@ -43,7 +28,7 @@ export function useConversationSearch() {
       window.removeEventListener("open-conversation-search", handleOpenPalette);
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [isOpen]);
+  }, []);
 
   return {
     isOpen,

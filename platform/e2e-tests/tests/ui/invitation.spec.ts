@@ -1,6 +1,5 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "../../fixtures";
-import { clickButton } from "../../utils";
 
 test.describe(
   "Invitation functionality",
@@ -19,8 +18,12 @@ test.describe(
       // Wait for the page to fully load (API calls to complete)
       await page.waitForLoadState("networkidle");
 
+      // Wait for the "Invite Member" button to be enabled (permissions must load first)
+      const inviteButton = page.getByRole("button", { name: /invite member/i });
+      await expect(inviteButton).toBeEnabled({ timeout: 15000 });
+
       // Click the "Invite Member" button to open the dialog
-      await clickButton({ page, options: { name: /invite member/i } });
+      await inviteButton.click();
 
       // Wait for the dialog to open
       await page.waitForTimeout(500);
@@ -55,8 +58,12 @@ test.describe(
       // Wait for the page to fully load (API calls to complete)
       await page.waitForLoadState("networkidle");
 
+      // Wait for the "Invite Member" button to be enabled (permissions must load first)
+      const inviteButton = page.getByRole("button", { name: /invite member/i });
+      await expect(inviteButton).toBeEnabled({ timeout: 15000 });
+
       // Click the "Invite Member" button to open the dialog
-      await clickButton({ page, options: { name: /invite member/i } });
+      await inviteButton.click();
 
       // Wait for the dialog to open
       await page.waitForTimeout(500);

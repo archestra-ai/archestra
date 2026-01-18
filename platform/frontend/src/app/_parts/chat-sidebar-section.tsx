@@ -55,6 +55,7 @@ import {
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 const VISIBLE_CHAT_COUNT = 10;
+const MAX_TITLE_LENGTH = 30;
 
 // Helper to extract first 15 chars from first user message
 function getConversationDisplayTitle(
@@ -283,8 +284,8 @@ export function ChatSidebarSection() {
                               <span className="truncate">
                                 <TypingText
                                   text={
-                                    displayTitle.length > 27
-                                      ? `${displayTitle.slice(0, 27)}...`
+                                    displayTitle.length > MAX_TITLE_LENGTH
+                                      ? `${displayTitle.slice(0, MAX_TITLE_LENGTH)}...`
                                       : displayTitle
                                   }
                                   typingSpeed={35}
@@ -295,7 +296,7 @@ export function ChatSidebarSection() {
                             ) : (
                               <TruncatedText
                                 message={displayTitle}
-                                maxLength={30}
+                                maxLength={MAX_TITLE_LENGTH}
                                 className="truncate"
                                 showTooltip={false}
                               />

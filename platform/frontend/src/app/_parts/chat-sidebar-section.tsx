@@ -58,8 +58,8 @@ const CONVERSATION_QUERY_PARAM = "conversation";
 const VISIBLE_CHAT_COUNT = 10;
 const MAX_TITLE_LENGTH = 30;
 
-// Helper to extract first 15 chars from first user message
-function getConversationDisplayTitle(
+// Helper to extract display title from conversation
+export function getConversationDisplayTitle(
   title: string | null,
   // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
   messages?: any[],
@@ -425,10 +425,11 @@ export function ChatSidebarSection() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
                 if (deleteConfirmId) {
-                  handleDeleteConversation(deleteConfirmId);
-                  setDeleteConfirmId(null);
+                  const id = deleteConfirmId;
+                  setDeleteConfirmId(null); // Close dialog first for better UX
+                  await handleDeleteConversation(id);
                 }
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

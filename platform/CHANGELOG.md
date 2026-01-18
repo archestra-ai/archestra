@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.0.27](https://github.com/archestra-ai/archestra/compare/platform-v1.0.26...platform-v1.0.27) (2026-01-18)
+
+
+### Features
+
+* add `query_knowledge_graph` Archestra MCP server tool ([#2222](https://github.com/archestra-ai/archestra/issues/2222)) ([5c61ad0](https://github.com/archestra-ai/archestra/commit/5c61ad08ec4e171fd7e5e8036d4c0118b5e61571))
+* add free-text search to logs pages ([#2173](https://github.com/archestra-ai/archestra/issues/2173)) ([f3d1dc4](https://github.com/archestra-ai/archestra/commit/f3d1dc43d1c186a6e557deec909d40b637f14c3b))
+* add knowledge graph integration with LightRAG provider ([#2177](https://github.com/archestra-ai/archestra/issues/2177)) ([911c1f5](https://github.com/archestra-ai/archestra/commit/911c1f51a0582c65856702d01fe2e9c1f0165f4e))
+* chat search keyboard shortcut ([#2083](https://github.com/archestra-ai/archestra/issues/2083)) ([534d408](https://github.com/archestra-ai/archestra/commit/534d4085e7f0092e67e472f79b64885666241ef7))
+* **chat:** add knowledge graph upload indicator ([#2196](https://github.com/archestra-ai/archestra/issues/2196)) ([be9d7da](https://github.com/archestra-ai/archestra/commit/be9d7da6d860b60be48b9c41bb544991102da3bc))
+
+
+### Bug Fixes
+
+* address slow logs page queries, update `/ready` probe, several small perf issues ([#2190](https://github.com/archestra-ai/archestra/issues/2190)) ([f0dc804](https://github.com/archestra-ai/archestra/commit/f0dc804fd3247c53147e7007c08461a2606663e9))
+* always include docker image from the catalog ([#2198](https://github.com/archestra-ai/archestra/issues/2198)) ([7c728bb](https://github.com/archestra-ai/archestra/commit/7c728bb8df156b2c40bb7632d738bce00e464127))
+* center empty state messages in cost statistics charts ([#2197](https://github.com/archestra-ai/archestra/issues/2197)) ([f8465b1](https://github.com/archestra-ai/archestra/commit/f8465b1f72097372d56e7b8edac912e5f049502d))
+* chat search keyboard navigation issues ([#2223](https://github.com/archestra-ai/archestra/issues/2223)) ([00d701a](https://github.com/archestra-ai/archestra/commit/00d701ab5d534545b4d59933ffa921caad72f8bc))
+* enable 'Invite member' button in OSS mode ([#2219](https://github.com/archestra-ai/archestra/issues/2219)) ([937b1e4](https://github.com/archestra-ai/archestra/commit/937b1e40bec4bea75206d496f8278850094bbaa6))
+* improve chat sidebar styling and reduce width ([#2221](https://github.com/archestra-ai/archestra/issues/2221)) ([0260a44](https://github.com/archestra-ai/archestra/commit/0260a447be0e5026ed199b8d86c09511966943e5))
+* model tried to call unavailable tool ([#2216](https://github.com/archestra-ai/archestra/issues/2216)) ([7370e94](https://github.com/archestra-ai/archestra/commit/7370e947f733bcc4118ff5709eadfc3a39460d20))
+* preserve original URL and redirect back after sign-in ([#2206](https://github.com/archestra-ai/archestra/issues/2206)) ([1e4ce7f](https://github.com/archestra-ai/archestra/commit/1e4ce7f8667116ed0ae6e5d6af0ef2c283084212))
+* prevent EADDRINUSE errors during hot-reload ([#2220](https://github.com/archestra-ai/archestra/issues/2220)) ([232aa4f](https://github.com/archestra-ai/archestra/commit/232aa4f912ddf716de901304db1b3ecfa41d7974))
+* show date and color dots in cost chart tooltips ([#2181](https://github.com/archestra-ai/archestra/issues/2181)) ([7bb6ea6](https://github.com/archestra-ai/archestra/commit/7bb6ea63f6a49f303cbdddb92e772a13180eed72))
+
 ## [1.0.26](https://github.com/archestra-ai/archestra/compare/platform-v1.0.25...platform-v1.0.26) (2026-01-16)
 
 

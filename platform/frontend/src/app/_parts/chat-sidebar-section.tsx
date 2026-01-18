@@ -3,7 +3,8 @@
 import {
   ChevronDown,
   ChevronRight,
-  Edit2,
+  MoreHorizontal,
+  Pencil,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -11,8 +12,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -28,7 +34,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
-import { WithInlineConfirm } from "@/components/ui/with-inline-confirm";
 import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import {
   useConversations,
@@ -85,9 +90,7 @@ export function ChatSidebarSection() {
   const [showAllChats, setShowAllChats] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
-    null,
-  );
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Track conversations with recently auto-generated titles for animation
@@ -190,46 +193,65 @@ export function ChatSidebarSection() {
                   conv.id,
                 );
                 const isRegenerating = regeneratingTitles.has(conv.id);
-                const isConfirmingDelete = confirmingDeleteId === conv.id;
-                const buttons =
+                const isMenuOpen = openMenuId === conv.id;
+                const menuButton =
                   editingId !== conv.id ? (
-                    <div className="absolute right-0 left-1/2 inset-y-0 flex items-center justify-end gap-0.5 pr-1 opacity-0 group-hover/menu-item:opacity-100 has-[[data-confirm-open]]:opacity-100 transition-opacity">
-                      {!isConfirmingDelete && (
-                        <PermissionButton
-                          permissions={{ conversation: ["update"] }}
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEdit(conv.id, displayTitle);
-                          }}
-                          title="Edit chat name"
-                          className="p-1 w-fit"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </PermissionButton>
-                      )}
-                      <WithInlineConfirm
-                        onConfirm={() => handleDeleteConversation(conv.id)}
-                        replaceMode
+                    <div
+                      className={`absolute right-0 inset-y-0 flex items-center pr-1 transition-opacity ${
+                        isMenuOpen
+                          ? "opacity-100"
+                          : "opacity-0 group-hover/menu-item:opacity-100"
+                      }`}
+                    >
+                      <DropdownMenu
+                        open={isMenuOpen}
                         onOpenChange={(open) =>
-                          setConfirmingDeleteId(open ? conv.id : null)
+                          setOpenMenuId(open ? conv.id : null)
                         }
                       >
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                          title="Delete chat"
-                          className="p-1 w-fit"
-                        >
-                          <Trash2 className="p-0 h-2 w-2 text-destructive" />
-                        </Button>
-                      </WithInlineConfirm>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-6 w-6 p-0"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" side="right">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEdit(conv.id, displayTitle);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRegenerateTitle(conv.id);
+                            }}
+                            disabled={generateTitleMutation.isPending}
+                          >
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Regenerate title
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteConversation(conv.id);
+                            }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   ) : null;
 
@@ -299,7 +321,7 @@ export function ChatSidebarSection() {
                                 Generating...
                               </span>
                             ) : hasRecentlyGeneratedTitle ? (
-                              <span className="flex-1 group-hover/menu-item:pr-14 transition-all overflow-hidden whitespace-nowrap">
+                              <span className="flex-1 group-hover/menu-item:pr-8 transition-all overflow-hidden whitespace-nowrap">
                                 <TypingText
                                   text={
                                     displayTitle.length > 17
@@ -315,7 +337,7 @@ export function ChatSidebarSection() {
                               <TruncatedText
                                 message={displayTitle}
                                 maxLength={20}
-                                className="flex-1 group-hover/menu-item:pr-14 transition-all"
+                                className="flex-1 group-hover/menu-item:pr-8 transition-all"
                                 tooltipContentProps={{
                                   side: "right",
                                   className:
@@ -325,7 +347,7 @@ export function ChatSidebarSection() {
                               />
                             )}
                           </SidebarMenuButton>
-                          {buttons}
+                          {menuButton}
                         </>
                       )}
                     </div>

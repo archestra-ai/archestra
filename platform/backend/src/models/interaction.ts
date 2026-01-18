@@ -4,10 +4,13 @@ import {
   count,
   desc,
   eq,
+  gte,
   inArray,
   isNotNull,
+  lte,
   max,
   min,
+  or,
   type SQL,
   sql,
   sum,
@@ -27,6 +30,14 @@ import type {
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
+
+/**
+ * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
+ * This prevents users from crafting searches that behave unexpectedly.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
+}
 
 /**
  * Extracts text content from a message content field.
@@ -218,6 +229,8 @@ class InteractionModel {
       externalAgentId?: string;
       userId?: string;
       sessionId?: string;
+      startDate?: Date;
+      endDate?: Date;
     },
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
@@ -266,6 +279,16 @@ class InteractionModel {
       conditions.push(
         eq(schema.interactionsTable.sessionId, filters.sessionId),
       );
+    }
+
+    // Date range filter
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.interactionsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -649,6 +672,9 @@ class InteractionModel {
       userId?: string;
       externalAgentId?: string;
       sessionId?: string;
+      startDate?: Date;
+      endDate?: Date;
+      search?: string;
     },
   ): Promise<
     PaginatedResult<{
@@ -716,6 +742,33 @@ class InteractionModel {
       conditions.push(
         eq(schema.interactionsTable.sessionId, filters.sessionId),
       );
+    }
+
+    // Date range filter
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.interactionsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
+    }
+
+    // Free-text search filter (case-insensitive)
+    // Searches across: request messages content, response content (for titles), and conversation titles
+    if (filters?.search) {
+      const searchPattern = `%${escapeLikePattern(filters.search)}%`;
+      const searchCondition = or(
+        // Search in request messages content (JSONB)
+        sql`${schema.interactionsTable.request}::text ILIKE ${searchPattern}`,
+        // Search in response content (for Claude Code titles)
+        sql`${schema.interactionsTable.response}::text ILIKE ${searchPattern}`,
+        // Search in conversation title (for Archestra Chat sessions)
+        sql`${schema.conversationsTable.title} ILIKE ${searchPattern}`,
+      );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -803,6 +856,11 @@ class InteractionModel {
       db
         .select({ total: sql<number>`COUNT(DISTINCT ${sessionGroupExpr})` })
         .from(schema.interactionsTable)
+        .leftJoin(
+          schema.conversationsTable,
+          // Only join when session_id is a valid UUID format (conversation IDs are UUIDs)
+          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
+        )
         .where(whereClause),
     ]);
 

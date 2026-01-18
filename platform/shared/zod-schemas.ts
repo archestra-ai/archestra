@@ -33,6 +33,7 @@ export const EnvironmentVariableSchema = z.object({
   required: z.boolean().optional(), // Whether this env var is required during installation (only applies when promptOnInstallation is true, defaults to false)
   description: z.string().optional(), // Optional description to show in installation dialog
   default: z.union([z.string(), z.number(), z.boolean()]).optional(), // Default value to pre-populate in installation dialog
+  mounted: z.boolean().optional(), // When true for secret type, mount as file at /secrets/<key> instead of env var
 });
 
 export const LocalConfigSchema = z

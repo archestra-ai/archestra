@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { SsoProviderIcon } from "@/components/sso-provider-icons.ee";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
 import { usePublicSsoProviders } from "@/lib/sso-provider.query.ee";
+import { getValidatedCallbackURLWithDefault } from "@/lib/utils/redirect-validation";
 
 interface SsoProviderSelectorProps {
   /**
@@ -20,24 +22,33 @@ interface SsoProviderSelectorProps {
 export function SsoProviderSelector({
   showDivider = true,
 }: SsoProviderSelectorProps) {
+  const searchParams = useSearchParams();
   const { data: ssoProviders = [], isLoading } = usePublicSsoProviders();
 
-  const handleSsoSignIn = useCallback(async (providerId: string) => {
-    try {
-      const result = await authClient.signIn.sso({
-        providerId,
-        callbackURL: `${window.location.origin}/`,
-        /**
-         * Use /auth/sign-in as the error callback base URL
-         */
-        errorCallbackURL: `${window.location.origin}/auth/sign-in`,
-      });
-      console.info("SSO sign-in initiated:", result);
-    } catch (error) {
-      console.error("SSO sign-in error:", error);
-      toast.error("Failed to initiate SSO sign-in");
-    }
-  }, []);
+  // Get the redirectTo URL from search params, defaulting to "/"
+  // Validates that the path is safe (relative path, no protocol) to prevent open redirect attacks
+  const callbackURL = useMemo(() => {
+    const redirectTo = searchParams.get("redirectTo");
+    return getValidatedCallbackURLWithDefault(redirectTo);
+  }, [searchParams]);
+
+  const handleSsoSignIn = useCallback(
+    async (providerId: string) => {
+      try {
+        await authClient.signIn.sso({
+          providerId,
+          callbackURL,
+          /**
+           * Use /auth/sign-in as the error callback base URL
+           */
+          errorCallbackURL: `${window.location.origin}/auth/sign-in`,
+        });
+      } catch {
+        toast.error("Failed to initiate SSO sign-in");
+      }
+    },
+    [callbackURL],
+  );
 
   // Don't show SSO options if the enterprise license is not activated
   if (

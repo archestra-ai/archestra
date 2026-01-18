@@ -1,10 +1,11 @@
 "use client";
 
 import type { archestraApiTypes, Permissions } from "@shared";
-import { allAvailableActions } from "@shared/access-control.ee";
+import { allAvailableActions } from "@shared/access-control";
 import { Plus, Shield, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { PredefinedRoles } from "@/components/roles/predefined-roles";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,6 +35,10 @@ import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 
+/**
+ * Enterprise Edition roles list with custom role management.
+ * Shows both predefined roles (read-only) and custom roles (CRUD).
+ */
 export function RolesList() {
   const { data: roles, isLoading } = useRoles();
   const createMutation = useCreateRole();
@@ -47,7 +52,6 @@ export function RolesList() {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
 
-  // Form state
   const [roleName, setRoleName] = useState("");
   const [permission, setPermission] = useState<Permissions>({});
 
@@ -63,10 +67,7 @@ export function RolesList() {
     }
 
     createMutation.mutate(
-      {
-        name: roleName,
-        permission,
-      },
+      { name: roleName, permission },
       {
         onSuccess: () => {
           setCreateDialogOpen(false);
@@ -97,10 +98,7 @@ export function RolesList() {
     updateMutation.mutate(
       {
         roleId: selectedRole.id,
-        data: {
-          name: roleName,
-          permission,
-        },
+        data: { name: roleName, permission },
       },
       {
         onSuccess: () => {
@@ -150,7 +148,6 @@ export function RolesList() {
     );
   }
 
-  // Separate predefined and custom roles
   const predefinedRoles = roles?.filter((role) => role.predefined) || [];
   const customRoles = roles?.filter((role) => !role.predefined) || [];
 
@@ -188,46 +185,7 @@ export function RolesList() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {predefinedRoles.length > 0 && (
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
-                Predefined Roles
-              </h3>
-              <div className="space-y-3">
-                {predefinedRoles.map((role) => (
-                  <div
-                    key={role.id}
-                    className="flex items-center justify-between rounded-lg border bg-muted/30 p-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Shield className="h-5 w-5 text-primary" />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-semibold capitalize">
-                            {role.name}
-                          </h4>
-                          <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                            System
-                          </span>
-                        </div>
-                        {/* <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                          <Users className="h-3 w-3" />
-                          <span>
-                            {role.memberCount} member
-                            {role.memberCount !== 1 ? "s" : ""}
-                          </span>
-                        </div> */}
-                      </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      Cannot be modified
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
+          <PredefinedRoles predefinedRoles={predefinedRoles} />
           <div>
             <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
               Custom Roles
@@ -251,13 +209,6 @@ export function RolesList() {
                       <Shield className="h-5 w-5" />
                       <div>
                         <h4 className="font-semibold">{role.name}</h4>
-                        {/* <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                          <Users className="h-3 w-3" />
-                          <span>
-                            {role.memberCount} member
-                            {role.memberCount !== 1 ? "s" : ""}
-                          </span>
-                        </div> */}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -277,7 +228,6 @@ export function RolesList() {
                           setRoleToDelete(role);
                           setDeleteDialogOpen(true);
                         }}
-                        // disabled={role.memberCount > 0}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </PermissionButton>

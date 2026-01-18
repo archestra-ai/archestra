@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 import { SESSION_ID_HEADER } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import { AgentModel, PromptModel, UserModel } from "@/models";
 import {
   extractBearerToken,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway.utils";
-import { executeA2AMessage } from "@/services/a2a-executor";
 import { ApiError, UuidIdSchema } from "@/types";
 
 /**

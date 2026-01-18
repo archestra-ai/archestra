@@ -1,12 +1,15 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getEmailProviderInfo } from "@/agents/incoming-email";
 import config from "@/config";
+import { getKnowledgeGraphProviderInfo } from "@/knowledge-graph";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
-import type { GlobalToolPolicy } from "@/types";
+import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
+import { KnowledgeGraphProviderTypeSchema } from "@/types/knowledge-graph";
 
 const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -37,6 +40,19 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             globalToolPolicy: z.enum(["permissive", "restrictive"]),
             /** Browser streaming - enables live browser automation via Playwright MCP */
             browserStreamingEnabled: z.boolean(),
+            /** Incoming email - allows agents to be invoked via email */
+            incomingEmail: z.object({
+              enabled: z.boolean(),
+              provider: EmailProviderTypeSchema.optional(),
+              displayName: z.string().optional(),
+              emailDomain: z.string().optional(),
+            }),
+            /** Knowledge graph - allows document ingestion into knowledge graph on file upload */
+            knowledgeGraph: z.object({
+              enabled: z.boolean(),
+              provider: KnowledgeGraphProviderTypeSchema.optional(),
+              displayName: z.string().optional(),
+            }),
           }),
         },
       },
@@ -56,6 +72,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         vllmEnabled: config.llm.vllm.enabled,
         ollamaEnabled: config.llm.ollama.enabled,
         globalToolPolicy,
+        incomingEmail: getEmailProviderInfo(),
+        knowledgeGraph: getKnowledgeGraphProviderInfo(),
       });
     },
   );

@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
-import { AlertCircle, Info } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { lazy, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
@@ -21,12 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import config from "@/lib/config";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useGetSecret } from "@/lib/secrets.query";
@@ -409,22 +403,7 @@ export function McpCatalogForm({
 
         {currentServerType === "remote" && (
           <div className="space-y-4 pt-4 border-t">
-            <div className="flex items-center gap-2">
-              <FormLabel>Authentication</FormLabel>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">
-                      Choose how users will authenticate when installing this
-                      server
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+            <FormLabel>Authentication</FormLabel>
 
             <FormField
               control={form.control}
@@ -443,16 +422,25 @@ export function McpCatalogForm({
                           htmlFor="auth-none"
                           className="font-normal cursor-pointer"
                         >
-                          No authentication required
+                          No authorization
                         </FormLabel>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="pat" id="auth-pat" />
+                        <RadioGroupItem value="bearer" id="auth-bearer" />
                         <FormLabel
-                          htmlFor="auth-pat"
+                          htmlFor="auth-bearer"
                           className="font-normal cursor-pointer"
                         >
-                          Personal Access Token (PAT)
+                          "Authorization: Bearer &lt;your token&gt;" header
+                        </FormLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="raw_token" id="auth-raw-token" />
+                        <FormLabel
+                          htmlFor="auth-raw-token"
+                          className="font-normal cursor-pointer"
+                        >
+                          "Authorization: &lt;your token&gt;" header
                         </FormLabel>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -461,7 +449,7 @@ export function McpCatalogForm({
                           htmlFor="auth-oauth"
                           className="font-normal cursor-pointer"
                         >
-                          OAuth
+                          OAuth 2.0
                         </FormLabel>
                       </div>
                     </RadioGroup>
@@ -471,11 +459,11 @@ export function McpCatalogForm({
               )}
             />
 
-            {authMethod === "pat" && (
+            {(authMethod === "bearer" || authMethod === "raw_token") && (
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-sm text-muted-foreground">
-                  Users will be prompted to provide their personal access token
-                  when installing this server.
+                  Users will be prompted to provide their access token when
+                  installing this server.
                 </p>
               </div>
             )}

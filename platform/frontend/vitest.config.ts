@@ -8,10 +8,6 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   resolve: {
     alias: {
-      "@shared/access-control.ee": path.resolve(
-        __dirname,
-        "../shared/access-control.ee.ts",
-      ),
       "@shared/access-control": path.resolve(
         __dirname,
         "../shared/access-control.ts",

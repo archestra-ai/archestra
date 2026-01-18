@@ -14,11 +14,13 @@ import {
 } from "@/components/ui/card";
 import config from "@/lib/config";
 import { useInvitationCheck } from "@/lib/invitation.query";
+import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitationId = searchParams.get("invitationId");
+  const redirectTo = searchParams.get("redirectTo");
 
   const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
 
@@ -114,6 +116,13 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
             </CardHeader>
           </Card>
         )}
+        {/*
+          callbackURL behavior differs by flow:
+          - Invitation flow: Points back to auth page with invitationId preserved.
+            After OAuth/SSO completes, user returns here to trigger invitation acceptance.
+          - Normal flow: Points to final destination (from redirectTo param or /).
+            After auth completes, user goes directly to their intended page.
+        */}
         <AuthViewWithErrorHandling
           path={path}
           callbackURL={
@@ -121,7 +130,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
               ? `${
                   path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
                 }?invitationId=${invitationId}`
-              : undefined
+              : getValidatedRedirectPath(redirectTo)
           }
         />
       </div>

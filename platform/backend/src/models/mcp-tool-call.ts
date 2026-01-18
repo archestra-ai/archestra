@@ -1,4 +1,17 @@
-import { and, asc, count, desc, eq, inArray, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  lte,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -11,6 +24,28 @@ import type {
   SortingQuery,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
+
+/**
+ * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
+ * This prevents users from crafting searches that behave unexpectedly.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
+}
+
+/**
+ * Builds a search condition for MCP tool calls across server name, method, tool name, arguments, and result.
+ */
+function buildMcpToolCallSearchCondition(search: string) {
+  const searchPattern = `%${escapeLikePattern(search)}%`;
+  return or(
+    ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
+    ilike(schema.mcpToolCallsTable.method, searchPattern),
+    sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
+    sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
+    sql`${schema.mcpToolCallsTable.toolResult}::text ILIKE ${searchPattern}`,
+  );
+}
 
 class McpToolCallModel {
   static async create(data: InsertMcpToolCall) {
@@ -30,12 +65,19 @@ class McpToolCallModel {
     sorting?: SortingQuery,
     userId?: string,
     isMcpServerAdmin?: boolean,
+    filters?: {
+      startDate?: Date;
+      endDate?: Date;
+      search?: string;
+    },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = McpToolCallModel.getOrderByClause(sorting);
 
-    // Build where clause for access control
-    let whereClause: SQL | undefined;
+    // Build where clauses
+    const conditions: SQL[] = [];
+
+    // Access control filter
     if (userId && !isMcpServerAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
@@ -46,11 +88,31 @@ class McpToolCallModel {
         return createPaginatedResult([], 0, pagination);
       }
 
-      whereClause = inArray(
-        schema.mcpToolCallsTable.agentId,
-        accessibleAgentIds,
+      conditions.push(
+        inArray(schema.mcpToolCallsTable.agentId, accessibleAgentIds),
       );
     }
+
+    // Date range filter
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.mcpToolCallsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
+    }
+
+    // Free-text search filter (case-insensitive)
+    // Searches across: mcpServerName, toolCall.name, toolCall.arguments
+    if (filters?.search) {
+      const searchCondition = buildMcpToolCallSearchCondition(filters.search);
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [data, [{ total }]] = await Promise.all([
       db
@@ -147,11 +209,40 @@ class McpToolCallModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     whereClauses?: SQL[],
+    filters?: {
+      startDate?: Date;
+      endDate?: Date;
+      search?: string;
+    },
   ): Promise<PaginatedResult<McpToolCall>> {
-    const whereCondition = and(
-      eq(schema.mcpToolCallsTable.agentId, agentId),
-      ...(whereClauses ?? []),
-    );
+    // Build conditions array
+    const conditions: SQL[] = [eq(schema.mcpToolCallsTable.agentId, agentId)];
+
+    // Add any custom where clauses
+    if (whereClauses && whereClauses.length > 0) {
+      conditions.push(...whereClauses);
+    }
+
+    // Date range filter
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.mcpToolCallsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
+    }
+
+    // Free-text search filter (case-insensitive)
+    // Searches across: mcpServerName, toolCall.name, toolCall.arguments
+    if (filters?.search) {
+      const searchCondition = buildMcpToolCallSearchCondition(filters.search);
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
+    }
+
+    const whereCondition = and(...conditions);
 
     const orderByClause = McpToolCallModel.getOrderByClause(sorting);
 

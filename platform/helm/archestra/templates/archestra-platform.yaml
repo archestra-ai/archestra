@@ -130,9 +130,10 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
           # Readiness probe - marks the container as ready to receive traffic
+          # Uses /ready endpoint which checks database connectivity
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: backend
             periodSeconds: 10
             timeoutSeconds: 5

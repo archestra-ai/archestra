@@ -94,7 +94,7 @@ describe("ConversationModel", () => {
     const conversations = await ConversationModel.findAll(user.id, org.id);
 
     expect(conversations).toHaveLength(2);
-    expect(conversations[0].title).toBe("Second Conversation"); // Ordered by createdAt desc
+    expect(conversations[0].title).toBe("Second Conversation"); // Ordered by updatedAt desc
     expect(conversations[1].title).toBe("First Conversation");
     expect(conversations.every((c) => c.agent)).toBe(true);
     expect(conversations.every((c) => c.userId === user.id)).toBe(true);
@@ -164,7 +164,7 @@ describe("ConversationModel", () => {
     expect(found).toBeNull();
   });
 
-  test("returns conversations ordered by createdAt descending", async ({
+  test("returns conversations ordered by updatedAt descending", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -182,7 +182,7 @@ describe("ConversationModel", () => {
       selectedModel: "claude-3-haiku-20240307",
     });
 
-    // Small delay to ensure different createdAt times
+    // Small delay to ensure different updatedAt times
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const second = await ConversationModel.create({
@@ -198,9 +198,111 @@ describe("ConversationModel", () => {
     expect(conversations).toHaveLength(2);
     expect(conversations[0].id).toBe(second.id); // Most recent first
     expect(conversations[1].id).toBe(first.id);
-    expect(conversations[0].createdAt.getTime()).toBeGreaterThanOrEqual(
-      conversations[1].createdAt.getTime(),
+    expect(conversations[0].updatedAt.getTime()).toBeGreaterThanOrEqual(
+      conversations[1].updatedAt.getTime(),
     );
+  });
+
+  test("updated conversation moves to top of list", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Update Order Agent", teams: [] });
+
+    // Create first conversation
+    const first = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "First",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Create second conversation (will be on top initially)
+    const second = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Second",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    // Verify second is on top initially
+    let conversations = await ConversationModel.findAll(user.id, org.id);
+    expect(conversations[0].id).toBe(second.id);
+    expect(conversations[1].id).toBe(first.id);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Update the first conversation - should move it to the top
+    await ConversationModel.update(first.id, user.id, org.id, {
+      title: "First Updated",
+    });
+
+    // Verify first is now on top after being updated
+    conversations = await ConversationModel.findAll(user.id, org.id);
+    expect(conversations[0].id).toBe(first.id);
+    expect(conversations[0].title).toBe("First Updated");
+    expect(conversations[1].id).toBe(second.id);
+  });
+
+  test("adding a message moves conversation to top of list", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Message Order Agent", teams: [] });
+
+    // Create first conversation
+    const first = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "First",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Create second conversation (will be on top initially)
+    const second = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Second",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    // Verify second is on top initially
+    let conversations = await ConversationModel.findAll(user.id, org.id);
+    expect(conversations[0].id).toBe(second.id);
+    expect(conversations[1].id).toBe(first.id);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Add a message to the first conversation - should move it to the top
+    const MessageModel = (await import("./message")).default;
+    await MessageModel.create({
+      conversationId: first.id,
+      role: "user",
+      content: {
+        id: "temp-id",
+        role: "user",
+        parts: [{ type: "text", text: "Hello" }],
+      },
+    });
+
+    // Verify first is now on top after adding a message
+    conversations = await ConversationModel.findAll(user.id, org.id);
+    expect(conversations[0].id).toBe(first.id);
+    expect(conversations[1].id).toBe(second.id);
   });
 
   test("returns null when conversation not found", async ({
@@ -414,7 +516,7 @@ describe("ConversationModel", () => {
     expect(found?.messages[0].id).not.toBe("temp-ai-sdk-id");
   });
 
-  test("findAll merges database UUIDs into message content", async ({
+  test("findById merges database UUIDs into multiple messages", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -452,15 +554,19 @@ describe("ConversationModel", () => {
       },
     });
 
-    const conversations = await ConversationModel.findAll(user.id, org.id);
+    // Use findById instead of findAll since findAll no longer returns messages for performance
+    const found = await ConversationModel.findById({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
-    expect(conversations).toHaveLength(1);
-    const found = conversations[0];
-    expect(found.messages).toHaveLength(2);
-    expect(found.messages[0].id).toBe(message1.id);
-    expect(found.messages[1].id).toBe(message2.id);
-    expect(found.messages[0].id).not.toBe("temp-id-1");
-    expect(found.messages[1].id).not.toBe("temp-id-2");
+    expect(found).toBeDefined();
+    expect(found?.messages).toHaveLength(2);
+    expect(found?.messages[0].id).toBe(message1.id);
+    expect(found?.messages[1].id).toBe(message2.id);
+    expect(found?.messages[0].id).not.toBe("temp-id-1");
+    expect(found?.messages[1].id).not.toBe("temp-id-2");
   });
 
   test("findById returns messages ordered by createdAt ascending", async ({
@@ -528,7 +634,7 @@ describe("ConversationModel", () => {
     expect(found?.messages[2].parts[0].text).toBe("Third");
   });
 
-  test("findAll returns messages ordered by createdAt ascending within each conversation", async ({
+  test("findById returns messages ordered by createdAt ascending for multiple conversations", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -598,12 +704,17 @@ describe("ConversationModel", () => {
       },
     });
 
-    const conversations = await ConversationModel.findAll(user.id, org.id);
-
-    expect(conversations).toHaveLength(2);
-
-    const conv1 = conversations.find((c) => c.id === conversation1.id);
-    const conv2 = conversations.find((c) => c.id === conversation2.id);
+    // Use findById instead of findAll since findAll no longer returns messages for performance
+    const conv1 = await ConversationModel.findById({
+      id: conversation1.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+    const conv2 = await ConversationModel.findById({
+      id: conversation2.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(conv1?.messages).toHaveLength(2);
     expect(conv1?.messages[0].parts[0].text).toBe("C1 First");

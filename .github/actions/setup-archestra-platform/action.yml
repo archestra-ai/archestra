@@ -91,12 +91,19 @@ runs:
         turbo-team: ${{ inputs.turbo-team }}
         turbo-token: ${{ inputs.turbo-token }}
 
-    - name: Pull Docker image
+    - name: Pull Docker image (if not already present)
       if: ${{ inputs.build-platform-image != 'true' }}
       shell: bash
       env:
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
-      run: docker pull "${PLATFORM_IMAGE_TAG}"
+      run: |
+        # Check if image already exists locally (e.g., loaded from artifact)
+        if docker image inspect "${PLATFORM_IMAGE_TAG}" > /dev/null 2>&1; then
+          echo "Image ${PLATFORM_IMAGE_TAG} already exists locally, skipping pull"
+        else
+          echo "Pulling image ${PLATFORM_IMAGE_TAG} from registry..."
+          docker pull "${PLATFORM_IMAGE_TAG}"
+        fi
 
     - name: Load Docker image into Kind
       shell: bash

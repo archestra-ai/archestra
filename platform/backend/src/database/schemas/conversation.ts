@@ -11,6 +11,8 @@ import agentsTable from "./agent";
 import chatApiKeysTable from "./chat-api-key";
 import promptsTable from "./prompt";
 
+// Note: Additional pg_trgm GIN index for search is created in migration 0116_pg_trgm_indexes.sql:
+// - conversations_title_trgm_idx: GIN index on title column
 const conversationsTable = pgTable("conversations", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),

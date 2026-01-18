@@ -273,6 +273,41 @@ const ollamaConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const zhipuaiConfig: ModelOptimizationTestConfig = {
+  providerName: "Zhipuai",
+  provider: "zhipuai",
+
+  endpoint: (agentId) => `/v1/zhipuai/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-zhipuai-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-zhipuai-baseline",
+  optimizedModel: "e2e-test-zhipuai-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -304,6 +339,7 @@ const testConfigs: ModelOptimizationTestConfig[] = [
   cerebrasConfig,
   vllmConfig,
   ollamaConfig,
+  zhipuaiConfig,
 ];
 
 test.describe("LLMProxy-ModelOptimization", () => {

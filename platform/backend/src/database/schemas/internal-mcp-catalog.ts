@@ -56,6 +56,7 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
       promptOnInstallation: boolean;
       required?: boolean; // Whether this env var is required during installation (defaults to false)
       description?: string; // Description to show in installation dialog
+      mounted?: boolean; // When true for secret type, mount as file at /secrets/<key> instead of env var
     }>;
     dockerImage?: string;
     serviceAccount?: string;

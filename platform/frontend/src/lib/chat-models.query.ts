@@ -18,9 +18,7 @@ export function useChatModels() {
   return useSuspenseQuery({
     queryKey: ["chat-models"],
     queryFn: async () => {
-      console.log("[DEBUG chat-models] Fetching chat models...");
       const { data, error } = await getChatModels();
-      console.log("[DEBUG chat-models] API response:", { data, error });
       if (error) {
         console.error("[DEBUG chat-models] API error:", error);
         throw new Error(
@@ -29,7 +27,6 @@ export function useChatModels() {
             : error.error?.message || "Failed to fetch chat models",
         );
       }
-      console.log("[DEBUG chat-models] Returning models:", data);
       return (data ?? []) as ChatModel[];
     },
   });
@@ -44,10 +41,6 @@ export function useModelsByProvider() {
 
   // Memoize to prevent creating new object reference on every render
   const modelsByProvider = useMemo(() => {
-    console.log(
-      "[DEBUG modelsByProvider] Computing from query.data:",
-      query.data,
-    );
     const result = query.data.reduce(
       (acc, model) => {
         if (!acc[model.provider]) {
@@ -58,7 +51,6 @@ export function useModelsByProvider() {
       },
       {} as Record<SupportedProvider, ChatModel[]>,
     );
-    console.log("[DEBUG modelsByProvider] Computed result:", result);
     return result;
   }, [query.data]);
 
@@ -71,11 +63,13 @@ export function useModelsByProvider() {
 /**
  * Non-suspense version for fetching chat models.
  * Use in components without Suspense boundaries.
+ *
+ * Note: Chat models are globally cached and shared across all conversations
+ * since the available models don't change per conversation.
  */
-export function useChatModelsQuery(conversationId?: string) {
+export function useChatModelsQuery() {
   return useQuery({
-    // Include conversationId in cache key for invalidation when conversation changes
-    queryKey: ["chat-models", conversationId],
+    queryKey: ["chat-models"],
     queryFn: async () => {
       const { data, error } = await getChatModels();
       if (error) {
@@ -88,4 +82,45 @@ export function useChatModelsQuery(conversationId?: string) {
       return (data ?? []) as ChatModel[];
     },
   });
+}
+
+/**
+ * Non-suspense version of useModelsByProvider.
+ * Returns models grouped by provider with loading/error states.
+ */
+export function useModelsByProviderQuery() {
+  const query = useQuery({
+    queryKey: ["chat-models"],
+    queryFn: async () => {
+      const { data, error } = await getChatModels();
+      if (error) {
+        throw new Error(
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || "Failed to fetch chat models",
+        );
+      }
+      return (data ?? []) as ChatModel[];
+    },
+  });
+
+  // Memoize to prevent creating new object reference on every render
+  const modelsByProvider = useMemo(() => {
+    if (!query.data) return {} as Record<SupportedProvider, ChatModel[]>;
+    return query.data.reduce(
+      (acc, model) => {
+        if (!acc[model.provider]) {
+          acc[model.provider] = [];
+        }
+        acc[model.provider].push(model);
+        return acc;
+      },
+      {} as Record<SupportedProvider, ChatModel[]>,
+    );
+  }, [query.data]);
+
+  return {
+    ...query,
+    modelsByProvider,
+  };
 }

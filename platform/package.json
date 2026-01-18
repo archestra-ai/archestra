@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.0.19",
+  "version": "1.0.26",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -29,9 +29,9 @@
     "cleanup:dev:k8s": "kubectl delete namespace archestra-dev"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.10",
+    "@biomejs/biome": "2.3.11",
     "tsx": "^4.21.0",
-    "turbo": "^2.7.2",
+    "turbo": "^2.7.3",
     "typescript": "^5.9.2"
   },
   "pnpm": {
@@ -45,7 +45,8 @@
       "express": "5.2.0",
       "jws": "4.0.1",
       "qs": "6.14.1",
-      "d3-path": "3.1.0"
+      "d3-path": "3.1.0",
+      "hono": "4.11.4"
     }
   },
   "packageManager": "pnpm@10.27.0"

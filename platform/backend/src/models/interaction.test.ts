@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";
+import ConversationModel from "./conversation";
 import InteractionModel from "./interaction";
 import TeamModel from "./team";
 
@@ -692,6 +693,841 @@ describe("InteractionModel", () => {
 
       expect(interactions.data).toHaveLength(1);
       expect(interactions.data[0].userId).toBe(user1.id);
+    });
+  });
+
+  describe("date range filtering", () => {
+    test("filters by startDate", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create interactions with different timestamps
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+
+      // Interaction from 2 days ago
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: twoDaysAgo.getTime(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Interaction from yesterday
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: yesterday.getTime(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter for interactions from yesterday onwards
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { startDate: yesterday },
+      );
+
+      // Should include yesterday's interaction and possibly the one just created
+      expect(interactions.data.length).toBeGreaterThanOrEqual(1);
+    });
+
+    test("filters by endDate", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create interactions
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter for interactions before a past date (should exclude all current interactions)
+      const pastDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { endDate: pastDate },
+      );
+
+      // Should not include the just-created interaction
+      expect(
+        interactions.data.every(
+          (i) => new Date(i.createdAt).getTime() <= pastDate.getTime(),
+        ),
+      ).toBe(true);
+    });
+
+    test("filters by date range (startDate and endDate)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create an interaction
+      await InteractionModel.create({
+        profileId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter for interactions in a date range that includes now
+      const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // yesterday
+      const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // tomorrow
+
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { startDate, endDate },
+      );
+
+      expect(interactions.data.length).toBeGreaterThanOrEqual(1);
+      expect(
+        interactions.data.every((i) => {
+          const createdAt = new Date(i.createdAt).getTime();
+          return (
+            createdAt >= startDate.getTime() && createdAt <= endDate.getTime()
+          );
+        }),
+      ).toBe(true);
+    });
+
+    test("date filter works with other filters", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
+      const agent2 = await AgentModel.create({ name: "Agent 2", teams: [] });
+
+      // Create interactions for both agents
+      await InteractionModel.create({
+        profileId: agent1.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent2.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter by profileId and date range
+      const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { profileId: agent1.id, startDate, endDate },
+      );
+
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].profileId).toBe(agent1.id);
+    });
+  });
+
+  describe("getSessions date filtering", () => {
+    test("filters sessions by date range", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create interaction
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "test-session",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Filter for sessions in a date range that includes now
+      const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { startDate, endDate },
+      );
+
+      expect(sessions.data.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("getSessions search filtering", () => {
+    test("searches by request message content (case insensitive)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-1",
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "Tell me about quantum computing" },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Quantum computing is...",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-2",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "How do I make a sandwich?" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "To make a sandwich...",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Search with lowercase
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "quantum" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].sessionId).toBe("session-1");
+    });
+
+    test("searches by response content", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-with-special-response",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content:
+                  "This response contains UniqueSearchableKeyword12345 for testing",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "other-session",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Test message" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Normal response",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "UniqueSearchableKeyword12345" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].sessionId).toBe("session-with-special-response");
+    });
+
+    test("search returns multiple matching sessions", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "python-session-1",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Help me with Python code" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "python-session-2",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Python debugging question" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "javascript-session",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "JavaScript question" }],
+        },
+        response: {
+          id: "r3",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "python" },
+      );
+
+      expect(sessions.data).toHaveLength(2);
+    });
+
+    test("search with no matches returns empty", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "test-session",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello there" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "nonexistentsearchterm987654" },
+      );
+
+      expect(sessions.data).toHaveLength(0);
+    });
+
+    test("search combined with other filters", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
+      const agent2 = await AgentModel.create({ name: "Agent 2", teams: [] });
+
+      // Agent 1 with searchable content
+      await InteractionModel.create({
+        profileId: agent1.id,
+        sessionId: "agent1-ml-session",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Machine learning question" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Agent 2 with same searchable content
+      await InteractionModel.create({
+        profileId: agent2.id,
+        sessionId: "agent2-ml-session",
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "Another machine learning topic" },
+          ],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Search + profile filter
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "machine learning", profileId: agent1.id },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].profileId).toBe(agent1.id);
+    });
+
+    test("search combined with date filter", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "searchable-session",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Unique search term XYZ789" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "XYZ789", startDate, endDate },
+      );
+
+      expect(sessions.data.length).toBeGreaterThanOrEqual(1);
+      expect(sessions.data[0].sessionId).toBe("searchable-session");
+    });
+
+    test("searches by conversation title (case insensitive)", async ({
+      makeAdmin,
+      makeUser,
+      makeOrganization,
+    }) => {
+      const admin = await makeAdmin();
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create a conversation with a searchable title
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "UniqueConversationTitle789 about quantum physics",
+        selectedModel: "gpt-4",
+      });
+
+      // Create an interaction linked to the conversation via sessionId
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: conversation.id, // Session ID = Conversation ID for chat sessions
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Tell me about atoms" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Atoms are...",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Create another conversation without the search term in title
+      const conversation2 = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Discussion about cooking",
+        selectedModel: "gpt-4",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: conversation2.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "How to make pasta?" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Search by conversation title (case insensitive)
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "uniqueconversationtitle789" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].sessionId).toBe(conversation.id);
+      expect(sessions.data[0].conversationTitle).toBe(
+        "UniqueConversationTitle789 about quantum physics",
+      );
+    });
+
+    test("searches match conversation title OR request/response content", async ({
+      makeAdmin,
+      makeUser,
+      makeOrganization,
+    }) => {
+      const admin = await makeAdmin();
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Conversation with "SharedSearchTerm" in title
+      const conversation1 = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Discussion about SharedSearchTerm",
+        selectedModel: "gpt-4",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: conversation1.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Regular question" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Conversation with "SharedSearchTerm" in request content
+      const conversation2 = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Another discussion",
+        selectedModel: "gpt-4",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: conversation2.id,
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "Question about SharedSearchTerm topic" },
+          ],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Conversation without the search term
+      const conversation3 = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Unrelated conversation",
+        selectedModel: "gpt-4",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: conversation3.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Different question" }],
+        },
+        response: {
+          id: "r3",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Search should find both conversations (title match + request content match)
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { search: "SharedSearchTerm" },
+      );
+
+      expect(sessions.data).toHaveLength(2);
+      const sessionIds = sessions.data.map((s) => s.sessionId);
+      expect(sessionIds).toContain(conversation1.id);
+      expect(sessionIds).toContain(conversation2.id);
+    });
+
+    test("conversation title search returns correct total count for pagination", async ({
+      makeAdmin,
+      makeUser,
+      makeOrganization,
+    }) => {
+      // This test verifies that the count query includes the LEFT JOIN with conversations table
+      // when searching by conversation title, ensuring pagination total is accurate
+      const admin = await makeAdmin();
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Create multiple conversations with searchable titles
+      const searchTerm = "PaginationTestTitle";
+
+      for (let i = 0; i < 5; i++) {
+        const conversation = await ConversationModel.create({
+          userId: user.id,
+          organizationId: org.id,
+          agentId: agent.id,
+          title: `${searchTerm} conversation ${i}`,
+          selectedModel: "gpt-4",
+        });
+
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: conversation.id,
+          request: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: `Question ${i}` }],
+          },
+          response: {
+            id: `r${i}`,
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        });
+      }
+
+      // Create a conversation without the search term (should not be included)
+      const otherConversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Unrelated title",
+        selectedModel: "gpt-4",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: otherConversation.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Unrelated question" }],
+        },
+        response: {
+          id: "r-other",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Search with pagination limit smaller than total results
+      const sessions = await InteractionModel.getSessions(
+        { limit: 2, offset: 0 },
+        admin.id,
+        true,
+        { search: searchTerm },
+      );
+
+      // Should return only 2 items due to limit, but total should be 5
+      expect(sessions.data).toHaveLength(2);
+      expect(sessions.pagination.total).toBe(5);
+
+      // Verify second page works correctly
+      const sessionsPage2 = await InteractionModel.getSessions(
+        { limit: 2, offset: 2 },
+        admin.id,
+        true,
+        { search: searchTerm },
+      );
+
+      expect(sessionsPage2.data).toHaveLength(2);
+      expect(sessionsPage2.pagination.total).toBe(5);
     });
   });
 

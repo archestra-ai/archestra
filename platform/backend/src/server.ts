@@ -31,9 +31,22 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  cleanupEmailProvider,
+  cleanupOldProcessedEmails,
+  EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
+  initializeEmailProvider,
+  PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
+  renewEmailSubscriptionIfNeeded,
+} from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
 import config from "@/config";
+import { isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
+import {
+  cleanupKnowledgeGraphProvider,
+  initializeKnowledgeGraphProvider,
+} from "@/knowledge-graph";
 import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
@@ -48,6 +61,7 @@ import {
   OpenAi,
   Vllm,
   WebSocketMessageSchema,
+  Zhipuai,
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
@@ -113,6 +127,12 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Ollama.API.ChatCompletionResponseSchema, {
     id: "OllamaChatCompletionResponse",
   });
+  z.globalRegistry.add(Zhipuai.API.ChatCompletionRequestSchema, {
+    id: "ZhipuaiChatCompletionRequest",
+  });
+  z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
+    id: "ZhipuaiChatCompletionResponse",
+  });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",
   });
@@ -146,6 +166,7 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
 
 /**
  * Register the health endpoint on a Fastify instance.
+ * This is a lightweight endpoint for liveness checks - it only verifies the HTTP server is running.
  */
 export function registerHealthEndpoint(fastify: FastifyInstanceWithZod) {
   fastify.get(
@@ -167,6 +188,53 @@ export function registerHealthEndpoint(fastify: FastifyInstanceWithZod) {
       status: "ok",
       version,
     }),
+  );
+}
+
+/**
+ * Register the readiness endpoint on a Fastify instance.
+ * This endpoint checks database connectivity and should be used for readiness probes.
+ * Returns 200 if the application is ready to receive traffic, 503 otherwise.
+ */
+export function registerReadinessEndpoint(fastify: FastifyInstanceWithZod) {
+  fastify.get(
+    "/ready",
+    {
+      schema: {
+        tags: ["health"],
+        response: {
+          200: z.object({
+            name: z.string(),
+            status: z.string(),
+            version: z.string(),
+            database: z.string(),
+          }),
+          503: z.object({
+            name: z.string(),
+            status: z.string(),
+            version: z.string(),
+            database: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const dbHealthy = await isDatabaseHealthy();
+
+      const response = {
+        name,
+        status: dbHealthy ? "ok" : "degraded",
+        version,
+        database: dbHealthy ? "connected" : "disconnected",
+      };
+
+      if (!dbHealthy) {
+        request.log.warn("Database health check failed for readiness probe");
+        return reply.status(503).send(response);
+      }
+
+      return reply.send(response);
+    },
   );
 }
 
@@ -280,7 +348,7 @@ const registerMetricsPlugin = async (
     routeMetrics: {
       enabled: metricsEnabled,
       methodBlacklist: ["OPTIONS", "HEAD"],
-      routeBlacklist: ["/health"],
+      routeBlacklist: ["/health", "/ready"],
     },
   });
 };
@@ -303,8 +371,8 @@ const startMetricsServer = async () => {
   // Add authentication hook for metrics endpoint if secret is configured
   if (metricsSecret) {
     metricsServer.addHook("preHandler", async (request, reply) => {
-      // Skip auth for health endpoint
-      if (request.url === "/health") {
+      // Skip auth for health and readiness endpoints
+      if (request.url === "/health" || request.url === "/ready") {
         return;
       }
 
@@ -381,11 +449,12 @@ const start = async () => {
 
   /**
    * Custom request logging hook that excludes noisy endpoints:
-   * - /health: Kubernetes liveness/readiness probes
+   * - /health: Kubernetes liveness probe
+   * - /ready: Kubernetes readiness probe (checks database connectivity)
    * - GET /v1/mcp/*: MCP Gateway SSE polling (happens every second)
    */
   const shouldSkipRequestLogging = (url: string, method: string): boolean => {
-    if (url === "/health") return true;
+    if (url === "/health" || url === "/ready") return true;
     // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
     if (method === "GET" && url.startsWith("/v1/mcp/")) return true;
     return false;
@@ -455,6 +524,34 @@ const start = async () => {
 
     startMcpServerRuntime(fastify);
 
+    // Initialize incoming email provider (if configured)
+    // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
+    await initializeEmailProvider();
+
+    // Initialize knowledge graph provider (if configured)
+    // This enables automatic document ingestion from chat uploads
+    await initializeKnowledgeGraphProvider();
+
+    // Background job to renew email subscriptions before they expire
+    const emailRenewalIntervalId = setInterval(() => {
+      renewEmailSubscriptionIfNeeded().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to run email subscription renewal check",
+        );
+      });
+    }, EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL);
+
+    // Background job to clean up old processed email records
+    const processedEmailCleanupIntervalId = setInterval(() => {
+      cleanupOldProcessedEmails().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to run processed email cleanup",
+        );
+      });
+    }, PROCESSED_EMAIL_CLEANUP_INTERVAL_MS);
+
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
      * inside of this server instance. Metrics are actually exposed on a different port
@@ -492,6 +589,7 @@ const start = async () => {
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
     registerHealthEndpoint(fastify);
+    registerReadinessEndpoint(fastify);
 
     // Register all API routes (eeRoutes already loaded at module level)
     await registerApiRoutes(fastify);
@@ -508,6 +606,19 @@ const start = async () => {
       fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
       try {
+        // Clear email subscription renewal interval
+        clearInterval(emailRenewalIntervalId);
+        clearInterval(processedEmailCleanupIntervalId);
+        fastify.log.info("Email background job intervals cleared");
+
+        // Cleanup email provider (unsubscribe from Graph API if needed)
+        await cleanupEmailProvider();
+        fastify.log.info("Email provider cleanup completed");
+
+        // Cleanup knowledge graph provider
+        await cleanupKnowledgeGraphProvider();
+        fastify.log.info("Knowledge graph provider cleanup completed");
+
         // Close WebSocket server
         websocketService.stop();
 

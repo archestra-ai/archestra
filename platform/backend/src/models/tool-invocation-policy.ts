@@ -1,4 +1,9 @@
-import { isAgentTool, isArchestraMcpServerTool } from "@shared";
+import {
+  CONTEXT_EXTERNAL_AGENT_ID,
+  CONTEXT_TEAM_IDS,
+  isAgentTool,
+  isArchestraMcpServerTool,
+} from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
@@ -28,14 +33,14 @@ class ToolInvocationPolicyModel {
       .values(policy)
       .returning();
 
-    // Clear auto-configured timestamp for all agent-tools using this tool
+    // Clear auto-configured timestamp for this tool
     await db
-      .update(schema.agentToolsTable)
+      .update(schema.toolsTable)
       .set({
         policiesAutoConfiguredAt: null,
         policiesAutoConfiguredReasoning: null,
       })
-      .where(eq(schema.agentToolsTable.toolId, policy.toolId));
+      .where(eq(schema.toolsTable.id, policy.toolId));
 
     return createdPolicy;
   }
@@ -68,14 +73,14 @@ class ToolInvocationPolicyModel {
       .returning();
 
     if (updatedPolicy) {
-      // Clear auto-configured timestamp for all agent-tools using this tool
+      // Clear auto-configured timestamp for this tool
       await db
-        .update(schema.agentToolsTable)
+        .update(schema.toolsTable)
         .set({
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.agentToolsTable.toolId, updatedPolicy.toolId));
+        .where(eq(schema.toolsTable.id, updatedPolicy.toolId));
     }
 
     return updatedPolicy || null;
@@ -95,14 +100,14 @@ class ToolInvocationPolicyModel {
     const deleted = result.rowCount !== null && result.rowCount > 0;
 
     if (deleted) {
-      // Clear auto-configured timestamp for all agent-tools using this tool
+      // Clear auto-configured timestamp for this tool
       await db
-        .update(schema.agentToolsTable)
+        .update(schema.toolsTable)
         .set({
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.agentToolsTable.toolId, policy.toolId));
+        .where(eq(schema.toolsTable.id, policy.toolId));
     }
 
     return deleted;
@@ -184,13 +189,13 @@ class ToolInvocationPolicyModel {
   }
 
   private static evaluateContextCondition(
-    path: string,
+    key: string,
     value: string,
     operator: AutonomyPolicyOperator.SupportedOperator,
     context: PolicyEvaluationContext,
   ): boolean {
     // Team matching - check if value is in teamIds array
-    if (path === "teamIds") {
+    if (key === CONTEXT_TEAM_IDS) {
       switch (operator) {
         case "contains":
           return context.teamIds.includes(value);
@@ -202,21 +207,19 @@ class ToolInvocationPolicyModel {
     }
 
     // Single value matching for other context fields
-    let contextValue: string | undefined;
-    if (path === "externalAgentId") {
-      contextValue = context.externalAgentId;
-    } else {
-      return false;
+    if (key === CONTEXT_EXTERNAL_AGENT_ID) {
+      const contextValue = context.externalAgentId;
+      switch (operator) {
+        case "equal":
+          return contextValue === value;
+        case "notEqual":
+          return contextValue !== value;
+        default:
+          return false;
+      }
     }
 
-    switch (operator) {
-      case "equal":
-        return contextValue === value;
-      case "notEqual":
-        return contextValue !== value;
-      default:
-        return false;
-    }
+    return false;
   }
 
   private static evaluateInputCondition(
@@ -359,10 +362,9 @@ class ToolInvocationPolicyModel {
         const conditionsMatch = policy.conditions.every(
           function evaluateCondition(condition) {
             const { key, value, operator } = condition;
-            const [scope, ...pathParts] = key.split(".");
-            if (scope === "context") {
+            if (key.startsWith("context.")) {
               return ToolInvocationPolicyModel.evaluateContextCondition(
-                pathParts.join("."),
+                key,
                 value,
                 operator,
                 context,

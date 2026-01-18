@@ -1,7 +1,14 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { lazy, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -19,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 import { ServiceAccountField } from "./service-account-field";
@@ -97,7 +105,14 @@ export function LocalServerInstallDialog({
 
   // Separate secret vs non-secret env vars
   // Secret env vars can be loaded from vault, non-secret must be entered manually
-  const secretEnvVars = promptedEnvVars.filter((env) => env.type === "secret");
+  // Note: 'mounted' field is added in schema but types may not be regenerated yet
+  const secretEnvVars = promptedEnvVars.filter(
+    (env) => env.type === "secret" && !(env as { mounted?: boolean }).mounted,
+  );
+  const secretFileVars = promptedEnvVars.filter(
+    (env) =>
+      env.type === "secret" && (env as { mounted?: boolean }).mounted === true,
+  );
   const nonSecretEnvVars = promptedEnvVars.filter(
     (env) => env.type !== "secret",
   );
@@ -171,10 +186,28 @@ export function LocalServerInstallDialog({
       }
     }
 
+    // Add secret file values
+    for (const env of secretFileVars) {
+      if (useVaultSecrets) {
+        // BYOS mode: use vault reference in path#key format
+        const vaultRef = vaultSecrets[env.key];
+        if (vaultRef?.path && vaultRef?.key) {
+          finalEnvironmentValues[env.key] = `${vaultRef.path}#${vaultRef.key}`;
+        }
+      } else {
+        // Non-BYOS mode: use manual value
+        if (environmentValues[env.key]) {
+          finalEnvironmentValues[env.key] = environmentValues[env.key];
+        }
+      }
+    }
+
     await onConfirm({
       environmentValues: finalEnvironmentValues,
       teamId: selectedTeamId,
-      isByosVault: useVaultSecrets && secretEnvVars.length > 0,
+      isByosVault:
+        useVaultSecrets &&
+        (secretEnvVars.length > 0 || secretFileVars.length > 0),
       serviceAccount: serviceAccount || undefined,
     });
 
@@ -213,15 +246,16 @@ export function LocalServerInstallDialog({
   // Check if secrets are valid:
   // - Vault mode (team + BYOS): each required secret field must have vault path AND key selected
   // - Manual mode (personal or BYOS disabled): manual secret values must be filled
+  const allSecrets = [...secretEnvVars, ...secretFileVars];
   const isSecretsValid =
-    secretEnvVars.length === 0 ||
+    allSecrets.length === 0 ||
     (useVaultSecrets
-      ? secretEnvVars.every((env) => {
+      ? allSecrets.every((env) => {
           if (!env.required) return true;
           const vaultRef = vaultSecrets[env.key];
           return vaultRef?.path && vaultRef?.key;
         })
-      : secretEnvVars.every((env) => {
+      : allSecrets.every((env) => {
           if (!env.required) return true;
           const value = environmentValues[env.key];
           return !!value?.trim();
@@ -345,62 +379,150 @@ export function LocalServerInstallDialog({
             </div>
           )}
 
-          {/* Secret Environment Variables */}
-          {secretEnvVars.length > 0 && (
+          {/* Secrets Section (env vars and files) */}
+          {(secretEnvVars.length > 0 || secretFileVars.length > 0) && (
             <>
               {nonSecretEnvVars.length > 0 && <Separator />}
 
               <div className="space-y-4">
                 <h3 className="text-sm font-medium">Secrets</h3>
 
-                {secretEnvVars.map((env) => (
-                  <div key={env.key} className="space-y-2 mb-4">
-                    <Label htmlFor={`env-${env.key}`}>
-                      {env.key}
-                      {env.required && (
-                        <span className="text-destructive ml-1">*</span>
-                      )}
-                    </Label>
-                    {env.description && (
-                      <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkBreaks]}
-                          components={markdownComponents}
-                        >
-                          {env.description}
-                        </ReactMarkdown>
-                      </div>
-                    )}
+                {/* Secret Environment Variables */}
+                {secretEnvVars.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium text-muted-foreground">
+                      Environment Variables
+                    </h4>
+                    {secretEnvVars.map((env) => (
+                      <div key={env.key} className="space-y-2">
+                        <Label htmlFor={`env-${env.key}`}>
+                          {env.key}
+                          {env.required && (
+                            <span className="text-destructive ml-1">*</span>
+                          )}
+                        </Label>
+                        {env.description && (
+                          <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm, remarkBreaks]}
+                              components={markdownComponents}
+                            >
+                              {env.description}
+                            </ReactMarkdown>
+                          </div>
+                        )}
 
-                    {/* BYOS mode: vault selector for each secret field */}
-                    {useVaultSecrets ? (
-                      <InlineVaultSecretSelector
-                        teamId={selectedTeamId}
-                        selectedSecretPath={vaultSecrets[env.key]?.path ?? null}
-                        selectedSecretKey={vaultSecrets[env.key]?.key ?? null}
-                        onSecretPathChange={(path) =>
-                          updateVaultSecret(env.key, "path", path)
-                        }
-                        onSecretKeyChange={(key) =>
-                          updateVaultSecret(env.key, "key", key)
-                        }
-                        disabled={isInstalling}
-                      />
-                    ) : (
-                      <Input
-                        id={`env-${env.key}`}
-                        type="password"
-                        value={environmentValues[env.key] || ""}
-                        onChange={(e) =>
-                          handleEnvVarChange(env.key, e.target.value)
-                        }
-                        placeholder={`Enter value for ${env.key}`}
-                        className="font-mono"
-                        disabled={isInstalling}
-                      />
-                    )}
+                        {/* BYOS mode: vault selector for each secret field */}
+                        {useVaultSecrets ? (
+                          <Suspense
+                            fallback={
+                              <div className="text-sm text-muted-foreground">
+                                Loading...
+                              </div>
+                            }
+                          >
+                            <InlineVaultSecretSelector
+                              teamId={selectedTeamId}
+                              selectedSecretPath={
+                                vaultSecrets[env.key]?.path ?? null
+                              }
+                              selectedSecretKey={
+                                vaultSecrets[env.key]?.key ?? null
+                              }
+                              onSecretPathChange={(path) =>
+                                updateVaultSecret(env.key, "path", path)
+                              }
+                              onSecretKeyChange={(key) =>
+                                updateVaultSecret(env.key, "key", key)
+                              }
+                              disabled={isInstalling}
+                            />
+                          </Suspense>
+                        ) : (
+                          <Input
+                            id={`env-${env.key}`}
+                            type="password"
+                            value={environmentValues[env.key] || ""}
+                            onChange={(e) =>
+                              handleEnvVarChange(env.key, e.target.value)
+                            }
+                            placeholder={`Enter value for ${env.key}`}
+                            className="font-mono"
+                            disabled={isInstalling}
+                          />
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {/* Secret Files (mounted as files at /secrets/<key>) */}
+                {secretFileVars.length > 0 && (
+                  <div className="space-y-4">
+                    {secretEnvVars.length > 0 && <Separator />}
+                    <h4 className="text-sm font-medium text-muted-foreground">
+                      Files
+                    </h4>
+
+                    {secretFileVars.map((env) => (
+                      <div key={env.key} className="space-y-2">
+                        <Label htmlFor={`env-${env.key}`}>
+                          {env.key}
+                          {env.required && (
+                            <span className="text-destructive ml-1">*</span>
+                          )}
+                        </Label>
+                        {env.description && (
+                          <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm, remarkBreaks]}
+                              components={markdownComponents}
+                            >
+                              {env.description}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+
+                        {/* BYOS mode: vault selector for each secret field */}
+                        {useVaultSecrets ? (
+                          <Suspense
+                            fallback={
+                              <div className="text-sm text-muted-foreground">
+                                Loading...
+                              </div>
+                            }
+                          >
+                            <InlineVaultSecretSelector
+                              teamId={selectedTeamId}
+                              selectedSecretPath={
+                                vaultSecrets[env.key]?.path ?? null
+                              }
+                              selectedSecretKey={
+                                vaultSecrets[env.key]?.key ?? null
+                              }
+                              onSecretPathChange={(path) =>
+                                updateVaultSecret(env.key, "path", path)
+                              }
+                              onSecretKeyChange={(key) =>
+                                updateVaultSecret(env.key, "key", key)
+                              }
+                              disabled={isInstalling}
+                            />
+                          </Suspense>
+                        ) : (
+                          <AutoResizeTextarea
+                            id={`env-${env.key}`}
+                            value={environmentValues[env.key] || ""}
+                            onChange={(value) =>
+                              handleEnvVarChange(env.key, value)
+                            }
+                            disabled={isInstalling}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -421,5 +543,47 @@ export function LocalServerInstallDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const MAX_TEXTAREA_HEIGHT = 200;
+
+function AutoResizeTextarea({
+  id,
+  value,
+  onChange,
+  disabled,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const adjustHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
+    }
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Re-adjust height when value changes
+  useEffect(() => {
+    adjustHeight();
+  }, [value, adjustHeight]);
+
+  return (
+    <Textarea
+      ref={textareaRef}
+      id={id}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="font-mono text-xs resize-none min-h-10 max-h-[200px] overflow-y-auto"
+      rows={1}
+      onInput={adjustHeight}
+      disabled={disabled}
+    />
   );
 }

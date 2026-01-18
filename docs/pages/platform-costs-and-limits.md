@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: Archestra Platform
 subcategory: Concepts
-order: 6
+order: 8
 ---
 
 Monitor and control AI model expenses with real-time tracking, spending limits, and automatic optimizations.

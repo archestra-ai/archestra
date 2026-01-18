@@ -426,7 +426,8 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Archestra MCP Server**:
 
-- Built-in tools automatically injected into all profiles
+- Built-in MCP server visible in the MCP catalog UI like other MCP servers
+- Tools must be explicitly assigned to profiles (not auto-injected)
 - Tools prefixed with `archestra__` to avoid conflicts
 - Available tools:
   - Profile management: `whoami`, `create_profile`, `get_profile`
@@ -436,9 +437,9 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   - Tool assignment: `bulk_assign_tools_to_profiles`
   - Operators: `get_autonomy_policy_operators`
 - Implementation: `backend/src/archestra-mcp-server.ts`
+- Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`
 - Note: `create_mcp_server_installation_request` temporarily disabled pending user context support
 - Security: Archestra tools are always trusted and bypass tool invocation/trusted data policies
-- UI: Hidden from tools management interface (use `excludeArchestraTools: true` query param)
 
 **Testing**:
 
@@ -447,7 +448,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - **E2E Test Fixtures**:
   - API fixtures: `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, `deleteTrustedDataPolicy`
   - UI fixtures: `goToPage`, `makeRandomString`
-- **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`
+- **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`, `seedAndAssignArchestraTools`
 
 **Backend Test Fixtures Usage**:
 

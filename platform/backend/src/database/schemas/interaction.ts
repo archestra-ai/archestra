@@ -68,6 +68,21 @@ const interactionsTable = pgTable(
     ),
     userIdIdx: index("interactions_user_id_idx").on(table.userId),
     sessionIdIdx: index("interactions_session_id_idx").on(table.sessionId),
+    createdAtIdx: index("interactions_created_at_idx").on(
+      table.createdAt.desc(),
+    ),
+    profileCreatedAtIdx: index("interactions_profile_created_at_idx").on(
+      table.profileId,
+      table.createdAt.desc(),
+    ),
+    sessionCreatedAtIdx: index("interactions_session_created_at_idx").on(
+      table.sessionId,
+      table.createdAt.desc(),
+    ),
+    // Note: Additional pg_trgm GIN indexes for search are created in migration 0116_pg_trgm_indexes.sql:
+    // - interactions_request_trgm_idx: GIN index on (request::text)
+    // - interactions_response_trgm_idx: GIN index on (response::text)
+    // These can't be defined in Drizzle schema as they require ::text cast and gin_trgm_ops operator class.
   }),
 );
 

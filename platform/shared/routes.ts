@@ -31,6 +31,7 @@ export const RouteId = {
   GetInternalMcpCatalog: "getInternalMcpCatalog",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
@@ -158,6 +159,10 @@ export const RouteId = {
   OllamaChatCompletionsWithDefaultAgent:
     "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
+  // Proxy Routes - Zhipu AI
+  ZhipuaiChatCompletionsWithDefaultAgent:
+    "zhipuaiChatCompletionsWithDefaultAgent",
+  ZhipuaiChatCompletionsWithAgent: "zhipuaiChatCompletionsWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",
@@ -265,6 +270,13 @@ export const RouteId = {
   GetSecret: "getSecret",
   CheckSecretsConnectivity: "checkSecretsConnectivity",
   InitializeSecretsManager: "initializeSecretsManager",
+
+  // Incoming Email Routes
+  GetIncomingEmailStatus: "getIncomingEmailStatus",
+  SetupIncomingEmailWebhook: "setupIncomingEmailWebhook",
+  RenewIncomingEmailSubscription: "renewIncomingEmailSubscription",
+  DeleteIncomingEmailSubscription: "deleteIncomingEmailSubscription",
+  GetPromptEmailAddress: "getPromptEmailAddress",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

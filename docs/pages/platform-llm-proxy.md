@@ -2,7 +2,7 @@
 title: LLM Proxy
 category: Archestra Platform
 subcategory: Concepts
-order: 2
+order: 3
 description: Secure proxy for LLM provider interactions
 lastUpdated: 2025-10-31
 ---

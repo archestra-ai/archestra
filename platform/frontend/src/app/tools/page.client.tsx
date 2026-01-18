@@ -78,13 +78,21 @@ function ToolsList({ initialData }: { initialData?: ToolsInitialData }) {
         initialData={initialData}
       />
 
-      <ToolDetailsDialog
-        tool={selectedToolForDialog}
-        open={!!selectedToolForDialog}
-        onOpenChange={(open: boolean) =>
-          !open && setSelectedToolForDialog(null)
+      <Suspense
+        fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
+            <LoadingSpinner />
+          </div>
         }
-      />
+      >
+        <ToolDetailsDialog
+          tool={selectedToolForDialog}
+          open={!!selectedToolForDialog}
+          onOpenChange={(open: boolean) =>
+            !open && setSelectedToolForDialog(null)
+          }
+        />
+      </Suspense>
     </div>
   );
 }

@@ -35,17 +35,19 @@ You'll need these later for your MS Teams app as `ARCHESTRA_PROMPT_A2A_ENDPOINT`
 
 1. Go to [portal.azure.com](https://portal.azure.com) > **Create a resource** > **Azure Bot**
 2. Fill in bot handle, subscription, resource group
+   > **Note:** If you're unable to create a resource, you may not have access to your Azure subscription
 3. Under **Microsoft App ID**, select **Create new Microsoft App ID**
 4. After creation, go to **Settings** > **Configuration**
-5. Copy the **Microsoft App ID**
-6. Click **Manage Password** link next to Microsoft App ID
-7. In the App Registration page, go to **Certificates & secrets** > **New client secret**
-8. Copy the secret value (shown only once)
+5. Copy the **Microsoft App ID** and note down for later
+6. Click **Manage Password** link next to Microsoft App ID. It will navigate you to **App Registration page -> Certificates & secrets**
+7. Click **New client secret**
+8. Copy the secret value (shown only once) and note down for later
 9. Back in Bot Configuration, set **Messaging endpoint** to `https://your-domain.com/api/messages` (or ngrok URL for local dev)
 10. Go to **Channels** > **Connect to channels** > add **Microsoft Teams**
-11. Back in App Registration, go to **API permissions** > **Add a permission** > **Microsoft Graph** > **Application permissions**
-12. Add `ChannelMessage.Read.All` (for thread history)
-13. Click **Grant admin consent**
+11. Navigate again to **App Registration**. Click **Search resources, services, and docs** at the top of the page and search **App registrations**, then click on it. Open **All applications** tab, find your registration and click on it.
+12. Go to **API permissions** > **Add a permission** > **Microsoft Graph** > **Application permissions**
+13. Add `ChannelMessage.Read.All` (for thread history)
+14. Click **Grant admin consent**
 
 ## Teams App Manifest
 
@@ -56,7 +58,7 @@ Create a folder with [color.png](/docs/color.png) (192x192), [outline.png](/docs
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
   "manifestVersion": "1.16",
   "version": "1.0.0",
-  "id": "{{BOT_ID}}",
+  "id": "{{BOT_MS_APP_ID}}",
   "packageName": "com.archestra.bot",
   "developer": {
     "name": "Your Company",
@@ -70,7 +72,7 @@ Create a folder with [color.png](/docs/color.png) (192x192), [outline.png](/docs
   "accentColor": "#FFFFFF",
   "bots": [
     {
-      "botId": "{{BOT_ID}}",
+      "botId": "{{BOT_MS_APP_ID}}",
       "scopes": ["personal", "team", "groupchat"],
       "supportsFiles": false,
       "isNotificationOnly": false
@@ -81,7 +83,7 @@ Create a folder with [color.png](/docs/color.png) (192x192), [outline.png](/docs
 }
 ```
 
-Replace `{{BOT_ID}}` with your Azure Bot App ID. Zip the folder contents, you'll need it later to upload to MS Teams apps.
+Replace `{{BOT_MS_APP_ID}}` with your Microsoft App ID value from Azure Bot configuration. Zip the folder contents, you'll need it later to upload to MS Teams apps.
 
 ## Bot Code
 
@@ -103,7 +105,7 @@ import { TeamsInfo } from "botbuilder";
 import express from "express";
 
 const auth = new ConfigurationBotFrameworkAuthentication({
-  MicrosoftAppId: process.env.BOT_ID,
+  MicrosoftAppId: process.env.BOT_MS_APP_ID,
   MicrosoftAppPassword: process.env.BOT_PASSWORD,
   MicrosoftAppTenantId: process.env.BOT_TENANT_ID,
   MicrosoftAppType: "SingleTenant",
@@ -126,7 +128,7 @@ async function getGraphToken(): Promise<string> {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: process.env.BOT_ID!,
+        client_id: process.env.BOT_MS_APP_ID!,
         client_secret: process.env.BOT_PASSWORD!,
         scope: "https://graph.microsoft.com/.default",
         grant_type: "client_credentials",
@@ -258,9 +260,9 @@ app.listen(3978, () => console.log("Bot listening on 3978"));
 
 | Variable | Description |
 |----------|-------------|
-| `BOT_ID` | Azure Bot App ID |
+| `BOT_MS_APP_ID` | Microsoft App ID from Azure Bot configuration |
 | `BOT_PASSWORD` | Azure Bot Client Secret |
-| `BOT_TENANT_ID` | Azure AD Tenant ID (for Single Tenant bots) |
+| `BOT_TENANT_ID` | App Tenant ID from Azure Bot configuration (for Single Tenant bots) |
 | `ARCHESTRA_PROMPT_A2A_ENDPOINT` | Full A2A endpoint URL (e.g. `http://localhost:9000/v1/a2a/{promptId}`) |
 | `ARCHESTRA_PROMPT_A2A_TOKEN` | A2A token (e.g. `archestra_24b0...`) |
 
@@ -278,7 +280,10 @@ ngrok http 3978
 
 Update your Azure Bot messaging endpoint with the ngrok URL.
 
-In Teams: **Apps** > **Manage your apps** > **Upload an app** > select your manifest zip. Start a chat with the bot.
+In Teams:
+1. **Apps** > **Manage your apps** > **Upload an app** > select your manifest zip
+2. On **Apps** > **Build for your org** add your app
+3. Start a chat with the bot
 
 ## Troubleshooting
 

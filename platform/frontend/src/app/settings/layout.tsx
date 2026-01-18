@@ -3,6 +3,7 @@
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
+import { useFeatures } from "@/lib/features.query";
 import { useSecretsType } from "@/lib/secrets.query";
 
 export default function SettingsLayout({
@@ -23,6 +24,7 @@ export default function SettingsLayout({
   });
 
   const { data: secretsType } = useSecretsType();
+  const { data: features } = useFeatures();
 
   const tabs = [
     { label: "Your Account", href: "/settings/account" },
@@ -50,6 +52,13 @@ export default function SettingsLayout({
      */
     ...(userCanUpdateOrganization && secretsType?.type === "Vault"
       ? [{ label: "Secrets", href: "/settings/secrets" }]
+      : []),
+    /**
+     * Incoming Email tab is shown when the feature is enabled
+     * and the user has permission to update organization settings.
+     */
+    ...(userCanUpdateOrganization && features?.incomingEmail?.enabled
+      ? [{ label: "Incoming Email", href: "/settings/incoming-email" }]
       : []),
   ];
 

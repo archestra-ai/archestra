@@ -273,6 +273,7 @@ class OptimizationRuleModel {
       cerebras: [],
       vllm: [], // vLLM model pricing varies by deployment, so no defaults
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
+      zhipuai: [],
     };
 
     // Define rules per provider
@@ -303,6 +304,7 @@ class OptimizationRuleModel {
         cerebras: [],
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
+        zhipuai: [],
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

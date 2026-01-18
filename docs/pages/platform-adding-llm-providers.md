@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-01-02
+lastUpdated: 2026-01-17
 ---
 
 <!--
@@ -42,6 +42,7 @@ Each provider needs Zod schemas defining its API contract. TypeScript types are 
 | `backend/src/types/llm-providers/{provider}/messages.ts` | Message array schemas - defines the structure of conversation history (user/assistant/tool messages)                               |
 | `backend/src/types/llm-providers/{provider}/tools.ts`    | Tool definition schemas - how tools are declared in requests (function calling format)                                             |
 | `backend/src/types/llm-providers/{provider}/index.ts`    | Namespace export that groups all types under `{Provider}.Types`                                                                    |
+| `backend/src/types/llm-providers/index.ts`               | Export the provider namespace (e.g., `export { default as {Provider} } from "./{provider}"`)                                       |
 | `backend/src/types/interaction.ts`                       | Add provider schemas to `InteractionRequestSchema`, `InteractionResponseSchema`, and `SelectInteractionSchema` discriminated union |
 
 ### Adapter Implementation
@@ -55,9 +56,9 @@ The adapter pattern provides a **provider-agnostic API** for business logic. LLM
 
 **Adapters to Implement:**
 
-- **RequestAdapter**: Provides Read/write access for the request data (model, messages, tools);
-- **ResponseAdapter**: Provides Read/write access to thee response data (id, model, text, tool calls, usage);
-- **StreamAdapter**: Process streaming chunks incrementally, accumulatin data required fro the LLMProxy logic;
+- **RequestAdapter**: Provides read/write access for the request data (model, messages, tools);
+- **ResponseAdapter**: Provides read/write access to the response data (id, model, text, tool calls, usage);
+- **StreamAdapter**: Process streaming chunks incrementally, accumulating data required for the LLMProxy logic;
 - **LLMProvider**: Create adapters, extract API keys from headers, create provider SDK clients, execute requests;
 
 ### Route Handler
@@ -130,6 +131,7 @@ Model optimization evaluates token counts to switch to cheaper models when possi
 | File                                                  | Description                                                                                                       |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `backend/src/routes/proxy/utils/cost-optimization.ts` | Add provider to `ProviderMessages` type mapping (e.g., `gemini: Gemini.Types.GenerateContentRequest["contents"]`) |
+| `backend/src/models/optimization-rule.ts`             | Add provider to default optimization rules structure (empty array placeholder for new providers)                  |
 
 ### Tool Results Compression
 
@@ -168,9 +170,11 @@ Prometheus metrics for request duration, token usage, and costs. Requires instru
 
 For example: OpenAI and Anthropic SDKs accept a custom `fetch` function, so we inject an instrumented fetch via `getObservableFetch()`. Gemini SDK doesn't expose fetch, so we wrap the SDK instance directly via `getObservableGenAI()`.
 
-| File                         | Description                                  |
-| ---------------------------- | -------------------------------------------- |
-| `backend/src/llm-metrics.ts` | Implement instrumented API calls for the SDK |
+| File                                                    | Description                                                                          |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `backend/src/llm-metrics.ts`                            | Implement instrumented API calls for the SDK                                         |
+| `backend/src/routes/proxy/utils/adapters/{provider}.ts` | Legacy adapter with `getUsageTokens()` function for metrics token extraction         |
+| `backend/src/routes/proxy/utils/adapters/index.ts`      | Export the legacy adapter (e.g., `export * as {provider} from "./{provider}"`)       |
 
 ### Frontend: Logs UI
 
@@ -197,7 +201,7 @@ Each provider must be added to the LLM Proxy e2e tests to ensure all features wo
 
 ## Chat Support
 
-Below is the list of modification requrest to support new Provider in the built-in Archestra Chat.
+Below is the list of modifications required to support a new provider in the built-in Archestra Chat.
 
 ### Configuration
 
@@ -219,10 +223,10 @@ Allows users to select this provider's models in the Chat UI.
 
 Each provider has a different API for listing available models.
 
-| File                                | Description                                                            |
-| ----------------------------------- | ---------------------------------------------------------------------- |
-| `backend/src/routes/chat-models.ts` | Add `fetch{Provider}Models()` function and register in `modelFetchers` |
-| `backend/src/routes/chat-models.ts` | Add case to `getProviderApiKey()` switch                               |
+| File                                         | Description                                                            |
+| -------------------------------------------- | ---------------------------------------------------------------------- |
+| `backend/src/routes/chat/routes.models.ts`   | Add `fetch{Provider}Models()` function and register in `modelFetchers` |
+| `backend/src/routes/chat/routes.models.ts`   | Add case to `getProviderApiKey()` switch                               |
 
 ### LLM Client
 
@@ -230,9 +234,9 @@ Chat uses Vercel AI SDK which requires provider-specific model creation.
 
 | File                                 | Description                                                                                      |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `backend/src/services/llm-client.ts` | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
-| `backend/src/services/llm-client.ts` | Add case to `resolveProviderApiKey()` switch                                                     |
-| `backend/src/services/llm-client.ts` | Add case to `createLLMModel()` - AI SDK requires provider-specific initialization                |
+| `backend/src/clients/llm-client.ts`  | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
+| `backend/src/clients/llm-client.ts`  | Add case to `resolveProviderApiKey()` switch                                                     |
+| `backend/src/clients/llm-client.ts`  | Add case to `createLLMModel()` - AI SDK requires provider-specific initialization                |
 
 ### Error Handling
 
@@ -268,8 +272,9 @@ Existing provider implementations for reference:
 
 - vLLM: `backend/src/routes/proxy/routesv2/vllm.ts`, `backend/src/routes/proxy/adapterV2/vllm.ts`
 - Ollama: `backend/src/routes/proxy/routesv2/ollama.ts`, `backend/src/routes/proxy/adapterV2/ollama.ts`
+- ZhipuAI: `backend/src/routes/proxy/routesv2/zhipuai.ts`, `backend/src/routes/proxy/adapterV2/zhipuai.ts`
 
-> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Azure OpenAI, Together AI, Groq), use the vLLM/Ollama implementations as starting points - they reuse OpenAI's type definitions and adapters.
+> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Azure OpenAI, Together AI, Groq), use the vLLM/Ollama/ZhipuAI implementations as starting points - they reuse OpenAI's type definitions and adapters.
 
 ## Smoke Testing
 

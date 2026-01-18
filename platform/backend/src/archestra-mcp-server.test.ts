@@ -5,7 +5,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import * as knowledgeGraph from "@/knowledge-graph";
-import { AgentLabelModel, AgentModel, InternalMcpCatalogModel } from "@/models";
+import { AgentModel, InternalMcpCatalogModel } from "@/models";
 import { beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent } from "@/types";
 import {

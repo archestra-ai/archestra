@@ -13,7 +13,6 @@ import { userHasPermission } from "@/auth/utils";
 import { getKnowledgeGraphProvider } from "@/knowledge-graph";
 import logger from "@/logging";
 import {
-  AgentLabelModel,
   AgentModel,
   AgentTeamModel,
   ConversationModel,

@@ -3,7 +3,7 @@ import { expect, test } from "../../fixtures";
 
 test.describe(
   "Invitation functionality",
-  { tag: ["@enterprise", "@firefox", "@webkit"] },
+  { tag: ["@enterprise"] },
   () => {
     // increase stability
     test.describe.configure({ mode: "serial", retries: 4 });

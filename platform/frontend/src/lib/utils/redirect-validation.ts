@@ -11,6 +11,7 @@
  * - Absolute URLs with protocols: https://evil.com, javascript:alert(1)
  * - Protocol-relative URLs: //evil.com (browser treats as https://evil.com)
  * - Paths containing protocol markers: /redirect?url=https://evil.com
+ * - Paths containing backslashes: /\evil.com (some browsers normalize to //evil.com)
  *
  * Note: Path traversal (/../) is allowed because browser normalization ensures
  * the final path stays within the application. Double-encoded characters are
@@ -21,7 +22,10 @@
  */
 function isValidRelativePath(path: string): boolean {
   return (
-    path.startsWith("/") && !path.startsWith("//") && !path.includes("://")
+    path.startsWith("/") &&
+    !path.startsWith("//") &&
+    !path.includes("://") &&
+    !path.includes("\\")
   );
 }
 

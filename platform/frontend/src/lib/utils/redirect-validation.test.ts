@@ -131,6 +131,20 @@ describe("redirect-validation", () => {
       ).toBe("/");
     });
 
+    it("should reject paths containing backslashes", () => {
+      // Some browsers normalize backslashes to forward slashes
+      // /\evil.com could become //evil.com (protocol-relative URL)
+      expect(getValidatedRedirectPath(encodeURIComponent("/\\evil.com"))).toBe(
+        "/",
+      );
+      expect(getValidatedRedirectPath(encodeURIComponent("/foo\\bar"))).toBe(
+        "/",
+      );
+      expect(
+        getValidatedRedirectPath(encodeURIComponent("/path\\\\to\\file")),
+      ).toBe("/");
+    });
+
     it("should reject paths containing ://", () => {
       expect(
         getValidatedRedirectPath(

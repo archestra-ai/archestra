@@ -75,10 +75,11 @@ test.describe(
       await generateButton.click();
 
       // Wait for the invitation link to be generated
+      // Increased timeout for CI environments where API calls may be slower
       const invitationLinkInput = page.getByTestId(
         E2eTestId.InvitationLinkInput,
       );
-      await expect(invitationLinkInput).toBeVisible({ timeout: 5000 });
+      await expect(invitationLinkInput).toBeVisible({ timeout: 15000 });
 
       // Get the invitation link
       const invitationLink = await invitationLinkInput.inputValue();

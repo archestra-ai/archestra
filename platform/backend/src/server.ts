@@ -66,6 +66,9 @@ import {
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 
+/** Max time to wait for cleanup operations during graceful shutdown before exiting */
+const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
+
 // Load enterprise routes if license is activated OR if running in codegen mode
 // (codegen mode ensures OpenAPI spec always includes all enterprise routes)
 const eeRoutes =
@@ -638,10 +641,10 @@ const start = async () => {
           ),
         ]);
 
-        // Wait max 3 seconds for cleanup, then exit anyway
+        // Wait for cleanup with timeout, then exit anyway
         await Promise.race([
           cleanupPromise,
-          new Promise((resolve) => setTimeout(resolve, 3000)),
+          new Promise((resolve) => setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS)),
         ]);
 
         process.exit(0);

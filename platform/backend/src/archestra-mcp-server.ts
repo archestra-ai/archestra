@@ -1669,28 +1669,18 @@ export async function executeArchestraTool(
         };
       }
 
-      // Get profile labels for LBAC filtering
-      // These labels determine what documents the profile can access in the knowledge graph
-      const profileLabels = await AgentLabelModel.getLabelsForAgent(profile.id);
-      const queryLabels = profileLabels.map((label) => ({
-        key: label.key,
-        value: label.value,
-      }));
-
       logger.info(
         {
           profileId: profile.id,
           profileName: profile.name,
-          labelCount: queryLabels.length,
-          labels: queryLabels.map((l) => `${l.key}:${l.value}`),
+          mode,
         },
-        "Querying knowledge graph with LBAC labels",
+        "Querying knowledge graph",
       );
 
-      // Execute the query with LBAC labels
+      // Execute the query
       const result = await provider.queryDocument(query, {
         mode,
-        labels: queryLabels,
       });
 
       if (result.error) {

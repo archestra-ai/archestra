@@ -743,11 +743,6 @@ describe("executeArchestraTool", () => {
         .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
-      // Mock getLabelsForAgent to return empty labels
-      const getLabelsSpy = vi
-        .spyOn(AgentLabelModel, "getLabelsForAgent")
-        .mockResolvedValue([]);
-
       try {
         const result = await executeArchestraTool(
           `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
@@ -762,12 +757,11 @@ describe("executeArchestraTool", () => {
         );
         expect(mockProvider.queryDocument).toHaveBeenCalledWith(
           "What are AI agents?",
-          { mode: "hybrid", labels: [] },
+          { mode: "hybrid" },
         );
       } finally {
         // Restore the original implementation
         getProviderSpy.mockRestore();
-        getLabelsSpy.mockRestore();
       }
     });
 
@@ -792,11 +786,6 @@ describe("executeArchestraTool", () => {
         .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
-      // Mock getLabelsForAgent to return empty labels
-      const getLabelsSpy = vi
-        .spyOn(AgentLabelModel, "getLabelsForAgent")
-        .mockResolvedValue([]);
-
       try {
         const result = await executeArchestraTool(
           `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
@@ -811,11 +800,10 @@ describe("executeArchestraTool", () => {
         // Should default to "hybrid" mode
         expect(mockProvider.queryDocument).toHaveBeenCalledWith(
           "Test query without mode",
-          { mode: "hybrid", labels: [] },
+          { mode: "hybrid" },
         );
       } finally {
         getProviderSpy.mockRestore();
-        getLabelsSpy.mockRestore();
       }
     });
 
@@ -840,11 +828,6 @@ describe("executeArchestraTool", () => {
         .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
         .mockReturnValue(mockProvider);
 
-      // Mock getLabelsForAgent to return empty labels
-      const getLabelsSpy = vi
-        .spyOn(AgentLabelModel, "getLabelsForAgent")
-        .mockResolvedValue([]);
-
       try {
         const result = await executeArchestraTool(
           `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
@@ -861,79 +844,6 @@ describe("executeArchestraTool", () => {
         );
       } finally {
         getProviderSpy.mockRestore();
-        getLabelsSpy.mockRestore();
-      }
-    });
-
-    test("should pass profile labels to provider for LBAC filtering", async () => {
-      const mockProvider = {
-        providerId: "lightrag" as const,
-        displayName: "LightRAG",
-        isConfigured: () => true,
-        initialize: vi.fn().mockResolvedValue(undefined),
-        cleanup: vi.fn().mockResolvedValue(undefined),
-        insertDocument: vi.fn().mockResolvedValue({
-          status: "completed",
-          documentId: "doc-123",
-        }),
-        queryDocument: vi.fn().mockResolvedValue({
-          answer: "Filtered response based on labels.",
-        }),
-        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
-      };
-
-      const getProviderSpy = vi
-        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
-        .mockReturnValue(mockProvider);
-
-      // Mock getLabelsForAgent to return profile labels
-      const mockLabels = [
-        {
-          keyId: "key-1",
-          valueId: "value-1",
-          key: "environment",
-          value: "production",
-        },
-        {
-          keyId: "key-2",
-          valueId: "value-2",
-          key: "team",
-          value: "engineering",
-        },
-      ];
-      const getLabelsSpy = vi
-        .spyOn(AgentLabelModel, "getLabelsForAgent")
-        .mockResolvedValue(mockLabels);
-
-      try {
-        const result = await executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
-          { query: "What are the production systems?" },
-          mockContext,
-        );
-
-        expect(result.isError).toBe(false);
-        expect((result.content[0] as any).text).toContain(
-          "Filtered response based on labels.",
-        );
-
-        // Verify labels were fetched for the correct profile
-        expect(getLabelsSpy).toHaveBeenCalledWith(testProfile.id);
-
-        // Verify labels were passed to the provider
-        expect(mockProvider.queryDocument).toHaveBeenCalledWith(
-          "What are the production systems?",
-          {
-            mode: "hybrid",
-            labels: [
-              { key: "environment", value: "production" },
-              { key: "team", value: "engineering" },
-            ],
-          },
-        );
-      } finally {
-        getProviderSpy.mockRestore();
-        getLabelsSpy.mockRestore();
       }
     });
   });

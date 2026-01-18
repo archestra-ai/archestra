@@ -639,13 +639,19 @@ const start = async () => {
           cleanupKnowledgeGraphProvider().then(() =>
             fastify.log.info("Knowledge graph provider cleanup completed"),
           ),
-        ]);
+        ]).then(() => "completed" as const);
 
         // Wait for cleanup with timeout, then exit anyway
-        await Promise.race([
+        const result = await Promise.race([
           cleanupPromise,
-          new Promise((resolve) => setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS)),
+          new Promise<"timeout">((resolve) =>
+            setTimeout(() => resolve("timeout"), SHUTDOWN_CLEANUP_TIMEOUT_MS),
+          ),
         ]);
+
+        if (result === "timeout") {
+          fastify.log.warn("Cleanup timed out, proceeding with shutdown");
+        }
 
         process.exit(0);
       } catch (error) {

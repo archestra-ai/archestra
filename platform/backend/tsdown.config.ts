@@ -3,6 +3,15 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { rmSync } from "node:fs";
 import { defineConfig, type UserConfig } from "tsdown";
 
+/** Max time to wait for the server process to exit gracefully before force killing */
+const PROCESS_EXIT_TIMEOUT_MS = 5000;
+
+/** Delay after SIGKILL to allow the process to fully terminate */
+const POST_KILL_DELAY_MS = 100;
+
+/** Delay after process exit to ensure OS releases the ports */
+const PORT_RELEASE_DELAY_MS = 250;
+
 /**
  * Track the current server process so we can properly terminate it before starting a new one.
  * This prevents EADDRINUSE errors by ensuring the old process fully exits before the new one starts.
@@ -15,7 +24,7 @@ let currentServerProcess: ChildProcess | null = null;
  */
 const waitForProcessExit = (
   proc: ChildProcess,
-  timeoutMs = 5000,
+  timeoutMs = PROCESS_EXIT_TIMEOUT_MS,
 ): Promise<void> => {
   return new Promise((resolve) => {
     // If process already exited, resolve immediately
@@ -31,7 +40,7 @@ const waitForProcessExit = (
         proc.kill("SIGKILL");
       }
       // Give it a moment to die
-      setTimeout(resolve, 100);
+      setTimeout(resolve, POST_KILL_DELAY_MS);
     }, timeoutMs);
 
     proc.once("exit", () => {
@@ -58,7 +67,7 @@ const onSuccessHandler: UserConfig["onSuccess"] = async () => {
     await waitForProcessExit(currentServerProcess);
 
     // Add a small delay to ensure OS releases the ports (EADDRINUSE prevention)
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, PORT_RELEASE_DELAY_MS));
 
     console.log("Previous server stopped");
   }

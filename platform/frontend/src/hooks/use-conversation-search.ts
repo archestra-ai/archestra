@@ -17,6 +17,9 @@ export function useConversationSearch() {
       if (isModKey && event.key === "k" && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         event.stopPropagation();
+        // Using functional update (prev => !prev) to avoid stale closure issues.
+        // This ensures we always toggle relative to current state without needing
+        // isOpen in the dependency array.
         setIsOpen((prev) => !prev);
       }
     };

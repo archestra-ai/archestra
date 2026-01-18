@@ -2,8 +2,8 @@ import { archestraApiSdk, type Permissions } from "@shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useArchestraHasPermission } from "./auth-provider";
 
 // Mock the auth client and SDK
 vi.mock("@/lib/clients/auth/auth-client", () => ({
@@ -55,27 +55,6 @@ beforeEach(() => {
     },
   } as ReturnType<typeof authClient.useSession>);
 });
-
-/**
- * Re-implementation of useArchestraHasPermission for testing purposes.
- * This mirrors the implementation in auth-provider.tsx to test the logic in isolation.
- */
-function useArchestraHasPermission(params: {
-  organizationId?: string;
-  permissions?: Permissions;
-  permission?: Permissions;
-}) {
-  // Handle both 'permissions' (plural) and 'permission' (singular) params
-  const permissionsToCheck = params.permissions || params.permission || {};
-
-  const { data: hasPermission, isPending } =
-    useHasPermissions(permissionsToCheck);
-
-  return {
-    data: { success: hasPermission, error: null },
-    isPending,
-  };
-}
 
 describe("useArchestraHasPermission", () => {
   it("should handle 'permissions' (plural) parameter", async () => {

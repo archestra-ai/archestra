@@ -25,7 +25,7 @@ import { useCustomRoles } from "@/lib/role.query";
  * This custom hook uses Archestra's permission system (/api/user/permissions)
  * which works correctly in both OSS and enterprise modes.
  */
-function useArchestraHasPermission(params: {
+export function useArchestraHasPermission(params: {
   organizationId?: string;
   permissions?: Permissions;
   permission?: Permissions;

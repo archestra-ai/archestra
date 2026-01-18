@@ -18,9 +18,11 @@ test.describe(
       // Wait for the page to fully load (API calls to complete)
       await page.waitForLoadState("networkidle");
 
-      // Wait for the "Invite Member" button to be enabled (permissions must load first)
+      // Wait for the "Invite Member" button to appear and be enabled
+      // The button is only rendered after permissions load and check passes
       const inviteButton = page.getByRole("button", { name: /invite member/i });
-      await expect(inviteButton).toBeEnabled({ timeout: 15000 });
+      await expect(inviteButton).toBeVisible({ timeout: 15000 });
+      await expect(inviteButton).toBeEnabled({ timeout: 5000 });
 
       // Click the "Invite Member" button to open the dialog
       await inviteButton.click();
@@ -58,9 +60,11 @@ test.describe(
       // Wait for the page to fully load (API calls to complete)
       await page.waitForLoadState("networkidle");
 
-      // Wait for the "Invite Member" button to be enabled (permissions must load first)
+      // Wait for the "Invite Member" button to appear and be enabled
+      // The button is only rendered after permissions load and check passes
       const inviteButton = page.getByRole("button", { name: /invite member/i });
-      await expect(inviteButton).toBeEnabled({ timeout: 15000 });
+      await expect(inviteButton).toBeVisible({ timeout: 15000 });
+      await expect(inviteButton).toBeEnabled({ timeout: 5000 });
 
       // Click the "Invite Member" button to open the dialog
       await inviteButton.click();

@@ -203,7 +203,7 @@ test.describe("Chat API Keys", () => {
       }
     });
 
-    test("One team scope for each team, only team members can see them", async ({
+    test("@enterprise One team scope for each team, only team members can see them", async ({
       adminPage,
       editorPage,
       memberPage,

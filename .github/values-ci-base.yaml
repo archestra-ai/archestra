@@ -1,5 +1,6 @@
-# CI-specific values for the Archestra Helm chart
-# This file is used during e2e testing in GitHub Actions
+# Base CI values for the Archestra Helm chart
+# This file contains common configuration shared by both enterprise and OSS e2e tests.
+# Use with values-ci-enterprise.yaml or values-ci-oss.yaml for mode-specific overrides.
 
 archestra:
   # Image will be set via --set during deployment
@@ -27,23 +28,10 @@ archestra:
     ARCHESTRA_METRICS_SECRET: "foo-bar"
     ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"
-    # Enable enterprise license for e2e tests (required for SSO tests)
-    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Disable better-auth rate limit for e2e tests
     ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
-    # Add Keycloak as trusted origin for SSO e2e tests (OIDC discovery URL validation)
-    # Includes both the internal K8s service name and the NodePort URL that appears in OIDC discovery
-    ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS: "http://e2e-tests-keycloak:8080,http://localhost:30081"
-    # Secrets manager configuration for BYOS tests
-    ARCHESTRA_SECRETS_MANAGER: "Vault"
-    # Vault configuration for BYOS tests
-    # Vault runs as a Kubernetes service in the cluster
-    # Pods access via K8s service name, host/Playwright access via NodePort mapped to 8200
-    ARCHESTRA_HASHICORP_VAULT_ADDR: "http://vault:8200"
-    ARCHESTRA_HASHICORP_VAULT_TOKEN: "dev-root-token"
-    ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN"
 
   # Use NodePort service type to expose services on fixed ports
   service:

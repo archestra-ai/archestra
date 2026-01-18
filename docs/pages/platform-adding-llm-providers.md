@@ -192,7 +192,7 @@ Each provider must be added to the LLM Proxy e2e tests to ensure all features wo
 | File                                                            | Description                                                                                                             |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `helm/e2e-tests/mappings/{provider}-*.json`                     | WireMock stub mappings for mocking provider API responses (models list, chat completions, tool calls, etc.)             |
-| `.github/values-ci.yaml`                                        | Add provider base URL pointing to WireMock (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL: "http://e2e-tests-wiremock:8080/v1"`) |
+| `.github/values-ci-base.yaml`                                   | Add provider base URL pointing to WireMock (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL: "http://e2e-tests-wiremock:8080/v1"`) |
 | `e2e-tests/tests/api/llm-proxy/tool-invocation.spec.ts`         | Tool invocation policy tests - add `{provider}Config` to `testConfigs` array                                            |
 | `e2e-tests/tests/api/llm-proxy/tool-persistence.spec.ts`        | Tool call persistence tests - add `{provider}Config` to `testConfigs` array                                             |
 | `e2e-tests/tests/api/llm-proxy/tool-result-compression.spec.ts` | TOON compression tests - add `{provider}Config` to `testConfigs` array                                                  |

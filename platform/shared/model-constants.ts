@@ -1,8 +1,5 @@
 import { z } from "zod";
 
-/**
- * Supported LLM providers
- */
 export const SupportedProvidersSchema = z.enum([
   "openai",
   "gemini",
@@ -11,7 +8,9 @@ export const SupportedProvidersSchema = z.enum([
   "vllm",
   "ollama",
   "zhipuai",
+  "minimax",
 ]);
+
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openai:chatCompletions",
@@ -20,7 +19,8 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "cerebras:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
-  "zhipuai:chatCompletions",
+
+  "minimax:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -36,5 +36,6 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   cerebras: "Cerebras",
   vllm: "vLLM",
   ollama: "Ollama",
-  zhipuai: "Zhipu AI",
+  zhipuai: "ZhipuAI",
+  minimax: "MiniMax",
 };

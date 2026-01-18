@@ -94,7 +94,8 @@ const minimaxProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.MiniMaxChatCompletionsWithDefaultAgent,
-        description: "Create a chat completion with MiniMax (uses default agent)",
+        description:
+          "Create a chat completion with MiniMax (uses default agent)",
         tags: ["llm-proxy"],
         body: MiniMax.API.ChatCompletionRequestSchema,
         headers: MiniMax.API.ChatCompletionsHeadersSchema,
@@ -142,7 +143,8 @@ const minimaxProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.MiniMaxChatCompletionsWithAgent,
-        description: "Create a chat completion with MiniMax for a specific agent",
+        description:
+          "Create a chat completion with MiniMax for a specific agent",
         tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,

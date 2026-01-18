@@ -331,7 +331,14 @@ export async function createLLMModelForAgent(params: {
   const isMiniMax = provider === "minimax";
 
   logger.info(
-    { apiKeySource: source, provider, isGeminiWithVertexAi, isVllm, isOllama, isMiniMax },
+    {
+      apiKeySource: source,
+      provider,
+      isGeminiWithVertexAi,
+      isVllm,
+      isOllama,
+      isMiniMax,
+    },
     "Using LLM provider API key",
   );
 

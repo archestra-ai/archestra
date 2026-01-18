@@ -2399,75 +2399,137 @@ export type OllamaChatCompletionResponseInput = {
     };
 };
 
-export type ZhipuaiChatCompletionRequestInput = {
+export type MiniMaxChatCompletionRequestInput = {
     model: string;
     /**
-     * https://docs.z.ai/api-reference/llm/chat-completion#body
+     * A message in the conversation
      */
     messages: Array<{
-        role: 'system';
-        content: string;
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'developer';
         name?: string;
     } | {
-        role: 'user';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'system';
+        name?: string;
+    } | {
         content: string | Array<{
             type: 'text';
             text: string;
         } | {
             type: 'image_url';
             /**
-             * https://docs.z.ai/api-reference/llm/chat-completion#body
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        } | {
+            type: 'input_audio';
+            /**
+             * Audio input details
+             */
+            input_audio: {
+                data: string;
+                format: 'wav' | 'mp3';
+            };
+        } | {
+            type: 'file';
+            /**
+             * File details
+             */
+            file: {
+                file_data?: string;
+                file_id?: string;
+                filename?: string;
+            };
+        }>;
+        role: 'user';
+        name?: string;
+    } | {
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | unknown;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | unknown;
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | unknown;
+        name?: string;
+        refusal?: string | unknown;
+        /**
+         * A tool call in the assistant message
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * Function call details
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * Custom tool call details
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+    } | {
+        role: 'tool';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
              */
             image_url: {
                 url: string;
                 detail?: 'auto' | 'low' | 'high';
             };
         }>;
-        name?: string;
-    } | {
-        role: 'assistant';
-        content?: string | unknown;
-        name?: string;
-        tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            /**
-             * https://docs.z.ai/api-reference/llm/chat-completion#response
-             */
-            function: {
-                arguments: string;
-                name: string;
-            };
-        }>;
-        function_call?: {
-            arguments: string;
-            name: string;
-        };
-    } | {
-        role: 'tool';
-        content: string;
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string;
+        content: string | unknown;
         name: string;
     }>;
+    /**
+     * A tool definition
+     */
     tools?: Array<{
         type: 'function';
         /**
-         * https://docs.z.ai/api-reference/llm/chat-completion#body
+         * A function definition for tool calling
          */
         function: {
             name: string;
             description?: string;
             /**
              *
-             * https://docs.z.ai/api-reference/llm/chat-completion#body
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
+             * The parameters the functions accepts, described as a JSON Schema object.
              * Omitting parameters defines a function with an empty parameter list.
              *
              */
@@ -2476,63 +2538,175 @@ export type ZhipuaiChatCompletionRequestInput = {
             };
             strict?: boolean | unknown;
         };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
     }>;
     /**
-     * https://docs.z.ai/api-reference/llm/chat-completion#body
+     * Tool choice option
      */
-    tool_choice?: 'auto' | {
+    tool_choice?: 'none' | 'auto' | 'required' | {
+        type: 'allowed_tools';
+        /**
+         * Allowed tools configuration
+         */
+        allowed_tools: {
+            /**
+             *
+             * Constrains the tools available to the model.
+             * auto: allows the model to pick from allowed tools or generate a message.
+             * required: requires the model to call one or more of the allowed tools.
+             *
+             */
+            mode: 'auto' | 'required';
+            tools: Array<{
+                [key: string]: {
+                    type: 'function';
+                    /**
+                     * A function definition for tool calling
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object.
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | unknown;
+                    };
+                };
+            }>;
+        };
+    } | {
         type: 'function';
         function: {
             name: string;
         };
-    };
-    request_id?: string;
-    do_sample?: boolean;
-    stream?: boolean;
-    thinking?: {
-        type: 'enabled' | 'disabled';
-        clear_thinking?: boolean;
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
     };
     temperature?: number | unknown;
-    top_p?: number | unknown;
     max_tokens?: number | unknown;
-    tool_stream?: boolean;
-    stop?: Array<string>;
-    response_format?: {
-        type: 'text' | 'json_object';
-    };
-    user_id?: string;
+    stream?: boolean | unknown;
+    top_p?: number | unknown;
+    frequency_penalty?: number | unknown;
+    presence_penalty?: number | unknown;
+    stop?: string | Array<string>;
+    seed?: number | unknown;
+    n?: number | unknown;
+    logprobs?: boolean | unknown;
+    top_logprobs?: number | unknown;
 };
 
-export type ZhipuaiChatCompletionResponseInput = {
+export type MiniMaxChatCompletionResponseInput = {
     id: string;
-    request_id?: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
         index: number;
         logprobs: unknown;
         /**
-         * https://docs.z.ai/api-reference/llm/chat-completion#response
+         * The assistant message in the response
          */
         message: {
             content: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
-            reasoning_content?: string;
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * A tool call in the assistant message
+             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
                 /**
-                 * https://docs.z.ai/api-reference/llm/chat-completion#response
+                 * Function call details
                  */
                 function: {
                     arguments: string;
                     name: string;
                 };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * Custom tool call details
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
             }>;
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
         };
     }>;
     created: number;
@@ -2540,31 +2714,15 @@ export type ZhipuaiChatCompletionResponseInput = {
     object: 'chat.completion';
     system_fingerprint?: string | unknown;
     /**
-     * https://docs.z.ai/api-reference/llm/chat-completion#response
+     * Token usage statistics for the completion
      */
     usage?: {
         completion_tokens: number;
         prompt_tokens: number;
         total_tokens: number;
-        /**
-         * https://docs.z.ai/api-reference/llm/chat-completion#response
-         */
-        prompt_tokens_details?: {
-            cached_tokens: number;
-        };
+        completion_tokens_details?: unknown;
+        prompt_tokens_details?: unknown;
     };
-    /**
-     * https://docs.z.ai/api-reference/llm/chat-completion#response
-     */
-    web_search?: Array<{
-        title: string;
-        content: string;
-        link: string;
-        media: string;
-        icon: string;
-        refer: string;
-        publish_date: string;
-    }>;
 };
 
 export type WebSocketMessageInput = {
@@ -5023,75 +5181,137 @@ export type OllamaChatCompletionResponse = {
     };
 };
 
-export type ZhipuaiChatCompletionRequest = {
+export type MiniMaxChatCompletionRequest = {
     model: string;
     /**
-     * https://docs.z.ai/api-reference/llm/chat-completion#body
+     * A message in the conversation
      */
     messages: Array<{
-        role: 'system';
-        content: string;
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'developer';
         name?: string;
     } | {
-        role: 'user';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'system';
+        name?: string;
+    } | {
         content: string | Array<{
             type: 'text';
             text: string;
         } | {
             type: 'image_url';
             /**
-             * https://docs.z.ai/api-reference/llm/chat-completion#body
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        } | {
+            type: 'input_audio';
+            /**
+             * Audio input details
+             */
+            input_audio: {
+                data: string;
+                format: 'wav' | 'mp3';
+            };
+        } | {
+            type: 'file';
+            /**
+             * File details
+             */
+            file: {
+                file_data?: string;
+                file_id?: string;
+                filename?: string;
+            };
+        }>;
+        role: 'user';
+        name?: string;
+    } | {
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | unknown;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | unknown;
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | unknown;
+        name?: string;
+        refusal?: string | unknown;
+        /**
+         * A tool call in the assistant message
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * Function call details
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * Custom tool call details
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+    } | {
+        role: 'tool';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
              */
             image_url: {
                 url: string;
                 detail?: 'auto' | 'low' | 'high';
             };
         }>;
-        name?: string;
-    } | {
-        role: 'assistant';
-        content?: string | unknown;
-        name?: string;
-        tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            /**
-             * https://docs.z.ai/api-reference/llm/chat-completion#response
-             */
-            function: {
-                arguments: string;
-                name: string;
-            };
-        }>;
-        function_call?: {
-            arguments: string;
-            name: string;
-        };
-    } | {
-        role: 'tool';
-        content: string;
         tool_call_id: string;
     } | {
         role: 'function';
-        content: string;
+        content: string | unknown;
         name: string;
     }>;
+    /**
+     * A tool definition
+     */
     tools?: Array<{
         type: 'function';
         /**
-         * https://docs.z.ai/api-reference/llm/chat-completion#body
+         * A function definition for tool calling
          */
         function: {
             name: string;
             description?: string;
             /**
              *
-             * https://docs.z.ai/api-reference/llm/chat-completion#body
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
+             * The parameters the functions accepts, described as a JSON Schema object.
              * Omitting parameters defines a function with an empty parameter list.
              *
              */
@@ -5100,63 +5320,175 @@ export type ZhipuaiChatCompletionRequest = {
             };
             strict?: boolean | unknown;
         };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
     }>;
     /**
-     * https://docs.z.ai/api-reference/llm/chat-completion#body
+     * Tool choice option
      */
-    tool_choice?: 'auto' | {
+    tool_choice?: 'none' | 'auto' | 'required' | {
+        type: 'allowed_tools';
+        /**
+         * Allowed tools configuration
+         */
+        allowed_tools: {
+            /**
+             *
+             * Constrains the tools available to the model.
+             * auto: allows the model to pick from allowed tools or generate a message.
+             * required: requires the model to call one or more of the allowed tools.
+             *
+             */
+            mode: 'auto' | 'required';
+            tools: Array<{
+                [key: string]: {
+                    type: 'function';
+                    /**
+                     * A function definition for tool calling
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object.
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | unknown;
+                    };
+                };
+            }>;
+        };
+    } | {
         type: 'function';
         function: {
             name: string;
         };
-    };
-    request_id?: string;
-    do_sample?: boolean;
-    stream?: boolean;
-    thinking?: {
-        type: 'enabled' | 'disabled';
-        clear_thinking?: boolean;
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
     };
     temperature?: number | unknown;
-    top_p?: number | unknown;
     max_tokens?: number | unknown;
-    tool_stream?: boolean;
-    stop?: Array<string>;
-    response_format?: {
-        type: 'text' | 'json_object';
-    };
-    user_id?: string;
+    stream?: boolean | unknown;
+    top_p?: number | unknown;
+    frequency_penalty?: number | unknown;
+    presence_penalty?: number | unknown;
+    stop?: string | Array<string>;
+    seed?: number | unknown;
+    n?: number | unknown;
+    logprobs?: boolean | unknown;
+    top_logprobs?: number | unknown;
 };
 
-export type ZhipuaiChatCompletionResponse = {
+export type MiniMaxChatCompletionResponse = {
     id: string;
-    request_id?: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
         index: number;
         logprobs: unknown;
         /**
-         * https://docs.z.ai/api-reference/llm/chat-completion#response
+         * The assistant message in the response
          */
         message: {
             content: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
-            reasoning_content?: string;
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * A tool call in the assistant message
+             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
                 /**
-                 * https://docs.z.ai/api-reference/llm/chat-completion#response
+                 * Function call details
                  */
                 function: {
                     arguments: string;
                     name: string;
                 };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * Custom tool call details
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
             }>;
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
         };
     }>;
     created: number;
@@ -5164,31 +5496,15 @@ export type ZhipuaiChatCompletionResponse = {
     object: 'chat.completion';
     system_fingerprint?: string | unknown;
     /**
-     * https://docs.z.ai/api-reference/llm/chat-completion#response
+     * Token usage statistics for the completion
      */
     usage?: {
         completion_tokens: number;
         prompt_tokens: number;
         total_tokens: number;
-        /**
-         * https://docs.z.ai/api-reference/llm/chat-completion#response
-         */
-        prompt_tokens_details?: {
-            cached_tokens: number;
-        };
+        completion_tokens_details?: unknown;
+        prompt_tokens_details?: unknown;
     };
-    /**
-     * https://docs.z.ai/api-reference/llm/chat-completion#response
-     */
-    web_search?: Array<{
-        title: string;
-        content: string;
-        link: string;
-        media: string;
-        icon: string;
-        refer: string;
-        publish_date: string;
-    }>;
 };
 
 export type WebSocketMessage = {
@@ -8707,7 +9023,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8727,7 +9043,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -8806,7 +9122,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8822,7 +9138,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -8894,7 +9210,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9066,7 +9382,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9166,7 +9482,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9182,7 +9498,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
     };
     url: '/api/chat/models';
 };
@@ -9253,7 +9569,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
         createdAt?: string;
     }>;
 };
@@ -9435,7 +9751,7 @@ export type CreateChatConversationData = {
         promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -9715,7 +10031,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'minimax';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -11053,19 +11369,9 @@ export type GetFeaturesResponses = {
         geminiVertexAiEnabled: boolean;
         vllmEnabled: boolean;
         ollamaEnabled: boolean;
+        minimaxEnabled: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
         browserStreamingEnabled: boolean;
-        incomingEmail: {
-            enabled: boolean;
-            provider?: 'outlook';
-            displayName?: string;
-            emailDomain?: string;
-        };
-        knowledgeGraph: {
-            enabled: boolean;
-            provider?: 'lightrag';
-            displayName?: string;
-        };
     };
 };
 
@@ -11415,452 +11721,6 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
 
-export type PostApiWebhooksIncomingEmailData = {
-    body?: unknown;
-    path?: never;
-    query?: never;
-    url: '/api/webhooks/incoming-email';
-};
-
-export type PostApiWebhooksIncomingEmailErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string;
-    };
-    /**
-     * Default Response
-     */
-    429: {
-        error: string;
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string;
-    };
-};
-
-export type PostApiWebhooksIncomingEmailError = PostApiWebhooksIncomingEmailErrors[keyof PostApiWebhooksIncomingEmailErrors];
-
-export type PostApiWebhooksIncomingEmailResponses = {
-    /**
-     * Default Response
-     */
-    200: string | {
-        success: boolean;
-        processed?: number;
-        errors?: number;
-    };
-};
-
-export type PostApiWebhooksIncomingEmailResponse = PostApiWebhooksIncomingEmailResponses[keyof PostApiWebhooksIncomingEmailResponses];
-
-export type GetPromptEmailAddressData = {
-    body?: never;
-    path: {
-        promptId: string;
-    };
-    query?: never;
-    url: '/api/prompts/{promptId}/email-address';
-};
-
-export type GetPromptEmailAddressErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptEmailAddressError = GetPromptEmailAddressErrors[keyof GetPromptEmailAddressErrors];
-
-export type GetPromptEmailAddressResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        enabled: boolean;
-        emailAddress: string | null;
-    };
-};
-
-export type GetPromptEmailAddressResponse = GetPromptEmailAddressResponses[keyof GetPromptEmailAddressResponses];
-
-export type GetIncomingEmailStatusData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/incoming-email/status';
-};
-
-export type GetIncomingEmailStatusErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetIncomingEmailStatusError = GetIncomingEmailStatusErrors[keyof GetIncomingEmailStatusErrors];
-
-export type GetIncomingEmailStatusResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        isActive: boolean;
-        subscription: {
-            id: string;
-            subscriptionId: string;
-            provider: string;
-            webhookUrl: string;
-            expiresAt: string;
-        } | null;
-    };
-};
-
-export type GetIncomingEmailStatusResponse = GetIncomingEmailStatusResponses[keyof GetIncomingEmailStatusResponses];
-
-export type SetupIncomingEmailWebhookData = {
-    body: {
-        webhookUrl: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/incoming-email/setup';
-};
-
-export type SetupIncomingEmailWebhookErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type SetupIncomingEmailWebhookError = SetupIncomingEmailWebhookErrors[keyof SetupIncomingEmailWebhookErrors];
-
-export type SetupIncomingEmailWebhookResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-        subscriptionId?: string;
-        expiresAt?: string;
-        message?: string;
-    };
-};
-
-export type SetupIncomingEmailWebhookResponse = SetupIncomingEmailWebhookResponses[keyof SetupIncomingEmailWebhookResponses];
-
-export type RenewIncomingEmailSubscriptionData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/incoming-email/renew';
-};
-
-export type RenewIncomingEmailSubscriptionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RenewIncomingEmailSubscriptionError = RenewIncomingEmailSubscriptionErrors[keyof RenewIncomingEmailSubscriptionErrors];
-
-export type RenewIncomingEmailSubscriptionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-        subscriptionId?: string;
-        expiresAt?: string;
-        message?: string;
-    };
-};
-
-export type RenewIncomingEmailSubscriptionResponse = RenewIncomingEmailSubscriptionResponses[keyof RenewIncomingEmailSubscriptionResponses];
-
-export type DeleteIncomingEmailSubscriptionData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/incoming-email/subscription';
-};
-
-export type DeleteIncomingEmailSubscriptionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteIncomingEmailSubscriptionError = DeleteIncomingEmailSubscriptionErrors[keyof DeleteIncomingEmailSubscriptionErrors];
-
-export type DeleteIncomingEmailSubscriptionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteIncomingEmailSubscriptionResponse = DeleteIncomingEmailSubscriptionResponses[keyof DeleteIncomingEmailSubscriptionResponses];
-
 export type GetInteractionsData = {
     body?: never;
     path?: never;
@@ -11881,14 +11741,6 @@ export type GetInteractionsData = {
          * Filter by session ID
          */
         sessionId?: string;
-        /**
-         * Filter by start date (ISO 8601 format)
-         */
-        startDate?: string;
-        /**
-         * Filter by end date (ISO 8601 format)
-         */
-        endDate?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
@@ -12096,10 +11948,10 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            request: ZhipuaiChatCompletionRequest;
-            processedRequest?: ZhipuaiChatCompletionRequest | null;
-            response: ZhipuaiChatCompletionResponse;
-            type: 'zhipuai:chatCompletions';
+            request: MiniMaxChatCompletionRequest;
+            processedRequest?: MiniMaxChatCompletionRequest | null;
+            response: MiniMaxChatCompletionResponse;
+            type: 'minimax:chatCompletions';
             model: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
@@ -12139,18 +11991,6 @@ export type GetInteractionSessionsData = {
          * Filter by session ID
          */
         sessionId?: string;
-        /**
-         * Filter by start date (ISO 8601 format)
-         */
-        startDate?: string;
-        /**
-         * Filter by end date (ISO 8601 format)
-         */
-        endDate?: string;
-        /**
-         * Free-text search across session content (case-insensitive)
-         */
-        search?: string;
         limit?: number;
         offset?: number;
     };
@@ -12616,10 +12456,10 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        request: ZhipuaiChatCompletionRequest;
-        processedRequest?: ZhipuaiChatCompletionRequest | null;
-        response: ZhipuaiChatCompletionResponse;
-        type: 'zhipuai:chatCompletions';
+        request: MiniMaxChatCompletionRequest;
+        processedRequest?: MiniMaxChatCompletionRequest | null;
+        response: MiniMaxChatCompletionResponse;
+        type: 'minimax:chatCompletions';
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
@@ -12737,7 +12577,6 @@ export type GetInternalMcpCatalogResponses = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
-                mounted?: boolean;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -12821,7 +12660,6 @@ export type CreateInternalMcpCatalogItemData = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
-                mounted?: boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -12970,7 +12808,6 @@ export type CreateInternalMcpCatalogItemResponses = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
-                mounted?: boolean;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -13204,7 +13041,6 @@ export type GetInternalMcpCatalogItemResponses = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
-                mounted?: boolean;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -13287,7 +13123,6 @@ export type UpdateInternalMcpCatalogItemData = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
-                mounted?: boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -13438,7 +13273,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 required?: boolean;
                 description?: string;
                 default?: string | number | boolean;
-                mounted?: boolean;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -14330,7 +14164,6 @@ export type GetMcpServerInstallationRequestsResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
-                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -14410,7 +14243,6 @@ export type CreateMcpServerInstallationRequestData = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
-                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -14544,7 +14376,6 @@ export type CreateMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
-                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -14777,7 +14608,6 @@ export type GetMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
-                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -14857,7 +14687,6 @@ export type UpdateMcpServerInstallationRequestData = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
-                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -15003,7 +14832,6 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
-                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -15159,7 +14987,6 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
-                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -15315,7 +15142,6 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
-                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -15471,7 +15297,6 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     required?: boolean;
                     description?: string;
                     default?: string | number | boolean;
-                    mounted?: boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -16340,18 +16165,6 @@ export type GetMcpToolCallsData = {
          * Filter by agent ID
          */
         agentId?: string;
-        /**
-         * Filter by start date (ISO 8601 format)
-         */
-        startDate?: string;
-        /**
-         * Filter by end date (ISO 8601 format)
-         */
-        endDate?: string;
-        /**
-         * Free-text search across MCP server name, tool name, and arguments (case-insensitive)
-         */
-        search?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';
@@ -16548,6 +16361,178 @@ export type GetMcpToolCallResponses = {
 };
 
 export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
+
+export type MinimaxChatCompletionsWithDefaultAgentData = {
+    body?: MiniMaxChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for MiniMax API
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/minimax/chat/completions';
+};
+
+export type MinimaxChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type MinimaxChatCompletionsWithDefaultAgentError = MinimaxChatCompletionsWithDefaultAgentErrors[keyof MinimaxChatCompletionsWithDefaultAgentErrors];
+
+export type MinimaxChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: MiniMaxChatCompletionResponse;
+};
+
+export type MinimaxChatCompletionsWithDefaultAgentResponse = MinimaxChatCompletionsWithDefaultAgentResponses[keyof MinimaxChatCompletionsWithDefaultAgentResponses];
+
+export type MinimaxChatCompletionsWithAgentData = {
+    body?: MiniMaxChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for MiniMax API
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/minimax/{agentId}/chat/completions';
+};
+
+export type MinimaxChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type MinimaxChatCompletionsWithAgentError = MinimaxChatCompletionsWithAgentErrors[keyof MinimaxChatCompletionsWithAgentErrors];
+
+export type MinimaxChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: MiniMaxChatCompletionResponse;
+};
+
+export type MinimaxChatCompletionsWithAgentResponse = MinimaxChatCompletionsWithAgentResponses[keyof MinimaxChatCompletionsWithAgentResponses];
 
 export type GetV1McpByProfileIdData = {
     body?: never;
@@ -17235,7 +17220,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -17255,7 +17240,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -17338,7 +17323,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -17437,7 +17422,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -17522,7 +17507,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -21268,7 +21253,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21281,7 +21266,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21356,7 +21341,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21520,7 +21505,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21533,7 +21518,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -21610,7 +21595,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'minimax';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -22700,180 +22685,6 @@ export type VllmChatCompletionsWithAgentResponses = {
 };
 
 export type VllmChatCompletionsWithAgentResponse = VllmChatCompletionsWithAgentResponses[keyof VllmChatCompletionsWithAgentResponses];
-
-export type ZhipuaiChatCompletionsWithDefaultAgentData = {
-    body?: ZhipuaiChatCompletionRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * Bearer token for Zhipu AI
-         */
-        authorization: string;
-        'accept-language'?: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/zhipuai/chat/completions';
-};
-
-export type ZhipuaiChatCompletionsWithDefaultAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type ZhipuaiChatCompletionsWithDefaultAgentError = ZhipuaiChatCompletionsWithDefaultAgentErrors[keyof ZhipuaiChatCompletionsWithDefaultAgentErrors];
-
-export type ZhipuaiChatCompletionsWithDefaultAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: ZhipuaiChatCompletionResponse;
-};
-
-export type ZhipuaiChatCompletionsWithDefaultAgentResponse = ZhipuaiChatCompletionsWithDefaultAgentResponses[keyof ZhipuaiChatCompletionsWithDefaultAgentResponses];
-
-export type ZhipuaiChatCompletionsWithAgentData = {
-    body?: ZhipuaiChatCompletionRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * Bearer token for Zhipu AI
-         */
-        authorization: string;
-        'accept-language'?: string;
-    };
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/v1/zhipuai/{agentId}/chat/completions';
-};
-
-export type ZhipuaiChatCompletionsWithAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type ZhipuaiChatCompletionsWithAgentError = ZhipuaiChatCompletionsWithAgentErrors[keyof ZhipuaiChatCompletionsWithAgentErrors];
-
-export type ZhipuaiChatCompletionsWithAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: ZhipuaiChatCompletionResponse;
-};
-
-export type ZhipuaiChatCompletionsWithAgentResponse = ZhipuaiChatCompletionsWithAgentResponses[keyof ZhipuaiChatCompletionsWithAgentResponses];
 
 export type GetPublicSsoProvidersData = {
     body?: never;

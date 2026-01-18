@@ -419,7 +419,7 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
  */
 async function fetchMiniMaxModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.chat.minimax.baseUrl || config.llm.minimax.baseUrl;
-  
+
   // Try /models endpoint first (OpenAI-compatible)
   let url = `${baseUrl}/models`;
   let response = await fetch(url, {
@@ -455,7 +455,7 @@ async function fetchMiniMaxModels(apiKey: string): Promise<ModelInfo[]> {
     logger.debug(
       "MiniMax /models endpoint not available, validating API key with chat completion test",
     );
-    
+
     // Try to validate API key with a known valid model name
     // MiniMax-M2.1 is a commonly available model
     url = `${baseUrl}/chat/completions`;
@@ -489,7 +489,7 @@ async function fetchMiniMaxModels(apiKey: string): Promise<ModelInfo[]> {
         { status: response.status, error: errorText },
         "MiniMax-M2.1 not available, trying alternative models",
       );
-      
+
       // Try Hailuo-2.3 as an alternative
       response = await fetch(url, {
         method: "POST",

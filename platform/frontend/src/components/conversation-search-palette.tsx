@@ -229,7 +229,7 @@ export function ConversationSearchPalette({
     return (
       <CommandItem
         key={conv.id}
-        value={`${displayTitle} ${preview}`}
+        value={conv.id}
         onSelect={() => handleSelectConversation(conv.id)}
         className="flex flex-col items-start gap-1.5 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full"
       >
@@ -255,6 +255,7 @@ export function ConversationSearchPalette({
       title="Search conversations"
       description="Search through your conversation history"
       className="max-w-2xl"
+      shouldFilter={false}
     >
       <CommandInput
         placeholder="Search chats..."
@@ -273,6 +274,7 @@ export function ConversationSearchPalette({
             {!searchQuery.trim() && (
               <CommandGroup>
                 <CommandItem
+                  value="new-chat"
                   onSelect={handleNewChat}
                   className="flex items-center gap-2 px-3 py-3 cursor-pointer aria-selected:bg-accent"
                 >

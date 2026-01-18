@@ -8,6 +8,7 @@ import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
+  ChatApiKeyModel,
   InternalMcpCatalogModel,
   SessionModel,
   TeamModel,
@@ -20,6 +21,7 @@ import type {
   AgentTool,
   InsertAccount,
   InsertAgent,
+  InsertChatApiKey,
   InsertConversation,
   InsertInteraction,
   InsertInternalMcpCatalog,
@@ -68,6 +70,7 @@ interface TestFixtures {
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
+  makeChatApiKey: typeof makeChatApiKey;
   makeSsoProvider: typeof makeSsoProvider;
   seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
 }
@@ -622,6 +625,29 @@ async function makeSecret(
 }
 
 /**
+ * Creates a test chat API key in the database.
+ * Used for testing features that require LLM API keys (e.g., auto-policy configuration).
+ */
+async function makeChatApiKey(
+  organizationId: string,
+  secretId: string,
+  overrides: Partial<
+    Pick<InsertChatApiKey, "name" | "provider" | "scope" | "userId" | "teamId">
+  > = {},
+) {
+  return await ChatApiKeyModel.create({
+    organizationId,
+    secretId,
+    name:
+      overrides.name ?? `Test API Key ${crypto.randomUUID().substring(0, 8)}`,
+    provider: overrides.provider ?? "anthropic",
+    scope: overrides.scope ?? "org_wide",
+    userId: overrides.userId ?? null,
+    teamId: overrides.teamId ?? null,
+  });
+}
+
+/**
  * Creates a test SSO provider in the database.
  * Bypasses Better Auth API for test simplicity.
  */
@@ -761,6 +787,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSecret: async ({}, use) => {
     await use(makeSecret);
+  },
+  makeChatApiKey: async ({}, use) => {
+    await use(makeChatApiKey);
   },
   makeSsoProvider: async ({}, use) => {
     await use(makeSsoProvider);

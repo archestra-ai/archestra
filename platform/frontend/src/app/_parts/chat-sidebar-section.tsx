@@ -298,8 +298,8 @@ export function ChatSidebarSection() {
                                 maxLength={20}
                                 className="truncate"
                                 tooltipContentProps={{
-                                  side: "bottom",
-                                  align: "start",
+                                  side: "right",
+                                  sideOffset: 8,
                                 }}
                               />
                             )}

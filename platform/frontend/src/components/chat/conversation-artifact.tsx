@@ -13,14 +13,12 @@ import { cn } from "@/lib/utils";
 interface ConversationArtifactPanelProps {
   artifact?: string | null;
   isOpen: boolean;
-  onToggle: () => void;
   className?: string;
 }
 
 export function ConversationArtifactPanel({
   artifact,
   isOpen,
-  onToggle,
   className,
 }: ConversationArtifactPanelProps) {
   const [width, setWidth] = useState(() => {

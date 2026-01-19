@@ -1,7 +1,14 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, FileText, Globe, PanelRightClose, Plus } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  FileText,
+  Globe,
+  PanelRightClose,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -1237,7 +1244,6 @@ export default function ChatPage() {
         <ConversationArtifactPanel
           artifact={conversation?.artifact}
           isOpen={isArtifactOpen}
-          onToggle={toggleArtifactPanel}
         />
       </div>
 

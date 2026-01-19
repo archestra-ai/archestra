@@ -318,8 +318,8 @@ export function PromptDialog({
                   htmlFor={`chatops-${provider.id}`}
                   className={
                     !provider.configured
-                      ? "text-muted-foreground cursor-not-allowed"
-                      : "cursor-pointer"
+                      ? "text-muted-foreground cursor-not-allowed font-normal"
+                      : "cursor-pointer font-normal"
                   }
                 >
                   {provider.displayName}

@@ -3,10 +3,12 @@ import { Client } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import {
   ActivityTypes,
-  BotFrameworkAdapter,
+  CloudAdapter,
+  ConfigurationBotFrameworkAuthentication,
   type ConversationReference,
   TurnContext,
 } from "botbuilder";
+import { PasswordServiceClientCredentialFactory } from "botframework-connector";
 import config from "@/config";
 import logger from "@/logging";
 import type {
@@ -23,15 +25,16 @@ import { CHATOPS_THREAD_HISTORY } from "./constants";
  * MS Teams provider implementation using Bot Framework SDK.
  *
  * Security:
- * - JWT validation is handled automatically by BotFrameworkAdapter
+ * - JWT validation is handled automatically by CloudAdapter
  * - App ID and Password are validated on every request
+ * - Supports both single-tenant and multi-tenant Azure Bot configurations
  * - No external API token needed - uses internal executeA2AMessage()
  */
 class MSTeamsProvider implements ChatOpsProvider {
   readonly providerId: ChatOpsProviderType = "ms-teams";
   readonly displayName = "Microsoft Teams";
 
-  private adapter: BotFrameworkAdapter | null = null;
+  private adapter: CloudAdapter | null = null;
   private graphClient: Client | null = null;
 
   /**
@@ -51,13 +54,24 @@ class MSTeamsProvider implements ChatOpsProvider {
       return;
     }
 
-    const { appId, appPassword, graph } = config.chatops.msTeams;
+    const { appId, appPassword, tenantId, graph } = config.chatops.msTeams;
 
-    // Initialize Bot Framework adapter
-    this.adapter = new BotFrameworkAdapter({
-      appId,
-      appPassword,
-    });
+    // Create credentials factory - tenantId enables single-tenant auth
+    const credentialsFactory = tenantId
+      ? new PasswordServiceClientCredentialFactory(appId, appPassword, tenantId)
+      : new PasswordServiceClientCredentialFactory(appId, appPassword);
+
+    // Create authentication with optional tenant ID for single-tenant bots
+    const auth = new ConfigurationBotFrameworkAuthentication(
+      {
+        MicrosoftAppId: appId,
+        MicrosoftAppTenantId: tenantId || undefined,
+      },
+      credentialsFactory,
+    );
+
+    // Initialize CloudAdapter (replaces deprecated BotFrameworkAdapter)
+    this.adapter = new CloudAdapter(auth);
 
     // Add error handler
     this.adapter.onTurnError = async (_context, error) => {
@@ -68,7 +82,11 @@ class MSTeamsProvider implements ChatOpsProvider {
       // Don't send error messages to users for security reasons
     };
 
-    logger.info("[MSTeamsProvider] Bot Framework adapter initialized");
+    const tenantMode = tenantId ? "single-tenant" : "multi-tenant";
+    logger.info(
+      { tenantMode },
+      "[MSTeamsProvider] Bot Framework adapter initialized",
+    );
 
     // Initialize Graph client if configured (for thread history)
     if (graph?.tenantId && graph?.clientId && graph?.clientSecret) {
@@ -384,7 +402,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   /**
    * Get the Bot Framework adapter for direct use (e.g., for Adaptive Card responses)
    */
-  getAdapter(): BotFrameworkAdapter | null {
+  getAdapter(): CloudAdapter | null {
     return this.adapter;
   }
 
@@ -407,28 +425,22 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("MSTeamsProvider not initialized");
     }
 
-    // Create a mock request/response that Bot Framework expects
-    const mockReq = {
-      body: req.body,
+    // Create request/response objects that CloudAdapter.process() expects
+    const adapterReq = {
+      body: req.body as Record<string, unknown>,
       headers: req.headers,
       method: "POST",
-      // Bot Framework needs these but doesn't actually use them for POST requests
-      on: () => {},
-      removeListener: () => {},
     };
 
-    const mockRes = {
-      status: res.status,
-      send: res.send,
+    const adapterRes = {
+      socket: null,
       end: () => {},
-      setHeader: () => {},
+      header: () => {},
+      send: res.send,
+      status: res.status,
     };
 
-    await this.adapter.processActivity(
-      mockReq as unknown as Parameters<typeof this.adapter.processActivity>[0],
-      mockRes as unknown as Parameters<typeof this.adapter.processActivity>[1],
-      handler,
-    );
+    await this.adapter.process(adapterReq, adapterRes, handler);
   }
 }
 

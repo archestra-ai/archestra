@@ -178,12 +178,16 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 
 1. Go to [portal.azure.com](https://portal.azure.com) → **Create a resource** → **Azure Bot**
 2. Fill in **bot handle**, **subscription**, **resource group**
-3. Under **Microsoft App ID**, select **Create new Microsoft App ID**
-4. After creation, go to **Settings** → **Configuration**
-5. Copy the **Microsoft App ID** — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`
-6. Click **Manage Password** → **New client secret** → copy the secret value for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD`
-7. Set **Messaging endpoint** to `https://your-archestra-domain/api/webhooks/chatops/ms-teams`
-8. Go to **Channels** → add **Microsoft Teams**
+3. Under **Type of App**, choose either:
+   - **Multi Tenant** (default) — bot can be used by any Azure AD tenant
+   - **Single Tenant** — bot restricted to your organization only (requires `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`)
+4. Under **Microsoft App ID**, select **Create new Microsoft App ID**
+5. After creation, go to **Settings** → **Configuration**
+6. Copy the **Microsoft App ID** — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`
+7. If using **Single Tenant**, note your **Azure AD Tenant ID** (find in Azure AD → Overview) — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`
+8. Click **Manage Password** → **New client secret** → copy the secret value for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD`
+9. Set **Messaging endpoint** to `https://your-archestra-domain/api/webhooks/chatops/ms-teams`
+10. Go to **Channels** → add **Microsoft Teams**
 
 #### Graph API Permissions (Optional - for thread history)
 
@@ -203,6 +207,9 @@ Set these environment variables:
 ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true
 ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=<Microsoft App ID>
 ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD=<Client Secret>
+
+# Optional - for single-tenant Azure Bot (leave empty for multi-tenant)
+ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=<Azure AD Tenant ID>
 
 # Optional - for thread history (requires Graph API permissions)
 ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID=<Azure AD Tenant ID>

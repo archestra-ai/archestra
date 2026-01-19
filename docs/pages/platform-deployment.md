@@ -763,6 +763,13 @@ These environment variables configure the ChatOps feature, which allows users to
   - Note: Keep this value secure; do not commit to version control
   - This is the client secret from your Azure Bot registration
 
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`** - Azure AD tenant ID for single-tenant bots.
+
+  - Optional: Leave empty for multi-tenant bots (default)
+  - Set to your Azure AD tenant ID if your Azure Bot is configured as single-tenant
+  - Example: `eeeee123-2205-4e2f-afb6-f83e5f588f40`
+  - Find in Azure Portal: Azure Bot → Configuration → Microsoft App ID (tenant) or Azure AD → Overview → Tenant ID
+
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Azure AD tenant ID for Microsoft Graph API (thread history).
 
   - Optional: Only required if you want to fetch conversation history for context

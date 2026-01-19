@@ -1,7 +1,6 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useQuery } from "@tanstack/react-query";
+import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -21,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
+import { useChatOpsStatus } from "@/lib/chatops.query";
 import {
   usePromptAgents,
   useSyncPromptAgents,
@@ -62,14 +62,7 @@ export function PromptDialog({
   >([]);
   const [allowedChatops, setAllowedChatops] = useState<string[]>([]);
 
-  // Fetch chatops provider status
-  const { data: chatopsProviders = [] } = useQuery({
-    queryKey: ["chatops", "status"],
-    queryFn: async () => {
-      const response = await archestraApiSdk.getChatOpsStatus();
-      return response.data?.providers || [];
-    },
-  });
+  const { data: chatopsProviders = [] } = useChatOpsStatus();
 
   // Available prompts that can be used as agents (excluding self)
   const availableAgentPrompts = useMemo(() => {

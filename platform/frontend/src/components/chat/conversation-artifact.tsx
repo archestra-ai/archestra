@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
+import { Copy, Download, FileText, GripVertical } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
@@ -349,15 +349,6 @@ export function ConversationArtifactPanel({
             title="Download as PDF"
           >
             <Download className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={onToggle}
-            title="Close panel"
-          >
-            <X className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>

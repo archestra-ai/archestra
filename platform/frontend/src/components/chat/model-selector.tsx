@@ -1,7 +1,7 @@
 "use client";
 
 import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   ModelSelectorContent,
@@ -26,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useModelsByProvider } from "@/lib/chat-models.query";
+import { useModelsByProviderQuery } from "@/lib/chat-models.query";
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -66,7 +66,7 @@ export function ModelSelector({
   messageCount = 0,
   onOpenChange: onOpenChangeProp,
 }: ModelSelectorProps) {
-  const { modelsByProvider } = useModelsByProvider();
+  const { modelsByProvider, isLoading } = useModelsByProviderQuery();
   const [pendingModel, setPendingModel] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -145,10 +145,20 @@ export function ModelSelector({
   );
   const isModelAvailable = allAvailableModelIds.includes(selectedModel);
 
+  // If loading, show loading state
+  if (isLoading) {
+    return (
+      <PromptInputButton disabled>
+        <Loader2 className="size-4 animate-spin" />
+        <ModelSelectorName>Loading models...</ModelSelectorName>
+      </PromptInputButton>
+    );
+  }
+
   // If no providers configured, show disabled state
   if (availableProviders.length === 0) {
     return (
-      <PromptInputButton disabled className="min-w-40">
+      <PromptInputButton disabled>
         <ModelSelectorName>No models available</ModelSelectorName>
       </PromptInputButton>
     );

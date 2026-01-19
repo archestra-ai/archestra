@@ -1,11 +1,9 @@
 "use client";
 
-import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect } from "react";
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -15,13 +13,9 @@ import {
 } from "@/components/ui/card";
 import { useInstallMcpServer } from "@/lib/mcp-server.query";
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [status, _setStatus] = useState<
-    "waiting" | "processing" | "success" | "error"
-  >("waiting");
-  const [errorMessage, _setErrorMessage] = useState<string>("");
   const installMutation = useInstallMcpServer();
 
   useEffect(() => {
@@ -113,73 +107,56 @@ export default function OAuthCallbackPage() {
     };
 
     handleOAuthCallback();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    searchParams,
-    installMutation.mutateAsync, // The mutation's onError handler will show the error toast
-    // Redirect back to catalog
-    router.push,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- router.push is stable but not memoized,
+    // and we intentionally run this effect only once per callback (guarded by sessionStorage)
+  }, [searchParams, installMutation.mutateAsync, router.push]);
 
+  // This component always redirects on success or error, so just show loading state
   return (
     <div className="container mx-auto p-6 max-w-2xl">
       <Card>
         <CardHeader>
           <CardTitle>OAuth Authentication</CardTitle>
-          <CardDescription>
-            {status === "waiting" && "Initializing OAuth flow..."}
-            {status === "processing" && "Processing authentication..."}
-            {status === "success" && "Authentication successful!"}
-            {status === "error" && "Authentication failed"}
-          </CardDescription>
+          <CardDescription>Processing authentication...</CardDescription>
         </CardHeader>
         <CardContent>
-          {status === "waiting" && (
-            <div className="flex flex-col items-center space-y-4">
-              <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-              <p className="text-center text-muted-foreground">
-                Preparing to complete authentication...
-              </p>
-            </div>
-          )}
-
-          {status === "processing" && (
-            <div className="flex flex-col items-center space-y-4">
-              <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-              <p className="text-center text-muted-foreground">
-                Completing OAuth authentication and installing MCP server...
-              </p>
-            </div>
-          )}
-
-          {status === "success" && (
-            <Alert className="border-green-200 bg-green-50">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertTitle>Success!</AlertTitle>
-              <AlertDescription>
-                The MCP server has been successfully installed with OAuth
-                authentication. Redirecting to MCP catalog...
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {status === "error" && (
-            <div className="space-y-4">
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Authentication Error</AlertTitle>
-                <AlertDescription>{errorMessage}</AlertDescription>
-              </Alert>
-
-              <div className="flex justify-center">
-                <Button onClick={() => router.push("/mcp-catalog")}>
-                  Back to MCP Catalog
-                </Button>
-              </div>
-            </div>
-          )}
+          <div className="flex flex-col items-center space-y-4">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+            <p className="text-center text-muted-foreground">
+              Completing OAuth authentication and installing MCP server...
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="container mx-auto p-6 max-w-2xl">
+      <Card>
+        <CardHeader>
+          <CardTitle>OAuth Authentication</CardTitle>
+          <CardDescription>Initializing OAuth flow...</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center space-y-4">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+            <p className="text-center text-muted-foreground">
+              Preparing to complete authentication...
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function OAuthCallbackPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <OAuthCallbackContent />
+    </Suspense>
   );
 }

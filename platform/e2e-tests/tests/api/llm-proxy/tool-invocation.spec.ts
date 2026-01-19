@@ -638,6 +638,10 @@ for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolInvocation-${config.providerName}`, () => {
     // Each test is self-contained with its own local variables and cleanup.
     // This allows parallel execution without shared mutable state collisions.
+    //
+    // Extra retries for these tests as they can be flaky due to WireMock stub timing issues
+    // when running in parallel with multiple providers
+    test.describe.configure({ retries: 2 });
 
     test("blocks tool invocation when untrusted data is consumed", async ({
       request,

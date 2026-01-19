@@ -5,9 +5,12 @@ import {
   desc,
   eq,
   gte,
+  ilike,
   inArray,
   lte,
+  or,
   type SQL,
+  sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
@@ -21,6 +24,28 @@ import type {
   SortingQuery,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
+
+/**
+ * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
+ * This prevents users from crafting searches that behave unexpectedly.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
+}
+
+/**
+ * Builds a search condition for MCP tool calls across server name, method, tool name, arguments, and result.
+ */
+function buildMcpToolCallSearchCondition(search: string) {
+  const searchPattern = `%${escapeLikePattern(search)}%`;
+  return or(
+    ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
+    ilike(schema.mcpToolCallsTable.method, searchPattern),
+    sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
+    sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
+    sql`${schema.mcpToolCallsTable.toolResult}::text ILIKE ${searchPattern}`,
+  );
+}
 
 class McpToolCallModel {
   static async create(data: InsertMcpToolCall) {
@@ -43,6 +68,7 @@ class McpToolCallModel {
     filters?: {
       startDate?: Date;
       endDate?: Date;
+      search?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
@@ -75,6 +101,15 @@ class McpToolCallModel {
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
+    }
+
+    // Free-text search filter (case-insensitive)
+    // Searches across: mcpServerName, toolCall.name, toolCall.arguments
+    if (filters?.search) {
+      const searchCondition = buildMcpToolCallSearchCondition(filters.search);
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -177,6 +212,7 @@ class McpToolCallModel {
     filters?: {
       startDate?: Date;
       endDate?: Date;
+      search?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Build conditions array
@@ -195,6 +231,15 @@ class McpToolCallModel {
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
+    }
+
+    // Free-text search filter (case-insensitive)
+    // Searches across: mcpServerName, toolCall.name, toolCall.arguments
+    if (filters?.search) {
+      const searchCondition = buildMcpToolCallSearchCondition(filters.search);
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
     }
 
     const whereCondition = and(...conditions);

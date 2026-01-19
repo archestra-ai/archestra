@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { render, screen } from "@testing-library/react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -15,6 +15,7 @@ vi.mock("@sentry/nextjs", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(),
   usePathname: vi.fn(),
+  useSearchParams: vi.fn(),
 }));
 
 // Mock auth client
@@ -42,12 +43,20 @@ const MockChild = () => (
   <div data-testid="protected-content">Protected Content</div>
 );
 
+const mockSearchParams = {
+  toString: vi.fn().mockReturnValue(""),
+  get: vi.fn().mockReturnValue(null),
+};
+
 describe("WithAuthCheck", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      mockSearchParams as unknown as ReturnType<typeof useSearchParams>,
+    );
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -62,7 +71,7 @@ describe("WithAuthCheck", () => {
       } as ReturnType<typeof authClient.useSession>);
     });
 
-    it("should redirect to sign-in when accessing protected page", () => {
+    it("should redirect to sign-in with redirectTo param when accessing protected page", () => {
       vi.mocked(usePathname).mockReturnValue("/dashboard");
 
       render(
@@ -71,7 +80,53 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(mockRouterPush).toHaveBeenCalledWith("/auth/sign-in");
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fdashboard",
+      );
+    });
+
+    it("should redirect to sign-in with encoded redirectTo param for complex paths", () => {
+      vi.mocked(usePathname).mockReturnValue("/settings/teams/123");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fsettings%2Fteams%2F123",
+      );
+    });
+
+    it("should preserve query parameters in redirectTo param", () => {
+      vi.mocked(usePathname).mockReturnValue("/search");
+      mockSearchParams.toString.mockReturnValue("q=hello&filter=active");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fsearch%3Fq%3Dhello%26filter%3Dactive",
+      );
+    });
+
+    it("should not add ? when there are no query parameters", () => {
+      vi.mocked(usePathname).mockReturnValue("/dashboard");
+      mockSearchParams.toString.mockReturnValue("");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fdashboard",
+      );
     });
 
     it("should allow access to auth pages", () => {
@@ -83,6 +138,20 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
+
+    it("should allow access to sign-out page without adding redirectTo", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-out");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      // Should not redirect at all - sign-out is an auth page
       expect(mockRouterPush).not.toHaveBeenCalled();
       expect(screen.getByTestId("protected-content")).toBeInTheDocument();
     });
@@ -99,8 +168,50 @@ describe("WithAuthCheck", () => {
       } as ReturnType<typeof authClient.useSession>);
     });
 
-    it("should redirect to home when accessing auth pages", () => {
+    it("should redirect to home when accessing auth pages without redirectTo", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+      mockSearchParams.get = vi.fn().mockReturnValue(null);
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith("/");
+    });
+
+    it("should redirect to home when redirectTo is empty string", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+      mockSearchParams.get = vi.fn().mockReturnValue("");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith("/");
+    });
+
+    it("should redirect to redirectTo param when accessing auth pages after login", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+      mockSearchParams.get = vi.fn().mockReturnValue("%2Flogs%2Fllm-proxy");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith("/logs/llm-proxy");
+    });
+
+    it("should ignore malicious redirectTo param and redirect to home", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+      mockSearchParams.get = vi
+        .fn()
+        .mockReturnValue(encodeURIComponent("https://evil.com/phishing"));
 
       render(
         <WithAuthCheck>
@@ -120,6 +231,20 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
+
+    it("should allow access to sign-out page when authenticated", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-out");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      // Sign-out is a special auth page - should not redirect
       expect(mockRouterPush).not.toHaveBeenCalled();
       expect(screen.getByTestId("protected-content")).toBeInTheDocument();
     });

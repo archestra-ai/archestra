@@ -63,6 +63,11 @@ class ConversationModel {
     return conversationWithAgent;
   }
 
+  /**
+   * Get all conversations for a user without messages.
+   * Messages are fetched separately via findById when a conversation is opened.
+   * This significantly improves performance for the conversations list.
+   */
   static async findAll(
     userId: string,
     organizationId: string,
@@ -70,7 +75,6 @@ class ConversationModel {
     const rows = await db
       .select({
         conversation: getTableColumns(schema.conversationsTable),
-        message: getTableColumns(schema.messagesTable),
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -81,46 +85,19 @@ class ConversationModel {
         schema.agentsTable,
         eq(schema.conversationsTable.agentId, schema.agentsTable.id),
       )
-      .leftJoin(
-        schema.messagesTable,
-        eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
-      )
       .where(
         and(
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(
-        desc(schema.conversationsTable.updatedAt),
-        schema.messagesTable.createdAt,
-      );
+      .orderBy(desc(schema.conversationsTable.updatedAt));
 
-    // Group messages by conversation
-    const conversationMap = new Map<string, Conversation>();
-
-    for (const row of rows) {
-      const conversationId = row.conversation.id;
-
-      if (!conversationMap.has(conversationId)) {
-        conversationMap.set(conversationId, {
-          ...row.conversation,
-          agent: row.agent,
-          messages: [],
-        });
-      }
-
-      const conversation = conversationMap.get(conversationId);
-      if (conversation && row?.message?.content) {
-        // Merge database UUID into message content (overrides AI SDK's temporary ID)
-        conversation.messages.push({
-          ...row.message.content,
-          id: row.message.id,
-        });
-      }
-    }
-
-    return Array.from(conversationMap.values());
+    return rows.map((row) => ({
+      ...row.conversation,
+      agent: row.agent,
+      messages: [], // Messages fetched separately via findById
+    }));
   }
 
   static async findById({

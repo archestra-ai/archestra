@@ -11059,6 +11059,11 @@ export type GetFeaturesResponses = {
             displayName?: string;
             emailDomain?: string;
         };
+        knowledgeGraph: {
+            enabled: boolean;
+            provider?: 'lightrag';
+            displayName?: string;
+        };
     };
 };
 
@@ -12140,6 +12145,10 @@ export type GetInteractionSessionsData = {
          * Filter by end date (ISO 8601 format)
          */
         endDate?: string;
+        /**
+         * Free-text search across session content (case-insensitive)
+         */
+        search?: string;
         limit?: number;
         offset?: number;
     };
@@ -16337,6 +16346,10 @@ export type GetMcpToolCallsData = {
          * Filter by end date (ISO 8601 format)
          */
         endDate?: string;
+        /**
+         * Free-text search across MCP server name, tool name, and arguments (case-insensitive)
+         */
+        search?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';

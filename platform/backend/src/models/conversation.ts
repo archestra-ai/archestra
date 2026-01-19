@@ -57,7 +57,7 @@ class ConversationModel {
       )
       .map((tool) => tool.id);
 
-    // Set enabled tools to non-Archestra tools plus todo_write and artifact_write
+    // Set enabled tools to non-Archestra tools plus default Archestra tools
     // This creates a custom tool selection with most Archestra tools disabled
     await ConversationEnabledToolModel.setEnabledTools(
       conversation.id,

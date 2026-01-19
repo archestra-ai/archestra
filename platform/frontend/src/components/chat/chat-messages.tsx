@@ -25,6 +25,7 @@ import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
+import { extractFileAttachments } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
@@ -353,23 +354,6 @@ export function ChatMessages({
 
                       // Use editable component for user messages
                       if (message.role === "user") {
-                        // Collect all file attachments from this message
-                        const fileAttachments = message.parts
-                          ?.filter((p) => p.type === "file")
-                          .map((p) => {
-                            const filePart = p as {
-                              type: "file";
-                              url: string;
-                              mediaType: string;
-                              filename?: string;
-                            };
-                            return {
-                              url: filePart.url,
-                              mediaType: filePart.mediaType,
-                              filename: filePart.filename,
-                            };
-                          });
-
                         return (
                           <Fragment key={partKey}>
                             <EditableUserMessage
@@ -379,7 +363,9 @@ export function ChatMessages({
                               text={part.text}
                               isEditing={editingPartKey === partKey}
                               editDisabled={isResponseInProgress}
-                              attachments={fileAttachments}
+                              attachments={extractFileAttachments(
+                                message.parts,
+                              )}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveUserMessage}
@@ -439,23 +425,6 @@ export function ChatMessages({
                           return null;
                         }
 
-                        // Collect all file attachments from this message
-                        const fileAttachments = message.parts
-                          ?.filter((p) => p.type === "file")
-                          .map((p) => {
-                            const fp = p as {
-                              type: "file";
-                              url: string;
-                              mediaType: string;
-                              filename?: string;
-                            };
-                            return {
-                              url: fp.url,
-                              mediaType: fp.mediaType,
-                              filename: fp.filename,
-                            };
-                          });
-
                         const partKey = `${message.id}-${i}`;
 
                         return (
@@ -467,7 +436,9 @@ export function ChatMessages({
                               text=""
                               isEditing={editingPartKey === partKey}
                               editDisabled={isResponseInProgress}
-                              attachments={fileAttachments}
+                              attachments={extractFileAttachments(
+                                message.parts,
+                              )}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveUserMessage}

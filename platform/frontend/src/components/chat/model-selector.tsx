@@ -133,7 +133,7 @@ export function ModelSelector({
   }
 
   return (
-    <>
+    <div>
       <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
         <ModelSelectorTrigger asChild>
           <PromptInputButton disabled={disabled}>
@@ -197,6 +197,6 @@ export function ModelSelector({
           </ModelSelectorList>
         </ModelSelectorContent>
       </ModelSelectorRoot>
-    </>
+    </div>
   );
 }

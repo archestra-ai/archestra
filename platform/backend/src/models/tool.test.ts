@@ -1297,9 +1297,7 @@ describe("ToolModel", () => {
       // Should have artifact_write and todo_write
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
-
-      // By default (no knowledge graph configured), should NOT have query_knowledge_graph
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
     });
 
     test("includes query_knowledge_graph when knowledge graph is configured", async ({

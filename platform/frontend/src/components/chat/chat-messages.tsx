@@ -417,9 +417,63 @@ export function ChatMessages({
                       );
 
                     case "file": {
-                      // User file attachments are rendered inside EditableUserMessage
+                      // User file attachments are normally rendered inside EditableUserMessage
+                      // But if there's no text part, we need to render them here
                       if (message.role === "user") {
-                        return null;
+                        // Check if message has any text parts
+                        const hasTextPart = message.parts?.some(
+                          (p) => p.type === "text",
+                        );
+
+                        // If there's a text part, files will be rendered with EditableUserMessage
+                        if (hasTextPart) {
+                          return null;
+                        }
+
+                        // For file-only messages, render on the first file part only
+                        const isFirstFilePart =
+                          message.parts?.findIndex((p) => p.type === "file") ===
+                          i;
+
+                        if (!isFirstFilePart) {
+                          return null;
+                        }
+
+                        // Collect all file attachments from this message
+                        const fileAttachments = message.parts
+                          ?.filter((p) => p.type === "file")
+                          .map((p) => {
+                            const fp = p as {
+                              type: "file";
+                              url: string;
+                              mediaType: string;
+                              filename?: string;
+                            };
+                            return {
+                              url: fp.url,
+                              mediaType: fp.mediaType,
+                              filename: fp.filename,
+                            };
+                          });
+
+                        const partKey = `${message.id}-${i}`;
+
+                        return (
+                          <Fragment key={partKey}>
+                            <EditableUserMessage
+                              messageId={message.id}
+                              partIndex={i}
+                              partKey={partKey}
+                              text=""
+                              isEditing={editingPartKey === partKey}
+                              editDisabled={isResponseInProgress}
+                              attachments={fileAttachments}
+                              onStartEdit={handleStartEdit}
+                              onCancelEdit={handleCancelEdit}
+                              onSave={handleSaveUserMessage}
+                            />
+                          </Fragment>
+                        );
                       }
 
                       // Render file attachments for assistant/system messages

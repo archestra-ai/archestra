@@ -25,7 +25,7 @@ import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
-import { extractFileAttachments } from "./chat-messages.utils";
+import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
@@ -406,13 +406,8 @@ export function ChatMessages({
                       // User file attachments are normally rendered inside EditableUserMessage
                       // But if there's no text part, we need to render them here
                       if (message.role === "user") {
-                        // Check if message has any text parts
-                        const hasTextPart = message.parts?.some(
-                          (p) => p.type === "text",
-                        );
-
                         // If there's a text part, files will be rendered with EditableUserMessage
-                        if (hasTextPart) {
+                        if (hasTextPart(message.parts)) {
                           return null;
                         }
 

@@ -31,15 +31,3 @@ export function extractFileAttachments(
 export function hasTextPart(parts: UIMessage["parts"] | undefined): boolean {
   return parts?.some((p) => p.type === "text") ?? false;
 }
-
-/**
- * Check if a message is a file-only message (has file parts but no text parts).
- */
-export function isFileOnlyMessage(
-  parts: UIMessage["parts"] | undefined,
-): boolean {
-  if (!parts || parts.length === 0) return false;
-  const hasFiles = parts.some((p) => p.type === "file");
-  const hasText = parts.some((p) => p.type === "text");
-  return hasFiles && !hasText;
-}

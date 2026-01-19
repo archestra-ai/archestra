@@ -1,10 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
-import {
-  extractFileAttachments,
-  hasTextPart,
-  isFileOnlyMessage,
-} from "./chat-messages.utils";
+import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 
 describe("extractFileAttachments", () => {
   it("should return undefined for undefined parts", () => {
@@ -145,58 +141,5 @@ describe("hasTextPart", () => {
       { type: "reasoning", text: "Thinking..." },
     ];
     expect(hasTextPart(parts)).toBe(false);
-  });
-});
-
-describe("isFileOnlyMessage", () => {
-  it("should return false for undefined parts", () => {
-    expect(isFileOnlyMessage(undefined)).toBe(false);
-  });
-
-  it("should return false for empty parts", () => {
-    expect(isFileOnlyMessage([])).toBe(false);
-  });
-
-  it("should return false when only text parts exist", () => {
-    const parts: UIMessage["parts"] = [{ type: "text", text: "Hello" }];
-    expect(isFileOnlyMessage(parts)).toBe(false);
-  });
-
-  it("should return true when only file parts exist", () => {
-    const parts: UIMessage["parts"] = [
-      { type: "file", url: "blob:123", mediaType: "image/png" },
-    ];
-    expect(isFileOnlyMessage(parts)).toBe(true);
-  });
-
-  it("should return true when multiple file parts exist without text", () => {
-    const parts: UIMessage["parts"] = [
-      { type: "file", url: "blob:1", mediaType: "image/png" },
-      { type: "file", url: "blob:2", mediaType: "application/pdf" },
-    ];
-    expect(isFileOnlyMessage(parts)).toBe(true);
-  });
-
-  it("should return false when both file and text parts exist", () => {
-    const parts: UIMessage["parts"] = [
-      { type: "file", url: "blob:123", mediaType: "image/png" },
-      { type: "text", text: "Here is the file" },
-    ];
-    expect(isFileOnlyMessage(parts)).toBe(false);
-  });
-
-  it("should return false when only reasoning parts exist", () => {
-    const parts: UIMessage["parts"] = [
-      { type: "reasoning", text: "Thinking..." },
-    ];
-    expect(isFileOnlyMessage(parts)).toBe(false);
-  });
-
-  it("should return true when file parts exist with reasoning but no text", () => {
-    const parts: UIMessage["parts"] = [
-      { type: "file", url: "blob:123", mediaType: "image/png" },
-      { type: "reasoning", text: "Analyzing image..." },
-    ];
-    expect(isFileOnlyMessage(parts)).toBe(true);
   });
 });

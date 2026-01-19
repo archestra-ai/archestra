@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { isAuthenticated } from "./auth.utils";
 
 const {
   getChatConversations,
@@ -47,12 +48,9 @@ export function useConversation(conversationId?: string) {
   });
 }
 
-type Conversation = NonNullable<
-  Awaited<ReturnType<typeof getChatConversation>>["data"]
->;
-
 export function useConversations(search?: string) {
   return useQuery({
+    enabled: isAuthenticated(),
     queryKey: ["conversations", search],
     queryFn: async () => {
       const trimmedSearch = search?.trim();

@@ -1,5 +1,6 @@
 "use client";
 
+import { AGENT_TOOL_PREFIX } from "@shared";
 import { Bot } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -77,7 +78,7 @@ export function AgentToolsDisplay({
   // Map promptTools to their display names
   const agentToolsWithNames = useMemo(() => {
     return promptTools.map((tool) => {
-      const promptName = tool.name.replace(/^agent__/, "");
+      const promptName = tool.name.replace(AGENT_TOOL_PREFIX, "");
       const matchingPrompt = allPrompts.find(
         (p) => p.name.toLowerCase().replace(/\s+/g, "_") === promptName,
       );

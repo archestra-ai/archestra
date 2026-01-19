@@ -1,6 +1,7 @@
 import {
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
-  TOOL_TODO_WRITE_FULL_NAME,
+  ARCHESTRA_MCP_SERVER_NAME,
+  DEFAULT_ARCHESTRA_TOOL_NAMES,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import {
   and,
@@ -45,14 +46,14 @@ class ConversationModel {
     // Combine profile tools and prompt-specific tools
     const allTools = [...agentTools, ...promptTools];
 
-    // Filter out Archestra tools (those starting with "archestra__"), but keep todo_write and artifact_write enabled
+    // Filter out Archestra tools, but keep default Archestra tools enabled
     // Agent delegation tools (agent__*) should be enabled by default
     const nonArchestraToolIds = allTools
       .filter(
         (tool) =>
-          !tool.name.startsWith("archestra__") ||
-          tool.name === TOOL_TODO_WRITE_FULL_NAME ||
-          tool.name === TOOL_ARTIFACT_WRITE_FULL_NAME,
+          !tool.name.startsWith(
+            `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
+          ) || DEFAULT_ARCHESTRA_TOOL_NAMES.includes(tool.name),
       )
       .map((tool) => tool.id);
 

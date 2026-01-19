@@ -35,6 +35,7 @@ vi.mock("@shared", async () => {
 
 vi.mock("./auth.utils", () => ({
   hasPermission: vi.fn(),
+  isAuthenticated: vi.fn(() => true),
 }));
 
 // Helper to wrap hooks with QueryClient

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { vi } from "vitest";
+import { beforeEach, describe, expect, test } from "@/test";
 
 import { MAX_DOCUMENT_SIZE_BYTES } from "./constants";
 

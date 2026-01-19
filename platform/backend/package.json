@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.0.26",
+  "version": "1.0.27",
   "description": "",
   "author": "",
   "private": true,
@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsdown && pnpm run sentry:sourcemaps",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
-    "dev": "rm -rf dist && tsdown --watch",
+    "dev": "tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "vitest",
     "lint": "biome check",

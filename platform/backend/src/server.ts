@@ -42,6 +42,7 @@ import {
 } from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
 import config from "@/config";
+import { isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import {
   cleanupKnowledgeGraphProvider,
@@ -65,6 +66,9 @@ import {
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
+
+/** Max time to wait for cleanup operations during graceful shutdown before exiting */
+const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 
 // Load enterprise routes if license is activated OR if running in codegen mode
 // (codegen mode ensures OpenAPI spec always includes all enterprise routes)
@@ -166,6 +170,7 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
 
 /**
  * Register the health endpoint on a Fastify instance.
+ * This is a lightweight endpoint for liveness checks - it only verifies the HTTP server is running.
  */
 export function registerHealthEndpoint(fastify: FastifyInstanceWithZod) {
   fastify.get(
@@ -187,6 +192,53 @@ export function registerHealthEndpoint(fastify: FastifyInstanceWithZod) {
       status: "ok",
       version,
     }),
+  );
+}
+
+/**
+ * Register the readiness endpoint on a Fastify instance.
+ * This endpoint checks database connectivity and should be used for readiness probes.
+ * Returns 200 if the application is ready to receive traffic, 503 otherwise.
+ */
+export function registerReadinessEndpoint(fastify: FastifyInstanceWithZod) {
+  fastify.get(
+    "/ready",
+    {
+      schema: {
+        tags: ["health"],
+        response: {
+          200: z.object({
+            name: z.string(),
+            status: z.string(),
+            version: z.string(),
+            database: z.string(),
+          }),
+          503: z.object({
+            name: z.string(),
+            status: z.string(),
+            version: z.string(),
+            database: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const dbHealthy = await isDatabaseHealthy();
+
+      const response = {
+        name,
+        status: dbHealthy ? "ok" : "degraded",
+        version,
+        database: dbHealthy ? "connected" : "disconnected",
+      };
+
+      if (!dbHealthy) {
+        request.log.warn("Database health check failed for readiness probe");
+        return reply.status(503).send(response);
+      }
+
+      return reply.send(response);
+    },
   );
 }
 
@@ -300,7 +352,7 @@ const registerMetricsPlugin = async (
     routeMetrics: {
       enabled: metricsEnabled,
       methodBlacklist: ["OPTIONS", "HEAD"],
-      routeBlacklist: ["/health"],
+      routeBlacklist: ["/health", "/ready"],
     },
   });
 };
@@ -323,8 +375,8 @@ const startMetricsServer = async () => {
   // Add authentication hook for metrics endpoint if secret is configured
   if (metricsSecret) {
     metricsServer.addHook("preHandler", async (request, reply) => {
-      // Skip auth for health endpoint
-      if (request.url === "/health") {
+      // Skip auth for health and readiness endpoints
+      if (request.url === "/health" || request.url === "/ready") {
         return;
       }
 
@@ -401,11 +453,12 @@ const start = async () => {
 
   /**
    * Custom request logging hook that excludes noisy endpoints:
-   * - /health: Kubernetes liveness/readiness probes
+   * - /health: Kubernetes liveness probe
+   * - /ready: Kubernetes readiness probe (checks database connectivity)
    * - GET /v1/mcp/*: MCP Gateway SSE polling (happens every second)
    */
   const shouldSkipRequestLogging = (url: string, method: string): boolean => {
-    if (url === "/health") return true;
+    if (url === "/health" || url === "/ready") return true;
     // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
     if (method === "GET" && url.startsWith("/v1/mcp/")) return true;
     return false;
@@ -543,6 +596,7 @@ const start = async () => {
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
     registerHealthEndpoint(fastify);
+    registerReadinessEndpoint(fastify);
 
     // Register all API routes (eeRoutes already loaded at module level)
     await registerApiRoutes(fastify);
@@ -559,35 +613,71 @@ const start = async () => {
       fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
       try {
-        // Clear email subscription renewal interval
-        clearInterval(emailRenewalIntervalId);
-        clearInterval(processedEmailCleanupIntervalId);
-        fastify.log.info("Email background job intervals cleared");
+        // PRIORITY: Close servers FIRST to release ports immediately
+        // This prevents EADDRINUSE errors during hot-reload when the new server starts
+        // before cleanup operations complete
 
-        // Cleanup email provider (unsubscribe from Graph API if needed)
-        await cleanupEmailProvider();
-        fastify.log.info("Email provider cleanup completed");
-
-        // Cleanup chatops providers
-        await chatOpsManager.cleanup();
-        fastify.log.info("ChatOps provider cleanup completed");
-
-        // Cleanup knowledge graph provider
-        await cleanupKnowledgeGraphProvider();
-        fastify.log.info("Knowledge graph provider cleanup completed");
-
-        // Close WebSocket server
-        websocketService.stop();
-
-        // Close metrics server
+        // Close metrics server (releases port 9050)
         if (metricsServerInstance) {
           await metricsServerInstance.close();
           fastify.log.info("Metrics server closed");
         }
 
-        // Close main server
+        // Close main server (releases port 9000)
         await fastify.close();
         fastify.log.info("Main server closed");
+
+        // Close WebSocket server
+        websocketService.stop();
+
+        // Clear email subscription renewal interval
+        clearInterval(emailRenewalIntervalId);
+        clearInterval(processedEmailCleanupIntervalId);
+        fastify.log.info("Email background job intervals cleared");
+
+        // Track which cleanup operations have completed
+        const completedCleanups = new Set<
+          "emailProvider" | "knowledgeGraph" | "chatOps"
+        >();
+
+        // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
+        const cleanupPromise = Promise.allSettled([
+          cleanupEmailProvider().then(() => {
+            completedCleanups.add("emailProvider");
+            fastify.log.info("Email provider cleanup completed");
+          }),
+          cleanupKnowledgeGraphProvider().then(() => {
+            completedCleanups.add("knowledgeGraph");
+            fastify.log.info("Knowledge graph provider cleanup completed");
+          }),
+          chatOpsManager.cleanup().then(() => {
+            completedCleanups.add("chatOps");
+            fastify.log.info("ChatOps provider cleanup completed");
+          }),
+        ]).then(() => "completed" as const);
+
+        // Wait for cleanup with timeout, then exit anyway
+        const allCleanupNames = [
+          "emailProvider",
+          "knowledgeGraph",
+          "chatOps",
+        ] as const;
+        const result = await Promise.race([
+          cleanupPromise,
+          new Promise<"timeout">((resolve) =>
+            setTimeout(() => resolve("timeout"), SHUTDOWN_CLEANUP_TIMEOUT_MS),
+          ),
+        ]);
+
+        if (result === "timeout") {
+          const pendingCleanups = allCleanupNames.filter(
+            (name) => !completedCleanups.has(name),
+          );
+          fastify.log.warn(
+            { pendingCleanups },
+            "Cleanup timed out, proceeding with shutdown",
+          );
+        }
 
         process.exit(0);
       } catch (error) {

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.26"
+    "version": "1.0.27"
   },
   "components": {
     "schemas": {
@@ -31794,7 +31794,17 @@
         "tags": [
           "Chat"
         ],
-        "description": "List all conversations for current user with agent details",
+        "description": "List all conversations for current user with agent details. Optionally filter by search query.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -38728,6 +38738,27 @@
                         "enabled"
                       ],
                       "additionalProperties": false
+                    },
+                    "knowledgeGraph": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "lightrag"
+                          ]
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "enabled"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -38739,7 +38770,8 @@
                     "ollamaEnabled",
                     "globalToolPolicy",
                     "browserStreamingEnabled",
-                    "incomingEmail"
+                    "incomingEmail",
+                    "knowledgeGraph"
                   ],
                   "additionalProperties": false
                 }

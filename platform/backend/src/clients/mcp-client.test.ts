@@ -922,6 +922,147 @@ describe("McpClient", () => {
           runWithLimitSpy.mockRestore();
         }
       });
+
+      test("strips catalogName prefix when mcpServerName includes userId suffix (Issue #1179)", async () => {
+        // Create tool with catalogName prefix (how local server tools are actually created)
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__prefix_test_tool",
+          description: "Tool for testing prefix stripping fallback",
+          parameters: {},
+          catalogId: localCatalogId,
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        // Mock runtime manager responses
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // Mock successful tool call
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Prefix stripping works!" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_prefix_test",
+          name: "local-streamable-http-server__prefix_test_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Verify the tool was called with just the tool name (stripped using catalogName)
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "prefix_test_tool",
+          arguments: {},
+        });
+
+        expect(result).toMatchObject({
+          id: "call_prefix_test",
+          content: [{ type: "text", text: "Prefix stripping works!" }],
+          isError: false,
+        });
+      });
+
+      test("falls back to stripping mcpServerName when catalogName prefix is missing", async () => {
+        // Create catalog with different name to ensure catalog prefix doesn't match
+        const otherCatalog = await InternalMcpCatalogModel.create({
+          name: "other-catalog",
+          serverType: "local",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "custom-server-name__fallback_tool",
+          description: "Tool using server name prefix",
+          parameters: {},
+          catalogId: otherCatalog.id,
+          mcpServerId: localMcpServerId,
+        });
+
+        // Ensure mcpServerName is 'custom-server-name' for this test
+        await McpServerModel.update(localMcpServerId, {
+          name: "custom-server-name",
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Fallback works!" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_fallback_test",
+          name: "custom-server-name__fallback_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Verify stripping worked using mcpServerName fallback
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "fallback_tool",
+          arguments: {},
+        });
+
+        expect(result).toMatchObject({
+          id: "call_fallback_test",
+          content: [{ type: "text", text: "Fallback works!" }],
+          isError: false,
+        });
+      });
+
+      test("does not modify tool name when no prefix matches (Identity Case)", async () => {
+        // Create tool with a name that doesn't follow the prefix convention
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "standalone_tool_name",
+          description: "Tool without standard prefix",
+          parameters: {},
+          catalogId: localCatalogId,
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Identity works!" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_identity_test",
+          name: "standalone_tool_name",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Verify the tool name was not mangled since no prefix matched
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "standalone_tool_name",
+          arguments: {},
+        });
+
+        expect(result).toMatchObject({
+          id: "call_identity_test",
+          content: [{ type: "text", text: "Identity works!" }],
+          isError: false,
+        });
+      });
     });
   });
 });

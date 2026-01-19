@@ -3,18 +3,36 @@
 import {
   ChevronDown,
   ChevronRight,
-  Edit2,
+  MoreHorizontal,
+  Pencil,
+  Search,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
   SidebarGroup,
+  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
@@ -28,7 +46,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
-import { WithInlineConfirm } from "@/components/ui/with-inline-confirm";
+import { useHasPermissions } from "@/lib/auth.query";
 import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import {
   useConversations,
@@ -36,12 +54,14 @@ import {
   useGenerateConversationTitle,
   useUpdateConversation,
 } from "@/lib/chat.query";
+import { cn } from "@/lib/utils";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 const VISIBLE_CHAT_COUNT = 10;
+const MAX_TITLE_LENGTH = 30;
 
-// Helper to extract first 15 chars from first user message
-function getConversationDisplayTitle(
+// Helper to extract display title from conversation
+export function getConversationDisplayTitle(
   title: string | null,
   // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
   messages?: any[],
@@ -85,10 +105,16 @@ export function ChatSidebarSection() {
   const [showAllChats, setShowAllChats] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
-    null,
-  );
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: canUpdateConversation } = useHasPermissions({
+    conversation: ["update"],
+  });
+  const { data: canDeleteConversation } = useHasPermissions({
+    conversation: ["delete"],
+  });
 
   // Track conversations with recently auto-generated titles for animation
   const { recentlyGeneratedTitles, regeneratingTitles, triggerRegeneration } =
@@ -123,14 +149,23 @@ export function ChatSidebarSection() {
   };
 
   const handleSaveEdit = async (id: string) => {
-    if (editingTitle.trim()) {
+    if (!editingTitle.trim()) {
+      setEditingId(null);
+      setEditingTitle("");
+      return;
+    }
+
+    try {
       await updateConversationMutation.mutateAsync({
         id,
         title: editingTitle.trim(),
       });
+      setEditingId(null);
+      setEditingTitle("");
+    } catch {
+      // Error is handled by the mutation's onError callback
+      // Keep editing state so user can retry
     }
-    setEditingId(null);
-    setEditingTitle("");
   };
 
   const handleCancelEdit = () => {
@@ -139,12 +174,17 @@ export function ChatSidebarSection() {
   };
 
   const handleDeleteConversation = async (id: string) => {
-    // If we're deleting the current conversation, navigate to new chat
-    if (currentConversationId === id) {
-      router.push("/chat");
-    }
+    const shouldNavigate = currentConversationId === id;
 
-    await deleteConversationMutation.mutateAsync(id);
+    try {
+      await deleteConversationMutation.mutateAsync(id);
+      // Navigate only after successful deletion
+      if (shouldNavigate) {
+        router.push("/chat");
+      }
+    } catch {
+      // Error is handled by the mutation's onError callback
+    }
   };
 
   const handleRegenerateTitle = async (id: string) => {
@@ -157,9 +197,31 @@ export function ChatSidebarSection() {
     await generateTitleMutation.mutateAsync({ id, regenerate: true });
   };
 
+  const openConversationSearch = () => {
+    window.dispatchEvent(new CustomEvent("open-conversation-search"));
+  };
+
   return (
-    <SidebarGroup className="px-4 py-0">
-      <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>
+    <SidebarGroup className="px-4 py-0 group-data-[collapsible=icon]:hidden">
+      <SidebarGroupLabel className="w-full justify-between pr-0">
+        Recent Chats
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <SidebarGroupAction
+                onClick={openConversationSearch}
+                className="relative top-auto right-auto transform-none h-6 w-6 text-sidebar-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+              >
+                <Search className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="sr-only">Search conversations (⌘K)</span>
+              </SidebarGroupAction>
+            </TooltipTrigger>
+            <TooltipContent side="right" align="center">
+              Search conversations (⌘K)
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </SidebarGroupLabel>
 
       <SidebarGroupContent>
         <SidebarMenu>
@@ -190,48 +252,7 @@ export function ChatSidebarSection() {
                   conv.id,
                 );
                 const isRegenerating = regeneratingTitles.has(conv.id);
-                const isConfirmingDelete = confirmingDeleteId === conv.id;
-                const buttons =
-                  editingId !== conv.id ? (
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover/menu-item:opacity-100 has-[[data-confirm-open]]:opacity-100 transition-opacity">
-                      {!isConfirmingDelete && (
-                        <PermissionButton
-                          permissions={{ conversation: ["update"] }}
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEdit(conv.id, displayTitle);
-                          }}
-                          title="Edit chat name"
-                          className="p-1 w-fit"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </PermissionButton>
-                      )}
-                      <WithInlineConfirm
-                        onConfirm={() => handleDeleteConversation(conv.id)}
-                        replaceMode
-                        onOpenChange={(open) =>
-                          setConfirmingDeleteId(open ? conv.id : null)
-                        }
-                      >
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                          title="Delete chat"
-                          className="p-1 w-fit"
-                        >
-                          <Trash2 className="p-0 h-2 w-2 text-destructive" />
-                        </Button>
-                      </WithInlineConfirm>
-                    </div>
-                  ) : null;
+                const isMenuOpen = openMenuId === conv.id;
 
                 return (
                   <SidebarMenuItem key={conv.id}>
@@ -285,25 +306,25 @@ export function ChatSidebarSection() {
                           </TooltipProvider>
                         </div>
                       ) : (
-                        <>
-                          <SidebarMenuButton
-                            onClick={() => handleSelectConversation(conv.id)}
-                            isActive={isCurrentConversation}
-                            className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent"
-                          >
+                        <SidebarMenuButton
+                          onClick={() => handleSelectConversation(conv.id)}
+                          isActive={isCurrentConversation}
+                          className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent justify-between"
+                        >
+                          <span className="flex items-center gap-2 min-w-0 flex-1">
                             {(hasRecentlyGeneratedTitle || isRegenerating) && (
                               <AISparkleIcon isAnimating />
                             )}
                             {isRegenerating ? (
-                              <span className="flex-1 pr-0 text-muted-foreground text-sm">
+                              <span className="text-muted-foreground text-sm truncate">
                                 Generating...
                               </span>
                             ) : hasRecentlyGeneratedTitle ? (
-                              <span className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all overflow-hidden">
+                              <span className="truncate">
                                 <TypingText
                                   text={
-                                    displayTitle.length > 17
-                                      ? `${displayTitle.slice(0, 17)}...`
+                                    displayTitle.length > MAX_TITLE_LENGTH
+                                      ? `${displayTitle.slice(0, MAX_TITLE_LENGTH)}...`
                                       : displayTitle
                                   }
                                   typingSpeed={35}
@@ -314,19 +335,75 @@ export function ChatSidebarSection() {
                             ) : (
                               <TruncatedText
                                 message={displayTitle}
-                                maxLength={20}
-                                className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all"
-                                tooltipContentProps={{
-                                  side: "right",
-                                  className:
-                                    "relative left-20 pointer-events-none",
-                                  noArrow: true,
-                                }}
+                                maxLength={MAX_TITLE_LENGTH}
+                                className="truncate"
+                                showTooltip={false}
                               />
                             )}
-                          </SidebarMenuButton>
-                          {buttons}
-                        </>
+                          </span>
+                          {(canUpdateConversation || canDeleteConversation) && (
+                            <DropdownMenu
+                              open={isMenuOpen}
+                              onOpenChange={(open) =>
+                                setOpenMenuId(open ? conv.id : null)
+                              }
+                            >
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className={cn(
+                                    "h-6 w-6 p-0 shrink-0 transition-opacity",
+                                    isMenuOpen
+                                      ? "opacity-100"
+                                      : "opacity-0 group-hover/menu-item:opacity-100",
+                                  )}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" side="right">
+                                {canUpdateConversation && (
+                                  <>
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStartEdit(conv.id, displayTitle);
+                                      }}
+                                    >
+                                      <Pencil className="h-4 w-4 mr-2" />
+                                      Rename
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRegenerateTitle(conv.id);
+                                      }}
+                                      disabled={generateTitleMutation.isPending}
+                                    >
+                                      <Sparkles className="h-4 w-4 mr-2" />
+                                      Regenerate title
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                {canDeleteConversation && (
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeleteConfirmId(conv.id);
+                                    }}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </SidebarMenuButton>
                       )}
                     </div>
                   </SidebarMenuItem>
@@ -356,6 +433,38 @@ export function ChatSidebarSection() {
           )}
         </SidebarMenu>
       </SidebarGroupContent>
+
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(open) => !open && setDeleteConfirmId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              conversation and all its messages.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteConversationMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (deleteConfirmId) {
+                  await handleDeleteConversation(deleteConfirmId);
+                  setDeleteConfirmId(null); // Close dialog only after successful deletion
+                }
+              }}
+              disabled={deleteConversationMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteConversationMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarGroup>
   );
 }

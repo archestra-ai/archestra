@@ -9333,7 +9333,9 @@ export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
 export type GetChatConversationsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+    };
     url: '/api/chat/conversations';
 };
 
@@ -11345,6 +11347,11 @@ export type GetFeaturesResponses = {
             provider?: 'outlook';
             displayName?: string;
             emailDomain?: string;
+        };
+        knowledgeGraph: {
+            enabled: boolean;
+            provider?: 'lightrag';
+            displayName?: string;
         };
     };
 };

@@ -25,6 +25,7 @@ import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
+import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
@@ -353,23 +354,6 @@ export function ChatMessages({
 
                       // Use editable component for user messages
                       if (message.role === "user") {
-                        // Collect all file attachments from this message
-                        const fileAttachments = message.parts
-                          ?.filter((p) => p.type === "file")
-                          .map((p) => {
-                            const filePart = p as {
-                              type: "file";
-                              url: string;
-                              mediaType: string;
-                              filename?: string;
-                            };
-                            return {
-                              url: filePart.url,
-                              mediaType: filePart.mediaType,
-                              filename: filePart.filename,
-                            };
-                          });
-
                         return (
                           <Fragment key={partKey}>
                             <EditableUserMessage
@@ -379,7 +363,9 @@ export function ChatMessages({
                               text={part.text}
                               isEditing={editingPartKey === partKey}
                               editDisabled={isResponseInProgress}
-                              attachments={fileAttachments}
+                              attachments={extractFileAttachments(
+                                message.parts,
+                              )}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveUserMessage}
@@ -417,9 +403,43 @@ export function ChatMessages({
                       );
 
                     case "file": {
-                      // User file attachments are rendered inside EditableUserMessage
+                      // User file attachments are normally rendered inside EditableUserMessage
+                      // But if there's no text part, we need to render them here
                       if (message.role === "user") {
-                        return null;
+                        // If there's a text part, files will be rendered with EditableUserMessage
+                        if (hasTextPart(message.parts)) {
+                          return null;
+                        }
+
+                        // For file-only messages, render on the first file part only
+                        const isFirstFilePart =
+                          message.parts?.findIndex((p) => p.type === "file") ===
+                          i;
+
+                        if (!isFirstFilePart) {
+                          return null;
+                        }
+
+                        const partKey = `${message.id}-${i}`;
+
+                        return (
+                          <Fragment key={partKey}>
+                            <EditableUserMessage
+                              messageId={message.id}
+                              partIndex={i}
+                              partKey={partKey}
+                              text=""
+                              isEditing={editingPartKey === partKey}
+                              editDisabled={isResponseInProgress}
+                              attachments={extractFileAttachments(
+                                message.parts,
+                              )}
+                              onStartEdit={handleStartEdit}
+                              onCancelEdit={handleCancelEdit}
+                              onSave={handleSaveUserMessage}
+                            />
+                          </Fragment>
+                        );
                       }
 
                       // Render file attachments for assistant/system messages

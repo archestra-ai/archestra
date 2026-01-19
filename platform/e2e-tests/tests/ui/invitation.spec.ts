@@ -1,6 +1,5 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "../../fixtures";
-import { clickButton } from "../../utils";
 
 test.describe(
   "Invitation functionality",
@@ -16,11 +15,18 @@ test.describe(
       // Navigate to the members settings page
       await goToPage(page, "/settings/members");
 
-      // Wait for the page to load
-      await page.waitForTimeout(1000);
+      // Wait for the page to fully load (API calls to complete)
+      await page.waitForLoadState("networkidle");
+
+      // Wait for the "Invite Member" button to appear (depends on permission checks)
+      const inviteMemberButton = page.getByRole("button", {
+        name: /invite member/i,
+        disabled: false,
+      });
+      await expect(inviteMemberButton).toBeVisible({ timeout: 15000 });
 
       // Click the "Invite Member" button to open the dialog
-      await clickButton({ page, options: { name: /invite member/i } });
+      await inviteMemberButton.click();
 
       // Wait for the dialog to open
       await page.waitForTimeout(500);
@@ -52,11 +58,18 @@ test.describe(
       // Navigate to the members settings page
       await goToPage(page, "/settings/members");
 
-      // Wait for the page to load
-      await page.waitForTimeout(1000);
+      // Wait for the page to fully load (API calls to complete)
+      await page.waitForLoadState("networkidle");
+
+      // Wait for the "Invite Member" button to appear (depends on permission checks)
+      const inviteMemberButton = page.getByRole("button", {
+        name: /invite member/i,
+        disabled: false,
+      });
+      await expect(inviteMemberButton).toBeVisible({ timeout: 15000 });
 
       // Click the "Invite Member" button to open the dialog
-      await clickButton({ page, options: { name: /invite member/i } });
+      await inviteMemberButton.click();
 
       // Wait for the dialog to open
       await page.waitForTimeout(500);
@@ -75,10 +88,11 @@ test.describe(
       await generateButton.click();
 
       // Wait for the invitation link to be generated
+      // Increased timeout for CI environments where API calls may be slower
       const invitationLinkInput = page.getByTestId(
         E2eTestId.InvitationLinkInput,
       );
-      await expect(invitationLinkInput).toBeVisible({ timeout: 5000 });
+      await expect(invitationLinkInput).toBeVisible({ timeout: 15000 });
 
       // Get the invitation link
       const invitationLink = await invitationLinkInput.inputValue();

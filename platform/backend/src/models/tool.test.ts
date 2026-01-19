@@ -1,4 +1,11 @@
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
+} from "@shared";
+import { vi } from "vitest";
+import * as knowledgeGraph from "@/knowledge-graph";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
 import TeamModel from "./team";
@@ -1265,6 +1272,100 @@ describe("ToolModel", () => {
       expect(toolWithoutParams?.description).toBe(
         "Has description but no parameters",
       );
+    });
+  });
+
+  describe("assignDefaultArchestraToolsToAgent", () => {
+    test("assigns artifact_write and todo_write tools by default", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      // First seed Archestra tools (but don't assign to agent)
+      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+      await seedAndAssignArchestraTools(tempAgent.id);
+
+      // Create a new agent
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      // Assign default tools (not all Archestra tools)
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+
+      // Get the tools assigned to the agent
+      const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = mcpTools.map((t) => t.name);
+
+      // Should have artifact_write and todo_write
+      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+
+      // By default (no knowledge graph configured), should NOT have query_knowledge_graph
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+    });
+
+    test("includes query_knowledge_graph when knowledge graph is configured", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      // First seed Archestra tools
+      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+      await seedAndAssignArchestraTools(tempAgent.id);
+
+      // Mock getKnowledgeGraphProviderType to return "lightrag"
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue("lightrag");
+
+      try {
+        // Create a new agent
+        const agent = await makeAgent({ name: "KG Enabled Agent" });
+
+        // Assign default tools
+        await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+
+        // Get the tools assigned to the agent
+        const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
+        const toolNames = mcpTools.map((t) => t.name);
+
+        // Should have all three default tools including query_knowledge_graph
+        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+        expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+        expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
+    });
+
+    test("is idempotent - does not create duplicates", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+      await seedAndAssignArchestraTools(tempAgent.id);
+
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+      const toolIdsAfterFirst = await AgentToolModel.findToolIdsByAgent(
+        agent.id,
+      );
+
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+      const toolIdsAfterSecond = await AgentToolModel.findToolIdsByAgent(
+        agent.id,
+      );
+
+      expect(toolIdsAfterSecond.length).toBe(toolIdsAfterFirst.length);
+    });
+
+    test("does nothing when tools are not seeded", async ({ makeAgent }) => {
+      // Create agent without seeding Archestra tools first
+      const agent = await makeAgent({ name: "Agent Without Seeded Tools" });
+
+      // This should not throw, just skip assignment
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+
+      const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(toolIds).toHaveLength(0);
     });
   });
 });

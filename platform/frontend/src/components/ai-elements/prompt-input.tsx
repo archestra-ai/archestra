@@ -1040,10 +1040,44 @@ export const PromptInputButton = ({
   );
 };
 
-export type PromptInputActionMenuProps = ComponentProps<typeof DropdownMenu>;
-export const PromptInputActionMenu = (props: PromptInputActionMenuProps) => (
-  <DropdownMenu {...props} />
-);
+export type PromptInputActionMenuProps = ComponentProps<typeof DropdownMenu> & {
+  /** Close the menu when files are added to attachments */
+  closeOnFileAdd?: boolean;
+};
+
+export const PromptInputActionMenu = ({
+  closeOnFileAdd = true,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  ...props
+}: PromptInputActionMenuProps) => {
+  const attachments = usePromptInputAttachments();
+  const [internalOpen, setInternalOpen] = useState(false);
+  const prevFilesCountRef = useRef(attachments.files.length);
+
+  // Track when files are added and close the menu
+  useEffect(() => {
+    if (
+      closeOnFileAdd &&
+      attachments.files.length > prevFilesCountRef.current
+    ) {
+      setInternalOpen(false);
+      controlledOnOpenChange?.(false);
+    }
+    prevFilesCountRef.current = attachments.files.length;
+  }, [attachments.files.length, closeOnFileAdd, controlledOnOpenChange]);
+
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const onOpenChange = isControlled
+    ? controlledOnOpenChange
+    : (newOpen: boolean) => {
+        setInternalOpen(newOpen);
+        controlledOnOpenChange?.(newOpen);
+      };
+
+  return <DropdownMenu open={open} onOpenChange={onOpenChange} {...props} />;
+};
 
 export type PromptInputActionMenuTriggerProps = PromptInputButtonProps;
 

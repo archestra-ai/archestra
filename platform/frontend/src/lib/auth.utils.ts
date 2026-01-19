@@ -1,5 +1,4 @@
 import type { Permissions } from "@shared";
-import { authClient } from "./clients/auth/auth-client";
 
 /**
  * Convert Permissions object to array of permission strings
@@ -12,8 +11,4 @@ export function permissionsToStrings(permissions: Permissions): string[] {
     }
   }
   return result;
-}
-
-export function isAuthenticated() {
-  return authClient.useSession().data?.user != null;
 }

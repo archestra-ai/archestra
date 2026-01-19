@@ -1,5 +1,6 @@
-import { isAuthenticated } from "./auth.utils";
+import { authClient } from "./clients/auth/auth-client";
 
 export function useIsAuthenticated() {
-  return isAuthenticated();
+  const session = authClient.useSession();
+  return session.data?.user != null;
 }

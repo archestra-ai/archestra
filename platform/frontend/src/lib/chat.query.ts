@@ -5,7 +5,6 @@ import {
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { isAuthenticated } from "./auth.utils";
 
 const {
   getChatConversations,
@@ -48,11 +47,17 @@ export function useConversation(conversationId?: string) {
   });
 }
 
-export function useConversations(search?: string) {
+export function useConversations({
+  enabled = true,
+  search,
+}: {
+  enabled?: boolean;
+  search?: string;
+}) {
   return useQuery({
-    enabled: isAuthenticated(),
     queryKey: ["conversations", search],
     queryFn: async () => {
+      if (!enabled) return [];
       const trimmedSearch = search?.trim();
 
       const { data, error } = await getChatConversations({
@@ -62,7 +67,7 @@ export function useConversations(search?: string) {
       if (error) throw new Error("Failed to fetch conversations");
       return data;
     },
-    staleTime: search ? 0 : 5 * 60 * 1000, // No stale time for searches, 5 minutes otherwise
+    staleTime: search ? 0 : 500, // No stale time for searches, 500ms otherwise
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

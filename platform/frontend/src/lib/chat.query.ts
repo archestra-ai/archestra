@@ -47,14 +47,17 @@ export function useConversation(conversationId?: string) {
   });
 }
 
-type Conversation = NonNullable<
-  Awaited<ReturnType<typeof getChatConversation>>["data"]
->;
-
-export function useConversations(search?: string) {
+export function useConversations({
+  enabled = true,
+  search,
+}: {
+  enabled?: boolean;
+  search?: string;
+}) {
   return useQuery({
     queryKey: ["conversations", search],
     queryFn: async () => {
+      if (!enabled) return [];
       const trimmedSearch = search?.trim();
 
       const { data, error } = await getChatConversations({
@@ -64,7 +67,7 @@ export function useConversations(search?: string) {
       if (error) throw new Error("Failed to fetch conversations");
       return data;
     },
-    staleTime: search ? 0 : 5 * 60 * 1000, // No stale time for searches, 5 minutes otherwise
+    staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

@@ -141,7 +141,6 @@ const PromptInputContent = ({
           <ModelSelector
             selectedModel={selectedModel}
             onModelChange={onModelChange}
-            messageCount={messageCount}
             onOpenChange={(open) => {
               if (!open) {
                 setTimeout(() => {

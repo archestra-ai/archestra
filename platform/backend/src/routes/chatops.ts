@@ -97,6 +97,42 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           },
           async (context: TurnContext) => {
+            // Check if this is a card submission (agent selection) FIRST
+            // Card submissions have activity.value but no text, so we must check before parseWebhookNotification
+            const activityValue = context.activity.value as
+              | { action?: string; channelId?: string; workspaceId?: string }
+              | undefined;
+            if (activityValue?.action === "selectAgent") {
+              // For card submissions, we need to construct a minimal message from the activity
+              const cardMessage: IncomingChatMessage = {
+                messageId: context.activity.id || `teams-${Date.now()}`,
+                channelId:
+                  activityValue.channelId ||
+                  context.activity.channelData?.channel?.id ||
+                  context.activity.conversation?.id ||
+                  "",
+                workspaceId:
+                  activityValue.workspaceId ||
+                  context.activity.channelData?.team?.id ||
+                  null,
+                threadId: context.activity.conversation?.id,
+                senderId:
+                  context.activity.from?.aadObjectId ||
+                  context.activity.from?.id ||
+                  "unknown",
+                senderName: context.activity.from?.name || "Unknown User",
+                text: "",
+                rawText: "",
+                timestamp: context.activity.timestamp
+                  ? new Date(context.activity.timestamp)
+                  : new Date(),
+                isThreadReply: false,
+                metadata: {},
+              };
+              await handleAgentSelection(context, cardMessage);
+              return;
+            }
+
             // Parse the activity into our message format
             const message = await provider.parseWebhookNotification(
               context.activity,
@@ -147,18 +183,6 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (trimmedText === CHATOPS_COMMANDS.SELECT_AGENT) {
               // Send agent selection card
               await sendAgentSelectionCard(context, message);
-              return;
-            }
-
-            // Check if this is a card submission (agent selection)
-            const activityValue = context.activity.value as
-              | { action?: string }
-              | undefined;
-            if (
-              context.activity.type === "message" &&
-              activityValue?.action === "selectAgent"
-            ) {
-              await handleAgentSelection(context, message);
               return;
             }
 

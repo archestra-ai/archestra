@@ -37,6 +37,7 @@ class PromptModel {
         agentId: input.agentId,
         userPrompt: input.userPrompt || null,
         systemPrompt: input.systemPrompt || null,
+        allowedChatops: input.allowedChatops || [],
         version: 1,
         history: [],
       })
@@ -206,6 +207,7 @@ class PromptModel {
         agentId: input.agentId ?? prompt.agentId,
         userPrompt: input.userPrompt ?? prompt.userPrompt,
         systemPrompt: input.systemPrompt ?? prompt.systemPrompt,
+        allowedChatops: input.allowedChatops ?? prompt.allowedChatops,
         version: prompt.version + 1,
         history: sql`${schema.promptsTable.history} || ${JSON.stringify([historyEntry])}::jsonb`,
       })

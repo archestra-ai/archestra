@@ -191,12 +191,19 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 
 #### Graph API Permissions (Optional - for thread history)
 
-To include thread history in agent context:
+To include thread history in agent context, you need different permissions depending on where the bot is used:
 
 1. In Azure Portal, go to **App registrations** → find your bot's app
 2. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions**
-3. Add `ChannelMessage.Read.All`
-4. Click **Grant admin consent**
+3. Add the following permissions:
+   - `ChannelMessage.Read.All` — for team channel messages
+   - `Chat.Read.All` — for group chat messages
+4. Click **Grant admin consent** for both permissions
+
+| Permission | Scope | Required For |
+|------------|-------|--------------|
+| `ChannelMessage.Read.All` | Application | Team channel thread history |
+| `Chat.Read.All` | Application | Group chat thread history |
 
 ### Configuration
 
@@ -319,5 +326,6 @@ The bot responds with an **Adaptive Card dropdown** to select which agent handle
 
 **No thread history**
 - Ensure Graph API credentials are configured
-- Verify `ChannelMessage.Read.All` permission is granted
-- Admin consent must be granted for the permission
+- For **team channels**: Verify `ChannelMessage.Read.All` permission is granted
+- For **group chats**: Verify `Chat.Read.All` permission is granted
+- Admin consent must be granted for both permissions

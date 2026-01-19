@@ -297,10 +297,16 @@ class MSTeamsProvider implements ChatOpsProvider {
 
     let messageId = "";
 
-    await this.adapter.continueConversation(ref, async (context) => {
-      const response = await context.sendActivity(replyText);
-      messageId = response?.id || "";
-    });
+    // Use continueConversationAsync (continueConversation is deprecated)
+    const botAppId = config.chatops.msTeams.appId;
+    await this.adapter.continueConversationAsync(
+      botAppId,
+      ref,
+      async (context) => {
+        const response = await context.sendActivity(replyText);
+        messageId = response?.id || "";
+      },
+    );
 
     return messageId;
   }
@@ -324,68 +330,108 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
 
     try {
-      // For Teams, we need to use the channel messages endpoint
-      // The format is: /teams/{teamId}/channels/{channelId}/messages/{messageId}/replies
-      // or for channel messages: /teams/{teamId}/channels/{channelId}/messages
+      // Detect if this is a group chat or team channel
+      // Group chats have IDs like "19:xxx@thread.tacv2" or "19:xxx@thread.v2"
+      // Team GUIDs are actual UUIDs like "e6ec2dea-2205-4e2f-afb6-f83e5f588f40"
+      const isGroupChat =
+        !params.workspaceId ||
+        params.workspaceId.startsWith("19:") ||
+        params.channelId.includes("@thread");
 
-      // Note: This requires the appropriate Graph API permissions
-      // (ChannelMessage.Read.All or ChannelMessage.Read.Group)
-
-      if (!params.workspaceId) {
-        logger.debug(
-          "[MSTeamsProvider] No workspace ID, cannot fetch channel messages",
-        );
-        return [];
-      }
-
-      // If we have a thread ID (reply to message), fetch replies
-      // Otherwise, fetch recent channel messages
       let messages: {
         id: string;
-        from?: { user?: { id?: string; displayName?: string } };
+        from?: {
+          user?: { id?: string; displayName?: string };
+          // Application/connector messages (e.g., Grafana IRM, webhooks)
+          application?: { id?: string; displayName?: string };
+        };
         body?: { content?: string };
+        // Attachments contain Adaptive Cards (used by Grafana IRM, etc.)
+        attachments?: {
+          contentType?: string;
+          content?: string;
+          name?: string;
+        }[];
         createdDateTime?: string;
       }[];
 
-      if (params.threadId && params.threadId !== params.channelId) {
-        // Fetch thread replies
+      if (isGroupChat) {
+        // For group chats, use the /chats/{chat-id}/messages endpoint
+        // The chat ID is the conversation ID (channelId in our structure)
+        // Note: This requires Chat.Read.All application permission
+
         const response = await this.graphClient
-          .api(
-            `/teams/${params.workspaceId}/channels/${params.channelId}/messages/${params.threadId}/replies`,
-          )
+          .api(`/chats/${params.channelId}/messages`)
           .top(limit)
-          .orderby("createdDateTime desc")
           .get();
         messages = response.value || [];
       } else {
-        // Fetch recent channel messages
-        const response = await this.graphClient
-          .api(
-            `/teams/${params.workspaceId}/channels/${params.channelId}/messages`,
-          )
-          .top(limit)
-          .orderby("createdDateTime desc")
-          .get();
-        messages = response.value || [];
+        // For team channels, use the /teams/{teamId}/channels/{channelId}/messages endpoint
+        // Note: This requires ChannelMessage.Read.All application permission
+        logger.debug(
+          { workspaceId: params.workspaceId, channelId: params.channelId },
+          "[MSTeamsProvider] Fetching team channel history",
+        );
+
+        if (params.threadId && params.threadId !== params.channelId) {
+          // Fetch thread replies
+          const response = await this.graphClient
+            .api(
+              `/teams/${params.workspaceId}/channels/${params.channelId}/messages/${params.threadId}/replies`,
+            )
+            .top(limit)
+            .get();
+          messages = response.value || [];
+        } else {
+          // Fetch recent channel messages
+          const response = await this.graphClient
+            .api(
+              `/teams/${params.workspaceId}/channels/${params.channelId}/messages`,
+            )
+            .top(limit)
+            .get();
+          messages = response.value || [];
+        }
       }
 
       // Convert to ChatThreadMessage format and filter out the current message
       const botAppId = config.chatops.msTeams.appId;
 
-      return messages
-        .filter((msg) => msg.id !== params.excludeMessageId)
-        .map((msg) => ({
-          messageId: msg.id,
-          senderId: msg.from?.user?.id || "unknown",
-          senderName: msg.from?.user?.displayName || "Unknown",
-          text: msg.body?.content || "",
-          timestamp: msg.createdDateTime
-            ? new Date(msg.createdDateTime)
-            : new Date(),
-          // Check if the message is from the bot by comparing user ID with bot's app ID
-          isFromBot: msg.from?.user?.id === botAppId,
-        }))
-        .reverse(); // Return oldest first
+      return (
+        messages
+          .filter((msg) => msg.id !== params.excludeMessageId)
+          .map((msg) => {
+            // Handle both user messages and application/connector messages (e.g., Grafana IRM)
+            const isUserMessage = Boolean(msg.from?.user);
+            const senderId = isUserMessage
+              ? msg.from?.user?.id || "unknown"
+              : msg.from?.application?.id || "unknown";
+            const senderName = isUserMessage
+              ? msg.from?.user?.displayName || "Unknown"
+              : msg.from?.application?.displayName || "App";
+
+            // Extract text from body and/or attachments (Adaptive Cards)
+            const text = extractMessageText(msg.body?.content, msg.attachments);
+
+            return {
+              messageId: msg.id,
+              senderId,
+              senderName,
+              text,
+              timestamp: msg.createdDateTime
+                ? new Date(msg.createdDateTime)
+                : new Date(),
+              // Check if the message is from our bot by comparing app ID
+              isFromBot:
+                msg.from?.user?.id === botAppId ||
+                msg.from?.application?.id === botAppId,
+            };
+          })
+          // Filter out messages with no text content
+          .filter((msg) => msg.text.trim().length > 0)
+          // Sort by timestamp ascending (oldest first) since API doesn't support orderby
+          .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+      );
     } catch (error) {
       logger.error(
         {
@@ -476,6 +522,121 @@ function extractThreadId(activity: {
 
   // Otherwise, use the conversation ID as the thread ID
   return activity.conversation?.id;
+}
+
+/**
+ * Extracts text content from message body and/or attachments (Adaptive Cards).
+ * Grafana IRM and similar connectors send content as Adaptive Card attachments.
+ */
+function extractMessageText(
+  bodyContent?: string,
+  attachments?: { contentType?: string; content?: string; name?: string }[],
+): string {
+  const parts: string[] = [];
+
+  // Add body content if present (strip HTML tags)
+  if (bodyContent) {
+    const cleanedBody = stripHtmlTags(bodyContent).trim();
+    if (cleanedBody) {
+      parts.push(cleanedBody);
+    }
+  }
+
+  // Extract text from Adaptive Card attachments
+  if (attachments && attachments.length > 0) {
+    for (const attachment of attachments) {
+      if (
+        attachment.contentType === "application/vnd.microsoft.card.adaptive" &&
+        attachment.content
+      ) {
+        try {
+          // Parse the Adaptive Card JSON and extract text elements
+          const card =
+            typeof attachment.content === "string"
+              ? JSON.parse(attachment.content)
+              : attachment.content;
+          const cardText = extractAdaptiveCardText(card);
+          if (cardText) {
+            parts.push(cardText);
+          }
+        } catch {
+          // If JSON parsing fails, try to use content as-is
+          if (typeof attachment.content === "string") {
+            parts.push(attachment.content);
+          }
+        }
+      }
+    }
+  }
+
+  return parts.join("\n\n");
+}
+
+/**
+ * Recursively extracts text from Adaptive Card elements.
+ */
+function extractAdaptiveCardText(element: unknown): string {
+  if (!element || typeof element !== "object") {
+    return "";
+  }
+
+  const parts: string[] = [];
+  const el = element as Record<string, unknown>;
+
+  // Extract text from TextBlock elements
+  if (el.type === "TextBlock" && typeof el.text === "string") {
+    parts.push(el.text);
+  }
+
+  // Extract text from FactSet elements (key-value pairs like in Grafana alerts)
+  if (el.type === "FactSet" && Array.isArray(el.facts)) {
+    for (const fact of el.facts as { title?: string; value?: string }[]) {
+      if (fact.title && fact.value) {
+        parts.push(`${fact.title}: ${fact.value}`);
+      }
+    }
+  }
+
+  // Recursively process body array
+  if (Array.isArray(el.body)) {
+    for (const item of el.body) {
+      const text = extractAdaptiveCardText(item);
+      if (text) parts.push(text);
+    }
+  }
+
+  // Recursively process items array (for containers)
+  if (Array.isArray(el.items)) {
+    for (const item of el.items) {
+      const text = extractAdaptiveCardText(item);
+      if (text) parts.push(text);
+    }
+  }
+
+  // Recursively process columns
+  if (Array.isArray(el.columns)) {
+    for (const col of el.columns) {
+      const text = extractAdaptiveCardText(col);
+      if (text) parts.push(text);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+/**
+ * Strips HTML tags from text content.
+ */
+function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export default MSTeamsProvider;

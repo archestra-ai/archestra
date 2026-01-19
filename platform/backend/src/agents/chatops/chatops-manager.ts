@@ -272,9 +272,16 @@ export class ChatOpsManager {
         excludeMessageId: message.messageId,
       });
 
-      return history.map(
-        (msg) => `${msg.isFromBot ? "Assistant" : msg.senderName}: ${msg.text}`,
-      );
+      return history.map((msg) => {
+        let text = msg.text;
+
+        // Strip footer from bot messages to avoid LLM repeating it
+        if (msg.isFromBot) {
+          text = stripBotFooter(text);
+        }
+
+        return `${msg.isFromBot ? "Assistant" : msg.senderName}: ${text}`;
+      });
     } catch (error) {
       logger.error(
         { error: error instanceof Error ? error.message : String(error) },
@@ -353,3 +360,35 @@ export class ChatOpsManager {
 
 // Singleton instance
 export const chatOpsManager = new ChatOpsManager();
+
+// =============================================================================
+// Internal Helpers
+// =============================================================================
+
+/**
+ * Strip the bot footer from message text to avoid LLM repeating it.
+ * The footer format is: "\n\n---\n_Routed to X. Use @Archestra /select-agent to change._"
+ * Teams may return this in various HTML formats.
+ */
+function stripBotFooter(text: string): string {
+  // Match the footer pattern in various formats Teams might use
+  return (
+    text
+      // Markdown format
+      .replace(
+        /\n\n---\n_Routed to .+?\. Use @Archestra \/select-agent to change\._$/i,
+        "",
+      )
+      // HTML with <hr> and <em>
+      .replace(
+        /<hr\s*\/?>\s*<em>Routed to .+?\. Use @Archestra \/select-agent to change\.<\/em>$/i,
+        "",
+      )
+      // Plain text "Routed to..." at end of message (after stripping HTML)
+      .replace(
+        /\s*Routed to .+?\. Use @Archestra \/select-agent to change\.$/i,
+        "",
+      )
+      .trim()
+  );
+}

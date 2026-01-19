@@ -145,7 +145,7 @@ export default function ChatPage() {
   >(null);
   const { data: editingPrompt } = usePrompt(editingPromptId || "");
 
-  // Set initial agent from URL param or default when data loads
+  // Set initial agent from URL param, localStorage, or default when data loads
   useEffect(() => {
     if (allProfiles.length === 0) return;
 
@@ -177,6 +177,23 @@ export default function ChatPage() {
           urlParamsConsumedRef.current = true;
           return;
         }
+      }
+
+     
+      const storedAgentId = localStorage.getItem("last-selected-agent-id");
+      if (storedAgentId && allProfiles.some((p) => p.id === storedAgentId)) {
+        setInitialAgentId(storedAgentId);
+      
+        const storedPromptId = localStorage.getItem("last-selected-prompt-id");
+        if (storedPromptId) {
+          const storedPrompt = prompts.find(
+            (p) => p.id === storedPromptId && p.agentId === storedAgentId,
+          );
+          if (storedPrompt) {
+            setInitialPromptId(storedPromptId);
+          }
+        }
+        return;
       }
     }
 
@@ -672,6 +689,13 @@ export default function ChatPage() {
     (promptId: string | null, agentId: string) => {
       setInitialAgentId(agentId);
       setInitialPromptId(promptId);
+      // Store last selected profile/agent in localStorage
+      localStorage.setItem("last-selected-agent-id", agentId);
+      if (promptId) {
+        localStorage.setItem("last-selected-prompt-id", promptId);
+      } else {
+        localStorage.removeItem("last-selected-prompt-id");
+      }
     },
     [],
   );

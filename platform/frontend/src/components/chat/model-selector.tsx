@@ -16,16 +16,6 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { useModelsByProviderQuery } from "@/lib/chat-models.query";
 
 interface ModelSelectorProps {
@@ -35,8 +25,6 @@ interface ModelSelectorProps {
   onModelChange: (model: string) => void;
   /** Whether the selector should be disabled */
   disabled?: boolean;
-  /** Number of messages in current conversation (for mid-conversation warning) */
-  messageCount?: number;
   /** Callback when the selector opens or closes */
   onOpenChange?: (open: boolean) => void;
 }
@@ -57,17 +45,14 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
  * - Models grouped by provider with provider name headers
  * - Search functionality to filter models
  * - Models filtered by configured API keys
- * - Mid-conversation warning when switching models
  */
 export function ModelSelector({
   selectedModel,
   onModelChange,
   disabled = false,
-  messageCount = 0,
   onOpenChange: onOpenChangeProp,
 }: ModelSelectorProps) {
   const { modelsByProvider, isLoading } = useModelsByProviderQuery();
-  const [pendingModel, setPendingModel] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -115,24 +100,7 @@ export function ModelSelector({
     }
 
     handleOpenChange(false);
-
-    // If there are messages, show warning dialog
-    if (messageCount > 0) {
-      setPendingModel(model);
-    } else {
-      onModelChange(model);
-    }
-  };
-
-  const handleConfirmChange = () => {
-    if (pendingModel) {
-      onModelChange(pendingModel);
-      setPendingModel(null);
-    }
-  };
-
-  const handleCancelChange = () => {
-    setPendingModel(null);
+    onModelChange(model);
   };
 
   // Check if selectedModel is in the available models
@@ -165,98 +133,68 @@ export function ModelSelector({
   }
 
   return (
-    <>
-      <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
-        <ModelSelectorTrigger asChild>
-          <PromptInputButton disabled={disabled}>
-            {selectedModelLogo && (
-              <ModelSelectorLogo provider={selectedModelLogo} />
-            )}
-            <ModelSelectorName>
-              {selectedModelDisplayName || "Select model"}
-            </ModelSelectorName>
-          </PromptInputButton>
-        </ModelSelectorTrigger>
-        <ModelSelectorContent
-          title="Select Model"
-          onCloseAutoFocus={(e) => e.preventDefault()}
-        >
-          <ModelSelectorInput placeholder="Search models..." />
-          <ModelSelectorList>
-            <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-
-            {/* Show current model if not in available list */}
-            {!isModelAvailable && selectedModel && (
-              <ModelSelectorGroup heading="Current (API key missing)">
-                <ModelSelectorItem
-                  disabled
-                  value={selectedModel}
-                  className="text-yellow-600"
-                >
-                  {selectedModelLogo && (
-                    <ModelSelectorLogo provider={selectedModelLogo} />
-                  )}
-                  <ModelSelectorName>{selectedModel}</ModelSelectorName>
-                  <CheckIcon className="ml-auto size-4" />
-                </ModelSelectorItem>
-              </ModelSelectorGroup>
-            )}
-
-            {availableProviders.map((provider) => (
-              <ModelSelectorGroup
-                key={provider}
-                heading={providerDisplayNames[provider]}
-              >
-                {modelsByProvider[provider]?.map((model) => (
-                  <ModelSelectorItem
-                    key={model.id}
-                    value={model.id}
-                    onSelect={() => handleSelectModel(model.id)}
-                  >
-                    <ModelSelectorLogo
-                      provider={providerToLogoProvider[provider]}
-                    />
-                    <ModelSelectorName>{model.displayName}</ModelSelectorName>
-                    {selectedModel === model.id ? (
-                      <CheckIcon className="ml-auto size-4" />
-                    ) : (
-                      <div className="ml-auto size-4" />
-                    )}
-                  </ModelSelectorItem>
-                ))}
-              </ModelSelectorGroup>
-            ))}
-          </ModelSelectorList>
-        </ModelSelectorContent>
-      </ModelSelectorRoot>
-
-      {/* Mid-conversation warning dialog */}
-      <AlertDialog
-        open={!!pendingModel}
-        onOpenChange={(open) => {
-          if (!open) {
-            handleCancelChange();
-            onOpenChangeProp?.(false);
-          }
-        }}
+    <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
+      <ModelSelectorTrigger asChild>
+        <PromptInputButton disabled={disabled}>
+          {selectedModelLogo && (
+            <ModelSelectorLogo provider={selectedModelLogo} />
+          )}
+          <ModelSelectorName>
+            {selectedModelDisplayName || "Select model"}
+          </ModelSelectorName>
+        </PromptInputButton>
+      </ModelSelectorTrigger>
+      <ModelSelectorContent
+        title="Select Model"
+        onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Change model mid-conversation?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Switching models during a conversation may affect response quality
-              and consistency. The new model may not have the same context
-              understanding as the previous one.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmChange}>
-              Change Model
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+        <ModelSelectorInput placeholder="Search models..." />
+        <ModelSelectorList>
+          <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+
+          {/* Show current model if not in available list */}
+          {!isModelAvailable && selectedModel && (
+            <ModelSelectorGroup heading="Current (API key missing)">
+              <ModelSelectorItem
+                disabled
+                value={selectedModel}
+                className="text-yellow-600"
+              >
+                {selectedModelLogo && (
+                  <ModelSelectorLogo provider={selectedModelLogo} />
+                )}
+                <ModelSelectorName>{selectedModel}</ModelSelectorName>
+                <CheckIcon className="ml-auto size-4" />
+              </ModelSelectorItem>
+            </ModelSelectorGroup>
+          )}
+
+          {availableProviders.map((provider) => (
+            <ModelSelectorGroup
+              key={provider}
+              heading={providerDisplayNames[provider]}
+            >
+              {modelsByProvider[provider]?.map((model) => (
+                <ModelSelectorItem
+                  key={model.id}
+                  value={model.id}
+                  onSelect={() => handleSelectModel(model.id)}
+                >
+                  <ModelSelectorLogo
+                    provider={providerToLogoProvider[provider]}
+                  />
+                  <ModelSelectorName>{model.displayName}</ModelSelectorName>
+                  {selectedModel === model.id ? (
+                    <CheckIcon className="ml-auto size-4" />
+                  ) : (
+                    <div className="ml-auto size-4" />
+                  )}
+                </ModelSelectorItem>
+              ))}
+            </ModelSelectorGroup>
+          ))}
+        </ModelSelectorList>
+      </ModelSelectorContent>
+    </ModelSelectorRoot>
   );
 }

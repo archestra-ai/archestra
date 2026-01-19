@@ -133,68 +133,70 @@ export function ModelSelector({
   }
 
   return (
-    <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
-      <ModelSelectorTrigger asChild>
-        <PromptInputButton disabled={disabled}>
-          {selectedModelLogo && (
-            <ModelSelectorLogo provider={selectedModelLogo} />
-          )}
-          <ModelSelectorName>
-            {selectedModelDisplayName || "Select model"}
-          </ModelSelectorName>
-        </PromptInputButton>
-      </ModelSelectorTrigger>
-      <ModelSelectorContent
-        title="Select Model"
-        onCloseAutoFocus={(e) => e.preventDefault()}
-      >
-        <ModelSelectorInput placeholder="Search models..." />
-        <ModelSelectorList>
-          <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+    <>
+      <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
+        <ModelSelectorTrigger asChild>
+          <PromptInputButton disabled={disabled}>
+            {selectedModelLogo && (
+              <ModelSelectorLogo provider={selectedModelLogo} />
+            )}
+            <ModelSelectorName>
+              {selectedModelDisplayName || "Select model"}
+            </ModelSelectorName>
+          </PromptInputButton>
+        </ModelSelectorTrigger>
+        <ModelSelectorContent
+          title="Select Model"
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          <ModelSelectorInput placeholder="Search models..." />
+          <ModelSelectorList>
+            <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
 
-          {/* Show current model if not in available list */}
-          {!isModelAvailable && selectedModel && (
-            <ModelSelectorGroup heading="Current (API key missing)">
-              <ModelSelectorItem
-                disabled
-                value={selectedModel}
-                className="text-yellow-600"
-              >
-                {selectedModelLogo && (
-                  <ModelSelectorLogo provider={selectedModelLogo} />
-                )}
-                <ModelSelectorName>{selectedModel}</ModelSelectorName>
-                <CheckIcon className="ml-auto size-4" />
-              </ModelSelectorItem>
-            </ModelSelectorGroup>
-          )}
-
-          {availableProviders.map((provider) => (
-            <ModelSelectorGroup
-              key={provider}
-              heading={providerDisplayNames[provider]}
-            >
-              {modelsByProvider[provider]?.map((model) => (
+            {/* Show current model if not in available list */}
+            {!isModelAvailable && selectedModel && (
+              <ModelSelectorGroup heading="Current (API key missing)">
                 <ModelSelectorItem
-                  key={model.id}
-                  value={model.id}
-                  onSelect={() => handleSelectModel(model.id)}
+                  disabled
+                  value={selectedModel}
+                  className="text-yellow-600"
                 >
-                  <ModelSelectorLogo
-                    provider={providerToLogoProvider[provider]}
-                  />
-                  <ModelSelectorName>{model.displayName}</ModelSelectorName>
-                  {selectedModel === model.id ? (
-                    <CheckIcon className="ml-auto size-4" />
-                  ) : (
-                    <div className="ml-auto size-4" />
+                  {selectedModelLogo && (
+                    <ModelSelectorLogo provider={selectedModelLogo} />
                   )}
+                  <ModelSelectorName>{selectedModel}</ModelSelectorName>
+                  <CheckIcon className="ml-auto size-4" />
                 </ModelSelectorItem>
-              ))}
-            </ModelSelectorGroup>
-          ))}
-        </ModelSelectorList>
-      </ModelSelectorContent>
-    </ModelSelectorRoot>
+              </ModelSelectorGroup>
+            )}
+
+            {availableProviders.map((provider) => (
+              <ModelSelectorGroup
+                key={provider}
+                heading={providerDisplayNames[provider]}
+              >
+                {modelsByProvider[provider]?.map((model) => (
+                  <ModelSelectorItem
+                    key={model.id}
+                    value={model.id}
+                    onSelect={() => handleSelectModel(model.id)}
+                  >
+                    <ModelSelectorLogo
+                      provider={providerToLogoProvider[provider]}
+                    />
+                    <ModelSelectorName>{model.displayName}</ModelSelectorName>
+                    {selectedModel === model.id ? (
+                      <CheckIcon className="ml-auto size-4" />
+                    ) : (
+                      <div className="ml-auto size-4" />
+                    )}
+                  </ModelSelectorItem>
+                ))}
+              </ModelSelectorGroup>
+            ))}
+          </ModelSelectorList>
+        </ModelSelectorContent>
+      </ModelSelectorRoot>
+    </>
   );
 }

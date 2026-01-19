@@ -461,6 +461,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatModels]: {
     conversation: ["read"],
   },
+  [RouteId.InvalidateChatModelsCache]: {
+    conversation: ["read"],
+  },
   [RouteId.UpdateChatMessage]: {
     conversation: ["update"],
   },

@@ -6,7 +6,7 @@ import { betterAuth } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import { AccountModel, MemberModel, UserModel, UserTokenModel } from "@/models";
-import { constructResponseSchema, UserSchema } from "@/types";
+import { constructResponseSchema, UpdateUser, UserSchema } from "@/types";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -172,7 +172,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // This is critical for downstream middleware/logging that relies on routeOptions
   fastify.route({
     method: "GET",
-    url: "/api/auth/admin/get-user",
+    url: "/api/auth/admin/user",
     schema: {
       operationId: RouteId.GetUser,
       description: "Get user by ID",
@@ -193,6 +193,139 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.status(500).send();
       }
     },
+  });
+
+  // Create User (Admin)
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/admin/users",
+    schema: {
+      operationId: RouteId.CreateUser,
+      description: "Create a new user",
+      tags: ["User"],
+      body: z.object({
+        id: z.string().optional(),
+        name: z.string(),
+        email: z.string(),
+        password: z.string().min(8),
+        image: z.string().optional(),
+      }),
+      response: constructResponseSchema(UserSchema),
+    },
+    async handler(request, reply) {
+      const { id, name, email, password, image } = request.body;
+
+      try {
+        const result = await betterAuth.api.signUpEmail({
+          body: {
+            id,
+            name,
+            email,
+            password,
+            image,
+          },
+          asResponse: false,
+        });
+
+        if (!result) {
+          throw new Error("Failed to create user");
+        }
+
+        return reply.code(200).send(result.user);
+      } catch (error) {
+        request.log.error(error);
+        if (error && typeof error === 'object' && 'status' in error) {
+          // biome-ignore lint/suspicious/noExplicitAny: error typing
+          const apiError = error as any;
+          return reply.status(apiError.status || 500).send(apiError.body || { message: "Failed to create user" });
+        }
+        return reply.status(500).send();
+      }
+    },
+  });
+
+  // Update User (Admin)
+  fastify.route({
+    method: "PATCH",
+    url: "/api/auth/admin/users/:id",
+    schema: {
+      operationId: RouteId.UpdateUser,
+      description: "Update a user",
+      tags: ["User"],
+      params: z.object({
+        id: z.string(),
+      }),
+      body: z.object({
+        name: z.string().optional(),
+        email: z.string().email().optional(),
+        image: z.string().optional(),
+      }),
+      response: constructResponseSchema(UserSchema),
+    },
+    async handler(request, reply) {
+      const { id } = request.params;
+      const updateData = request.body;
+
+      try {
+        // Check if user exists
+        const user = await UserModel.getById(id);
+        if (!user) {
+          return reply.status(404).send();
+        }
+
+        await UserModel.patch(id, updateData);
+
+        // Fetch updated user to return
+        const updatedUser = await UserModel.getById(id);
+        if (!updatedUser) {
+          return reply.status(404).send();
+        }
+        return reply.send({ ...updatedUser });
+
+      } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send();
+      }
+    }
+  });
+
+  // Delete User (Admin)
+  fastify.route({
+    method: "DELETE",
+    url: "/api/auth/admin/users/:id",
+    schema: {
+      operationId: RouteId.DeleteUser,
+      description: "Delete a user",
+      tags: ["User"],
+      params: z.object({
+        id: z.string(),
+      }),
+      response: {
+        200: z.object({
+          success: z.boolean(),
+        }),
+        404: z.object({}),
+        500: z.object({}),
+      }
+    },
+    async handler(request, reply) {
+      const { id } = request.params;
+      try {
+        // Check if user exists
+        const user = await UserModel.getById(id);
+        if (!user) {
+          return reply.status(404).send();
+        }
+
+        // Using UserModel.delete which deletes from DB.
+        // Be certain this is what is desired from the request.
+        await UserModel.delete(id);
+        return reply.send({ success: true });
+      } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send();
+      }
+    }
   });
 
   // Existing auth handler for all other auth routes

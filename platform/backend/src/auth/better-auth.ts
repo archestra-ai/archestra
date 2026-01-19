@@ -23,12 +23,12 @@ import SessionModel from "@/models/session";
 const { ssoConfig, syncSsoRole, syncSsoTeams } =
   config.enterpriseLicenseActivated
     ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
-      await import("./sso.ee")
+    await import("./sso.ee")
     : {
-        ssoConfig: undefined,
-        syncSsoRole: () => {},
-        syncSsoTeams: () => {},
-      };
+      ssoConfig: undefined,
+      syncSsoRole: () => { },
+      syncSsoTeams: () => { },
+    };
 
 const APP_NAME = "Archestra";
 const {

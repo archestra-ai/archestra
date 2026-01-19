@@ -235,6 +235,9 @@ export const RouteId = {
   // User Routes
   GetUserPermissions: "getUserPermissions",
   GetUser: "getUser",
+  CreateUser: "createUser",
+  UpdateUser: "updateUser",
+  DeleteUser: "deleteUser",
 
   // Token Price Routes
   GetTokenPrices: "getTokenPrices",

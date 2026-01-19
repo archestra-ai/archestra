@@ -67,7 +67,7 @@ export function useConversations({
       if (error) throw new Error("Failed to fetch conversations");
       return data;
     },
-    staleTime: search ? 0 : 500, // No stale time for searches, 500ms otherwise
+    staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

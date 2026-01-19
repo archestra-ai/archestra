@@ -46,6 +46,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
+import { useIsAuthenticated } from "@/lib/auth.hook";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import {
@@ -97,7 +98,10 @@ export function ChatSidebarSection() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { data: conversations = [], isLoading } = useConversations();
+  const isAuthenticated = useIsAuthenticated();
+  const { data: conversations = [], isLoading } = useConversations({
+    enabled: isAuthenticated,
+  });
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
   const generateTitleMutation = useGenerateConversationTitle();

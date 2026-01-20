@@ -150,7 +150,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by (profile_name) (rate(llm_tokens_total{type=\"input\"}[1m]))",
+          "expr": "sum by (profile_name) (rate(llm_tokens_total{type=\"input\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{profile_name}} (input)",
@@ -163,7 +163,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by (profile_name) (rate(llm_tokens_total{type=\"output\"}[1m]))",
+          "expr": "sum by (profile_name) (rate(llm_tokens_total{type=\"output\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{profile_name}} (output)",
@@ -292,7 +292,7 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "sum by (model) (rate(llm_request_duration_seconds_count[1m]))",
+          "expr": "sum by (model) (rate(llm_request_duration_seconds_count[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{model}}",
@@ -393,7 +393,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(llm_blocked_tools_total[1m])",
+          "expr": "rate(llm_blocked_tools_total[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "{{profile_name}}",
@@ -522,7 +522,7 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "sum by (model) (rate(llm_cost_total[5m]) * 3600)",
+          "expr": "sum by (model) (rate(llm_cost_total[$__rate_interval]) * 3600)",
           "hide": false,
           "instant": false,
           "interval": "",
@@ -661,7 +661,7 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket[5m])) by (model, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket[$__rate_interval])) by (model, le))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{model}} (p95)",
@@ -675,7 +675,7 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(llm_time_to_first_token_seconds_bucket[5m])) by (model, le))",
+          "expr": "histogram_quantile(0.50, sum(rate(llm_time_to_first_token_seconds_bucket[$__rate_interval])) by (model, le))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{model}} (p50)",
@@ -805,7 +805,7 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(llm_tokens_per_second_bucket[5m])) by (model, le))",
+          "expr": "histogram_quantile(0.50, sum(rate(llm_tokens_per_second_bucket[$__rate_interval])) by (model, le))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{model}} (p50)",
@@ -819,7 +819,7 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(llm_tokens_per_second_bucket[5m])) by (model, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_tokens_per_second_bucket[$__rate_interval])) by (model, le))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{model}} (p95)",
@@ -929,7 +929,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(route) (rate(http_request_duration_seconds_count{route=~\"$route\"}[1m]))",
+          "expr": "sum by(route) (rate(http_request_duration_seconds_count{route=~\"$route\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{route}}",
@@ -1034,7 +1034,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route=~\"$route\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route=~\"$route\"}[$__rate_interval])) by (le))",
           "hide": false,
           "instant": false,
           "legendFormat": "p95",
@@ -1047,7 +1047,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{route=~\"$route\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{route=~\"$route\"}[$__rate_interval])) by (le))",
           "hide": false,
           "instant": false,
           "legendFormat": "p50",
@@ -1183,7 +1183,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(route, status_code) (rate(http_request_duration_seconds_count{status_code=~\"4..|5..\",route=~\"$route\"}[1m]))",
+          "expr": "sum by(route, status_code) (rate(http_request_duration_seconds_count{status_code=~\"4..|5..\",route=~\"$route\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{route}} ({{status_code}})",
@@ -1469,7 +1469,7 @@
                 "type": "prometheus",
                 "uid": "$metrics_datasource"
               },
-              "expr": "rate(process_cpu_seconds_total[1m])",
+              "expr": "rate(process_cpu_seconds_total[$__rate_interval])",
               "hide": false,
               "instant": false,
               "legendFormat": "CPU Usage",

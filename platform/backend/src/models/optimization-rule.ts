@@ -273,6 +273,7 @@ class OptimizationRuleModel {
       cerebras: [],
       vllm: [], // vLLM model pricing varies by deployment, so no defaults
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
+      xai: [], // x.ai model pricing varies, so no defaults
       zhipuai: [],
     };
 
@@ -304,6 +305,7 @@ class OptimizationRuleModel {
         cerebras: [],
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
+        xai: [], // x.ai optimization rules are deployment-specific, no defaults
         zhipuai: [],
       };
 

@@ -271,6 +271,7 @@ export const parseBodyLimit = (
 
 const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 
+// Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const OTEL_TRACES_PATH = "/v1/traces";
 
@@ -299,6 +300,11 @@ export const getOtelExporterOtlpEndpoint = (
   // If already ends with /v1/traces, return as-is
   if (normalizedUrl.endsWith(OTEL_TRACES_PATH)) {
     return normalizedUrl;
+  }
+
+  // Fix common typo: /v1/trace (missing 's') -> /v1/traces
+  if (normalizedUrl.endsWith("/v1/trace")) {
+    return `${normalizedUrl}s`;
   }
 
   // If ends with /v1, just append /traces

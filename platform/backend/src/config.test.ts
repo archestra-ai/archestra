@@ -724,12 +724,12 @@ describe("getOtelExporterOtlpEndpoint", () => {
       expect(result).toBe("http://otel-collector/v1/traces");
     });
 
-    test("should not double-append when URL ends with partial match", () => {
-      // URL ending in /v1/trace (missing s) should get full suffix appended
+    test("should fix common typo /v1/trace (missing s) to /v1/traces", () => {
+      // URL ending in /v1/trace (missing s) should be normalized to /v1/traces
       const result = getOtelExporterOtlpEndpoint(
         "http://otel-collector:4318/v1/trace",
       );
-      expect(result).toBe("http://otel-collector:4318/v1/trace/v1/traces");
+      expect(result).toBe("http://otel-collector:4318/v1/traces");
     });
   });
 });

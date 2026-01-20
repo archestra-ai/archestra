@@ -18,7 +18,8 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
     case "openai":
     case "vllm":
     case "ollama":
-      // vLLM and Ollama use tiktoken-compatible tokenization for most models
+    case "mistral":
+      // vLLM, Ollama and Mistral use tiktoken-compatible tokenization for most models
       return new TiktokenTokenizer();
     case "zhipuai":
       return new TiktokenTokenizer();

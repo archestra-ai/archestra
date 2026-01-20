@@ -270,6 +270,24 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
             return part.text;
           }
         }
+
+        // If no text part found, provide descriptive fallback for other content types
+        for (const part of message.parts) {
+          if (hasFunctionCall(part)) {
+            return `[Function call: ${part.functionCall.name}]`;
+          }
+          if (hasFunctionResponse(part)) {
+            return `[Function response: ${part.functionResponse.name}]`;
+          }
+          if (hasInlineData(part)) {
+            return `[${part.inlineData.mimeType} data]`;
+          }
+          if (hasFileData(part)) {
+            const fileName =
+              part.fileData.fileUri.split("/").pop() || part.fileData.fileUri;
+            return `[File: ${fileName}]`;
+          }
+        }
       }
     }
     return "";

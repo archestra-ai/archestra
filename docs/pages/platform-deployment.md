@@ -111,7 +111,8 @@ The Helm chart provides extensive configuration options through values. For the 
 - `archestra.imageTag` - Image tag for the Archestra Platform. New Helm releases update this value to latest available image tag.
 - `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
 - `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
-- `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options)
+- `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options). Supports Kubernetes `$(VAR_NAME)` expansion syntax.
+- `archestra.envWithValueFrom` - Environment variables with `valueFrom` for Kubernetes downward API (`fieldRef`, `resourceFieldRef`) or other sources. Required for defining variables like `NODE_IP` that can be referenced via `$(NODE_IP)` in other env vars.
 - `archestra.envFromSecrets` - Environment variables from Kubernetes Secrets (inject sensitive data from secrets)
 - `archestra.envFrom` - Import all key-value pairs from Secrets or ConfigMaps as environment variables
 
@@ -478,7 +479,9 @@ For complete documentation, examples, and resource reference, visit the [Archest
 
 ## Environment Variables
 
-The following environment variables can be used to configure Archestra Platform:
+The following environment variables can be used to configure Archestra Platform.
+
+### Application & API Configuration
 
 - **`ARCHESTRA_DATABASE_URL`** - PostgreSQL connection string for the database.
 
@@ -511,11 +514,27 @@ The following environment variables can be used to configure Archestra Platform:
   - Example: `https://frontend.example.com`
   - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
 
-- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
+- **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
 
-  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
-  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
-  - Required when using different domains or subdomains for frontend and backend
+  - Default: `permissive`
+  - Values: `permissive` or `restrictive`
+  - `permissive`: Tools are allowed, unless a specific policy is set for them.
+  - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
+
+- **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
+
+  - Default: `enabled`
+  - Set to `disabled` to opt-out of analytics
+
+- **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
+
+  - Default: `info`
+  - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
+  - Please reach out to <sales@archestra.ai> to learn more about the license.
+
+### Authentication & Security
 
 - **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens and passwords.
 
@@ -530,6 +549,12 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Default: `password`
   - Note: Change this to a secure password for production deployments
+
+- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
+
+  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
+  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
+  - Required when using different domains or subdomains for frontend and backend
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
 
@@ -550,6 +575,25 @@ The following environment variables can be used to configure Archestra Platform:
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
   - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
   - Required when configuring SSO with external identity providers hosted on different domains
+
+- **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
+
+  - Default: `DB` (database storage)
+  - Options: `DB` or `Vault`
+  - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
+
+- **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
+
+  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
+  - Example: `http://localhost:8200`
+  - Note: System falls back to database storage if Vault is configured but credentials are missing
+
+- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
+
+  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
+  - Note: System falls back to database storage if Vault is configured but credentials are missing
+
+### LLM Provider Configuration
 
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 
@@ -579,13 +623,6 @@ The following environment variables can be used to configure Archestra Platform:
   - Example: `http://localhost:11434/v1` (default Ollama)
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
 
-- **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
-
-  - Default: `permissive`
-  - Values: `permissive` or `restrictive`
-  - `permissive`: Tools are allowed, unless a specific policy is set for them.
-  - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
-
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
 
   - Default: `false`
@@ -611,6 +648,21 @@ The following environment variables can be used to configure Archestra Platform:
   - When not set, uses [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials)
   - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
+- **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
+
+  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`, `ARCHESTRA_CHAT_VLLM_API_KEY`, `ARCHESTRA_CHAT_OLLAMA_API_KEY`
+  - These serve as fallback API keys when no organization default or profile-specific key is configured
+  - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
+  - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
+
+- **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Default LLM provider for Chat and A2A features.
+
+  - Default: `anthropic`
+  - Options: `anthropic`, `openai`, `gemini`
+  - Used when no profile-specific provider is configured
+
+### MCP Server Orchestrator
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
 
   - Default: `default`
@@ -626,77 +678,36 @@ The following environment variables can be used to configure Archestra Platform:
   - Default: `true`
   - Set to `false` when Archestra is deployed in the different cluster and specify the `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`.
 
-- **`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`** - Path to custom kubeconfig file. Mount the required kubeconfig as volume inside the
+- **`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`** - Path to the custom kubeconfig file to mount as a volume inside the container.
 
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
 
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
+### Observability & Metrics
+
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces.
 
   - Default: `http://localhost:4318/v1/traces`
 
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME`** - Username for OTEL basic authentication
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME`** - Username for OTEL basic authentication.
 
   - Optional: Only used if both username and password are provided
   - Example: `your-username`
 
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for OTEL basic authentication
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for OTEL basic authentication.
 
   - Optional: Only used if both username and password are provided
   - Example: `your-password`
 
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for OTEL authentication
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for OTEL authentication.
 
   - Optional: Takes precedence over basic authentication if provided
   - Example: `your-bearer-token`
 
-- **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
-
-  - Default: `enabled`
-  - Set to `disabled` to opt-out of analytics
-
-- **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
-
-  - Default: `info`
-  - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
-
-- **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access
+- **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
 
   - Default: `archestra-metrics-secret`
   - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`
-
-- **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
-
-  - Default: `DB` (database storage)
-  - Options: `DB` or `Vault`
-  - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
-
-- **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
-
-  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
-  - Example: `http://localhost:8200`
-  - Note: System falls back to database storage if Vault is configured but credentials are missing
-
-- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
-
-  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
-  - Note: System falls back to database storage if Vault is configured but credentials are missing
-
-- **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
-
-  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`, `ARCHESTRA_CHAT_VLLM_API_KEY`, `ARCHESTRA_CHAT_OLLAMA_API_KEY`
-  - These serve as fallback API keys when no organization default or profile-specific key is configured
-  - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
-  - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
-
-- **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Default LLM provider for Chat and A2A features.
-
-  - Default: `anthropic`
-  - Options: `anthropic`, `openai`, `gemini`
-  - Used when no profile-specific provider is configured
-
-- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
-  - Please reach out to <sales@archestra.ai> to learn more about the license.
 
 ### Incoming Email Configuration
 

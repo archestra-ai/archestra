@@ -28,7 +28,10 @@ test.describe("Chat Models Cache Invalidation API", () => {
     try {
       await clearWiremockRequests(request);
     } catch {
-      test.skip(true, "WireMock not available - run: tilt trigger e2e-test-dependencies");
+      test.skip(
+        true,
+        "WireMock not available - run: tilt trigger e2e-test-dependencies",
+      );
       return;
     }
 
@@ -100,32 +103,33 @@ test.describe("Chat Models Cache Invalidation API", () => {
   });
 });
 
-test.describe.skip("Chat Models API", () => {
-  test.describe.configure({ mode: "serial" });
+test.describe
+  .skip("Chat Models API", () => {
+    test.describe.configure({ mode: "serial" });
 
-  test("should fetch chat models from all providers", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    const response = await makeApiRequest({
+    test("should fetch chat models from all providers", async ({
       request,
-      method: "get",
-      urlSuffix: "/api/chat/models",
+      makeApiRequest,
+    }) => {
+      const response = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/chat/models",
+      });
+
+      expect(response.ok()).toBe(true);
+      const models = await response.json();
+
+      expect(Array.isArray(models)).toBe(true);
+
+      // Check that models have the expected shape
+      for (const model of models) {
+        expect(model).toHaveProperty("id");
+        expect(model).toHaveProperty("displayName");
+        expect(model).toHaveProperty("provider");
+        expect(["openai", "anthropic", "gemini"]).toContain(model.provider);
+      }
     });
-
-    expect(response.ok()).toBe(true);
-    const models = await response.json();
-
-    expect(Array.isArray(models)).toBe(true);
-
-    // Check that models have the expected shape
-    for (const model of models) {
-      expect(model).toHaveProperty("id");
-      expect(model).toHaveProperty("displayName");
-      expect(model).toHaveProperty("provider");
-      expect(["openai", "anthropic", "gemini"]).toContain(model.provider);
-    }
-  });
 
     test("should fetch chat models filtered by provider (openai)", async ({
       request,

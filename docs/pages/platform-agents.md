@@ -4,7 +4,7 @@ category: Archestra Platform
 subcategory: Concepts
 order: 1
 description: Agent invocation methods including A2A, incoming email, and ChatOps
-lastUpdated: 2026-01-17
+lastUpdated: 2026-01-20
 ---
 
 Agents in Archestra are invoked through Prompts. While the primary method is via the [Chat](/docs/platform-chat) interface or [API](/docs/platform-api-reference), agents can also be triggered through alternative channels like A2A (Agent-to-Agent), incoming email, and ChatOps integrations.
@@ -166,26 +166,20 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 - **Teams tenant** where you can install custom apps
 - **Archestra deployment** with external webhook access
 
-### Setup Overview
+### Setup
 
-1. **Create Azure Bot** in Azure Portal
-2. **Configure Archestra** with bot credentials
-3. **Enable Teams integration** on your agent
-4. **Install the Teams app** and mention the bot in a channel
-5. **Select which agent** handles the channel (via Adaptive Card)
-
-### Create Azure Bot
+#### Create Azure Bot
 
 1. Go to [portal.azure.com](https://portal.azure.com) → **Create a resource** → **Azure Bot**
 2. Fill in **bot handle**, **subscription**, **resource group**
 3. Under **Type of App**, choose either:
    - **Multi Tenant** (default) — bot can be used by any Azure AD tenant
-   - **Single Tenant** — bot restricted to your organization only (requires `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`)
+   - **Single Tenant** — bot restricted to your organization only
 4. Under **Microsoft App ID**, select **Create new Microsoft App ID**
 5. After creation, go to **Settings** → **Configuration**
 6. Copy the **Microsoft App ID** — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`
 7. If using **Single Tenant**, note your **Azure AD Tenant ID** (find in Azure AD → Overview) — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`
-8. Click **Manage Password** → **New client secret** → copy the secret value for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD`
+8. Click **Manage Password** → **New client secret** → copy the secret value for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET`
 9. Set **Messaging endpoint** to `https://your-archestra-domain/api/webhooks/chatops/ms-teams`
 10. Go to **Channels** → add **Microsoft Teams**
 
@@ -200,12 +194,7 @@ To include thread history in agent context, you need different permissions depen
    - `Chat.Read.All` — for group chat messages
 4. Click **Grant admin consent** for both permissions
 
-| Permission | Scope | Required For |
-|------------|-------|--------------|
-| `ChannelMessage.Read.All` | Application | Team channel thread history |
-| `Chat.Read.All` | Application | Group chat thread history |
-
-### Configuration
+#### Configure Archestra
 
 Set these environment variables:
 
@@ -213,18 +202,20 @@ Set these environment variables:
 # Required
 ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true
 ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=<Microsoft App ID>
-ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD=<Client Secret>
+ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=<Client Secret>
 
 # Optional - for single-tenant Azure Bot (leave empty for multi-tenant)
 ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=<Azure AD Tenant ID>
 
 # Optional - for thread history (requires Graph API permissions)
-ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID=<Azure AD Tenant ID>
-ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID=<App Registration Client ID>
-ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET=<App Registration Secret>
+# These fall back to the Bot credentials above if not set.
+# Only set if you need separate credentials for Graph API.
+# ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID=<Azure AD Tenant ID>
+# ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID=<App Registration Client ID>
+# ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET=<App Registration Secret>
 ```
 
-### Enable Agent for Teams
+Then enable Agent for MS Teams:
 
 1. In Archestra, go to **Chat** → open the **Agent Library**
 2. **Edit** the agent you want to use with Teams
@@ -233,7 +224,7 @@ ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET=<App Registration Secret>
 
 Only agents with **Microsoft Teams enabled** will appear in the channel selection dropdown.
 
-### Teams App Manifest
+#### Teams App Manifest
 
 Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png](/docs/outline.png)** (32x32) and **`manifest.json`**:
 
@@ -279,7 +270,7 @@ Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png]
 
 Replace `{{BOT_MS_APP_ID}}` with your **Microsoft App ID**. **Zip the folder contents**.
 
-### Install in Teams
+#### Install in Teams
 
 1. In Teams: **Apps** → **Manage your apps** → **Upload an app**
 2. Select your **manifest zip**
@@ -301,17 +292,39 @@ The bot responds with an **Adaptive Card dropdown** to select which agent handle
 
 | Command | Description |
 |---------|-------------|
-| `@Archestra /select-agent` | Change which agent handles this channel |
-| `@Archestra /status` | Show current agent binding |
+| `@Archestra /select-agent` | Change which agent handles this channel by default |
+| `@Archestra /status` | Show currently set default agent for the channel |
 | `@Archestra /help` | Show available commands |
 
-### Architecture
+#### Default Agent
 
-- **Single Azure Bot** shared across your deployment
-- **Channel bindings** stored in Archestra database
-- **Messages validated** via Bot Framework JWT verification
-- **Thread history** fetched via Microsoft Graph API (if configured)
-- **Responses sent** via Bot Framework SDK
+Each Teams channel requires a **default agent** to be bound to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
+
+Once set, the default agent processes all subsequent messages in that channel until you change it with `/select-agent`.
+
+#### Switching Agents Inline
+
+You can temporarily use a different agent for a single message by using the `>AgentName` syntax:
+
+```
+@Archestra >Sales what's our Q4 pipeline?
+```
+
+This routes the message to the "Sales" agent instead of the channel's default agent. The default binding remains unchanged—only this specific message uses the alternate agent.
+
+**Matching rules:**
+- Agent names are matched case-insensitively
+- Spaces in agent names are optional: `>AgentPeter` matches "Agent Peter"
+- If the agent name isn't found, the message falls back to the default agent with a notice
+
+**Examples:**
+
+| Message | Routed To |
+|---------|-----------|
+| `@Archestra hello` | Default agent |
+| `@Archestra >Sales check revenue` | Sales agent |
+| `@Archestra >support help me` | Support agent |
+| `@Archestra >Unknown test` | Default agent (with fallback notice) |
 
 ### Troubleshooting
 

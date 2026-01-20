@@ -93,9 +93,21 @@ importers:
       '@kubiks/otel-drizzle':
         specifier: ^2.1.0
         version: 2.1.0(@opentelemetry/api@1.9.0)(drizzle-orm@0.45.1(@electric-sql/pglite@0.3.14)(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(kysely@0.28.9)(pg@8.16.3))
+      '@microsoft/kiota-authentication-azure':
+        specifier: 1.0.0-preview.99
+        version: 1.0.0-preview.99
       '@microsoft/microsoft-graph-client':
         specifier: ^3.0.7
         version: 3.0.7(@azure/identity@4.13.0)
+      '@microsoft/msgraph-sdk':
+        specifier: 1.0.0-preview.77
+        version: 1.0.0-preview.77
+      '@microsoft/msgraph-sdk-chats':
+        specifier: 1.0.0-preview.77
+        version: 1.0.0-preview.77
+      '@microsoft/msgraph-sdk-teams':
+        specifier: 1.0.0-preview.77
+        version: 1.0.0-preview.77
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
         version: 1.25.2(hono@4.11.4)(zod@4.3.5)
@@ -1696,6 +1708,30 @@ packages:
   '@mermaid-js/parser@0.6.3':
     resolution: {integrity: sha512-lnjOhe7zyHjc+If7yT4zoedx2vo4sHaTmtkl1+or8BRTnCtDmcTpAjpzDSfCZrshM5bCoz0GyidzadJAH1xobA==}
 
+  '@microsoft/kiota-abstractions@1.0.0-preview.99':
+    resolution: {integrity: sha512-6qrlwGCO3DbvpA7tszqk7JNQPFPDg8gv5NGMTziwdtHqaQrUALKusm3vdJGPVGrbNiZL6/lBaY5NSUvLtlhRCg==}
+
+  '@microsoft/kiota-authentication-azure@1.0.0-preview.99':
+    resolution: {integrity: sha512-gPmk/vx15sBMfjfLPgqPanmyVR/rA5HGd3318VtPS28mXxH07Zn30R6PVqSemhIwSxfiGnPiq0SlTj28BQhTKQ==}
+
+  '@microsoft/kiota-bundle@1.0.0-preview.99':
+    resolution: {integrity: sha512-AxvO+z6UgWMAT2NfXN36CMhAUm/39tUQt8o32axeEJDS/EvZINDAPstbQV+zK7bJRC8kCqUHhCE/fuHX2dXA+g==}
+
+  '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.99':
+    resolution: {integrity: sha512-lIruiYf8L7DPG0Fm92QN5YK4zx4sh76EtTONUAqBCxt5AtEJ7KQceBajaXQsjfcndUAp9LmDVdqR44o8sc9/mA==}
+
+  '@microsoft/kiota-serialization-form@1.0.0-preview.99':
+    resolution: {integrity: sha512-BdXxqNfy+5yWTyxpBguqJYy6E9RRotrDClRcUO89okFcR5N6s6xenjsvGw++q9KWNi7qcHrqaG8xlRz1TLk81Q==}
+
+  '@microsoft/kiota-serialization-json@1.0.0-preview.99':
+    resolution: {integrity: sha512-kDmMYmB7XkRprlLviEynRPDkE45JDxqiuUopfBRMvNK4qhzFiJTXGLihZ2FG6fdVu9LbV3/W0QxbeGP35kDK6A==}
+
+  '@microsoft/kiota-serialization-multipart@1.0.0-preview.99':
+    resolution: {integrity: sha512-cfviCAVTlZPD+MUgdTIgsX/IfHND+gKQhem3vJeo7l5Qqz2rvvVFXOHwECI19umO9Un1QFKe1V5wg+M+aj90+g==}
+
+  '@microsoft/kiota-serialization-text@1.0.0-preview.99':
+    resolution: {integrity: sha512-gcBffQRI1soHVAiS4YjfMr3SQ9fC8xVUGMfarTTszU4PjpxyFOknaWoFdt/0rvMeavI9jOtbyvDKAf77cZyYIQ==}
+
   '@microsoft/microsoft-graph-client@3.0.7':
     resolution: {integrity: sha512-/AazAV/F+HK4LIywF9C+NYHcJo038zEnWkteilcxC1FM/uK/4NVGDKGrxx7nNq1ybspAroRKT4I1FHfxQzxkUw==}
     engines: {node: '>=12.0.0'}
@@ -1713,6 +1749,18 @@ packages:
         optional: true
       stream-browserify:
         optional: true
+
+  '@microsoft/msgraph-sdk-chats@1.0.0-preview.77':
+    resolution: {integrity: sha512-HktFFU5e1W2zJin3QB5nMEHcTm+vRop5WarDHm5fy50KVsofiWPkyET3ja1iyIHLFspO6EUMIKwSgSWZyPZD/w==}
+
+  '@microsoft/msgraph-sdk-core@1.0.0-preview.17':
+    resolution: {integrity: sha512-zg4adBwEIwJBjM3IHi8xmz6Hyumz/IyEdCiX4JLWd+v4Jo9qIexZ0+IPEhi8xbgMwdrJ0h82D1CKGRe1vcsCBw==}
+
+  '@microsoft/msgraph-sdk-teams@1.0.0-preview.77':
+    resolution: {integrity: sha512-NNNvZt5D7e8zG4ZYUhHgNsZ8Pi2N57KBYlvjPVFStUOUAvEhdEGb5hFrd9bEPAa6yS+Yudb9CsR4dBtTJtl0/Q==}
+
+  '@microsoft/msgraph-sdk@1.0.0-preview.77':
+    resolution: {integrity: sha512-Yt2shpGa7+GFbj0tKTZcdV7dHb861fBaTAK5flbmHNaHcEbYOD7blSMBl+6s7rKJ6bfNxmFXwPZTM+xfeZnTWA==}
 
   '@modelcontextprotocol/sdk@1.25.2':
     resolution: {integrity: sha512-LZFeo4F9M5qOhC/Uc1aQSrBHxMrvxett+9KLHt7OhcExtoiRN9DKgbZffMP/nxjutWDQpfMDfP3nkHI4X9ijww==}
@@ -4323,6 +4371,9 @@ packages:
 
   '@standard-schema/utils@0.3.0':
     resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
+
+  '@std-uritemplate/std-uritemplate@2.0.8':
+    resolution: {integrity: sha512-8oj7jKksoTRxjdPkWKX9FyOKDS8ORBm+ZfTSHm0f3eYha8cI0O1d57gyduOIAX7Y2uUukNDNlxlvGb+FFkE7yQ==}
 
   '@swc/helpers@0.5.15':
     resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}
@@ -8219,6 +8270,9 @@ packages:
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
 
+  tinyduration@3.4.1:
+    resolution: {integrity: sha512-NemFoamVYn7TmtwZKZ3OiliM9fZkr6EWiTM+wKknco6POSy2gS689xx/pXip0JYp40HXpUw6k65CUYHWYUXdaA==}
+
   tinyexec@1.0.2:
     resolution: {integrity: sha512-W/KYk+NFhkmsYpuHq5JykngiOCnxeVL8v8dFnqxSD8qEEdRfXk1SDM6JzNqcERbcGYj9tMrDQBYV9cjgnunFIg==}
     engines: {node: '>=18'}
@@ -10298,12 +10352,93 @@ snapshots:
     dependencies:
       langium: 3.3.1
 
+  '@microsoft/kiota-abstractions@1.0.0-preview.99':
+    dependencies:
+      '@opentelemetry/api': 1.9.0
+      '@std-uritemplate/std-uritemplate': 2.0.8
+      tinyduration: 3.4.1
+      tslib: 2.8.1
+
+  '@microsoft/kiota-authentication-azure@1.0.0-preview.99':
+    dependencies:
+      '@azure/core-auth': 1.10.1
+      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@opentelemetry/api': 1.9.0
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@microsoft/kiota-bundle@1.0.0-preview.99':
+    dependencies:
+      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@microsoft/kiota-http-fetchlibrary': 1.0.0-preview.99
+      '@microsoft/kiota-serialization-form': 1.0.0-preview.99
+      '@microsoft/kiota-serialization-json': 1.0.0-preview.99
+      '@microsoft/kiota-serialization-multipart': 1.0.0-preview.99
+      '@microsoft/kiota-serialization-text': 1.0.0-preview.99
+
+  '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.99':
+    dependencies:
+      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@opentelemetry/api': 1.9.0
+      tslib: 2.8.1
+
+  '@microsoft/kiota-serialization-form@1.0.0-preview.99':
+    dependencies:
+      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      tslib: 2.8.1
+
+  '@microsoft/kiota-serialization-json@1.0.0-preview.99':
+    dependencies:
+      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      tslib: 2.8.1
+
+  '@microsoft/kiota-serialization-multipart@1.0.0-preview.99':
+    dependencies:
+      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      tslib: 2.8.1
+
+  '@microsoft/kiota-serialization-text@1.0.0-preview.99':
+    dependencies:
+      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      tslib: 2.8.1
+
   '@microsoft/microsoft-graph-client@3.0.7(@azure/identity@4.13.0)':
     dependencies:
       '@babel/runtime': 7.28.4
       tslib: 2.8.1
     optionalDependencies:
       '@azure/identity': 4.13.0
+
+  '@microsoft/msgraph-sdk-chats@1.0.0-preview.77':
+    dependencies:
+      '@microsoft/msgraph-sdk': 1.0.0-preview.77
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@microsoft/msgraph-sdk-core@1.0.0-preview.17':
+    dependencies:
+      '@azure/core-auth': 1.10.1
+      '@microsoft/kiota-authentication-azure': 1.0.0-preview.99
+      '@microsoft/kiota-bundle': 1.0.0-preview.99
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@microsoft/msgraph-sdk-teams@1.0.0-preview.77':
+    dependencies:
+      '@microsoft/msgraph-sdk': 1.0.0-preview.77
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@microsoft/msgraph-sdk@1.0.0-preview.77':
+    dependencies:
+      '@microsoft/msgraph-sdk-core': 1.0.0-preview.17
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
 
   '@modelcontextprotocol/sdk@1.25.2(hono@4.11.4)(zod@4.3.5)':
     dependencies:
@@ -13230,6 +13365,8 @@ snapshots:
   '@standard-schema/spec@1.1.0': {}
 
   '@standard-schema/utils@0.3.0': {}
+
+  '@std-uritemplate/std-uritemplate@2.0.8': {}
 
   '@swc/helpers@0.5.15':
     dependencies:
@@ -17782,6 +17919,8 @@ snapshots:
   tiny-invariant@1.3.3: {}
 
   tinybench@2.9.0: {}
+
+  tinyduration@3.4.1: {}
 
   tinyexec@1.0.2: {}
 

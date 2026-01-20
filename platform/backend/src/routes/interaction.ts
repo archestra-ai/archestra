@@ -17,6 +17,13 @@ import {
 /**
  * Session summary schema for the sessions endpoint
  */
+const ToonSkipReasonCountsSchema = z.object({
+  applied: z.number(),
+  notEnabled: z.number(),
+  notEffective: z.number(),
+  noToolResults: z.number(),
+});
+
 const SessionSummarySchema = z.object({
   sessionId: z.string().nullable(),
   sessionSource: z.string().nullable(),
@@ -26,6 +33,8 @@ const SessionSummarySchema = z.object({
   totalOutputTokens: z.number(),
   totalCost: z.string().nullable(),
   totalBaselineCost: z.string().nullable(),
+  totalToonCostSavings: z.string().nullable(),
+  toonSkipReasonCounts: ToonSkipReasonCountsSchema,
   firstRequestTime: z.date(),
   lastRequestTime: z.date(),
   models: z.array(z.string()),

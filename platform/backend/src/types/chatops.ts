@@ -182,8 +182,8 @@ export interface MSTeamsConfig {
   enabled: boolean;
   /** Azure Bot App ID */
   appId: string;
-  /** Azure Bot App Password (Client Secret) */
-  appPassword: string;
+  /** Azure Bot App Secret (Client Secret) */
+  appSecret: string;
   /** Optional Graph API configuration for thread history */
   graph?: {
     tenantId: string;

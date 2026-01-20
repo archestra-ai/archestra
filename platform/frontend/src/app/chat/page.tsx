@@ -1,14 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import {
-  Eye,
-  EyeOff,
-  FileText,
-  Globe,
-  PanelRightClose,
-  Plus,
-} from "lucide-react";
+import { Eye, EyeOff, FileText, Globe, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -891,119 +884,119 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen w-full flex-col">
-      {/* Header spans full width - stays fixed when artifact panel opens */}
-      <StreamTimeoutWarning status={status} messages={messages} />
-      <PermissivePolicyBar />
+    <div className="flex h-screen w-full">
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex flex-col h-full">
+          <StreamTimeoutWarning status={status} messages={messages} />
+          <PermissivePolicyBar />
 
-      <div className="sticky top-0 z-10 bg-background border-b p-2">
-        <div className="flex items-start justify-between gap-2">
-          {/* Left side - agent selector stays fixed, tools wrap internally */}
-          <div className="flex items-start gap-2 min-w-0 flex-1">
-            {/* Agent/Profile selector - fixed width */}
-            <div className="flex-shrink-0">
-              {conversationId ? (
-                <AgentSelector
-                  currentPromptId={conversation?.promptId ?? null}
-                  currentAgentId={conversation?.agentId ?? ""}
-                  currentModel={conversation?.selectedModel ?? ""}
-                />
-              ) : (
-                <InitialAgentSelector
-                  currentPromptId={initialPromptId}
-                  onPromptChange={handleInitialPromptChange}
-                  defaultAgentId={initialAgentId ?? allProfiles[0]?.id ?? ""}
-                />
-              )}
-            </div>
-
-            {/* Agent tools display - wraps internally, takes remaining space */}
-            {(conversationId ? conversation?.promptId : initialPromptId) && (
-              <AgentToolsDisplay
-                agentId={
-                  conversationId
-                    ? (conversation?.agentId ?? "")
-                    : (initialAgentId ?? "")
-                }
-                promptId={
-                  conversationId
-                    ? (conversation?.promptId ?? null)
-                    : initialPromptId
-                }
-                conversationId={conversationId}
-                addAgentsButton={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2 gap-1.5 text-xs border-dashed"
-                    onClick={() => {
-                      const promptIdToEdit = conversationId
-                        ? conversation?.promptId
-                        : initialPromptId;
-                      if (promptIdToEdit) {
-                        setEditingPromptId(promptIdToEdit);
-                        setIsPromptDialogOpen(true);
+          <div className="sticky top-0 z-10 bg-background border-b p-2">
+            <div className="flex items-start justify-between gap-2">
+              {/* Left side - agent selector stays fixed, tools wrap internally */}
+              <div className="flex items-start gap-2 min-w-0 flex-1">
+                {/* Agent/Profile selector - fixed width */}
+                <div className="flex-shrink-0">
+                  {conversationId ? (
+                    <AgentSelector
+                      currentPromptId={conversation?.promptId ?? null}
+                      currentAgentId={conversation?.agentId ?? ""}
+                      currentModel={conversation?.selectedModel ?? ""}
+                    />
+                  ) : (
+                    <InitialAgentSelector
+                      currentPromptId={initialPromptId}
+                      onPromptChange={handleInitialPromptChange}
+                      defaultAgentId={
+                        initialAgentId ?? allProfiles[0]?.id ?? ""
                       }
-                    }}
-                  >
-                    <Plus className="h-3 w-3" />
-                    Add agents
-                  </Button>
-                }
-              />
-            )}
-          </div>
-          {/* Right side - controls stay fixed in first row */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {hasPlaywrightMcp && isBrowserStreamingEnabled && (
-              <Button
-                variant={isBrowserPanelOpen ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
-                className="text-xs"
-              >
-                <Globe className="h-3 w-3 mr-1" />
-                Browser
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleArtifactPanel}
-              className="text-xs"
-            >
-              {isArtifactOpen ? (
-                <PanelRightClose className="h-3 w-3 mr-1" />
-              ) : (
-                <FileText className="h-3 w-3 mr-1" />
-              )}
-              {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleHideToolCalls}
-              className="text-xs"
-            >
-              {hideToolCalls ? (
-                <>
-                  <Eye className="h-3 w-3 mr-1" />
-                  Show tool calls
-                </>
-              ) : (
-                <>
-                  <EyeOff className="h-3 w-3 mr-1" />
-                  Hide tool calls
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
+                    />
+                  )}
+                </div>
 
-      {/* Content area below header - artifact panel and chat content side by side */}
-      <div className="flex flex-1 min-h-0">
-        <div className="flex-1 flex flex-col min-w-0">
+                {/* Agent tools display - wraps internally, takes remaining space */}
+                {(conversationId
+                  ? conversation?.promptId
+                  : initialPromptId) && (
+                  <AgentToolsDisplay
+                    agentId={
+                      conversationId
+                        ? (conversation?.agentId ?? "")
+                        : (initialAgentId ?? "")
+                    }
+                    promptId={
+                      conversationId
+                        ? (conversation?.promptId ?? null)
+                        : initialPromptId
+                    }
+                    conversationId={conversationId}
+                    addAgentsButton={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 gap-1.5 text-xs border-dashed"
+                        onClick={() => {
+                          const promptIdToEdit = conversationId
+                            ? conversation?.promptId
+                            : initialPromptId;
+                          if (promptIdToEdit) {
+                            setEditingPromptId(promptIdToEdit);
+                            setIsPromptDialogOpen(true);
+                          }
+                        }}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add agents
+                      </Button>
+                    }
+                  />
+                )}
+              </div>
+              {/* Right side - controls stay fixed in first row */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {hasPlaywrightMcp && isBrowserStreamingEnabled && (
+                  <Button
+                    variant={isBrowserPanelOpen ? "secondary" : "ghost"}
+                    size="sm"
+                    onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
+                    className="text-xs"
+                  >
+                    <Globe className="h-3 w-3 mr-1" />
+                    Browser
+                  </Button>
+                )}
+                {!isArtifactOpen && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleArtifactPanel}
+                    className="text-xs"
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    Show Artifact
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleHideToolCalls}
+                  className="text-xs"
+                >
+                  {hideToolCalls ? (
+                    <>
+                      <Eye className="h-3 w-3 mr-1" />
+                      Show tool calls
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      Hide tool calls
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto">
             {conversationId ? (
               <ChatMessages
@@ -1239,12 +1232,6 @@ export default function ChatPage() {
             </div>
           )}
         </div>
-
-        {/* Right-side artifact panel - inside flex container so it appears alongside chat content */}
-        <ConversationArtifactPanel
-          artifact={conversation?.artifact}
-          isOpen={isArtifactOpen}
-        />
       </div>
 
       <CustomServerRequestDialog
@@ -1264,6 +1251,13 @@ export default function ChatPage() {
           conversationId={conversationId}
         />
       )}
+
+      {/* Right-side artifact panel */}
+      <ConversationArtifactPanel
+        artifact={conversation?.artifact}
+        isOpen={isArtifactOpen}
+        onToggle={toggleArtifactPanel}
+      />
 
       <PromptDialog
         open={isPromptDialogOpen}

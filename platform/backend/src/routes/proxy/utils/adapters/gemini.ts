@@ -35,9 +35,9 @@ import type {
   CommonToolCall,
   CommonToolResult,
   Gemini,
+  ToolCompressionStats,
   ToolResultUpdates,
 } from "@/types";
-import type { CompressionStats } from "../toon-conversion";
 
 type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
 
@@ -533,7 +533,7 @@ export async function convertToolResultsToToon(
   model: string,
 ): Promise<{
   contents: GeminiContents;
-  stats: CompressionStats;
+  stats: ToolCompressionStats;
 }> {
   const tokenizer = getTokenizer("gemini");
   let toolResultCount = 0;
@@ -648,25 +648,25 @@ export async function convertToolResultsToToon(
   );
 
   // Calculate cost savings
-  let toonCostSavings: number | null = null;
-  if (toolResultCount > 0) {
-    const tokensSaved = totalTokensBefore - totalTokensAfter;
-    if (tokensSaved > 0) {
-      const tokenPrice = await TokenPriceModel.findByModel(model);
-      if (tokenPrice) {
-        const inputPricePerToken =
-          Number(tokenPrice.pricePerMillionInput) / 1000000;
-        toonCostSavings = tokensSaved * inputPricePerToken;
-      }
+  let toonCostSavings = 0;
+  const tokensSaved = totalTokensBefore - totalTokensAfter;
+  if (tokensSaved > 0) {
+    const tokenPrice = await TokenPriceModel.findByModel(model);
+    if (tokenPrice) {
+      const inputPricePerToken =
+        Number(tokenPrice.pricePerMillionInput) / 1000000;
+      toonCostSavings = tokensSaved * inputPricePerToken;
     }
   }
 
   return {
     contents: result,
     stats: {
-      toonTokensBefore: toolResultCount > 0 ? totalTokensBefore : null,
-      toonTokensAfter: toolResultCount > 0 ? totalTokensAfter : null,
-      toonCostSavings,
+      tokensBefore: totalTokensBefore,
+      tokensAfter: totalTokensAfter,
+      costSavings: toonCostSavings,
+      wasEffective: totalTokensAfter < totalTokensBefore,
+      hadToolResults: toolResultCount > 0,
     },
   };
 }

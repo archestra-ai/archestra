@@ -1,5 +1,5 @@
 import { RouteId } from "@shared";
-import type { TurnContext } from "botbuilder";
+import { TurnContext } from "botbuilder";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -148,13 +148,47 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const trimmedText = message.text.trim().toLowerCase();
 
             if (trimmedText === CHATOPS_COMMANDS.HELP) {
-              await context.sendActivity(
-                "Available commands:\n" +
-                  "• `/select-agent` - Change which agent handles this channel\n" +
-                  "• `/status` - Show current agent binding for this channel\n" +
-                  "• `/help` - Show this help message\n\n" +
-                  "Or just send a message to interact with the bound agent.",
-              );
+              await context.sendActivity({
+                attachments: [
+                  {
+                    contentType: "application/vnd.microsoft.card.adaptive",
+                    content: {
+                      type: "AdaptiveCard",
+                      $schema:
+                        "http://adaptivecards.io/schemas/adaptive-card.json",
+                      version: "1.4",
+                      body: [
+                        {
+                          type: "TextBlock",
+                          text: "**Available commands:**",
+                          wrap: true,
+                        },
+                        {
+                          type: "FactSet",
+                          spacing: "Small",
+                          facts: [
+                            {
+                              title: "/select-agent",
+                              value: "Change the default agent",
+                            },
+                            {
+                              title: "/status",
+                              value: "Show current agent binding",
+                            },
+                            { title: "/help", value: "Show this help message" },
+                          ],
+                        },
+                        {
+                          type: "TextBlock",
+                          text: "Or just send a message to interact with the bound agent.",
+                          wrap: true,
+                          spacing: "Medium",
+                        },
+                      ],
+                    },
+                  },
+                ],
+              });
               return;
             }
 
@@ -167,15 +201,64 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
               if (binding) {
                 const prompt = await PromptModel.findById(binding.promptId);
-                await context.sendActivity(
-                  `This channel is bound to agent: **${prompt?.name || binding.promptId}**\n` +
-                    `Use \`/select-agent\` to change the binding.`,
-                );
+                await context.sendActivity({
+                  attachments: [
+                    {
+                      contentType: "application/vnd.microsoft.card.adaptive",
+                      content: {
+                        type: "AdaptiveCard",
+                        $schema:
+                          "http://adaptivecards.io/schemas/adaptive-card.json",
+                        version: "1.4",
+                        body: [
+                          {
+                            type: "TextBlock",
+                            text: `This channel is bound to agent: **${prompt?.name || binding.promptId}** which means it will handle all requests in the channel by default.`,
+                            wrap: true,
+                          },
+                          {
+                            type: "TextBlock",
+                            text: `**Tip:** You can use other agents by mentioning **@Archestra >AgentName** (e.g., @Archestra >Sales what's the status?).`,
+                            wrap: true,
+                          },
+                          {
+                            type: "TextBlock",
+                            text: "Use **/select-agent** to change the default agent handling requests in the channel.",
+                            wrap: true,
+                            spacing: "Medium",
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                });
               } else {
-                await context.sendActivity(
-                  "No agent is bound to this channel yet.\n" +
-                    "Send any message to set up an agent binding.",
-                );
+                await context.sendActivity({
+                  attachments: [
+                    {
+                      contentType: "application/vnd.microsoft.card.adaptive",
+                      content: {
+                        type: "AdaptiveCard",
+                        $schema:
+                          "http://adaptivecards.io/schemas/adaptive-card.json",
+                        version: "1.4",
+                        body: [
+                          {
+                            type: "TextBlock",
+                            text: "No agent is bound to this channel yet.",
+                            wrap: true,
+                          },
+                          {
+                            type: "TextBlock",
+                            text: "Send any message to set up an agent binding.",
+                            wrap: true,
+                            spacing: "Medium",
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                });
               }
               return;
             }
@@ -427,33 +510,89 @@ async function sendAgentSelectionCard(
     workspaceId: message.workspaceId,
   });
 
+  // Build card body based on whether this is first-time setup or changing agent
+  const cardBody = existingBinding
+    ? [
+        {
+          type: "TextBlock",
+          size: "Medium",
+          weight: "Bolder",
+          text: "Change Default Agent",
+        },
+        {
+          type: "TextBlock",
+          text: "Select a different agent to handle messages in this channel:",
+          wrap: true,
+        },
+        {
+          type: "Input.ChoiceSet",
+          id: "promptId",
+          style: "compact",
+          value: existingBinding.promptId,
+          choices,
+        },
+      ]
+    : [
+        {
+          type: "TextBlock",
+          weight: "Bolder",
+          text: "Welcome to Archestra!",
+        },
+        {
+          type: "TextBlock",
+          text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel by default.",
+          wrap: true,
+          spacing: "Small",
+        },
+        {
+          type: "TextBlock",
+          text: "**Tip:** You can use other agents by mentioning **@Archestra >AgentName** (e.g., @Archestra >Sales what's the status?).",
+          wrap: true,
+          spacing: "Small",
+        },
+        {
+          type: "TextBlock",
+          text: "**Available commands:**",
+          wrap: true,
+          spacing: "Medium",
+        },
+        {
+          type: "FactSet",
+          spacing: "Small",
+          facts: [
+            {
+              title: "/select-agent",
+              value:
+                "Change the default agent handling requests in the channel",
+            },
+            {
+              title: "/status",
+              value: "Check the current agent handling requests in the channel",
+            },
+            { title: "/help", value: "Show available commands" },
+          ],
+        },
+        {
+          type: "TextBlock",
+          text: "**Let's set the default agent for this channel:**",
+          wrap: true,
+          spacing: "Medium",
+        },
+        {
+          type: "Input.ChoiceSet",
+          id: "promptId",
+          style: "compact",
+          value: choices[0]?.value || "",
+          choices,
+        },
+      ];
+
   // Send Adaptive Card
   const card = {
     type: "AdaptiveCard",
     $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
     version: "1.4",
-    body: [
-      {
-        type: "TextBlock",
-        size: "Medium",
-        weight: "Bolder",
-        text: existingBinding ? "Change Agent" : "Welcome! Select an Agent",
-      },
-      {
-        type: "TextBlock",
-        text: existingBinding
-          ? "Select a different agent to handle messages in this channel:"
-          : "No agent is bound to this channel yet. Select an agent to handle messages here:",
-        wrap: true,
-      },
-      {
-        type: "Input.ChoiceSet",
-        id: "promptId",
-        style: "compact",
-        value: existingBinding?.promptId || "",
-        choices,
-      },
-    ],
+    body: cardBody,
     actions: [
       {
         type: "Action.Submit",
@@ -462,6 +601,8 @@ async function sendAgentSelectionCard(
           action: "selectAgent",
           channelId: message.channelId,
           workspaceId: message.workspaceId,
+          // Include original message so we can process it after binding
+          originalMessageText: message.text || undefined,
         },
       },
     ],
@@ -485,9 +626,14 @@ async function handleAgentSelection(
   message: IncomingChatMessage,
 ): Promise<void> {
   const value = context.activity.value as
-    | { promptId?: string; channelId?: string; workspaceId?: string }
+    | {
+        promptId?: string;
+        channelId?: string;
+        workspaceId?: string;
+        originalMessageText?: string;
+      }
     | undefined;
-  const { promptId, channelId, workspaceId } = value || {};
+  const { promptId, channelId, workspaceId, originalMessageText } = value || {};
 
   if (!promptId) {
     await context.sendActivity("Please select an agent from the dropdown.");
@@ -522,8 +668,51 @@ async function handleAgentSelection(
     promptId,
   });
 
-  await context.sendActivity(
-    `Agent **${prompt.name}** is now bound to this channel.\n` +
-      "Send a message (with @mention) to start interacting!",
-  );
+  // If there was an original message (not a command), process it now
+  if (originalMessageText && !isCommand(originalMessageText)) {
+    await context.sendActivity(
+      `Agent **${prompt.name}** is now bound to this channel. Processing your message...`,
+    );
+
+    // Get the provider and process the original message
+    const provider = chatOpsManager.getMSTeamsProvider();
+    if (provider) {
+      // Construct a message object for processing
+      const originalMessage: IncomingChatMessage = {
+        messageId: `${message.messageId}-original`,
+        channelId: channelId || message.channelId,
+        workspaceId: workspaceId || message.workspaceId,
+        threadId: message.threadId,
+        senderId: message.senderId,
+        senderName: message.senderName,
+        text: originalMessageText,
+        rawText: originalMessageText,
+        timestamp: message.timestamp,
+        isThreadReply: message.isThreadReply,
+        metadata: {
+          conversationReference: TurnContext.getConversationReference(
+            context.activity,
+          ),
+        },
+      };
+
+      await chatOpsManager.processMessage({
+        message: originalMessage,
+        provider,
+        sendReply: true,
+      });
+    }
+  } else {
+    await context.sendActivity(
+      `Agent **${prompt.name}** is now bound to this channel.\n` +
+        "Send a message (with @mention) to start interacting!",
+    );
+  }
+}
+
+/**
+ * Check if the message text is a command (starts with /)
+ */
+function isCommand(text: string): boolean {
+  return text.trim().startsWith("/");
 }

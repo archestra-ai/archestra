@@ -405,9 +405,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             model,
           );
         filteredMessages = convertedMessages;
-        toonTokensBefore = stats.toonTokensBefore;
-        toonTokensAfter = stats.toonTokensAfter;
-        toonCostSavings = stats.toonCostSavings;
+        toonTokensBefore = stats.tokensBefore;
+        toonTokensAfter = stats.tokensAfter;
+        toonCostSavings = stats.costSavings;
       }
 
       const openAiSdkMessages =

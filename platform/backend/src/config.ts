@@ -271,6 +271,51 @@ export const parseBodyLimit = (
 
 const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 
+// Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
+const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
+const OTEL_TRACES_PATH = "/v1/traces";
+
+/**
+ * Get OTEL exporter endpoint for traces.
+ * Reads from ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT and intelligently ensures
+ * the URL ends with /v1/traces.
+ *
+ * @param envValue - The environment variable value (for testing)
+ * @returns The full OTEL endpoint URL with /v1/traces suffix
+ */
+export const getOtelExporterOtlpEndpoint = (
+  envValue?: string | undefined,
+): string => {
+  const rawValue =
+    envValue ?? process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+  const value = rawValue?.trim();
+
+  if (!value) {
+    return `${DEFAULT_OTEL_ENDPOINT}${OTEL_TRACES_PATH}`;
+  }
+
+  // Remove trailing slashes for consistent comparison
+  const normalizedUrl = value.replace(/\/+$/, "");
+
+  // If already ends with /v1/traces, return as-is
+  if (normalizedUrl.endsWith(OTEL_TRACES_PATH)) {
+    return normalizedUrl;
+  }
+
+  // Fix common typo: /v1/trace (missing 's') -> /v1/traces
+  if (normalizedUrl.endsWith("/v1/trace")) {
+    return `${normalizedUrl}s`;
+  }
+
+  // If ends with /v1, just append /traces
+  if (normalizedUrl.endsWith("/v1")) {
+    return `${normalizedUrl}/traces`;
+  }
+
+  // Otherwise, append the full /v1/traces path
+  return `${normalizedUrl}${OTEL_TRACES_PATH}`;
+};
+
 export default {
   frontendBaseUrl,
   api: {
@@ -327,14 +372,23 @@ export default {
     msTeams: {
       enabled: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED === "true",
       appId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID || "",
-      appPassword: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD || "",
+      appSecret: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET || "",
       // Optional: Set for single-tenant Azure Bot (leave empty for multi-tenant)
       tenantId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID || "",
+      // Graph API credentials for thread history (falls back to Bot credentials if not set)
       graph: {
-        tenantId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID || "",
-        clientId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID || "",
+        tenantId:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID ||
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID ||
+          "",
+        clientId:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID ||
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID ||
+          "",
         clientSecret:
-          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET || "",
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET ||
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET ||
+          "",
       },
     },
   },
@@ -491,9 +545,7 @@ export default {
   observability: {
     otel: {
       traceExporter: {
-        url:
-          process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
-          "http://localhost:4318/v1/traces",
+        url: getOtelExporterOtlpEndpoint(),
         headers: getOtlpAuthHeaders(),
       } satisfies Partial<OTLPExporterNodeConfigBase>,
     },

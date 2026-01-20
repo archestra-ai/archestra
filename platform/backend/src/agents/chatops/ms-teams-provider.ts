@@ -447,9 +447,14 @@ function errorMessage(error: unknown): string {
 function cleanBotMention(text: string, botName?: string): string {
   let cleaned = text.replace(/<at>.*?<\/at>/gi, "").trim();
   if (botName) {
-    cleaned = cleaned.replace(new RegExp(`@${botName}\\s*`, "gi"), "").trim();
+    const escapedName = escapeRegExp(botName);
+    cleaned = cleaned.replace(new RegExp(`@${escapedName}\\s*`, "gi"), "").trim();
   }
   return cleaned;
+}
+
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

@@ -393,6 +393,12 @@ export default {
         process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
       useV2Routes: process.env.ARCHESTRA_CEREBRAS_USE_V2_ROUTES !== "false",
     },
+    deepseek: {
+      enabled: Boolean(process.env.ARCHESTRA_DEEPSEEK_BASE_URL),
+      baseUrl:
+        process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+      useV2Routes: process.env.ARCHESTRA_DEEPSEEK_USE_V2_ROUTES !== "false",
+    },
     vllm: {
       enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
@@ -424,6 +430,12 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_CEREBRAS_BASE_URL ||
         "https://api.cerebras.ai/v1",
+    },
+    deepseek: {
+      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_DEEPSEEK_BASE_URL ||
+        "https://api.deepseek.com",
     },
     vllm: {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",

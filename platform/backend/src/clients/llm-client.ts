@@ -57,6 +57,10 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "zhipuai";
   }
 
+  if (lowerModel.includes("deepseek")) {
+    return "deepseek";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -111,6 +115,9 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "cerebras" && config.chat.cerebras.apiKey) {
       providerApiKey = config.chat.cerebras.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "deepseek" && config.chat.deepseek.apiKey) {
+      providerApiKey = config.chat.deepseek.apiKey;
       apiKeySource = "environment";
     } else if (provider === "openai" && config.chat.openai.apiKey) {
       providerApiKey = config.chat.openai.apiKey;
@@ -226,6 +233,17 @@ export function createLLMModel(params: {
       headers,
     });
     return client(modelName);
+  }
+
+  if (provider === "deepseek") {
+    // URL format: /v1/deepseek/:agentId (SDK appends /chat/completions)
+    // DeepSeek is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/deepseek/${agentId}`,
+      headers,
+    });
+    return client.chat(modelName);
   }
 
   if (provider === "vllm") {

@@ -10,6 +10,7 @@ import type {
   Agent,
   Anthropic,
   Cerebras,
+  DeepSeek,
   Gemini,
   OpenAi,
   Vllm,
@@ -19,6 +20,7 @@ import type {
 type ProviderMessages = {
   anthropic: Anthropic.Types.MessagesRequest["messages"];
   cerebras: Cerebras.Types.ChatCompletionsRequest["messages"];
+  deepseek: DeepSeek.Types.ChatCompletionsRequest["messages"];
   gemini: Gemini.Types.GenerateContentRequest["contents"];
   openai: OpenAi.Types.ChatCompletionsRequest["messages"];
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];

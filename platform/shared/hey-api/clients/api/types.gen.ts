@@ -8707,7 +8707,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8727,7 +8727,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -8806,7 +8806,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8822,7 +8822,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -8894,7 +8894,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9066,7 +9066,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9166,7 +9166,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9182,7 +9182,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat/models';
 };
@@ -9253,7 +9253,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         createdAt?: string;
     }>;
 };
@@ -9435,7 +9435,7 @@ export type CreateChatConversationData = {
         promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -9715,7 +9715,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'deepseek' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -10635,6 +10635,830 @@ export type DeleteChatOpsBindingResponses = {
 
 export type DeleteChatOpsBindingResponse = DeleteChatOpsBindingResponses[keyof DeleteChatOpsBindingResponses];
 
+export type DeepSeekChatCompletionsWithDefaultAgentData = {
+    /**
+     * DeepSeek chat completion request (OpenAI-compatible)
+     */
+    body: {
+        model: string;
+        /**
+         * A message in the conversation
+         */
+        messages: Array<{
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * Image URL details
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            } | {
+                type: 'input_audio';
+                /**
+                 * Audio input details
+                 */
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                type: 'file';
+                /**
+                 * File details
+                 */
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                type: 'text';
+                text: string;
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            refusal?: string | null;
+            /**
+             * A tool call in the assistant message
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * Function call details
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * Custom tool call details
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+            reasoning_content?: string | null;
+        } | {
+            role: 'tool';
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * Image URL details
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            }>;
+            tool_call_id: string;
+        } | {
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        /**
+         * A tool definition
+         */
+        tools?: Array<{
+            type: 'function';
+            /**
+             * A function definition for tool calling
+             */
+            function: {
+                name: string;
+                description?: string;
+                /**
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object.
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool
+                 */
+                name: string;
+                /**
+                 * Description of the tool
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        }>;
+        /**
+         * Tool choice option
+         */
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            /**
+             * Allowed tools configuration
+             */
+            allowed_tools: {
+                /**
+                 *
+                 * Constrains the tools available to the model.
+                 * auto: allows the model to pick from allowed tools or generate a message.
+                 * required: requires the model to call one or more of the allowed tools.
+                 *
+                 */
+                mode: 'auto' | 'required';
+                tools: Array<{
+                    [key: string]: {
+                        type: 'function';
+                        /**
+                         * A function definition for tool calling
+                         */
+                        function: {
+                            name: string;
+                            description?: string;
+                            /**
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object.
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool
+                 */
+                name: string;
+                /**
+                 * Description of the tool
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        stream?: boolean | null;
+        top_p?: number | null;
+        frequency_penalty?: number | null;
+        presence_penalty?: number | null;
+        stop?: string | Array<string>;
+        n?: number | null;
+        logprobs?: boolean | null;
+        top_logprobs?: number | null;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for DeepSeek API
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/deepseek/chat/completions';
+};
+
+export type DeepSeekChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeepSeekChatCompletionsWithDefaultAgentError = DeepSeekChatCompletionsWithDefaultAgentErrors[keyof DeepSeekChatCompletionsWithDefaultAgentErrors];
+
+export type DeepSeekChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * DeepSeek chat completion response (OpenAI-compatible)
+     */
+    200: {
+        id: string;
+        choices: Array<{
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+            index: number;
+            logprobs: unknown;
+            /**
+             * The assistant message in the response
+             */
+            message: {
+                content: string | null;
+                refusal?: string | null;
+                role: 'assistant';
+                annotations?: Array<unknown>;
+                audio?: unknown;
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                /**
+                 * A tool call in the assistant message
+                 */
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * Function call details
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * Custom tool call details
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+                reasoning_content?: string | null;
+            };
+        }>;
+        created: number;
+        model: string;
+        object: 'chat.completion';
+        system_fingerprint?: string | null;
+        /**
+         * Token usage statistics for the completion
+         */
+        usage?: {
+            completion_tokens: number;
+            prompt_tokens: number;
+            total_tokens: number;
+            completion_tokens_details?: unknown;
+            prompt_tokens_details?: unknown;
+        };
+    };
+};
+
+export type DeepSeekChatCompletionsWithDefaultAgentResponse = DeepSeekChatCompletionsWithDefaultAgentResponses[keyof DeepSeekChatCompletionsWithDefaultAgentResponses];
+
+export type DeepSeekChatCompletionsWithAgentData = {
+    /**
+     * DeepSeek chat completion request (OpenAI-compatible)
+     */
+    body: {
+        model: string;
+        /**
+         * A message in the conversation
+         */
+        messages: Array<{
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * Image URL details
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            } | {
+                type: 'input_audio';
+                /**
+                 * Audio input details
+                 */
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                type: 'file';
+                /**
+                 * File details
+                 */
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                type: 'text';
+                text: string;
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            refusal?: string | null;
+            /**
+             * A tool call in the assistant message
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * Function call details
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * Custom tool call details
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+            reasoning_content?: string | null;
+        } | {
+            role: 'tool';
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * Image URL details
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            }>;
+            tool_call_id: string;
+        } | {
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        /**
+         * A tool definition
+         */
+        tools?: Array<{
+            type: 'function';
+            /**
+             * A function definition for tool calling
+             */
+            function: {
+                name: string;
+                description?: string;
+                /**
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object.
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool
+                 */
+                name: string;
+                /**
+                 * Description of the tool
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        }>;
+        /**
+         * Tool choice option
+         */
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            /**
+             * Allowed tools configuration
+             */
+            allowed_tools: {
+                /**
+                 *
+                 * Constrains the tools available to the model.
+                 * auto: allows the model to pick from allowed tools or generate a message.
+                 * required: requires the model to call one or more of the allowed tools.
+                 *
+                 */
+                mode: 'auto' | 'required';
+                tools: Array<{
+                    [key: string]: {
+                        type: 'function';
+                        /**
+                         * A function definition for tool calling
+                         */
+                        function: {
+                            name: string;
+                            description?: string;
+                            /**
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object.
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool
+                 */
+                name: string;
+                /**
+                 * Description of the tool
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        stream?: boolean | null;
+        top_p?: number | null;
+        frequency_penalty?: number | null;
+        presence_penalty?: number | null;
+        stop?: string | Array<string>;
+        n?: number | null;
+        logprobs?: boolean | null;
+        top_logprobs?: number | null;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for DeepSeek API
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/deepseek/{agentId}/chat/completions';
+};
+
+export type DeepSeekChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeepSeekChatCompletionsWithAgentError = DeepSeekChatCompletionsWithAgentErrors[keyof DeepSeekChatCompletionsWithAgentErrors];
+
+export type DeepSeekChatCompletionsWithAgentResponses = {
+    /**
+     * DeepSeek chat completion response (OpenAI-compatible)
+     */
+    200: {
+        id: string;
+        choices: Array<{
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+            index: number;
+            logprobs: unknown;
+            /**
+             * The assistant message in the response
+             */
+            message: {
+                content: string | null;
+                refusal?: string | null;
+                role: 'assistant';
+                annotations?: Array<unknown>;
+                audio?: unknown;
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                /**
+                 * A tool call in the assistant message
+                 */
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * Function call details
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * Custom tool call details
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+                reasoning_content?: string | null;
+            };
+        }>;
+        created: number;
+        model: string;
+        object: 'chat.completion';
+        system_fingerprint?: string | null;
+        /**
+         * Token usage statistics for the completion
+         */
+        usage?: {
+            completion_tokens: number;
+            prompt_tokens: number;
+            total_tokens: number;
+            completion_tokens_details?: unknown;
+            prompt_tokens_details?: unknown;
+        };
+    };
+};
+
+export type DeepSeekChatCompletionsWithAgentResponse = DeepSeekChatCompletionsWithAgentResponses[keyof DeepSeekChatCompletionsWithAgentResponses];
+
 export type GetDefaultDualLlmConfigData = {
     body?: never;
     path?: never;
@@ -11338,6 +12162,7 @@ export type GetFeaturesResponses = {
         byosEnabled: boolean;
         byosVaultKvVersion: '1' | '2';
         geminiVertexAiEnabled: boolean;
+        deepseekEnabled: boolean;
         vllmEnabled: boolean;
         ollamaEnabled: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
@@ -17522,7 +18347,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -17542,7 +18367,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -17625,7 +18450,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -17724,7 +18549,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -17809,7 +18634,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -21579,7 +22404,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21592,7 +22417,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21667,7 +22492,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21831,7 +22656,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21844,7 +22669,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -21921,7 +22746,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

@@ -271,6 +271,7 @@ class OptimizationRuleModel {
       ],
       gemini: [],
       cerebras: [],
+      deepseek: [], // DeepSeek model pricing varies, no defaults yet
       vllm: [], // vLLM model pricing varies by deployment, so no defaults
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
       zhipuai: [],
@@ -302,6 +303,7 @@ class OptimizationRuleModel {
         ],
         gemini: [],
         cerebras: [],
+        deepseek: [], // DeepSeek optimization rules are deployment-specific, no defaults
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],

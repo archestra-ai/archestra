@@ -929,6 +929,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   anthropic: parseAnthropicError,
   gemini: parseGeminiError,
   cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
+  deepseek: parseOpenAIError, // DeepSeek uses OpenAI-compatible API
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
@@ -944,6 +945,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   anthropic: mapAnthropicErrorWrapper,
   gemini: mapGeminiErrorWrapper,
   cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
+  deepseek: mapOpenAIErrorWrapper, // DeepSeek uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,

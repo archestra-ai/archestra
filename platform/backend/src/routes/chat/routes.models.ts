@@ -324,6 +324,42 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from DeepSeek API
+ * DeepSeek exposes an OpenAI-compatible /models endpoint
+ * See: https://api-docs.deepseek.com/
+ */
+async function fetchDeepSeekModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.deepseek.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch DeepSeek models",
+    );
+    throw new Error(`Failed to fetch DeepSeek models: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{ id: string; object: string; created: number }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    name: model.id,
+    displayName: model.id,
+    provider: "deepseek" as const,
+  }));
+}
+
+/**
  * Fetch models from Zhipuai API
  */
 async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -560,6 +596,7 @@ const modelFetchers: Record<
 > = {
   anthropic: fetchAnthropicModels,
   cerebras: fetchCerebrasModels,
+  deepseek: fetchDeepSeekModels,
   gemini: fetchGeminiModels,
   openai: fetchOpenAiModels,
   vllm: fetchVllmModels,

@@ -32,6 +32,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
             /** Vertex AI Gemini mode - when enabled, no API key needed for Gemini */
             geminiVertexAiEnabled: z.boolean(),
+            /** DeepSeek mode - when enabled, DeepSeek provider is available */
+            deepseekEnabled: z.boolean(),
             /** vLLM mode - when enabled, no API key may be needed */
             vllmEnabled: z.boolean(),
             /** Ollama mode - when enabled, no API key is typically needed */
@@ -69,6 +71,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         byosEnabled: isByosEnabled(),
         byosVaultKvVersion: getByosVaultKvVersion(),
         geminiVertexAiEnabled: isVertexAiEnabled(),
+        deepseekEnabled: config.llm.deepseek.enabled,
         vllmEnabled: config.llm.vllm.enabled,
         ollamaEnabled: config.llm.ollama.enabled,
         globalToolPolicy,

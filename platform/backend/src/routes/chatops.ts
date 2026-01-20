@@ -540,7 +540,7 @@ async function sendAgentSelectionCard(
         },
         {
           type: "TextBlock",
-          text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel.",
+          text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel by default.",
           wrap: true,
           spacing: "Small",
         },

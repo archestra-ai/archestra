@@ -393,6 +393,10 @@ export default {
         process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
       useV2Routes: process.env.ARCHESTRA_CEREBRAS_USE_V2_ROUTES !== "false",
     },
+    xai: {
+      baseUrl: process.env.ARCHESTRA_XAI_BASE_URL || "https://api.x.ai/v1",
+      useV2Routes: process.env.ARCHESTRA_XAI_USE_V2_ROUTES !== "false",
+    },
     vllm: {
       enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
@@ -424,6 +428,11 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_CEREBRAS_BASE_URL ||
         "https://api.cerebras.ai/v1",
+    },
+    xai: {
+      apiKey: process.env.ARCHESTRA_CHAT_XAI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_XAI_BASE_URL || "https://api.x.ai/v1",
     },
     vllm: {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",

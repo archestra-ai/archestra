@@ -34,6 +34,8 @@ const mcpServerTable = pgTable("mcp_server", {
     .default("idle")
     .$type<LocalMcpServerInstallationStatus>(),
   localInstallationError: text("local_installation_error"),
+  oauthRefreshError: text("oauth_refresh_error"),
+  oauthRefreshFailedAt: timestamp("oauth_refresh_failed_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

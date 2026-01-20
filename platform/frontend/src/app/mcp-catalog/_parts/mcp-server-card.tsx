@@ -2,6 +2,7 @@
 
 import { type archestraApiTypes, E2eTestId } from "@shared";
 import {
+  AlertTriangle,
   FileText,
   Info,
   MoreVertical,
@@ -137,6 +138,9 @@ export function McpServerCard({
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
   });
+  const { data: hasMcpServerUpdatePermission } = useHasPermissions({
+    mcpServer: ["update"],
+  });
   const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
   // Fetch all MCP servers to get installations for logs dropdown
@@ -214,6 +218,18 @@ export function McpServerCard({
   const hasError = installedServer?.localInstallationStatus === "error";
   const errorMessage = installedServer?.localInstallationError;
   const mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
+
+  // Check for OAuth refresh errors that the current user can fix
+  // Only show warning if: OAuth server + has error + user can re-authenticate
+  const isOAuthServer = !!item.oauthConfig;
+  const hasOAuthRefreshError =
+    isOAuthServer &&
+    (mcpServerOfCurrentCatalogItem?.some(
+      (s) =>
+        s.oauthRefreshError &&
+        (s.teamId ? hasMcpServerUpdatePermission : s.ownerId === currentUserId),
+    ) ??
+      false);
 
   const isInstalling = Boolean(
     installingItemId === item.id ||
@@ -331,6 +347,24 @@ export function McpServerCard({
           >
             {mcpServersCount}
           </span>
+          {hasOAuthRefreshError && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="font-medium mb-1">Authentication failed</p>
+                  <p className="text-xs text-muted-foreground">
+                    Some credentials need re-authentication.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Click Manage to fix.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </span>
       </div>
       {mcpServersCount > 0 && (
@@ -361,6 +395,24 @@ export function McpServerCard({
           </WithoutPermissions>
           :{" "}
           <span className="font-medium text-foreground">{mcpServersCount}</span>
+          {hasOAuthRefreshError && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="font-medium mb-1">Authentication failed</p>
+                  <p className="text-xs text-muted-foreground">
+                    Some credentials need re-authentication.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Click Manage to fix.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </span>
       </div>
       {mcpServersCount > 0 && (

@@ -1,5 +1,9 @@
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import config from "@/config";
@@ -12,6 +16,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
@@ -156,7 +161,7 @@ class McpClient {
     if ("error" in secretsResult) {
       return secretsResult.error;
     }
-    const { secrets } = secretsResult;
+    const { secrets, secretId } = secretsResult;
 
     // Build connection cache key using the resolved target server ID
     // This ensures each user gets their own connection for dynamic credentials
@@ -164,6 +169,8 @@ class McpClient {
 
     const executeToolCall = async (
       getTransport: () => Promise<Transport>,
+      currentSecrets: Record<string, unknown>,
+      isRetry = false,
     ): Promise<CommonToolResult> => {
       try {
         // Get the appropriate transport
@@ -203,18 +210,78 @@ class McpClient {
           tool.responseModifierTemplate,
         );
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+
+        // Check if this is an authentication error (401) and we can attempt refresh
+        const isAuthError =
+          error instanceof UnauthorizedError ||
+          (error instanceof StreamableHTTPError && error.code === 401);
+
+        // Only attempt token refresh for OAuth servers with a refresh token
+        const isOAuthServer = !!catalogItem.oauthConfig;
+        const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
+          .refresh_token;
+        const canAttemptRecovery =
+          !isRetry &&
+          isAuthError &&
+          isOAuthServer &&
+          secretId &&
+          hasRefreshToken;
+
+        if (canAttemptRecovery) {
+          const recoveryResult = await this.attemptTokenRefreshAndRetry({
+            secretId,
+            catalogId: catalogItem.id,
+            connectionKey,
+            toolCall,
+            agentId,
+            mcpServerName: tool.mcpServerName || "unknown",
+            catalogItem,
+            targetLocalMcpServerId,
+            executeRetry: (getTransport, secrets) =>
+              executeToolCall(getTransport, secrets, true),
+          });
+
+          if (recoveryResult) {
+            return recoveryResult;
+          }
+          // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
+        } else if (isAuthError && isOAuthServer && targetLocalMcpServerId) {
+          // Track OAuth error when we can't attempt recovery
+          // Error codes: 1=no_refresh_token, 2=retry_failed, 3=auth_failed
+          const errorCode = !hasRefreshToken ? "1" : isRetry ? "2" : "3";
+
+          await McpServerModel.update(targetLocalMcpServerId, {
+            oauthRefreshError: errorCode,
+            oauthRefreshFailedAt: new Date(),
+          });
+
+          logger.warn(
+            {
+              toolName: toolCall.name,
+              targetLocalMcpServerId,
+              errorCode,
+              isRetry,
+              hasRefreshToken,
+            },
+            "OAuth authentication error recorded",
+          );
+        }
+
         return await this.createErrorResult(
           toolCall,
           agentId,
-          error instanceof Error ? error.message : "Unknown error",
+          errorMessage,
           tool.mcpServerName || "unknown",
         );
       }
     };
 
     if (!this.shouldLimitConcurrency()) {
-      return executeToolCall(() =>
-        this.getTransport(catalogItem, targetLocalMcpServerId, secrets),
+      return executeToolCall(
+        () => this.getTransport(catalogItem, targetLocalMcpServerId, secrets),
+        secrets,
       );
     }
 
@@ -228,13 +295,15 @@ class McpClient {
       connectionKey,
       concurrencyLimit,
       () =>
-        executeToolCall(() =>
-          this.getTransportWithKind(
-            catalogItem,
-            targetLocalMcpServerId,
-            secrets,
-            transportKind,
-          ),
+        executeToolCall(
+          () =>
+            this.getTransportWithKind(
+              catalogItem,
+              targetLocalMcpServerId,
+              secrets,
+              transportKind,
+            ),
+          secrets,
         ),
     );
   }
@@ -356,7 +425,8 @@ class McpClient {
     toolCall: CommonToolCall;
     agentId: string;
   }): Promise<
-    { secrets: Record<string, unknown> } | { error: CommonToolResult }
+    | { secrets: Record<string, unknown>; secretId?: string }
+    | { error: CommonToolResult }
   > {
     const mcpServer = await McpServerModel.findById(targetMcpServerId);
     if (!mcpServer) {
@@ -379,7 +449,7 @@ class McpClient {
           },
           `Found secrets for MCP server ${targetMcpServerId}`,
         );
-        return { secrets: secret.secret };
+        return { secrets: secret.secret, secretId: mcpServer.secretId };
       }
     }
     return { secrets: {} };
@@ -788,6 +858,120 @@ class McpClient {
 
     await this.persistToolCall(agentId, mcpServerName, toolCall, toolResult);
     return toolResult;
+  }
+
+  /**
+   * Attempt to recover from an authentication error by refreshing the OAuth token
+   * and retrying the tool call.
+   *
+   * @returns The result of the retried tool call, or null if refresh failed
+   */
+  private async attemptTokenRefreshAndRetry(params: {
+    secretId: string;
+    catalogId: string;
+    connectionKey: string;
+    toolCall: CommonToolCall;
+    agentId: string;
+    mcpServerName: string;
+    catalogItem: InternalMcpCatalog;
+    targetLocalMcpServerId: string;
+    executeRetry: (
+      getTransport: () => Promise<Transport>,
+      secrets: Record<string, unknown>,
+    ) => Promise<CommonToolResult>;
+  }): Promise<CommonToolResult | null> {
+    const {
+      secretId,
+      catalogId,
+      connectionKey,
+      toolCall,
+      agentId,
+      mcpServerName,
+      catalogItem,
+      targetLocalMcpServerId,
+      executeRetry,
+    } = params;
+
+    logger.info(
+      { toolName: toolCall.name, secretId, catalogId },
+      "attemptTokenRefreshAndRetry: authentication error detected, attempting token refresh and retry",
+    );
+
+    // Invalidate existing client since token is going to be changed
+    const existingClient = this.activeConnections.get(connectionKey);
+    if (existingClient) {
+      try {
+        await existingClient.close();
+      } catch {
+        // Ignore close errors
+      }
+      this.activeConnections.delete(connectionKey);
+    }
+
+    // Attempt refresh
+    const refreshResult = await refreshOAuthToken(secretId, catalogId);
+
+    if (!refreshResult) {
+      logger.warn(
+        { toolName: toolCall.name, secretId },
+        "attemptTokenRefreshAndRetry: token refresh failed",
+      );
+
+      // Track the refresh failure in the MCP server record
+      // Error code: 0=refresh_failed
+      await McpServerModel.update(targetLocalMcpServerId, {
+        oauthRefreshError: "0",
+        oauthRefreshFailedAt: new Date(),
+      });
+
+      return null;
+    }
+
+    logger.info(
+      { toolName: toolCall.name, secretId },
+      "attemptTokenRefreshAndRetry: token refreshed, retrying tool call",
+    );
+
+    // Clear any previous refresh error since refresh succeeded
+    await McpServerModel.update(targetLocalMcpServerId, {
+      oauthRefreshError: null,
+      oauthRefreshFailedAt: null,
+    });
+
+    try {
+      // Re-fetch updated secrets and retry once
+      const updatedSecret = await secretManager().getSecret(secretId);
+      if (!updatedSecret?.secret) {
+        logger.warn(
+          { toolName: toolCall.name, secretId },
+          "attemptTokenRefreshAndRetry: failed to fetch updated secret after refresh",
+        );
+        return null;
+      }
+
+      // Create new transport with updated secrets
+      const getUpdatedTransport = () =>
+        this.getTransport(
+          catalogItem,
+          targetLocalMcpServerId,
+          updatedSecret.secret,
+        );
+
+      return await executeRetry(getUpdatedTransport, updatedSecret.secret);
+    } catch (retryError) {
+      const retryErrorMsg =
+        retryError instanceof Error ? retryError.message : String(retryError);
+      logger.error(
+        { toolName: toolCall.name, error: retryErrorMsg },
+        "attemptTokenRefreshAndRetry: retry after token refresh also failed",
+      );
+      return await this.createErrorResult(
+        toolCall,
+        agentId,
+        retryErrorMsg,
+        mcpServerName,
+      );
+    }
   }
 
   /**

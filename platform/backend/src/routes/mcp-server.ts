@@ -592,6 +592,80 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  /**
+   * Re-authenticate an MCP server by updating its secret
+   * Used when OAuth token refresh fails and user needs to re-authenticate
+   */
+  fastify.patch(
+    "/api/mcp_server/:id/reauthenticate",
+    {
+      schema: {
+        operationId: RouteId.ReauthenticateMcpServer,
+        description:
+          "Update MCP server secret after re-authentication (clears OAuth refresh errors)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          secretId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async ({ params: { id }, body: { secretId }, user }, reply) => {
+      // Get the existing MCP server
+      const mcpServer = await McpServerModel.findById(id, user.id);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Verify user owns this server or is in the team
+      if (mcpServer.ownerId !== user.id && !mcpServer.teamId) {
+        throw new ApiError(
+          403,
+          "You do not have permission to re-authenticate this server",
+        );
+      }
+
+      // Delete the old secret if it exists
+      if (mcpServer.secretId) {
+        try {
+          await secretManager().deleteSecret(mcpServer.secretId);
+          logger.info(
+            { mcpServerId: id, oldSecretId: mcpServer.secretId },
+            "Deleted old secret during re-authentication",
+          );
+        } catch (error) {
+          logger.error(
+            { err: error, mcpServerId: id },
+            "Failed to delete old secret during re-authentication",
+          );
+          // Continue with update even if old secret deletion fails
+        }
+      }
+
+      // Update the server with new secret and clear OAuth error fields
+      const updatedServer = await McpServerModel.update(id, {
+        secretId,
+        oauthRefreshError: null,
+        oauthRefreshFailedAt: null,
+      });
+
+      if (!updatedServer) {
+        throw new ApiError(500, "Failed to update MCP server");
+      }
+
+      logger.info(
+        { mcpServerId: id, newSecretId: secretId },
+        "MCP server re-authenticated successfully",
+      );
+
+      return reply.send(updatedServer);
+    },
+  );
+
   fastify.delete(
     "/api/mcp_server/:id",
     {

@@ -213,12 +213,17 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         body: [
                           {
                             type: "TextBlock",
-                            text: `This channel is bound to agent: **${prompt?.name || binding.promptId}**`,
+                            text: `This channel is bound to agent: **${prompt?.name || binding.promptId}** which means it will handle all requests in the channel by default.`,
                             wrap: true,
                           },
                           {
                             type: "TextBlock",
-                            text: "Use **/select-agent** to change the binding.",
+                            text: `**Tip:** You can use other agents by mentioning **@Archestra >AgentName** (e.g., @Archestra >Sales what's the status?).`,
+                            wrap: true,
+                          },
+                          {
+                            type: "TextBlock",
+                            text: "Use **/select-agent** to change the default agent handling requests in the channel.",
                             wrap: true,
                             spacing: "Medium",
                           },
@@ -535,7 +540,13 @@ async function sendAgentSelectionCard(
         },
         {
           type: "TextBlock",
-          text: "Each Microsoft Teams channel needs a default agent bound to it. This agent will handle all your requests in this channel.",
+          text: "Each Microsoft Teams channel needs a **default agent** bound to it. This agent will handle all your requests in this channel.",
+          wrap: true,
+          spacing: "Small",
+        },
+        {
+          type: "TextBlock",
+          text: "**Tip:** You can use other agents by mentioning **@Archestra >AgentName** (e.g., @Archestra >Sales what's the status?).",
           wrap: true,
           spacing: "Small",
         },
@@ -549,9 +560,16 @@ async function sendAgentSelectionCard(
           type: "FactSet",
           spacing: "Small",
           facts: [
-            { title: "/select-agent", value: "Change the default agent" },
-            { title: "/status", value: "Show current agent binding" },
-            { title: "/help", value: "Show help message" },
+            {
+              title: "/select-agent",
+              value:
+                "Change the default agent handling requests in the channel",
+            },
+            {
+              title: "/status",
+              value: "Check the current agent handling requests in the channel",
+            },
+            { title: "/help", value: "Show available commands" },
           ],
         },
         {

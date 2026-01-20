@@ -257,6 +257,10 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   }
 
   getLastUserMessage(): string {
+    // Handle case where contents might be undefined or not an array
+    if (!this.request.contents || !Array.isArray(this.request.contents)) {
+      return "";
+    }
     const reversedMessages = [...this.request.contents].reverse();
     for (const message of reversedMessages) {
       if (message.role !== "user") {

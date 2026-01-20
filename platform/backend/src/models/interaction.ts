@@ -809,7 +809,14 @@ class InteractionModel {
           ) FILTER (WHERE
             ${schema.interactionsTable.request}::text NOT LIKE '%prompt suggestion generator%'
             AND ${schema.interactionsTable.request}::text NOT LIKE '%Please write a 5-10 word title%'
-            AND LENGTH(${schema.interactionsTable.request}->'messages'->0->>'content') > 20
+            AND COALESCE(
+              LENGTH(${schema.interactionsTable.request}->'messages'->0->>'content'),
+              -- For Gemini, just check if request has contents array (Gemini format)
+              CASE WHEN ${schema.interactionsTable.request}->>'contents' IS NOT NULL THEN 21
+                   ELSE 0
+              END,
+              0
+            ) > 20
           ))[1]`,
           lastInteractionType: sql<string>`(ARRAY_AGG(
             ${schema.interactionsTable.type}
@@ -817,7 +824,14 @@ class InteractionModel {
           ) FILTER (WHERE
             ${schema.interactionsTable.request}::text NOT LIKE '%prompt suggestion generator%'
             AND ${schema.interactionsTable.request}::text NOT LIKE '%Please write a 5-10 word title%'
-            AND LENGTH(${schema.interactionsTable.request}->'messages'->0->>'content') > 20
+            AND COALESCE(
+              LENGTH(${schema.interactionsTable.request}->'messages'->0->>'content'),
+              -- For Gemini, just check if request has contents array (Gemini format)
+              CASE WHEN ${schema.interactionsTable.request}->>'contents' IS NOT NULL THEN 21
+                   ELSE 0
+              END,
+              0
+            ) > 20
           ))[1]`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),

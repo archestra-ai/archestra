@@ -165,3 +165,33 @@ export const TimeInMs = {
   Hour: 1_000 * 60 * 60,
   Day: 1_000 * 60 * 60 * 24,
 } as const;
+
+/**
+ * Incoming email security modes.
+ * - private: Requires sender email to match an Archestra user who has access to the agent
+ * - internal: Only allows emails from a specific domain
+ * - public: No sender restrictions (anyone can email the agent)
+ */
+export const INCOMING_EMAIL_SECURITY_MODE = {
+  PRIVATE: "private",
+  INTERNAL: "internal",
+  PUBLIC: "public",
+} as const;
+
+export type IncomingEmailSecurityMode =
+  (typeof INCOMING_EMAIL_SECURITY_MODE)[keyof typeof INCOMING_EMAIL_SECURITY_MODE];
+
+export const INCOMING_EMAIL_SECURITY_MODES = Object.values(
+  INCOMING_EMAIL_SECURITY_MODE,
+);
+
+/**
+ * Check if a value is a valid incoming email security mode
+ */
+export function isValidIncomingEmailSecurityMode(
+  value: string,
+): value is IncomingEmailSecurityMode {
+  return INCOMING_EMAIL_SECURITY_MODES.includes(
+    value as IncomingEmailSecurityMode,
+  );
+}

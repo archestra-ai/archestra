@@ -9,7 +9,7 @@ import {
 } from "@/agents/incoming-email";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { PromptModel } from "@/models";
+import { AgentModel, PromptModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -245,6 +245,20 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Schema for email address response
+   * Includes both global provider status and agent-level settings
+   */
+  const EmailAddressResponseSchema = z.object({
+    // Global incoming email provider status
+    providerEnabled: z.boolean(),
+    emailAddress: z.string().nullable(),
+    // Agent-level incoming email settings
+    agentIncomingEmailEnabled: z.boolean(),
+    agentSecurityMode: z.enum(["private", "internal", "public"]),
+    agentAllowedDomain: z.string().nullable(),
+  });
+
+  /**
    * Endpoint to get the agent email address for a prompt
    * Used by the frontend to display the email address for an agent
    */
@@ -258,12 +272,7 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           promptId: z.string().uuid(),
         }),
-        response: constructResponseSchema(
-          z.object({
-            enabled: z.boolean(),
-            emailAddress: z.string().nullable(),
-          }),
-        ),
+        response: constructResponseSchema(EmailAddressResponseSchema),
       },
     },
     async (request, reply) => {
@@ -275,20 +284,43 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Prompt not found");
       }
 
+      // Get agent's incoming email settings
+      const agentEmailSettings = await AgentModel.getIncomingEmailSettings(
+        prompt.agentId,
+      );
+
       const provider = getEmailProvider();
 
       if (!provider) {
         return reply.send({
-          enabled: false,
+          providerEnabled: false,
           emailAddress: null,
+          agentIncomingEmailEnabled:
+            agentEmailSettings?.incomingEmailEnabled ?? false,
+          agentSecurityMode:
+            (agentEmailSettings?.incomingEmailSecurityMode as
+              | "private"
+              | "internal"
+              | "public") ?? "private",
+          agentAllowedDomain:
+            agentEmailSettings?.incomingEmailAllowedDomain ?? null,
         });
       }
 
       const emailAddress = provider.generateEmailAddress(promptId);
 
       return reply.send({
-        enabled: true,
+        providerEnabled: true,
         emailAddress,
+        agentIncomingEmailEnabled:
+          agentEmailSettings?.incomingEmailEnabled ?? false,
+        agentSecurityMode:
+          (agentEmailSettings?.incomingEmailSecurityMode as
+            | "private"
+            | "internal"
+            | "public") ?? "private",
+        agentAllowedDomain:
+          agentEmailSettings?.incomingEmailAllowedDomain ?? null,
       });
     },
   );

@@ -1,3 +1,4 @@
+import { INCOMING_EMAIL_SECURITY_MODE } from "@shared";
 import { vi } from "vitest";
 
 // Mock the a2a-executor service - must be before other imports
@@ -168,7 +169,11 @@ describe("processIncomingEmail", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     // Create a prompt for the agent
     const prompt = await createTestPrompt(agent.id, org.id);
@@ -216,7 +221,11 @@ describe("processIncomingEmail", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
@@ -262,7 +271,11 @@ describe("processIncomingEmail", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
@@ -308,7 +321,11 @@ describe("processIncomingEmail", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
@@ -362,7 +379,11 @@ describe("processIncomingEmail", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
@@ -409,8 +430,12 @@ describe("processIncomingEmail", () => {
   }) => {
     await makeUser(); // Need a user in the system
     const org = await makeOrganization();
-    // Create agent without assigning to any team
-    const agent = await makeAgent({ teams: [] });
+    // Create agent without assigning to any team but with email enabled
+    const agent = await makeAgent({
+      teams: [],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
@@ -453,7 +478,11 @@ describe("processIncomingEmail", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     // Create a prompt for the agent
     const prompt = await createTestPrompt(agent.id, org.id);
@@ -552,7 +581,11 @@ describe("processIncomingEmail with sendReply option", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const [prompt] = await db
       .insert(schema.promptsTable)
@@ -607,7 +640,11 @@ describe("processIncomingEmail with sendReply option", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const [prompt] = await db
       .insert(schema.promptsTable)
@@ -669,7 +706,11 @@ describe("processIncomingEmail with sendReply option", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const [prompt] = await db
       .insert(schema.promptsTable)
@@ -731,7 +772,11 @@ describe("processIncomingEmail with sendReply option", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const [prompt] = await db
       .insert(schema.promptsTable)
@@ -803,7 +848,11 @@ describe("processIncomingEmail with conversation history", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const [prompt] = await db
       .insert(schema.promptsTable)
@@ -893,7 +942,11 @@ describe("processIncomingEmail with conversation history", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const [prompt] = await db
       .insert(schema.promptsTable)
@@ -957,7 +1010,11 @@ describe("processIncomingEmail with conversation history", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
 
     const [prompt] = await db
       .insert(schema.promptsTable)
@@ -1013,5 +1070,413 @@ describe("processIncomingEmail with conversation history", () => {
     const callArgs = vi.mocked(executeA2AMessage).mock.calls[0][0];
     expect(callArgs.message).toBe("Current message only");
     expect(callArgs.message).not.toContain("<conversation_history>");
+  });
+});
+
+describe("processIncomingEmail security modes", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.mocked(executeA2AMessage).mockResolvedValue({
+      messageId: "msg-security-test",
+      text: "Agent security response",
+      finishReason: "end_turn",
+    });
+  });
+
+  test("rejects email when incoming email is disabled on the agent", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    // Create agent with incoming email disabled (default)
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: false,
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-disabled-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test",
+      body: "Test body",
+      receivedAt: new Date(),
+    };
+
+    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
+      "Incoming email is not enabled for agent",
+    );
+    expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+  });
+
+  test("private mode: accepts email from registered user with access", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeAgent,
+  }) => {
+    const user = await makeUser({ email: "authorized@company.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    // Add user as a team member (makeTeam only sets createdBy, not membership)
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-private-authorized-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "authorized@company.com", // Same email as the user
+      subject: "Test",
+      body: "Private mode test",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: user.id,
+        message: "Private mode test",
+      }),
+    );
+  });
+
+  test("private mode: rejects email from unknown sender", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser({ email: "authorized@company.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-private-unknown-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "unknown@external.com", // Unknown email
+      subject: "Test",
+      body: "Test body",
+      receivedAt: new Date(),
+    };
+
+    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
+      "email sender unknown@external.com is not a registered Archestra user",
+    );
+    expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+  });
+
+  test("private mode: rejects email from user without team access", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    // Create user without access to the agent's team
+    const userWithAccess = await makeUser({ email: "authorized@company.com" });
+    // userWithoutAccess exists but is not a team member - we only need to create it
+    // to register the email address in the system
+    await makeUser({
+      email: "noaccess@company.com",
+    });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, userWithAccess.id);
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-private-noaccess-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "noaccess@company.com", // User exists but no team access
+      subject: "Test",
+      body: "Test body",
+      receivedAt: new Date(),
+    };
+
+    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
+      "user noaccess@company.com does not have access to this agent",
+    );
+    expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+  });
+
+  test("internal mode: accepts email from allowed domain", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
+      incomingEmailAllowedDomain: "company.com",
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-internal-allowed-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "anyone@company.com", // From allowed domain
+      subject: "Test",
+      body: "Internal domain test",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Internal domain test",
+      }),
+    );
+  });
+
+  test("internal mode: rejects email from different domain", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
+      incomingEmailAllowedDomain: "company.com",
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-internal-blocked-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "hacker@external.com", // From different domain
+      subject: "Test",
+      body: "Test body",
+      receivedAt: new Date(),
+    };
+
+    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
+      "emails from domain external.com are not allowed",
+    );
+    expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+  });
+
+  test("internal mode: domain comparison is case-insensitive", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
+      incomingEmailAllowedDomain: "COMPANY.COM", // Uppercase
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-internal-case-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "user@company.com", // Lowercase domain
+      subject: "Test",
+      body: "Case test",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalled();
+  });
+
+  test("public mode: accepts email from any sender", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-public-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "random@anywhere.org", // Any sender
+      subject: "Public Test",
+      body: "Public mode test",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Public mode test",
+      }),
+    );
   });
 });

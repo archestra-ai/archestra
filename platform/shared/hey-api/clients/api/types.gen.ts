@@ -5446,6 +5446,9 @@ export type GetAgentsResponses = {
             isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -5507,6 +5510,9 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain?: string | null;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -5589,6 +5595,9 @@ export type CreateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5711,6 +5720,9 @@ export type GetAllAgentsResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5833,6 +5845,9 @@ export type GetDefaultAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6036,6 +6051,9 @@ export type GetAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6088,6 +6106,9 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain?: string | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -6172,6 +6193,9 @@ export type UpdateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -11895,8 +11919,11 @@ export type GetPromptEmailAddressResponses = {
      * Default Response
      */
     200: {
-        enabled: boolean;
+        providerEnabled: boolean;
         emailAddress: string | null;
+        agentIncomingEmailEnabled: boolean;
+        agentSecurityMode: 'private' | 'internal' | 'public';
+        agentAllowedDomain: string | null;
     };
 };
 

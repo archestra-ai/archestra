@@ -15,6 +15,7 @@ import {
   SelectAgentSchema,
   UpdateAgentSchema,
   UuidIdSchema,
+  validateIncomingEmailSettings,
 } from "@/types";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -198,6 +199,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, headers }, reply) => {
+      // Validate incoming email settings (allowed domain required for internal mode)
+      try {
+        validateIncomingEmailSettings(body);
+      } catch (error) {
+        throw new ApiError(
+          400,
+          error instanceof Error
+            ? error.message
+            : "Invalid incoming email settings",
+        );
+      }
+
       // Validate team assignment for non-admin users if teams are being updated
       if (body.teams !== undefined) {
         const { success: isProfileAdmin } = await hasPermission(

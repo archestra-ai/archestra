@@ -55,6 +55,9 @@ export function ProfileActions({
             teams: agent.teams || [],
             labels: agent.labels || [],
             considerContextUntrusted: agent.considerContextUntrusted,
+            incomingEmailEnabled: agent.incomingEmailEnabled,
+            incomingEmailSecurityMode: agent.incomingEmailSecurityMode,
+            incomingEmailAllowedDomain: agent.incomingEmailAllowedDomain,
             createdAt: agent.createdAt,
             updatedAt: agent.updatedAt,
           });

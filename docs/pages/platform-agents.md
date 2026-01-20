@@ -156,6 +156,27 @@ agents+agent-abc123456789...@company.com
 
 will invoke that specific agent.
 
+### Security Modes
+
+Incoming email is disabled by default for all agents. When enabled, you must choose a security mode to control who can invoke the agent via email.
+
+| Mode | Description |
+|------|-------------|
+| **Private** | Only registered Archestra users who have team-based access to the agent can invoke it. The sender's email address must match an existing user, and that user must be a member of at least one team assigned to the agent. |
+| **Internal** | Only emails from a specified domain are accepted. Configure an allowed domain (e.g., `company.com`) to restrict access to your organization's email addresses. |
+| **Public** | Any email address can invoke the agent. Use with caution as this exposes the agent to external senders. |
+
+To configure incoming email security:
+
+1. Go to **Profiles** page
+2. Click **Edit** on the desired profile
+3. Check **Enable incoming email**
+4. Select a **Security Mode**
+5. For Internal mode, enter the **Allowed Domain**
+6. Save changes
+
+When security validation fails, the email is rejected with an appropriate error and no agent execution occurs.
+
 ## ChatOps: Microsoft Teams
 
 Archestra can connect directly to Microsoft Teams channels. When users mention the bot in a channel, messages are routed to your configured agent and responses appear directly in Teams.

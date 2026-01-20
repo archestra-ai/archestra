@@ -122,30 +122,6 @@ class PromptModel {
   }
 
   /**
-   * Find a prompt by name (case-insensitive) that allows a specific chatops provider.
-   * Used for inline agent mentions like @AgentName in Teams messages.
-   */
-  static async findByNameAndChatopsProvider(
-    name: string,
-    provider: ChatOpsProviderType,
-  ): Promise<Pick<Prompt, "id" | "name"> | null> {
-    const [prompt] = await db
-      .select({
-        id: schema.promptsTable.id,
-        name: schema.promptsTable.name,
-      })
-      .from(schema.promptsTable)
-      .where(
-        and(
-          sql`LOWER(${schema.promptsTable.name}) = LOWER(${name})`,
-          sql`${schema.promptsTable.allowedChatops} @> ${JSON.stringify([provider])}::jsonb`,
-        ),
-      );
-
-    return prompt || null;
-  }
-
-  /**
    * Find a prompt by ID
    */
   static async findById(id?: string | null): Promise<Prompt | null> {

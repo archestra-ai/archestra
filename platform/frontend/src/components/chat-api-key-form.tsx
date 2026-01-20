@@ -107,6 +107,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
   },
+  xai: {
+    name: "x.ai (Grok)",
+    icon: "/icons/xai.png",
+    placeholder: "xai-...",
+    enabled: true,
+    consoleUrl: "https://console.x.ai/",
+    consoleName: "x.ai Console",
+  },
   zhipuai: {
     name: "Zhipu AI",
     icon: "/icons/zhipuai.png",

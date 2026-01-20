@@ -104,9 +104,7 @@ export function Savings({
               {costOptimizationSavings > 0 ? (
                 <div>
                   Model optimization: -{formatCost(costOptimizationSavings)}
-                  {baselineModel &&
-                  actualModel &&
-                  baselineModel !== actualModel
+                  {baselineModel && actualModel && baselineModel !== actualModel
                     ? ` (${baselineModel} \u2192 ${actualModel})`
                     : ""}
                 </div>

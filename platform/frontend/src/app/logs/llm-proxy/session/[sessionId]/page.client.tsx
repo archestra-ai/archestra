@@ -88,6 +88,9 @@ export default function SessionDetailPage({
   const lastRequest = sessionData?.lastRequestTime ?? null;
   const totalRequests =
     sessionData?.requestCount ?? paginationMeta?.total ?? interactions.length;
+  const totalCost = sessionData?.totalCost;
+  const totalBaselineCost = sessionData?.totalBaselineCost;
+  const totalToonCostSavings = sessionData?.totalToonCostSavings;
 
   // Session metadata from API
   const sessionSource = sessionData?.sessionSource;
@@ -201,6 +204,25 @@ export default function SessionDetailPage({
             <div className="font-mono">
               {totalInputTokens.toLocaleString()} in /{" "}
               {totalOutputTokens.toLocaleString()} out
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Total Cost</div>
+            <div className="font-mono">
+              {totalCost && totalBaselineCost ? (
+                <TooltipProvider>
+                  <Savings
+                    cost={totalCost}
+                    baselineCost={totalBaselineCost}
+                    toonCostSavings={totalToonCostSavings}
+                    format="percent"
+                    tooltip="hover"
+                    variant="session"
+                  />
+                </TooltipProvider>
+              ) : (
+                "-"
+              )}
             </div>
           </div>
           <div>
@@ -319,8 +341,6 @@ export default function SessionDetailPage({
                               format="percent"
                               tooltip="hover"
                               variant="interaction"
-                              inputTokens={interaction.inputTokens ?? 0}
-                              outputTokens={interaction.outputTokens ?? 0}
                               baselineModel={interaction.baselineModel}
                               actualModel={interaction.model}
                             />

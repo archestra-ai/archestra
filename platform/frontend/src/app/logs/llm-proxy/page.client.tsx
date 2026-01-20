@@ -251,8 +251,6 @@ function SessionRow({
               format="percent"
               tooltip="hover"
               variant="session"
-              inputTokens={session.totalInputTokens}
-              outputTokens={session.totalOutputTokens}
             />
           </TooltipProvider>
         )}

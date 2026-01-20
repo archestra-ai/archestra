@@ -648,6 +648,127 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * Cohere implementation of DualLlmClient
+ * Cohere uses a custom v2 Chat API, so we use fetch directly
+ */
+export class CohereDualLlmClient implements DualLlmClient {
+  private apiKey: string;
+  private model: string;
+  private baseURL: string;
+
+  constructor(apiKey: string, model: string) {
+    logger.debug({ model }, "[dualLlmClient] Cohere: initializing client");
+    this.apiKey = apiKey;
+    // Strip :free suffix if present (Cohere API doesn't accept it)
+    // The :free suffix is used in the UI to indicate free tier, but API needs base model name
+    this.model = model.replace(/:free$/, "");
+    this.baseURL = config.llm.cohere.baseUrl || "https://api.cohere.ai";
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] Cohere: starting chat completion",
+    );
+
+    // Convert messages to Cohere format
+    const cohereMessages = messages.map((msg) => ({
+      role: msg.role === "assistant" ? "chatbot" : msg.role,
+      content: msg.content,
+    }));
+
+    const response = await fetch(`${this.baseURL}/v2/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+        "Cohere-Version": "2024-11-19",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: cohereMessages,
+        temperature,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Cohere API error: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    const data = (await response.json()) as {
+      response: { text: string };
+    };
+
+    const content = data.response.text.trim();
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Cohere: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] Cohere: starting chat with schema",
+    );
+
+    // Cohere doesn't have native structured output, so use prompt-based approach
+    const systemPrompt = `You must respond with valid JSON matching this schema:
+${JSON.stringify(schema.schema, null, 2)}
+
+Return only the JSON object, no other text.`;
+
+    const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
+      if (idx === 0 && msg.role === "user") {
+        return {
+          ...msg,
+          content: `${systemPrompt}\n\n${msg.content}`,
+        };
+      }
+      return msg;
+    });
+
+    const response = await this.chat(enhancedMessages, temperature);
+
+    try {
+      return JSON.parse(response) as T;
+    } catch (parseError) {
+      logger.error(
+        {
+          model: this.model,
+          schemaName: schema.name,
+          response,
+          error: parseError instanceof Error ? parseError.message : String(parseError),
+        },
+        "[dualLlmClient] Cohere: failed to parse JSON response",
+      );
+      throw parseError;
+    }
+  }
+}
+
+/**
  * Zhipuai implementation of DualLlmClient
  * Zhipuai exposes an OpenAI-compatible API, so we use the OpenAI SDK with Zhipuai's base URL
  */
@@ -830,6 +951,14 @@ export function createDualLlmClient(
         throw new Error("API key required for Zhipuai dual LLM");
       }
       return new ZhipuaiDualLlmClient(apiKey, model);
+    case "cohere":
+      if (!apiKey) {
+        throw new Error("API key required for Cohere dual LLM");
+      }
+      if (!model) {
+        throw new Error("Model name required for Cohere dual LLM");
+      }
+      return new CohereDualLlmClient(apiKey, model);
     default:
       logger.debug(
         { provider },

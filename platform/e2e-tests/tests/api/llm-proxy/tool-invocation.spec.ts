@@ -620,6 +620,80 @@ const zhipuaiConfig: ToolInvocationTestConfig = {
     ),
 };
 
+const cohereConfig: ToolInvocationTestConfig = {
+  providerName: "Cohere",
+
+  endpoint: (agentId) => `/v1/cohere/${agentId}/v2/chat`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "command-r-plus",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameter_definitions: t.parameters.properties,
+    })),
+  }),
+
+  trustedDataPolicyAttributePath: "$.content",
+
+  assertToolCallBlocked: (response) => {
+    // Cohere returns refusal in response.text or response.response.text
+    const text = response.text || response.response?.text || "";
+    expect(text).toBeTruthy();
+    expect(text).toContain("read_file");
+    expect(text).toContain("denied");
+  },
+
+  assertToolCallsPresent: (response, expectedTools) => {
+    // Cohere returns tool_calls in response.response.tool_calls
+    const toolCalls =
+      response.response?.tool_calls || response.tool_calls || [];
+    expect(toolCalls.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = toolCalls.find(
+        (tc: { name: string }) => tc.name === toolName,
+      );
+      expect(found).toBeDefined();
+    }
+  },
+
+  assertToolArgument: (response, toolName, argName, matcher) => {
+    const toolCalls =
+      response.response?.tool_calls || response.tool_calls || [];
+    const toolCall = toolCalls.find(
+      (tc: { name: string }) => tc.name === toolName,
+    );
+    expect(toolCall).toBeDefined();
+    expect(toolCall.parameters).toBeDefined();
+    matcher(toolCall.parameters[argName]);
+  },
+
+  findInteractionByContent: (interactions, content) =>
+    interactions.find((i) =>
+      i.request?.messages?.some((m: { content?: string | unknown[] }) => {
+        if (typeof m.content === "string") {
+          return m.content.includes(content);
+        }
+        if (Array.isArray(m.content)) {
+          return m.content.some(
+            (block: unknown) => {
+              const typedBlock = block as { type?: string; text?: string };
+              return typedBlock.type === "text" && typedBlock.text?.includes(content);
+            },
+          );
+        }
+        return false;
+      }),
+    ),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -632,6 +706,7 @@ const testConfigs: ToolInvocationTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  cohereConfig,
 ];
 
 for (const config of testConfigs) {

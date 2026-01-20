@@ -47,10 +47,6 @@ export function useConversation(conversationId?: string) {
   });
 }
 
-type Conversation = NonNullable<
-  Awaited<ReturnType<typeof getChatConversation>>["data"]
->;
-
 export function useConversations(search?: string) {
   return useQuery({
     queryKey: ["conversations", search],

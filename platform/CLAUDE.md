@@ -260,6 +260,71 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **General**:
 
+- **Prefer Classes for Stateful Modules**: When encapsulating functionality that involves state (cached values, intervals, connections, etc.), prefer creating a class over standalone module functions. Export a singleton instance. This improves encapsulation, testability, and makes state management explicit.
+  ```typescript
+  // Good - class with singleton
+  class ChatOpsManager {
+    private provider: Provider | null = null;
+
+    initialize() { ... }
+    cleanup() { ... }
+  }
+  export const chatOpsManager = new ChatOpsManager();
+
+  // Avoid - module-level state with loose functions
+  let provider: Provider | null = null;
+  export function initialize() { ... }
+  export function cleanup() { ... }
+  ```
+
+- **Private Methods at Bottom**: In classes, mark methods as `private` if they are only used within the class. Place all private methods at the bottom of the class, after public methods. This keeps the "public interface" visible at the top.
+  ```typescript
+  class MyService {
+    // Public methods first
+    doSomething() {
+      this.helperA();
+    }
+
+    // Private methods at bottom
+    private helperA() { ... }
+    private helperB() { ... }
+  }
+  ```
+
+- **No Premature Exports**: Only export what is actually used outside the module. If a function, constant, or type is only used within the module, do NOT export it. This is critical for maintaining clean module boundaries.
+  ```typescript
+  // Good - only export what's needed externally
+  export const myService = new MyService();
+
+  // Bad - exporting internal helpers "just in case"
+  export function internalHelper() { ... }  // Not used outside!
+  export const INTERNAL_CONSTANT = 42;      // Not used outside!
+  ```
+
+- **Module Code Order**: Structure modules so the "public interface" appears at the top. Internal/private functions and constants should be placed at the bottom of the file. This makes it immediately clear what the module exposes.
+  ```typescript
+  // 1. Imports
+  import { something } from "somewhere";
+
+  // 2. Exported items (public interface) - at TOP
+  export function publicFunctionA() {
+    return helperB();
+  }
+
+  export const publicConstant = "value";
+
+  // 3. Internal helpers - at BOTTOM
+  function helperB() {
+    return helperC();
+  }
+
+  function helperC() {
+    return INTERNAL_CONFIG.value;
+  }
+
+  const INTERNAL_CONFIG = { value: 42 };
+  ```
+
 - **Function Parameters**: If a function accepts more than 2 parameters, use a single object parameter instead of multiple positional parameters. This improves readability, makes parameters self-documenting, and allows for easier future extension.
   ```typescript
   // Good
@@ -307,13 +372,29 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Flat file structure, avoid barrel files
 - **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
 - Only export public APIs
+- **Module Code Order (CRITICAL)**: Always place exports at TOP of file, internal helpers at BOTTOM. Use section comments (`// ===`) to separate. Function declarations are hoisted, so helpers can be called before defined.
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
 - **API Response Standardization**: Use `constructResponseSchema` helper for all routes to ensure consistent error responses (400, 401, 403, 404, 500)
-- **Error Handling**: Throw `ApiError` instances with appropriate status codes - handled centrally by Fastify error handler
+- **Error Handling**: Always use `throw new ApiError(statusCode, message)` for error responses - never use manual `reply.status().send({ error: ... })`. The centralized Fastify error handler formats all errors consistently as `{ error: { message, type } }` and logs appropriately.
+- **Protected Routes & Authentication**: Routes under `/api/` are protected by the auth middleware which guarantees `request.user` and `request.organizationId` exist. Never add redundant null checks like `if (!request.organizationId) throw new ApiError(401, "Unauthorized")` - just use `request.organizationId` directly. The middleware handles authentication; routes handle authorization and business logic.
 - **Type Organization**: Keep database schemas in `database/schemas/`, extract business types to dedicated `types/` files
 - **Pagination**: Use `PaginationQuerySchema` and `createPaginatedResponseSchema` for consistent pagination across APIs
 - **Sorting**: Use `SortingQuerySchema` or `createSortingQuerySchema` for standardized sorting parameters
+- **Database Types via drizzle-zod**: Never manually define TypeScript interfaces for database entities. Use `drizzle-zod` to generate Zod schemas from Drizzle table definitions, then infer types with `z.infer<>`. This keeps types in sync with the schema automatically:
+  ```typescript
+  // In types/<entity>.ts
+  import { createSelectSchema, createInsertSchema, createUpdateSchema } from "drizzle-zod";
+  import { schema } from "@/database";
+
+  export const SelectEntitySchema = createSelectSchema(schema.entityTable);
+  export const InsertEntitySchema = createInsertSchema(schema.entityTable).omit({ id: true, createdAt: true, updatedAt: true });
+  export const UpdateEntitySchema = createUpdateSchema(schema.entityTable).pick({ fieldToUpdate: true });
+
+  export type Entity = z.infer<typeof SelectEntitySchema>;
+  export type InsertEntity = z.infer<typeof InsertEntitySchema>;
+  export type UpdateEntity = z.infer<typeof UpdateEntitySchema>;
+  ```
 
 **Team-based Access Control**:
 

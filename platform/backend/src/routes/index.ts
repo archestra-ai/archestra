@@ -19,6 +19,7 @@ export { default as browserStreamRoutes } from "./browser-stream";
 export { default as chatApiKeysRoutes } from "./chat/routes.api-keys";
 export { default as chatRoutes } from "./chat/routes.chat";
 export { default as chatModelsRoutes } from "./chat/routes.models";
+export { default as chatopsRoutes } from "./chatops";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";

@@ -323,6 +323,21 @@ export default {
       },
     },
   },
+  chatops: {
+    msTeams: {
+      enabled: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED === "true",
+      appId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID || "",
+      appPassword: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD || "",
+      // Optional: Set for single-tenant Azure Bot (leave empty for multi-tenant)
+      tenantId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID || "",
+      graph: {
+        tenantId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID || "",
+        clientId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID || "",
+        clientSecret:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET || "",
+      },
+    },
+  },
   knowledgeGraph: {
     provider: parseKnowledgeGraphProvider(),
     lightrag: {

@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.28](https://github.com/archestra-ai/archestra/compare/platform-v1.0.27...platform-v1.0.28) (2026-01-19)
+
+
+### Features
+
+* Microsoft Teams integration ([#2186](https://github.com/archestra-ai/archestra/issues/2186)) ([1bfb065](https://github.com/archestra-ai/archestra/commit/1bfb065b3c4cdf61e7e9cb19dba2a1733655df8a))
+
+
+### Bug Fixes
+
+* display file-only messages in chat ([#2228](https://github.com/archestra-ai/archestra/issues/2228)) ([569036a](https://github.com/archestra-ai/archestra/commit/569036ae46b5d6bff0305ba03368243300e7185e)), closes [#2225](https://github.com/archestra-ai/archestra/issues/2225)
+* fetch conversations only after logging in ([#2232](https://github.com/archestra-ai/archestra/issues/2232)) ([735c84e](https://github.com/archestra-ai/archestra/commit/735c84e8cddc97b88de0dc46188d70702755c556))
+* fix invitation test ([#2236](https://github.com/archestra-ai/archestra/issues/2236)) ([d52dace](https://github.com/archestra-ai/archestra/commit/d52dacea723931fe69f63f112fb9437739d9acf1))
+* remove model change dialog ([#2234](https://github.com/archestra-ai/archestra/issues/2234)) ([fe6eb0f](https://github.com/archestra-ai/archestra/commit/fe6eb0fa034e9d8ff54f375d774a830fd3e47ef2))
+
+
+### Miscellaneous Chores
+
+* add mermaid vscode extension to workspace recommendations + remove `.pyc` files ([#2237](https://github.com/archestra-ai/archestra/issues/2237)) ([a6d730b](https://github.com/archestra-ai/archestra/commit/a6d730bdbed1768ae3bf48ce21e46bca087852cb))
+
 ## [1.0.27](https://github.com/archestra-ai/archestra/compare/platform-v1.0.26...platform-v1.0.27) (2026-01-18)
 
 

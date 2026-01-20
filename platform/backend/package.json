@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.0.27",
+  "version": "1.0.28",
   "description": "",
   "author": "",
   "private": true,
@@ -67,6 +67,8 @@
     "@toon-format/toon": "^2.1.0",
     "ai": "^6.0.22",
     "better-auth": "1.4.10",
+    "botbuilder": "^4.23.3",
+    "botframework-connector": "^4.23.3",
     "cache-manager": "^7.2.7",
     "dotenv": "^17.2.2",
     "drizzle-kit": "^0.31.8",

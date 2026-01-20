@@ -31,6 +31,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   cleanupEmailProvider,
   cleanupOldProcessedEmails,
@@ -531,6 +532,9 @@ const start = async () => {
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
     await initializeEmailProvider();
 
+    // Initialize chatops providers (MS Teams, Slack, etc.)
+    await chatOpsManager.initialize();
+
     // Initialize knowledge graph provider (if configured)
     // This enables automatic document ingestion from chat uploads
     await initializeKnowledgeGraphProvider();
@@ -632,7 +636,9 @@ const start = async () => {
         fastify.log.info("Email background job intervals cleared");
 
         // Track which cleanup operations have completed
-        const completedCleanups = new Set<string>();
+        const completedCleanups = new Set<
+          "emailProvider" | "knowledgeGraph" | "chatOps"
+        >();
 
         // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
         const cleanupPromise = Promise.allSettled([
@@ -644,10 +650,18 @@ const start = async () => {
             completedCleanups.add("knowledgeGraph");
             fastify.log.info("Knowledge graph provider cleanup completed");
           }),
+          chatOpsManager.cleanup().then(() => {
+            completedCleanups.add("chatOps");
+            fastify.log.info("ChatOps provider cleanup completed");
+          }),
         ]).then(() => "completed" as const);
 
         // Wait for cleanup with timeout, then exit anyway
-        const allCleanupNames = ["emailProvider", "knowledgeGraph"];
+        const allCleanupNames = [
+          "emailProvider",
+          "knowledgeGraph",
+          "chatOps",
+        ] as const;
         const result = await Promise.race([
           cleanupPromise,
           new Promise<"timeout">((resolve) =>

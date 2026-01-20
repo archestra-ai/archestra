@@ -5,6 +5,7 @@ import { schema } from "@/database";
 import {
   Anthropic,
   Cerebras,
+  DeepSeek,
   Gemini,
   Ollama,
   OpenAi,
@@ -30,6 +31,7 @@ export const InteractionRequestSchema = z.union([
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
+  DeepSeek.API.ChatCompletionRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -40,6 +42,7 @@ export const InteractionResponseSchema = z.union([
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
+  DeepSeek.API.ChatCompletionResponseSchema,
 ]);
 
 /**
@@ -121,6 +124,13 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["deepseek:chatCompletions"]),
+    request: DeepSeek.API.ChatCompletionRequestSchema,
+    processedRequest:
+      DeepSeek.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: DeepSeek.API.ChatCompletionResponseSchema,
   }),
 ]);
 

@@ -28,7 +28,7 @@ test.describe
       }
     });
 
-    test("should fetch chat models filtered by provider (openai)", async ({
+    test("should fetch chat models filtered by given provider (openai)", async ({
       request,
       makeApiRequest,
     }) => {

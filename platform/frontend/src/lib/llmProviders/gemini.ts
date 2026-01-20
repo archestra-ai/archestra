@@ -109,6 +109,11 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   }
 
   isLastMessageToolCall(): boolean {
+    // Safety check: ensure contents exists and is an array
+    if (!this.request.contents || !Array.isArray(this.request.contents)) {
+      return false;
+    }
+
     const messages = this.request.contents;
 
     if (messages.length === 0) {
@@ -126,6 +131,11 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   }
 
   getLastToolCallId(): string | null {
+    // Safety check: ensure contents exists and is an array
+    if (!this.request.contents || !Array.isArray(this.request.contents)) {
+      return null;
+    }
+
     const messages = this.request.contents;
     if (messages.length === 0) {
       return null;
@@ -149,6 +159,11 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   getToolNamesUsed(): string[] {
     const toolsUsed = new Set<string>();
 
+    // Safety check: ensure contents exists and is an array
+    if (!this.request.contents || !Array.isArray(this.request.contents)) {
+      return Array.from(toolsUsed);
+    }
+
     // Tools are invoked by the model in functionCall parts
     for (const message of this.request.contents) {
       if (message.role === "model" && Array.isArray(message.parts)) {
@@ -165,6 +180,11 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
 
   getToolNamesRefused(): string[] {
     const toolsRefused = new Set<string>();
+
+    // Safety check: ensure contents exists and is an array
+    if (!this.request.contents || !Array.isArray(this.request.contents)) {
+      return Array.from(toolsRefused);
+    }
 
     // Check for text blocks containing tool refusal patterns
     for (const message of this.request.contents) {
@@ -225,6 +245,11 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   getToolRefusedCount(): number {
     let count = 0;
 
+    // Safety check: ensure contents exists and is an array
+    if (!this.request.contents || !Array.isArray(this.request.contents)) {
+      return count;
+    }
+
     // Count refusals in request messages
     for (const message of this.request.contents) {
       if (message.role === "model" && Array.isArray(message.parts)) {
@@ -257,6 +282,11 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   }
 
   getLastUserMessage(): string {
+    // Safety check: ensure contents exists and is an array
+    if (!this.request.contents || !Array.isArray(this.request.contents)) {
+      return "";
+    }
+
     const reversedMessages = [...this.request.contents].reverse();
     for (const message of reversedMessages) {
       if (message.role !== "user") {

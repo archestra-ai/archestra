@@ -931,6 +931,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
   vllm: parseVllmError,
   ollama: parseOllamaError,
+  xai: parseOpenAIError, // x.ai uses OpenAI-compatible API
   zhipuai: parseZhipuaiError,
 };
 
@@ -946,6 +947,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
+  xai: mapOpenAIErrorWrapper, // x.ai uses OpenAI-compatible API
   zhipuai: mapZhipuaiErrorWrapper,
 };
 

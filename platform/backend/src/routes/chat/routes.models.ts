@@ -232,6 +232,47 @@ async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from x.ai API (OpenAI-compatible)
+ * x.ai exposes an OpenAI-compatible API at /models endpoint
+ * See: https://docs.x.ai/docs/api-reference
+ */
+async function fetchXaiModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.chat.xai.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch x.ai models",
+    );
+    throw new Error(`Failed to fetch x.ai models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      object: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    name: model.id,
+    displayName: model.id,
+    provider: "xai" as const,
+  }));
+}
+
+/**
  * Fetch models from vLLM API
  * vLLM exposes an OpenAI-compatible /models endpoint
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
@@ -564,6 +605,7 @@ const modelFetchers: Record<
   openai: fetchOpenAiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
+  xai: fetchXaiModels,
   zhipuai: fetchZhipuaiModels,
 };
 

@@ -733,7 +733,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_, reply) => {
-      await cacheManager.deleteByPrefix(`${CacheKey.GetChatModels}-`);
+      await cacheManager.deleteByPrefix(CacheKey.GetChatModels);
       logger.info("Invalidated chat models cache");
       return reply.send({ success: true });
     },

@@ -1,10 +1,17 @@
 import { ClientSecretCredential } from "@azure/identity";
-import { Client } from "@microsoft/microsoft-graph-client";
-import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
+import { AzureIdentityAuthenticationProvider } from "@microsoft/kiota-authentication-azure";
+import {
+  createGraphServiceClient,
+  GraphRequestAdapter,
+  type GraphServiceClient,
+} from "@microsoft/msgraph-sdk";
 import type {
   ChatMessage,
   ChatMessageAttachment,
-} from "@microsoft/microsoft-graph-types";
+} from "@microsoft/msgraph-sdk/models";
+// Register the chats and teams fluent API extensions
+import "@microsoft/msgraph-sdk-chats";
+import "@microsoft/msgraph-sdk-teams";
 import {
   ActivityTypes,
   CloudAdapter,
@@ -37,7 +44,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   readonly displayName = "Microsoft Teams";
 
   private adapter: CloudAdapter | null = null;
-  private graphClient: Client | null = null;
+  private graphClient: GraphServiceClient | null = null;
 
   isConfigured(): boolean {
     const { enabled, appId, appPassword } = config.chatops.msTeams;
@@ -82,13 +89,11 @@ class MSTeamsProvider implements ChatOpsProvider {
         graph.clientId,
         graph.clientSecret,
       );
-      const authProvider = new TokenCredentialAuthenticationProvider(
-        credential,
-        {
-          scopes: ["https://graph.microsoft.com/.default"],
-        },
-      );
-      this.graphClient = Client.initWithMiddleware({ authProvider });
+      const authProvider = new AzureIdentityAuthenticationProvider(credential, [
+        "https://graph.microsoft.com/.default",
+      ]);
+      const requestAdapter = new GraphRequestAdapter(authProvider);
+      this.graphClient = createGraphServiceClient(requestAdapter);
       logger.info("[MSTeamsProvider] Graph client initialized");
     } else {
       logger.info(
@@ -318,34 +323,36 @@ class MSTeamsProvider implements ChatOpsProvider {
     const client = this.graphClient;
     if (!client) return [];
 
+    const chatMessages = client.chats.byChatId(params.channelId).messages;
+
     // For thread replies, fetch parent message and attempt to get replies
     if (params.threadId && !params.threadId.includes("@thread")) {
-      const parentMessage = await client
-        .api(`/chats/${params.channelId}/messages/${params.threadId}`)
+      const parentMessage = await chatMessages
+        .byChatMessageId(params.threadId)
         .get();
 
       try {
-        const repliesResponse = await client
-          .api(`/chats/${params.channelId}/messages/${params.threadId}/replies`)
-          .top(limit - 1)
-          .get();
-        return [parentMessage, ...(repliesResponse.value || [])];
+        const repliesResponse = await chatMessages
+          .byChatMessageId(params.threadId)
+          .replies.get({ queryParameters: { top: limit - 1 } });
+        return [parentMessage, ...(repliesResponse?.value || [])].filter(
+          (msg): msg is ChatMessage => msg !== undefined,
+        );
       } catch (error) {
         // /replies endpoint not supported for group chats - use parent message only
         logger.warn(
           { error: errorMessage(error), threadId: params.threadId },
           "[MSTeamsProvider] Thread replies unavailable for group chat (API limitation)",
         );
-        return [parentMessage];
+        return parentMessage ? [parentMessage] : [];
       }
     }
 
     // No thread - fetch recent messages
-    const response = await client
-      .api(`/chats/${params.channelId}/messages`)
-      .top(limit)
-      .get();
-    return response.value || [];
+    const response = await chatMessages.get({
+      queryParameters: { top: limit },
+    });
+    return response?.value || [];
   }
 
   private async fetchTeamChannelHistory(
@@ -353,39 +360,43 @@ class MSTeamsProvider implements ChatOpsProvider {
     limit: number,
   ): Promise<ChatMessage[]> {
     const client = this.graphClient;
-    if (!client) return [];
+    if (!client || !params.workspaceId) return [];
 
-    const baseUrl = `/teams/${params.workspaceId}/channels/${params.channelId}/messages`;
+    const channelMessages = client.teams
+      .byTeamId(params.workspaceId)
+      .channels.byChannelId(params.channelId).messages;
+
     const isThreadReply =
       params.threadId &&
       params.threadId !== params.channelId &&
       !params.threadId.includes("@thread");
 
     if (isThreadReply) {
+      const messageBuilder = channelMessages.byChatMessageId(params.threadId);
       try {
         const [parentResponse, repliesResponse] = await Promise.all([
-          client.api(`${baseUrl}/${params.threadId}`).get(),
-          client
-            .api(`${baseUrl}/${params.threadId}/replies`)
-            .top(limit - 1)
-            .get(),
+          messageBuilder.get(),
+          messageBuilder.replies.get({ queryParameters: { top: limit - 1 } }),
         ]);
-        return [parentResponse, ...(repliesResponse.value || [])];
+        return [parentResponse, ...(repliesResponse?.value || [])].filter(
+          (msg): msg is ChatMessage => msg !== undefined,
+        );
       } catch (error) {
         logger.warn(
           { error: errorMessage(error), threadId: params.threadId },
           "[MSTeamsProvider] Failed to fetch thread, falling back to replies only",
         );
-        const response = await client
-          .api(`${baseUrl}/${params.threadId}/replies`)
-          .top(limit)
-          .get();
-        return response.value || [];
+        const response = await messageBuilder.replies.get({
+          queryParameters: { top: limit },
+        });
+        return response?.value || [];
       }
     }
 
-    const response = await client.api(baseUrl).top(limit).get();
-    return response.value || [];
+    const response = await channelMessages.get({
+      queryParameters: { top: limit },
+    });
+    return response?.value || [];
   }
 
   private convertToThreadMessages(

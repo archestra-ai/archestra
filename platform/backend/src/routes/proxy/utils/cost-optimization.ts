@@ -10,6 +10,7 @@ import type {
   Agent,
   Anthropic,
   Cerebras,
+  DeepSeek,
   Gemini,
   OpenAi,
   Vllm,
@@ -24,6 +25,7 @@ type ProviderMessages = {
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
+  deepseek: DeepSeek.Types.ChatCompletionsRequest["messages"];
 };
 
 /**

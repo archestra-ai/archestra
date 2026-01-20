@@ -222,8 +222,7 @@ const parseIncomingEmailProvider = (): EmailProviderType | undefined => {
 /**
  * Parse knowledge graph provider from environment variable
  */
-const parseKnowledgeGraphProvider = ():
-  | KnowledgeGraphProviderType
+const parseKnowledgeGraphProvider = ():\n  | KnowledgeGraphProviderType
   | undefined => {
   const provider =
     process.env.ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER?.toLowerCase();
@@ -417,6 +416,10 @@ export default {
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
     },
+    deepseek: {
+      baseUrl:
+        process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+    },
   },
   chat: {
     openai: {
@@ -445,6 +448,11 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
+    },
+    deepseek: {
+      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

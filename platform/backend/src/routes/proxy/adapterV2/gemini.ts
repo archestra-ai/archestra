@@ -722,7 +722,12 @@ async function convertToolResultsToToon(
                 return {
                   functionResponse: {
                     ...functionResponse,
-                    response: { toon: compressed } as Record<string, unknown>,
+                    // Gemini expects response as Record<string, unknown>, but we now have a TOON string
+                    // We wrap it in a {"tool_result": "<TOON string>"} object to match the expected format
+                    response: { tool_result: compressed } as Record<
+                      string,
+                      unknown
+                    >,
                   },
                 };
               }

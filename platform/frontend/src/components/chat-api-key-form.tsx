@@ -115,6 +115,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://z.ai/model-api",
     consoleName: "Zhipu AI Platform",
   },
+  mistral: {
+    name: "Mistral AI",
+    icon: "/icons/mistral.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://console.mistral.ai/api-keys/",
+    consoleName: "Mistral Console",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };
@@ -403,8 +411,7 @@ export function ChatApiKeyForm({
                     <span className="text-xs text-muted-foreground">
                       (no teams available)
                     </span>
-                  )}
-                </div>
+                  )}\n                </div>
               </SelectItem>
               <WithPermissions
                 permissions={{ team: ["admin"] }}
@@ -430,8 +437,7 @@ export function ChatApiKeyForm({
             <Label htmlFor="chat-api-key-team">Team</Label>
             <Select
               value={teamId ?? undefined}
-              onValueChange={(v) => form.setValue("teamId", v)}
-              disabled={isPending}
+              onValueChange={(v) => form.setValue("teamId", v)}\n              disabled={isPending}
             >
               <SelectTrigger id="chat-api-key-team">
                 <SelectValue placeholder="Select a team" />

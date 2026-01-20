@@ -719,6 +719,25 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(models);
     },
   );
+
+  // Invalidate chat models cache
+  fastify.post(
+    "/api/chat/models/invalidate-cache",
+    {
+      schema: {
+        operationId: RouteId.InvalidateChatModelsCache,
+        description:
+          "Invalidate the chat models cache to force a refresh of available models from providers",
+        tags: ["Chat"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (_, reply) => {
+      await cacheManager.deleteByPrefix(CacheKey.GetChatModels);
+      logger.info("Invalidated chat models cache");
+      return reply.send({ success: true });
+    },
+  );
 };
 
 export default chatModelsRoutes;

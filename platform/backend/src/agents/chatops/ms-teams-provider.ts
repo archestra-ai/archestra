@@ -448,7 +448,9 @@ function cleanBotMention(text: string, botName?: string): string {
   let cleaned = text.replace(/<at>.*?<\/at>/gi, "").trim();
   if (botName) {
     const escapedName = escapeRegExp(botName);
-    cleaned = cleaned.replace(new RegExp(`@${escapedName}\\s*`, "gi"), "").trim();
+    cleaned = cleaned
+      .replace(new RegExp(`@${escapedName}\\s*`, "gi"), "")
+      .trim();
   }
   return cleaned;
 }

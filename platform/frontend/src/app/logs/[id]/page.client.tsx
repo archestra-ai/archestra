@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useDualLlmResultsByInteraction } from "@/lib/dual-llm-result.query";
 import { useInteraction } from "@/lib/interaction.query";
 import {
@@ -169,8 +170,6 @@ function LogDetail({
               </div>
               {(() => {
                 const savings = calculateCostSavings(dynamicInteraction);
-                if (!savings.hasSavings) return null;
-
                 const effectiveCost = dynamicInteraction.cost || "0";
                 const effectiveBaselineCost =
                   dynamicInteraction.baselineCost ||
@@ -180,22 +179,34 @@ function LogDetail({
                 return (
                   <div>
                     <div className="text-sm text-muted-foreground mb-2">
-                      Cost savings
+                      Cost
                     </div>
                     <div className="flex gap-3">
-                      <Savings
-                        cost={effectiveCost}
-                        baselineCost={effectiveBaselineCost}
-                        toonCostSavings={dynamicInteraction.toonCostSavings}
-                        toonTokensSaved={savings.toonTokensSaved}
-                        format="percent"
-                        tooltip="always"
-                        showUnifiedTooltip={true}
-                      />
+                      <TooltipProvider>
+                        <Savings
+                          cost={effectiveCost}
+                          baselineCost={effectiveBaselineCost}
+                          toonCostSavings={dynamicInteraction.toonCostSavings}
+                          toonTokensSaved={savings.toonTokensSaved}
+                          toonSkipReason={dynamicInteraction.toonSkipReason}
+                          format="percent"
+                          tooltip="always"
+                          variant="interaction"
+                          baselineModel={dynamicInteraction.baselineModel}
+                          actualModel={dynamicInteraction.model}
+                        />
+                      </TooltipProvider>
                     </div>
                   </div>
                 );
               })()}
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">Tokens</div>
+                <div className="font-mono text-sm">
+                  {(dynamicInteraction.inputTokens ?? 0).toLocaleString()} in /{" "}
+                  {(dynamicInteraction.outputTokens ?? 0).toLocaleString()} out
+                </div>
+              </div>
               {isDualLlmRelevant && (
                 <div>
                   <div className="text-sm text-muted-foreground mb-2">

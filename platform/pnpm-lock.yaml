@@ -238,6 +238,9 @@ importers:
       '@sentry/cli':
         specifier: ^3.0.3
         version: 3.0.3
+      '@types/cache-manager':
+        specifier: ^5.0.0
+        version: 5.0.0
       '@types/lodash-es':
         specifier: ^4.17.12
         version: 4.17.12
@@ -4529,6 +4532,10 @@ packages:
 
   '@types/bunyan@1.8.11':
     resolution: {integrity: sha512-758fRH7umIMk5qt5ELmRMff4mLDlN+xyYzC+dkPTdKwbSkJFvz6xwyScrytPU0QIBbRRwbiE8/BIg8bpajerNQ==}
+
+  '@types/cache-manager@5.0.0':
+    resolution: {integrity: sha512-YaQBBhn2OIShxGMH7l1qzGgXCQJ2TRYTqMhFMXRBkDcXQIlqXv+XFkBGstwXSyv7q+JQm3HbpVhaVF8l5tr+Hg==}
+    deprecated: This is a stub types definition. cache-manager provides its own type definitions, so you do not need this installed.
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -13497,6 +13504,10 @@ snapshots:
   '@types/bunyan@1.8.11':
     dependencies:
       '@types/node': 25.0.8
+
+  '@types/cache-manager@5.0.0':
+    dependencies:
+      cache-manager: 7.2.7
 
   '@types/chai@5.2.3':
     dependencies:

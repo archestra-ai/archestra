@@ -40,7 +40,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
 } from "./common-llm-format";
-import type { ToonCompressionResult } from "./tool-result-compression";
+import type { ToolCompressionStats } from "./tool-result-compression";
 
 /**
  * Options for creating an LLM provider client
@@ -129,7 +129,7 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
    * 2. Apply via existing applyToolResultUpdates(updates)
    * This keeps adapters simple (just apply updates) and makes TOON logic provider-agnostic.
    */
-  applyToonCompression(model: string): Promise<ToonCompressionResult>;
+  applyToonCompression(model: string): Promise<ToolCompressionStats>;
 
   /**
    * Convert tool result content to provider-specific format (e.g., MCP image blocks)

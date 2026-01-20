@@ -9,6 +9,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
   User,
   Users,
@@ -50,6 +51,7 @@ import {
   useChatApiKeys,
   useCreateChatApiKey,
   useDeleteChatApiKey,
+  useInvalidateChatModelsCache,
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
 import { useFeatureFlag } from "@/lib/features.hook";
@@ -75,6 +77,7 @@ function ChatSettingsContent() {
   const createMutation = useCreateChatApiKey();
   const updateMutation = useUpdateChatApiKey();
   const deleteMutation = useDeleteChatApiKey();
+  const invalidateCacheMutation = useInvalidateChatModelsCache();
   const byosEnabled = useFeatureFlag("byosEnabled");
   const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
 
@@ -369,13 +372,25 @@ function ChatSettingsContent() {
             Manage API keys for LLM providers used in the Archestra Chat
           </p>
         </div>
-        <Button
-          onClick={() => setIsCreateDialogOpen(true)}
-          data-testid={E2eTestId.AddChatApiKeyButton}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add API Key
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => invalidateCacheMutation.mutate()}
+            disabled={invalidateCacheMutation.isPending}
+          >
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${invalidateCacheMutation.isPending ? "animate-spin" : ""}`}
+            />
+            Refresh models
+          </Button>
+          <Button
+            onClick={() => setIsCreateDialogOpen(true)}
+            data-testid={E2eTestId.AddChatApiKeyButton}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add API Key
+          </Button>
+        </div>
       </div>
 
       {byosEnabled &&

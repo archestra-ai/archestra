@@ -607,12 +607,15 @@ class ToolModel {
   static async assignDefaultArchestraToolsToAgent(
     agentId: string,
   ): Promise<void> {
-    const assignedDefaultTools = DEFAULT_ARCHESTRA_TOOL_NAMES;
+    // Create a copy to avoid mutating the shared constant
+    const assignedDefaultTools = [...DEFAULT_ARCHESTRA_TOOL_NAMES];
     if (!getKnowledgeGraphProviderType()) {
-      assignedDefaultTools.splice(
-        assignedDefaultTools.indexOf(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME),
-        1,
-      ); // Remove query_knowledge_graph tool if knowledge graph is not configured
+      const index = assignedDefaultTools.indexOf(
+        TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+      );
+      if (index !== -1) {
+        assignedDefaultTools.splice(index, 1); // Remove query_knowledge_graph tool if knowledge graph is not configured
+      }
     }
 
     const defaultTools = await db

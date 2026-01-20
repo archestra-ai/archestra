@@ -1276,7 +1276,7 @@ describe("ToolModel", () => {
   });
 
   describe("assignDefaultArchestraToolsToAgent", () => {
-    test("assigns artifact_write and todo_write tools by default", async ({
+    test("assigns artifact_write and todo_write tools by default (without query_knowledge_graph when KG not configured)", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1297,7 +1297,8 @@ describe("ToolModel", () => {
       // Should have artifact_write and todo_write
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
-      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      // Should NOT have query_knowledge_graph when knowledge graph is not configured
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
     });
 
     test("includes query_knowledge_graph when knowledge graph is configured", async ({

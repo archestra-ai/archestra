@@ -15,6 +15,15 @@ jobs:
     name: Trigger Website Vercel Deploy
     runs-on: ubuntu-latest
     steps:
+      - name: Validate secret is available
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$VERCEL_DEPLOY_HOOK_URL" ]; then
+            echo "::error::WEBSITE_VERCEL_DEPLOY_HOOK_URL secret is not set"
+            exit 1
+          fi
+
       - name: Trigger Vercel Deploy Hook
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}

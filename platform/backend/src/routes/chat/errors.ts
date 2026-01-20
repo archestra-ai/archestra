@@ -932,6 +932,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
+  groq: parseOpenAIError, // Groq uses OpenAI-compatible API
 };
 
 /**
@@ -947,6 +948,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,
+  groq: mapOpenAIErrorWrapper, // Groq uses OpenAI-compatible API
 };
 
 // =============================================================================

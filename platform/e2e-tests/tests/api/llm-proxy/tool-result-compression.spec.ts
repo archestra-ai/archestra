@@ -320,6 +320,32 @@ const zhipuaiConfig: CompressionTestConfig = {
 // Test Suite
 // =============================================================================
 
+const groqConfig: CompressionTestConfig = {
+  providerName: "Groq",
+  endpoint: (profileId) => `/v1/groq/${profileId}/chat/completions`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "llama-3.1-70b-versatile",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+};
+
 const testConfigs: CompressionTestConfig[] = [
   openaiConfig,
   anthropicConfig,
@@ -328,6 +354,7 @@ const testConfigs: CompressionTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  groqConfig,
 ];
 
 for (const config of testConfigs) {

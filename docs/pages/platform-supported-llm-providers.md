@@ -230,3 +230,36 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **API Key format**: Obtain your API key from the [Zhipu AI Platform](https://z.ai/)
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
+
+## Groq
+
+### Supported Groq APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Groq Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/groq/{profile-id}`
+- **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+- `ARCHESTRA_GROQ_BASE_URL`: Base URL for Groq API (default: `https://api.groq.com/openai/v1`)
+- `ARCHESTRA_CHAT_GROQ_API_KEY`: API key for Groq chat functionality
+- `ARCHESTRA_CHAT_GROQ_BASE_URL`: Optional custom base URL for Groq chat (defaults to `ARCHESTRA_GROQ_BASE_URL`)
+
+### Popular Models
+
+- `llama-3.1-70b-versatile` - High-performance model for complex tasks
+- `llama-3.1-8b-instant` - Fast, efficient model for quick responses
+- `mixtral-8x7b-32768` - Mixtral model with large context window
+- `gemma-7b-it` - Google's Gemma model optimized for instruction following
+
+### Important Notes
+
+- Groq uses an OpenAI-compatible API format, so integration is straightforward.
+- The provider supports both streaming and non-streaming responses.
+- Tool calling and function calling are fully supported.
+- Groq provides extremely fast inference speeds, making it ideal for real-time applications.
+- Vercel AI SDK is supported for Groq.
+- **API Key format**: Obtain your API key from the [Groq Console](https://console.groq.com/keys)

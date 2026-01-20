@@ -223,6 +223,26 @@ const zhipuaiConfig: TokenCostLimitTestConfig = {
 // Test Suite
 // =============================================================================
 
+const groqConfig: TokenCostLimitTestConfig = {
+  providerName: "Groq",
+  endpoint: (profileId) => `/v1/groq/${profileId}/chat/completions`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+  buildRequest: (content) => ({
+    model: "test-groq-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+  modelName: "test-groq-cost-limit",
+  tokenPrice: {
+    provider: "groq",
+    model: "test-groq-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 const testConfigs: TokenCostLimitTestConfig[] = [
   openaiConfig,
   anthropicConfig,
@@ -231,6 +251,7 @@ const testConfigs: TokenCostLimitTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  groqConfig,
 ];
 
 for (const config of testConfigs) {

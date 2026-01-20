@@ -332,6 +332,23 @@ function generateLongMessage(): string {
 // Test Suite
 // =============================================================================
 
+const groqConfig: ModelOptimizationTestConfig = {
+  providerName: "Groq",
+  provider: "groq",
+  endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
+  headers: () => ({
+    "Content-Type": "application/json",
+  }),
+  buildRequest: (content, tools) => ({
+    model: "llama-3.1-70b-versatile",
+    messages: [{ role: "user", content }],
+    ...(tools && { tools }),
+  }),
+  baselineModel: "llama-3.1-70b-versatile",
+  optimizedModel: "llama-3.1-8b-instant",
+  getModelFromResponse: (response) => response.model,
+};
+
 const testConfigs: ModelOptimizationTestConfig[] = [
   openaiConfig,
   anthropicConfig,
@@ -340,6 +357,7 @@ const testConfigs: ModelOptimizationTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  groqConfig,
 ];
 
 test.describe("LLMProxy-ModelOptimization", () => {

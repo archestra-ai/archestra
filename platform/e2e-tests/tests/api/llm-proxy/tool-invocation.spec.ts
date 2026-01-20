@@ -624,6 +624,29 @@ const zhipuaiConfig: ToolInvocationTestConfig = {
 // Test Suite
 // =============================================================================
 
+const groqConfig: ToolInvocationTestConfig = {
+  providerName: "Groq",
+  routeId: RouteId.GroqChatCompletionsWithDefaultAgent,
+  model: "llama-3.1-70b-versatile",
+  toolCallAssertions: (m) => {
+    // Groq uses OpenAI-compatible format
+    return (
+      m.role === "assistant" &&
+      Array.isArray(m.tool_calls) &&
+      m.tool_calls.length > 0 &&
+      m.tool_calls.some(
+        (tc) =>
+          tc.type === "function" &&
+          typeof tc.function === "object" &&
+          tc.function !== null &&
+          "name" in tc.function &&
+          typeof tc.function.name === "string" &&
+          tc.function.name.length > 0,
+      )
+    );
+  },
+};
+
 const testConfigs: ToolInvocationTestConfig[] = [
   openaiConfig,
   anthropicConfig,
@@ -632,6 +655,7 @@ const testConfigs: ToolInvocationTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  groqConfig,
 ];
 
 for (const config of testConfigs) {

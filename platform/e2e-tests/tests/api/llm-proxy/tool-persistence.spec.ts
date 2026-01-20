@@ -230,6 +230,32 @@ const zhipuaiConfig: ToolPersistenceTestConfig = {
 // Test Suite
 // =============================================================================
 
+const groqConfig: ToolPersistenceTestConfig = {
+  providerName: "Groq",
+  endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "llama-3.1-70b-versatile",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+};
+
 const testConfigs: ToolPersistenceTestConfig[] = [
   openaiConfig,
   anthropicConfig,
@@ -238,6 +264,7 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  groqConfig,
 ];
 
 for (const config of testConfigs) {

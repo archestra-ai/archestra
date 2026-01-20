@@ -411,6 +411,111 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Groq API
+ * Groq exposes an OpenAI-compatible /models endpoint
+ */
+async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl =
+    config.chat.groq.baseUrl || config.llm.groq.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Groq models",
+    );
+    throw new Error(`Failed to fetch Groq models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  // Filter to chat-compatible models
+  // Include: llama-, mixtral-, gemma- models
+  // Exclude: -embedding models only
+  const chatModelPrefixes = ["llama-", "mixtral-", "gemma-"];
+  const excludePatterns = ["-embedding"];
+
+  const apiModels = data.data
+    .filter((model) => {
+      const id = model.id.toLowerCase();
+      // Must start with a chat model prefix
+      const hasValidPrefix = chatModelPrefixes.some((prefix) =>
+        id.startsWith(prefix),
+      );
+      if (!hasValidPrefix) return false;
+
+      // Must not contain excluded patterns
+      const hasExcludedPattern = excludePatterns.some((pattern) =>
+        id.includes(pattern),
+      );
+      return !hasExcludedPattern;
+    })
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "groq" as const,
+      createdAt: new Date(model.created * 1000).toISOString(),
+    }));
+
+  // Add common models that may not be listed in /models endpoint
+  const commonModels: ModelInfo[] = [
+    {
+      id: "llama-3.1-70b-versatile",
+      displayName: "llama-3.1-70b-versatile",
+      provider: "groq" as const,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: "llama-3.1-8b-instant",
+      displayName: "llama-3.1-8b-instant",
+      provider: "groq" as const,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: "mixtral-8x7b-32768",
+      displayName: "mixtral-8x7b-32768",
+      provider: "groq" as const,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: "gemma-7b-it",
+      displayName: "gemma-7b-it",
+      provider: "groq" as const,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  // Combine API models with common models, avoiding duplicates
+  const existingIds = new Set(apiModels.map((m) => m.id.toLowerCase()));
+  const allModels = [];
+
+  // Add common models first (they appear at the top)
+  for (const commonModel of commonModels) {
+    if (!existingIds.has(commonModel.id.toLowerCase())) {
+      allModels.push(commonModel);
+    }
+  }
+
+  // Then add API models
+  allModels.push(...apiModels);
+
+  return allModels;
+}
+
+/**
  * Fetch models from Gemini API via Vertex AI SDK
  * Uses Application Default Credentials (ADC) for authentication
  *
@@ -548,6 +653,8 @@ async function getProviderApiKey({
       return config.chat.ollama.apiKey || "";
     case "zhipuai":
       return config.chat.zhipuai?.apiKey || null;
+    case "groq":
+      return config.chat.groq?.apiKey || null;
     default:
       return null;
   }
@@ -565,6 +672,7 @@ const modelFetchers: Record<
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
   zhipuai: fetchZhipuaiModels,
+  groq: fetchGroqModels,
 };
 
 /**
@@ -635,6 +743,10 @@ export async function fetchModelsForProvider({
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     } else if (provider === "zhipuai") {
+      if (apiKey) {
+        models = await modelFetchers[provider](apiKey);
+      }
+    } else if (provider === "groq" && isGroqEnabled) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

@@ -11,6 +11,7 @@ import type {
   Anthropic,
   Cerebras,
   Gemini,
+  Groq,
   OpenAi,
   Vllm,
   Zhipuai,
@@ -24,6 +25,7 @@ type ProviderMessages = {
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
+  groq: Groq.Types.ChatCompletionsRequest["messages"];
 };
 
 /**

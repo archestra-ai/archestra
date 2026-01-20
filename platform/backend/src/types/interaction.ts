@@ -6,6 +6,7 @@ import {
   Anthropic,
   Cerebras,
   Gemini,
+  Groq,
   Ollama,
   OpenAi,
   Vllm,
@@ -29,6 +30,7 @@ export const InteractionRequestSchema = z.union([
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
+  Groq.API.ChatCompletionRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -39,6 +41,7 @@ export const InteractionResponseSchema = z.union([
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
+  Groq.API.ChatCompletionResponseSchema,
 ]);
 
 /**

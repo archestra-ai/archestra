@@ -57,6 +57,10 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "zhipuai";
   }
 
+  if (lowerModel.includes("llama") || lowerModel.includes("mixtral") || lowerModel.includes("gemma")) {
+    return "groq";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -97,7 +101,8 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.anthropicApiKey ??
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
-      secret?.secret?.zhipuaiApiKey;
+      secret?.secret?.zhipuaiApiKey ??
+      secret?.secret?.groqApiKey;
     if (secretValue) {
       providerApiKey = secretValue as string;
       apiKeySource = resolvedApiKey.scope;
@@ -125,6 +130,9 @@ export async function resolveProviderApiKey(params: {
       providerApiKey = config.chat.ollama.apiKey;
     } else if (provider === "zhipuai" && config.chat.zhipuai.apiKey) {
       providerApiKey = config.chat.zhipuai.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "groq" && config.chat.groq.apiKey) {
+      providerApiKey = config.chat.groq.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -257,7 +265,18 @@ export function createLLMModel(params: {
     // Zhipuai is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
     const client = createOpenAI({
       apiKey,
-      baseURL: `http://localhost:${config.api.port}/v1/zhipuai/${agentId}`,
+      baseURL: `http://127.0.0.1:${config.api.port}/v1/zhipuai/${agentId}`,
+      headers,
+    });
+    return client.chat(modelName);
+  }
+
+  if (provider === "groq") {
+    // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+    // Groq is OpenAI-compatible, so we use the OpenAI SDK
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://127.0.0.1:${config.api.port}/v1/groq/${agentId}`,
       headers,
     });
     return client.chat(modelName);

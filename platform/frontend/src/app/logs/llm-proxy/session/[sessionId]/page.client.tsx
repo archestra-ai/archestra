@@ -55,6 +55,10 @@ export default function SessionDetailPage({
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
 
+  // Check if session exists (sessionData would be populated if it exists)
+  const sessionExists = sessionData !== undefined;
+  const hasInteractions = interactions.length > 0;
+
   const handlePageChange = useCallback(
     (newPage: number) => {
       const newParams = new URLSearchParams(searchParams.toString());
@@ -103,16 +107,21 @@ export default function SessionDetailPage({
     );
 
     for (const interaction of sortedInteractions) {
-      const dynamicInteraction = new DynamicInteraction(interaction);
-      const userMessage = dynamicInteraction.getLastUserMessage();
-      if (
-        userMessage &&
-        !userMessage.includes("Please write a 5-10 word title") &&
-        userMessage.length > 10
-      ) {
-        return userMessage.length > 100
-          ? `${userMessage.slice(0, 100)}...`
-          : userMessage;
+      try {
+        const dynamicInteraction = new DynamicInteraction(interaction);
+        const userMessage = dynamicInteraction.getLastUserMessage();
+        if (
+          userMessage &&
+          !userMessage.includes("Please write a 5-10 word title") &&
+          userMessage.length > 10
+        ) {
+          return userMessage.length > 100
+            ? `${userMessage.slice(0, 100)}...`
+            : userMessage;
+        }
+      } catch (error) {
+        // Skip interactions that fail to parse
+        console.warn("Failed to extract user message from interaction:", error);
       }
     }
     return null;
@@ -243,20 +252,57 @@ export default function SessionDetailPage({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {interactions.length === 0 ? (
+            {!hasInteractions ? (
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="text-center text-muted-foreground"
+                  className="text-center text-muted-foreground py-8"
                 >
-                  No interactions found for this session
+                  <div className="flex flex-col gap-2 items-center">
+                    <p className="font-medium">
+                      {!sessionExists
+                        ? "Session not found or you don't have access"
+                        : "No interactions found for this session"}
+                    </p>
+                    {!sessionExists ? (
+                      <div className="text-sm text-muted-foreground space-y-2">
+                        <p>
+                          This session may not exist, or you may not have
+                          permission to view it.
+                        </p>
+                        <p className="text-xs">
+                          Session ID: {params.sessionId}
+                        </p>
+                        <p className="text-xs">
+                          Note: Non-admin users can only see sessions for agents
+                          they have access to.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        <p className="text-xs">
+                          Session ID: {params.sessionId}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
               interactions.map((interaction) => {
                 const dynamicInteraction = new DynamicInteraction(interaction);
-                const userMessage = dynamicInteraction.getLastUserMessage();
-                const toolsUsed = dynamicInteraction.getToolNamesUsed();
+                let userMessage = "";
+                let toolsUsed: string[] = [];
+                try {
+                  userMessage = dynamicInteraction.getLastUserMessage();
+                  toolsUsed = dynamicInteraction.getToolNamesUsed();
+                } catch (error) {
+                  console.warn(
+                    "Failed to extract data from interaction:",
+                    error,
+                  );
+                  // Continue with empty values
+                }
                 const requestType =
                   "requestType" in interaction
                     ? (interaction.requestType ?? "main")

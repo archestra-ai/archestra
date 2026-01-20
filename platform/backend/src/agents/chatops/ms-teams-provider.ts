@@ -207,10 +207,29 @@ class MSTeamsProvider implements ChatOpsProvider {
       return null;
     }
 
+    // Debug: Log raw activity data for thread detection
+    logger.debug(
+      {
+        conversationId: activity.conversation?.id,
+        replyToId: activity.replyToId,
+        channelDataChannel: activity.channelData?.channel?.id,
+        channelDataTeam: activity.channelData?.team?.id,
+      },
+      "[MSTeamsProvider] Raw activity IDs for thread detection",
+    );
+
     // Extract channel and workspace IDs
     // For Teams, the channel ID is in channelData.channel.id, and team ID is in channelData.team.id
-    const channelId =
+    // The conversation ID may contain ";messageid=xxx" suffix for thread replies - strip it
+    let rawChannelId =
       activity.channelData?.channel?.id || activity.conversation?.id;
+
+    // Strip the ";messageid=" suffix if present to get the clean channel ID
+    if (rawChannelId?.includes(";messageid=")) {
+      rawChannelId = rawChannelId.split(";messageid=")[0];
+    }
+    const channelId = rawChannelId;
+
     const workspaceId = activity.channelData?.team?.id || null;
 
     if (!channelId) {
@@ -232,6 +251,13 @@ class MSTeamsProvider implements ChatOpsProvider {
       return null;
     }
 
+    // Detect if this is a thread reply:
+    // 1. replyToId is set (explicit reply)
+    // 2. conversation.id contains ";messageid=" (Teams thread format)
+    const isThreadReply =
+      Boolean(activity.replyToId) ||
+      Boolean(activity.conversation?.id?.includes(";messageid="));
+
     const message: IncomingChatMessage = {
       messageId: activity.id || `teams-${Date.now()}`,
       channelId,
@@ -242,7 +268,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       text: cleanedText,
       rawText: activity.text,
       timestamp: activity.timestamp ? new Date(activity.timestamp) : new Date(),
-      isThreadReply: Boolean(activity.replyToId),
+      isThreadReply,
       metadata: {
         tenantId:
           activity.channelData?.tenant?.id || activity.conversation?.tenantId,
@@ -340,6 +366,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
       let messages: {
         id: string;
+        replyToId?: string; // ID of parent message if this is a thread reply
         from?: {
           user?: { id?: string; displayName?: string };
           // Application/connector messages (e.g., Grafana IRM, webhooks)
@@ -360,11 +387,77 @@ class MSTeamsProvider implements ChatOpsProvider {
         // The chat ID is the conversation ID (channelId in our structure)
         // Note: This requires Chat.Read.All application permission
 
-        const response = await this.graphClient
-          .api(`/chats/${params.channelId}/messages`)
-          .top(limit)
-          .get();
-        messages = response.value || [];
+        logger.debug(
+          {
+            channelId: params.channelId,
+            threadId: params.threadId,
+            hasThreadId: Boolean(params.threadId),
+          },
+          "[MSTeamsProvider] Fetching group chat history",
+        );
+
+        // If we have a thread ID, fetch only the parent message and its replies
+        // This ensures we only see thread context, not other channel messages
+        if (params.threadId && !params.threadId.includes("@thread")) {
+          // Fetch the parent message directly
+          const parentMessage = await this.graphClient
+            .api(`/chats/${params.channelId}/messages/${params.threadId}`)
+            .get();
+
+          logger.debug(
+            {
+              parentMessageId: parentMessage?.id,
+              hasBody: Boolean(parentMessage?.body?.content),
+            },
+            "[MSTeamsProvider] Fetched parent message for group chat thread",
+          );
+
+          // Try to fetch thread replies (only works for team channels, not group chats)
+          try {
+            const repliesResponse = await this.graphClient
+              .api(
+                `/chats/${params.channelId}/messages/${params.threadId}/replies`,
+              )
+              .top(limit - 1)
+              .get();
+            const replies = repliesResponse.value || [];
+
+            logger.debug(
+              {
+                parentMessageId: parentMessage?.id,
+                repliesCount: replies.length,
+              },
+              "[MSTeamsProvider] Fetched thread replies for group chat",
+            );
+
+            // Combine: parent message first, then replies
+            messages = [parentMessage, ...replies];
+          } catch (repliesError) {
+            // The /replies endpoint is not supported for group chats.
+            // Graph API doesn't provide replyToId for group chat messages either.
+            // Best we can do: return just the parent message for context.
+            logger.warn(
+              {
+                error:
+                  repliesError instanceof Error
+                    ? repliesError.message
+                    : String(repliesError),
+                threadId: params.threadId,
+              },
+              "[MSTeamsProvider] Thread replies not available for group chat (API limitation), using parent message only",
+            );
+
+            // Use the parent message we already fetched successfully
+            messages = [parentMessage];
+          }
+        } else {
+          // No thread ID or it's a channel format - just fetch recent messages
+          const response = await this.graphClient
+            .api(`/chats/${params.channelId}/messages`)
+            .top(limit)
+            .get();
+          messages = response.value || [];
+        }
       } else {
         // For team channels, use the /teams/{teamId}/channels/{channelId}/messages endpoint
         // Note: This requires ChannelMessage.Read.All application permission
@@ -373,16 +466,85 @@ class MSTeamsProvider implements ChatOpsProvider {
           "[MSTeamsProvider] Fetching team channel history",
         );
 
-        if (params.threadId && params.threadId !== params.channelId) {
-          // Fetch thread replies
-          const response = await this.graphClient
-            .api(
-              `/teams/${params.workspaceId}/channels/${params.channelId}/messages/${params.threadId}/replies`,
-            )
-            .top(limit)
-            .get();
-          messages = response.value || [];
+        // Debug: Log thread detection
+        logger.debug(
+          {
+            threadId: params.threadId,
+            channelId: params.channelId,
+            workspaceId: params.workspaceId,
+            isThreadReply:
+              params.threadId &&
+              params.threadId !== params.channelId &&
+              !params.threadId.includes("@thread"),
+          },
+          "[MSTeamsProvider] Thread detection",
+        );
+
+        // Check if this is a thread reply (threadId is set and different from channelId)
+        // Channel IDs contain "@thread" (e.g., "19:xxx@thread.tacv2"), thread IDs are message IDs
+        const isThreadReply =
+          params.threadId &&
+          params.threadId !== params.channelId &&
+          !params.threadId.includes("@thread");
+
+        if (isThreadReply) {
+          logger.debug(
+            {
+              endpoint: `/teams/${params.workspaceId}/channels/${params.channelId}/messages/${params.threadId}/replies`,
+            },
+            "[MSTeamsProvider] Fetching thread replies",
+          );
+
+          // First, fetch the parent message (the thread starter)
+          try {
+            const parentResponse = await this.graphClient
+              .api(
+                `/teams/${params.workspaceId}/channels/${params.channelId}/messages/${params.threadId}`,
+              )
+              .get();
+
+            // Then fetch thread replies
+            const repliesResponse = await this.graphClient
+              .api(
+                `/teams/${params.workspaceId}/channels/${params.channelId}/messages/${params.threadId}/replies`,
+              )
+              .top(limit - 1) // Reserve one slot for parent message
+              .get();
+
+            // Combine parent + replies (parent first)
+            messages = [parentResponse, ...(repliesResponse.value || [])];
+
+            logger.debug(
+              {
+                parentMessageId: parentResponse.id,
+                repliesCount: repliesResponse.value?.length || 0,
+              },
+              "[MSTeamsProvider] Fetched parent + replies",
+            );
+          } catch (error) {
+            logger.warn(
+              {
+                error: error instanceof Error ? error.message : String(error),
+                threadId: params.threadId,
+              },
+              "[MSTeamsProvider] Failed to fetch parent message, fetching replies only",
+            );
+            // Fall back to just replies if parent fetch fails
+            const response = await this.graphClient
+              .api(
+                `/teams/${params.workspaceId}/channels/${params.channelId}/messages/${params.threadId}/replies`,
+              )
+              .top(limit)
+              .get();
+            messages = response.value || [];
+          }
         } else {
+          logger.debug(
+            {
+              endpoint: `/teams/${params.workspaceId}/channels/${params.channelId}/messages`,
+            },
+            "[MSTeamsProvider] Fetching channel messages (not a thread)",
+          );
           // Fetch recent channel messages
           const response = await this.graphClient
             .api(
@@ -394,41 +556,91 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
       }
 
+      // Debug: Log raw messages from Graph API
+      logger.debug(
+        {
+          messageCount: messages.length,
+          messages: messages.map((msg) => ({
+            id: msg.id,
+            fromUser: msg.from?.user?.displayName,
+            fromApp: msg.from?.application?.displayName,
+            bodyContent: msg.body?.content?.substring(0, 200),
+            attachmentCount: msg.attachments?.length || 0,
+            attachmentTypes: msg.attachments?.map((a) => a.contentType),
+          })),
+        },
+        "[MSTeamsProvider] Raw messages from Graph API",
+      );
+
       // Convert to ChatThreadMessage format and filter out the current message
       const botAppId = config.chatops.msTeams.appId;
 
-      return (
-        messages
-          .filter((msg) => msg.id !== params.excludeMessageId)
-          .map((msg) => {
-            // Handle both user messages and application/connector messages (e.g., Grafana IRM)
-            const isUserMessage = Boolean(msg.from?.user);
-            const senderId = isUserMessage
-              ? msg.from?.user?.id || "unknown"
-              : msg.from?.application?.id || "unknown";
-            const senderName = isUserMessage
-              ? msg.from?.user?.displayName || "Unknown"
-              : msg.from?.application?.displayName || "App";
+      const processedMessages = messages
+        .filter((msg) => msg.id !== params.excludeMessageId)
+        .map((msg) => {
+          // Handle both user messages and application/connector messages (e.g., Grafana IRM)
+          const isUserMessage = Boolean(msg.from?.user);
+          const senderId = isUserMessage
+            ? msg.from?.user?.id || "unknown"
+            : msg.from?.application?.id || "unknown";
+          const senderName = isUserMessage
+            ? msg.from?.user?.displayName || "Unknown"
+            : msg.from?.application?.displayName || "App";
 
-            // Extract text from body and/or attachments (Adaptive Cards)
-            const text = extractMessageText(msg.body?.content, msg.attachments);
+          // Extract text from body and/or attachments (Adaptive Cards)
+          const text = extractMessageText(msg.body?.content, msg.attachments);
 
-            return {
+          // Debug: Log extraction results
+          logger.debug(
+            {
               messageId: msg.id,
-              senderId,
               senderName,
-              text,
-              timestamp: msg.createdDateTime
-                ? new Date(msg.createdDateTime)
-                : new Date(),
-              // Check if the message is from our bot by comparing app ID
-              isFromBot:
-                msg.from?.user?.id === botAppId ||
-                msg.from?.application?.id === botAppId,
-            };
-          })
-          // Filter out messages with no text content
-          .filter((msg) => msg.text.trim().length > 0)
+              extractedTextLength: text.length,
+              extractedTextPreview: text.substring(0, 100),
+              hasBody: Boolean(msg.body?.content),
+              attachments: msg.attachments?.map((a) => ({
+                contentType: a.contentType,
+                contentPreview:
+                  typeof a.content === "string"
+                    ? a.content.substring(0, 100)
+                    : "non-string",
+              })),
+            },
+            "[MSTeamsProvider] Message text extraction",
+          );
+
+          return {
+            messageId: msg.id,
+            senderId,
+            senderName,
+            text,
+            timestamp: msg.createdDateTime
+              ? new Date(msg.createdDateTime)
+              : new Date(),
+            // Check if the message is from our bot by comparing app ID
+            isFromBot:
+              msg.from?.user?.id === botAppId ||
+              msg.from?.application?.id === botAppId,
+          };
+        });
+
+      // Debug: Log filtering results
+      const filteredMessages = processedMessages.filter(
+        (msg) => msg.text.trim().length > 0,
+      );
+      logger.debug(
+        {
+          beforeFilter: processedMessages.length,
+          afterFilter: filteredMessages.length,
+          filteredOut: processedMessages
+            .filter((msg) => msg.text.trim().length === 0)
+            .map((msg) => ({ id: msg.messageId, sender: msg.senderName })),
+        },
+        "[MSTeamsProvider] Messages after filtering empty",
+      );
+
+      return (
+        filteredMessages
           // Sort by timestamp ascending (oldest first) since API doesn't support orderby
           .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
       );
@@ -508,20 +720,36 @@ function cleanBotMention(text: string, botName?: string): string {
 }
 
 /**
- * Extracts the conversation/thread ID from a Teams activity.
- * For thread replies, this is the parent message ID.
+ * Extracts the thread message ID from a Teams activity.
+ *
+ * Teams conversation IDs can have two formats:
+ * 1. Simple: "19:xxx@thread.tacv2" (no thread, just channel)
+ * 2. Thread: "19:xxx@thread.tacv2;messageid=1234567890" (reply in a thread)
+ *
+ * For thread replies, we need to extract just the message ID (e.g., "1234567890")
+ * to use with the Graph API /messages/{messageId}/replies endpoint.
  */
 function extractThreadId(activity: {
   conversation?: { id?: string };
   replyToId?: string;
 }): string | undefined {
-  // If this is a reply to another message, use the parent message ID
+  // If replyToId is set, use it (this is the most reliable indicator)
   if (activity.replyToId) {
     return activity.replyToId;
   }
 
-  // Otherwise, use the conversation ID as the thread ID
-  return activity.conversation?.id;
+  // Check if conversation ID contains ";messageid=" which indicates a thread reply
+  const conversationId = activity.conversation?.id;
+  if (conversationId?.includes(";messageid=")) {
+    // Extract the message ID from the format "channelId;messageid=messageId"
+    const match = conversationId.match(/;messageid=(\d+)/);
+    if (match) {
+      return match[1]; // Return just the message ID
+    }
+  }
+
+  // No thread - return undefined (not the channel ID)
+  return undefined;
 }
 
 /**

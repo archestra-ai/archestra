@@ -196,23 +196,32 @@ export class ChatOpsManager {
       };
     }
 
+    // Check for inline agent mention (e.g., "@AgentName do something")
+    const { agentToUse, cleanedMessageText, fallbackMessage } =
+      await this.resolveInlineAgentMention({
+        messageText: message.text,
+        defaultPrompt: prompt,
+        provider,
+      });
+
     // Build context from thread history if available
     const contextMessages = await this.fetchThreadHistory(message, provider);
 
-    // Build the full message with context
-    let fullMessage = message.text;
+    // Build the full message with context (using cleaned text without agent mention)
+    let fullMessage = cleanedMessageText;
     if (contextMessages.length > 0) {
-      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${message.text}`;
+      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
-    // Execute the A2A message using the prompt
+    // Execute the A2A message using the resolved agent
     return this.executeAndReply({
-      prompt,
+      prompt: agentToUse,
       binding,
       message,
       provider,
       fullMessage,
       sendReply,
+      fallbackMessage,
     });
   }
 
@@ -254,13 +263,115 @@ export class ChatOpsManager {
   }
 
   /**
+   * Resolve inline agent mention from message text.
+   * Supports patterns like ">AgentName do something" to use a specific agent.
+   * Tolerant matching: ">AgentPeter", "> AgentPeter", ">Agent Peter", "> Agent Peter"
+   * all match an agent named "Agent Peter" (case-insensitive, space-tolerant).
+   * If the mentioned agent is not found or not enabled, falls back to default.
+   */
+  private async resolveInlineAgentMention(params: {
+    messageText: string;
+    defaultPrompt: { id: string; name: string };
+    provider: ChatOpsProvider;
+  }): Promise<{
+    agentToUse: { id: string; name: string };
+    cleanedMessageText: string;
+    fallbackMessage?: string;
+  }> {
+    const { messageText, defaultPrompt, provider } = params;
+
+    // Check if message starts with > (agent mention prefix)
+    if (!messageText.startsWith(">")) {
+      return {
+        agentToUse: defaultPrompt,
+        cleanedMessageText: messageText,
+      };
+    }
+
+    // Get text after the > symbol, trim leading space ("> Agent" -> "Agent")
+    const textAfterPrefix = messageText.slice(1).trimStart();
+
+    // Get all available agents for this provider to match against
+    const availableAgents = await PromptModel.findByAllowedChatopsProvider(
+      provider.providerId,
+    );
+
+    // Sort by name length (longest first) to match "Agent Peter" before "Agent"
+    const sortedAgents = [...availableAgents].sort(
+      (a, b) => b.name.length - a.name.length,
+    );
+
+    // Try to match the message start against known agent names
+    for (const agent of sortedAgents) {
+      // Try to find where the agent name ends in the message
+      // Tolerant matching handles spaces and case variations
+      const match = findTolerantMatch(textAfterPrefix, agent.name);
+
+      if (match) {
+        const cleanedMessageText = textAfterPrefix.slice(match.length).trim();
+
+        logger.debug(
+          { mentionedAgent: agent.name, defaultAgent: defaultPrompt.name },
+          "[ChatOps] Using mentioned agent instead of default",
+        );
+
+        return {
+          agentToUse: agent,
+          cleanedMessageText,
+        };
+      }
+    }
+
+    // No known agent matched - extract the attempted mention for error message
+    // Take everything up to the first newline or reasonable length
+    const mentionEndMatch = textAfterPrefix.match(/^([^\n]{1,50})(?:\s|$)/);
+    if (mentionEndMatch) {
+      // Try to extract just the first word(s) that look like an agent name
+      const potentialName = textAfterPrefix.split(/\s{2,}|\n/)[0].trim();
+      const cleanedMessageText = textAfterPrefix
+        .slice(potentialName.length)
+        .trim();
+
+      logger.debug(
+        { mentionedAgentName: potentialName, defaultAgent: defaultPrompt.name },
+        "[ChatOps] Mentioned agent not found, using default",
+      );
+
+      return {
+        agentToUse: defaultPrompt,
+        cleanedMessageText: cleanedMessageText || textAfterPrefix,
+        fallbackMessage: `${potentialName} not found, using ${defaultPrompt.name}`,
+      };
+    }
+
+    // Just a > with nothing useful after - use default
+    return {
+      agentToUse: defaultPrompt,
+      cleanedMessageText: messageText,
+    };
+  }
+
+  /**
    * Fetch thread history for context
    */
   private async fetchThreadHistory(
     message: IncomingChatMessage,
     provider: ChatOpsProvider,
   ): Promise<string[]> {
+    // Debug: Log incoming message details for thread context
+    logger.debug(
+      {
+        messageId: message.messageId,
+        channelId: message.channelId,
+        workspaceId: message.workspaceId,
+        threadId: message.threadId,
+        isThreadReply: message.isThreadReply,
+      },
+      "[ChatOps] fetchThreadHistory - message details",
+    );
+
     if (!message.threadId) {
+      logger.debug("[ChatOps] No threadId, skipping history fetch");
       return [];
     }
 
@@ -271,6 +382,18 @@ export class ChatOpsManager {
         threadId: message.threadId,
         excludeMessageId: message.messageId,
       });
+
+      logger.debug(
+        {
+          historyCount: history.length,
+          messages: history.map((m) => ({
+            sender: m.senderName,
+            textPreview: m.text.substring(0, 50),
+            isFromBot: m.isFromBot,
+          })),
+        },
+        "[ChatOps] Thread history fetched",
+      );
 
       return history.map((msg) => {
         let text = msg.text;
@@ -302,9 +425,17 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     fullMessage: string;
     sendReply: boolean;
+    fallbackMessage?: string;
   }): Promise<ChatOpsProcessingResult> {
-    const { prompt, binding, message, provider, fullMessage, sendReply } =
-      params;
+    const {
+      prompt,
+      binding,
+      message,
+      provider,
+      fullMessage,
+      sendReply,
+      fallbackMessage,
+    } = params;
 
     try {
       const result = await executeA2AMessage({
@@ -319,10 +450,15 @@ export class ChatOpsManager {
 
       // Send reply
       if (sendReply && agentResponse) {
+        // Build footer - include fallback message if agent mention wasn't found
+        const footer = fallbackMessage
+          ? `${fallbackMessage}`
+          : `Via ${prompt.name}`;
+
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: `Via ${prompt.name}`,
+          footer,
           conversationReference: message.metadata?.conversationReference,
         });
       }
@@ -367,19 +503,80 @@ export const chatOpsManager = new ChatOpsManager();
 
 /**
  * Strip the bot footer from message text to avoid LLM repeating it.
- * The footer format is: "\n\n---\n_Via X_"
+ * Footer formats:
+ * - "Via AgentName" (normal)
+ * - "AgentX not found, using AgentY" (fallback)
  * Teams may return this in various HTML formats.
  */
 function stripBotFooter(text: string): string {
   // Match the footer pattern in various formats Teams might use
   return (
     text
-      // Markdown format: "\n\n---\n_Via AgentName_"
+      // Markdown format: "\n\n---\n_Via AgentName_" or "\n\n---\n_X not found, using Y_"
       .replace(/\n\n---\n_Via .+?_$/i, "")
+      .replace(/\n\n---\n_.+? not found, using .+?_$/i, "")
       // HTML with <hr> and <em>
       .replace(/<hr\s*\/?>\s*<em>Via .+?<\/em>$/i, "")
-      // Plain text "Via X" at end of message (after stripping HTML)
+      .replace(/<hr\s*\/?>\s*<em>.+? not found, using .+?<\/em>$/i, "")
+      // Plain text at end of message (after stripping HTML)
       .replace(/\s*Via .+?$/i, "")
+      .replace(/\s*.+? not found, using .+?$/i, "")
       .trim()
   );
+}
+
+/**
+ * Find a tolerant match for an agent name at the start of text.
+ * Handles variations like "AgentPeter", "Agent Peter", "agent peter" for "Agent Peter".
+ * Returns the match object with the length of matched text, or null if no match.
+ */
+function findTolerantMatch(
+  text: string,
+  agentName: string,
+): { length: number } | null {
+  const lowerText = text.toLowerCase();
+  const lowerName = agentName.toLowerCase();
+
+  // Strategy 1: Exact match (with spaces)
+  if (lowerText.startsWith(lowerName)) {
+    const charAfter = text[agentName.length];
+    if (charAfter === undefined || charAfter === " " || charAfter === "\n") {
+      return { length: agentName.length };
+    }
+  }
+
+  // Strategy 2: Match without spaces (e.g., "agentpeter" matches "Agent Peter")
+  const nameWithoutSpaces = lowerName.replace(/\s+/g, "");
+
+  // Walk through the text, matching characters from nameWithoutSpaces
+  // while allowing optional spaces in the text
+  let textIdx = 0;
+  let nameIdx = 0;
+
+  while (nameIdx < nameWithoutSpaces.length && textIdx < text.length) {
+    const textChar = lowerText[textIdx];
+    const nameChar = nameWithoutSpaces[nameIdx];
+
+    if (textChar === nameChar) {
+      textIdx++;
+      nameIdx++;
+    } else if (textChar === " ") {
+      // Skip spaces in text
+      textIdx++;
+    } else {
+      // Mismatch
+      return null;
+    }
+  }
+
+  // Check if we matched the full agent name
+  if (nameIdx === nameWithoutSpaces.length) {
+    // Make sure we're at a word boundary
+    const charAfter = text[textIdx];
+    if (charAfter === undefined || charAfter === " " || charAfter === "\n") {
+      return { length: textIdx };
+    }
+  }
+
+  return null;
 }

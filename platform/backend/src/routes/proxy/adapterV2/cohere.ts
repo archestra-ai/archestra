@@ -7,6 +7,7 @@ import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
+  Cohere,
   CommonMcpToolDefinition,
   CommonMessage,
   CommonToolCall,
@@ -19,7 +20,6 @@ import type {
   StreamAccumulatorState,
   ToonCompressionResult,
   UsageView,
-  Cohere,
 } from "@/types";
 import type { CompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
@@ -49,7 +49,8 @@ class CohereClient {
     customFetch?: typeof fetch,
   ) {
     this.apiKey = apiKey;
-    this.baseURL = baseURL || config.llm.cohere.baseUrl || "https://api.cohere.ai";
+    this.baseURL =
+      baseURL || config.llm.cohere.baseUrl || "https://api.cohere.ai";
     this.customFetch = customFetch;
   }
 
@@ -84,7 +85,7 @@ class CohereClient {
       { url, model: request.model, hasMessages: !!request.messages },
       "Cohere chatStream request",
     );
-    
+
     const response = await (this.customFetch || fetch)(url, {
       method: "POST",
       headers: {
@@ -99,7 +100,11 @@ class CohereClient {
     });
 
     logger.debug(
-      { status: response.status, statusText: response.statusText, headers: Object.fromEntries(response.headers.entries()) },
+      {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+      },
       "Cohere API response received",
     );
 
@@ -142,7 +147,7 @@ class CohereClient {
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed) continue; // Skip empty lines
-          
+
           if (trimmed.startsWith("data: ")) {
             const data = trimmed.slice(6);
             if (data === "[DONE]") {
@@ -165,7 +170,10 @@ class CohereClient {
             }
           } else if (trimmed) {
             // Log non-empty lines that don't start with "data: "
-            logger.debug({ line: trimmed }, "Cohere stream unexpected line format");
+            logger.debug(
+              { line: trimmed },
+              "Cohere stream unexpected line format",
+            );
           }
         }
       }
@@ -176,7 +184,7 @@ class CohereClient {
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed) continue;
-          
+
           if (trimmed.startsWith("data: ")) {
             const data = trimmed.slice(6);
             if (data === "[DONE]") continue;
@@ -197,7 +205,7 @@ class CohereClient {
           }
         }
       }
-      
+
       logger.debug(
         { totalEvents: eventCount },
         "Cohere stream parsing completed",
@@ -359,10 +367,18 @@ class CohereRequestAdapter
           if (typeof value === "object" && value !== null) {
             const param = value as Record<string, unknown>;
             parameterDefinitions[key] = {
-              type: (param.type as "string" | "number" | "boolean" | "object" | "array") || "string",
+              type:
+                (param.type as
+                  | "string"
+                  | "number"
+                  | "boolean"
+                  | "object"
+                  | "array") || "string",
               description: param.description as string | undefined,
               enum: param.enum as (string | number)[] | undefined,
-              properties: param.properties as Record<string, unknown> | undefined,
+              properties: param.properties as
+                | Record<string, unknown>
+                | undefined,
               required: param.required as string[] | undefined,
               items: param.items,
             };
@@ -504,11 +520,11 @@ class CohereRequestAdapter
       };
 
       // Extract text content
-      let textContent = "";
+      let _textContent = "";
       if (typeof message.content === "string") {
-        textContent = message.content;
+        _textContent = message.content;
       } else if (Array.isArray(message.content)) {
-        textContent = message.content
+        _textContent = message.content
           .filter((block) => block.type === "text")
           .map((block) => block.text)
           .join("");
@@ -713,22 +729,42 @@ class CohereStreamAdapter
     let isFinal = false;
 
     // Handle new Cohere format with "type" field (OpenAI-compatible format)
-    const chunkAny = chunk as any;
-    
+    // Type assertion needed because Cohere can return OpenAI-compatible chunks with "type" field
+    const chunkWithType = chunk as CohereStreamChunk & {
+      type?: string;
+      index?: number;
+      message?: { id?: string };
+      delta?: {
+        message?: { content?: { text?: string } };
+        usage?: {
+          tokens?: { input_tokens?: number; output_tokens?: number };
+          billed_units?: { input_tokens?: number; output_tokens?: number };
+        };
+        finish_reason?: string;
+      };
+      text?: string;
+    };
+
     // Handle message-start to get response ID
-    if (chunkAny.type === "message-start" && chunkAny.message?.id) {
-      this.state.responseId = chunkAny.message.id;
-      logger.info({ responseId: this.state.responseId }, "Cohere message-start chunk processed");
+    if (chunkWithType.type === "message-start" && chunkWithType.message?.id) {
+      this.state.responseId = chunkWithType.message.id;
+      logger.info(
+        { responseId: this.state.responseId },
+        "Cohere message-start chunk processed",
+      );
       return { sseData: null, isToolCallChunk, isFinal };
     }
-    
+
     // Generate responseId if we don't have one yet
     if (!this.state.responseId) {
       this.state.responseId = `cohere-${Date.now()}`;
     }
-    
-    if (chunkAny.type === "content-delta" && chunkAny.delta?.message?.content?.text) {
-      const text = chunkAny.delta.message.content.text;
+
+    if (
+      chunkWithType.type === "content-delta" &&
+      chunkWithType.delta?.message?.content?.text
+    ) {
+      const text = chunkWithType.delta.message.content.text;
       this.state.text += text;
       const textModel = this.state.model || this.modelFromRequest || "cohere";
       const openAiChunk = {
@@ -738,7 +774,7 @@ class CohereStreamAdapter
         model: textModel,
         choices: [
           {
-            index: chunkAny.index ?? 0,
+            index: chunkWithType.index ?? 0,
             delta: {
               content: text,
             },
@@ -748,21 +784,34 @@ class CohereStreamAdapter
       };
       sseData = `data: ${JSON.stringify(openAiChunk)}\n\n`;
       logger.info(
-        { textLength: text.length, totalTextLength: this.state.text.length, chunkText: text.substring(0, 50) },
+        {
+          textLength: text.length,
+          totalTextLength: this.state.text.length,
+          chunkText: text.substring(0, 50),
+        },
         "Cohere content-delta chunk processed",
       );
       return { sseData, isToolCallChunk, isFinal };
     }
 
     // Handle message-end with usage
-    if (chunkAny.type === "message-end" && chunkAny.delta?.finish_reason) {
-      if (chunkAny.delta.usage) {
+    if (
+      chunkWithType.type === "message-end" &&
+      chunkWithType.delta?.finish_reason
+    ) {
+      if (chunkWithType.delta.usage) {
         this.state.usage = {
-          inputTokens: chunkAny.delta.usage.tokens?.input_tokens ?? chunkAny.delta.usage.billed_units?.input_tokens ?? 0,
-          outputTokens: chunkAny.delta.usage.tokens?.output_tokens ?? chunkAny.delta.usage.billed_units?.output_tokens ?? 0,
+          inputTokens:
+            chunkWithType.delta.usage.tokens?.input_tokens ??
+            chunkWithType.delta.usage.billed_units?.input_tokens ??
+            0,
+          outputTokens:
+            chunkWithType.delta.usage.tokens?.output_tokens ??
+            chunkWithType.delta.usage.billed_units?.output_tokens ??
+            0,
         };
       }
-      this.state.stopReason = chunkAny.delta.finish_reason;
+      this.state.stopReason = chunkWithType.delta.finish_reason ?? null;
       isFinal = true;
       const finishReason = this.mapCohereFinishReasonToOpenAI(
         this.state.stopReason ?? "COMPLETE",
@@ -795,12 +844,16 @@ class CohereStreamAdapter
     }
 
     // Handle content-end (no-op, just marks end of content)
-    if (chunkAny.type === "content-end") {
+    if (chunkWithType.type === "content-end") {
       return { sseData: null, isToolCallChunk, isFinal };
     }
 
     logger.info(
-      { eventType: chunk.event_type, chunkType: chunkAny.type, hasText: !!(chunk as any).text },
+      {
+        eventType: chunk.event_type,
+        chunkType: chunkWithType.type,
+        hasText: !!chunkWithType.text,
+      },
       "Cohere processChunk",
     );
 
@@ -812,7 +865,7 @@ class CohereStreamAdapter
         sseData = null;
         break;
 
-      case "text-generation":
+      case "text-generation": {
         if (!chunk.text) {
           logger.warn({ chunk }, "Cohere text-generation chunk has no text");
           sseData = null;
@@ -838,10 +891,15 @@ class CohereStreamAdapter
         };
         sseData = `data: ${JSON.stringify(openAiChunk)}\n\n`;
         logger.info(
-          { textLength: chunk.text.length, totalTextLength: this.state.text.length, chunkText: chunk.text.substring(0, 50) },
+          {
+            textLength: chunk.text.length,
+            totalTextLength: this.state.text.length,
+            chunkText: chunk.text.substring(0, 50),
+          },
           "Cohere text-generation chunk processed",
         );
         break;
+      }
 
       case "tool-calls-generation":
         // Add tool calls to state
@@ -860,7 +918,7 @@ class CohereStreamAdapter
         sseData = null;
         break;
 
-      case "stream-end":
+      case "stream-end": {
         if (chunk.finish_reason) {
           this.state.stopReason = chunk.finish_reason;
         }
@@ -899,6 +957,7 @@ class CohereStreamAdapter
         };
         sseData = `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
         break;
+      }
     }
 
     return { sseData, isToolCallChunk, isFinal };
@@ -1022,13 +1081,14 @@ class CohereStreamAdapter
       response: {
         id: this.state.responseId,
         text: this.state.text,
-        finish_reason: (this.state.stopReason as
-          | "COMPLETE"
-          | "MAX_TOKENS"
-          | "STOP_SEQUENCE"
-          | "TOOL_CALLS"
-          | "ERROR"
-          | "ERROR_TOXIC") ?? "COMPLETE",
+        finish_reason:
+          (this.state.stopReason as
+            | "COMPLETE"
+            | "MAX_TOKENS"
+            | "STOP_SEQUENCE"
+            | "TOOL_CALLS"
+            | "ERROR"
+            | "ERROR_TOXIC") ?? "COMPLETE",
         tool_calls:
           this.state.toolCalls.length > 0
             ? this.state.toolCalls.map((tc) => {
@@ -1086,7 +1146,7 @@ export async function convertToolResultsToToon(
         }
 
         toolResultCount++;
-        let content: unknown;
+        let _content: unknown;
         const originalResult = toolResult.result;
 
         if (typeof originalResult === "string") {
@@ -1112,7 +1172,10 @@ export async function convertToolResultsToToon(
           } catch {
             return toolResult;
           }
-        } else if (typeof originalResult === "object" && originalResult !== null) {
+        } else if (
+          typeof originalResult === "object" &&
+          originalResult !== null
+        ) {
           try {
             const compressed = toonEncode(originalResult);
             const originalStr = JSON.stringify(originalResult);
@@ -1150,7 +1213,7 @@ export async function convertToolResultsToToon(
       const updatedContent = message.content.map((block) => {
         if (block.type === "tool_result" && !block.is_error) {
           toolResultCount++;
-          let content: unknown = block.result;
+          const content: unknown = block.result;
 
           if (typeof content === "string") {
             try {
@@ -1289,11 +1352,7 @@ export const cohereAdapterFactory: LLMProvider<
       ? getObservableFetch("cohere", options.agent, options.externalAgentId)
       : undefined;
 
-    return new CohereClient(
-      apiKey,
-      options?.baseUrl,
-      customFetch,
-    );
+    return new CohereClient(apiKey, options?.baseUrl, customFetch);
   },
 
   async execute(

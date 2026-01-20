@@ -759,7 +759,10 @@ Return only the JSON object, no other text.`;
           model: this.model,
           schemaName: schema.name,
           response,
-          error: parseError instanceof Error ? parseError.message : String(parseError),
+          error:
+            parseError instanceof Error
+              ? parseError.message
+              : String(parseError),
         },
         "[dualLlmClient] Cohere: failed to parse JSON response",
       );

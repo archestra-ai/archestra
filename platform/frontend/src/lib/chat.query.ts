@@ -47,15 +47,27 @@ export function useConversation(conversationId?: string) {
   });
 }
 
-export function useConversations() {
+export function useConversations({
+  enabled = true,
+  search,
+}: {
+  enabled?: boolean;
+  search?: string;
+}) {
   return useQuery({
-    queryKey: ["conversations"],
+    queryKey: ["conversations", search],
     queryFn: async () => {
-      const { data, error } = await getChatConversations();
+      if (!enabled) return [];
+      const trimmedSearch = search?.trim();
+
+      const { data, error } = await getChatConversations({
+        query: trimmedSearch ? { search: trimmedSearch } : undefined,
+      });
+
       if (error) throw new Error("Failed to fetch conversations");
       return data;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

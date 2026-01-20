@@ -21,6 +21,24 @@ export interface InsertDocumentResult {
 }
 
 /**
+ * Query modes supported by LightRAG
+ * - local: Uses only local context from the knowledge graph
+ * - global: Uses global context across all documents
+ * - hybrid: Combines local and global context (recommended)
+ * - naive: Simple RAG without graph-based retrieval
+ */
+export const QueryModeSchema = z.enum(["local", "global", "hybrid", "naive"]);
+export type QueryMode = z.infer<typeof QueryModeSchema>;
+
+/**
+ * Options for querying the knowledge graph
+ */
+export interface QueryOptions {
+  /** Query mode (local, global, hybrid, naive). Defaults to hybrid. */
+  mode?: QueryMode;
+}
+
+/**
  * Result of querying the knowledge graph
  */
 export interface QueryResult {
@@ -98,9 +116,10 @@ export interface KnowledgeGraphProvider {
   /**
    * Query the knowledge graph
    * @param query - Natural language query
+   * @param options - Query options
    * @returns The answer and optional source references
    */
-  queryDocument(query: string): Promise<QueryResult>;
+  queryDocument(query: string, options?: QueryOptions): Promise<QueryResult>;
 
   /**
    * Check the health of the knowledge graph service

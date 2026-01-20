@@ -9260,6 +9260,83 @@ export type GetChatModelsResponses = {
 
 export type GetChatModelsResponse = GetChatModelsResponses[keyof GetChatModelsResponses];
 
+export type InvalidateChatModelsCacheData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/models/invalidate-cache';
+};
+
+export type InvalidateChatModelsCacheErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type InvalidateChatModelsCacheError = InvalidateChatModelsCacheErrors[keyof InvalidateChatModelsCacheErrors];
+
+export type InvalidateChatModelsCacheResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type InvalidateChatModelsCacheResponse = InvalidateChatModelsCacheResponses[keyof InvalidateChatModelsCacheResponses];
+
 export type StreamChatData = {
     body: {
         id: string;
@@ -9333,7 +9410,9 @@ export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
 export type GetChatConversationsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+    };
     url: '/api/chat/conversations';
 };
 
@@ -10345,6 +10424,293 @@ export type UpdateConversationEnabledToolsResponses = {
 };
 
 export type UpdateConversationEnabledToolsResponse = UpdateConversationEnabledToolsResponses[keyof UpdateConversationEnabledToolsResponses];
+
+export type PostApiWebhooksChatopsMsTeamsData = {
+    body?: unknown;
+    path?: never;
+    query?: never;
+    url: '/api/webhooks/chatops/ms-teams';
+};
+
+export type PostApiWebhooksChatopsMsTeamsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string;
+    };
+};
+
+export type PostApiWebhooksChatopsMsTeamsError = PostApiWebhooksChatopsMsTeamsErrors[keyof PostApiWebhooksChatopsMsTeamsErrors];
+
+export type PostApiWebhooksChatopsMsTeamsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: string;
+    } | {
+        success: boolean;
+    };
+};
+
+export type PostApiWebhooksChatopsMsTeamsResponse = PostApiWebhooksChatopsMsTeamsResponses[keyof PostApiWebhooksChatopsMsTeamsResponses];
+
+export type GetChatOpsStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/status';
+};
+
+export type GetChatOpsStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetChatOpsStatusError = GetChatOpsStatusErrors[keyof GetChatOpsStatusErrors];
+
+export type GetChatOpsStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        providers: Array<{
+            id: string;
+            displayName: string;
+            configured: boolean;
+        }>;
+    };
+};
+
+export type GetChatOpsStatusResponse = GetChatOpsStatusResponses[keyof GetChatOpsStatusResponses];
+
+export type ListChatOpsBindingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/bindings';
+};
+
+export type ListChatOpsBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListChatOpsBindingsError = ListChatOpsBindingsErrors[keyof ListChatOpsBindingsErrors];
+
+export type ListChatOpsBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        provider: 'ms-teams';
+        channelId: string;
+        workspaceId: string | null;
+        promptId: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type ListChatOpsBindingsResponse = ListChatOpsBindingsResponses[keyof ListChatOpsBindingsResponses];
+
+export type DeleteChatOpsBindingData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chatops/bindings/{id}';
+};
+
+export type DeleteChatOpsBindingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteChatOpsBindingError = DeleteChatOpsBindingErrors[keyof DeleteChatOpsBindingErrors];
+
+export type DeleteChatOpsBindingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteChatOpsBindingResponse = DeleteChatOpsBindingResponses[keyof DeleteChatOpsBindingResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -18846,6 +19212,9 @@ export type GetPromptsResponses = {
         history: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -18860,6 +19229,9 @@ export type CreatePromptData = {
         userPrompt?: string | null;
         systemPrompt?: string | null;
         version?: number;
+        allowedChatops?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
     };
     path?: never;
     query?: never;
@@ -18938,6 +19310,9 @@ export type CreatePromptResponses = {
         systemPrompt: string | null;
         version: number;
         history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
         createdAt: string;
@@ -19109,6 +19484,9 @@ export type GetPromptResponses = {
         history: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -19122,6 +19500,9 @@ export type UpdatePromptData = {
         agentId?: string;
         userPrompt?: string | null;
         systemPrompt?: string | null;
+        allowedChatops?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
     };
     path: {
         id: string;
@@ -19202,6 +19583,9 @@ export type UpdatePromptResponses = {
         systemPrompt: string | null;
         version: number;
         history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
         createdAt: string;
@@ -19293,6 +19677,9 @@ export type GetPromptVersionsResponses = {
             systemPrompt: string | null;
             version: number;
             history: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown>;
+            allowedChatops: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown>;
             createdAt: string;
@@ -19498,6 +19885,9 @@ export type RollbackPromptResponses = {
         systemPrompt: string | null;
         version: number;
         history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
         createdAt: string;

@@ -5,10 +5,12 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
+import { getKnowledgeGraphProvider } from "@/knowledge-graph";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -33,6 +35,7 @@ import {
   type ToolInvocation,
   type TrustedData,
 } from "@/types";
+import { type QueryMode, QueryModeSchema } from "@/types/knowledge-graph";
 
 /**
  * Constants for Archestra MCP server
@@ -1611,6 +1614,111 @@ export async function executeArchestraTool(
     }
   }
 
+  if (toolName === TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME) {
+    logger.info(
+      { profileId: profile.id, queryArgs: args },
+      "query_knowledge_graph tool called",
+    );
+
+    try {
+      const query = args?.query as string;
+      const modeArg = args?.mode as string | undefined;
+
+      if (!query || query.trim() === "") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: query parameter is required and cannot be empty",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Validate mode if provided
+      let mode: QueryMode = "hybrid";
+      if (modeArg) {
+        const parseResult = QueryModeSchema.safeParse(modeArg);
+        if (!parseResult.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: Invalid mode "${modeArg}". Must be one of: local, global, hybrid, naive`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        mode = parseResult.data;
+      }
+
+      // Get the knowledge graph provider
+      const provider = getKnowledgeGraphProvider();
+      if (!provider) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Knowledge graph provider is not configured. Please configure the ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER environment variable.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      logger.info(
+        {
+          profileId: profile.id,
+          profileName: profile.name,
+          mode,
+        },
+        "Querying knowledge graph",
+      );
+
+      // Execute the query
+      const result = await provider.queryDocument(query, {
+        mode,
+      });
+
+      if (result.error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error querying knowledge graph: ${result.error}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: result.answer,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      logger.error({ err: error }, "Error querying knowledge graph");
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error querying knowledge graph: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
   if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
     logger.info(
       { profileId: profile.id, todoArgs: args },
@@ -2339,6 +2447,31 @@ export function getArchestraMcpTools(): Tool[] {
           },
         },
         required: ["id"],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
+      name: TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+      title: "Query Knowledge Graph",
+      description:
+        "Query the organization's knowledge graph to retrieve information from uploaded documents. Uses graph-based retrieval augmented generation (GraphRAG) for accurate and contextual results.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "The natural language query to search the knowledge graph",
+          },
+          mode: {
+            type: "string",
+            enum: ["local", "global", "hybrid", "naive"],
+            description:
+              "Query mode: 'local' uses only local context, 'global' uses global context across all documents, 'hybrid' combines both (recommended), 'naive' uses simple RAG without graph-based retrieval. Defaults to 'hybrid'.",
+          },
+        },
+        required: ["query"],
       },
       annotations: {},
       _meta: {},

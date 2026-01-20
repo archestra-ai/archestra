@@ -1,7 +1,14 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { lazy, useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -407,22 +414,30 @@ export function LocalServerInstallDialog({
 
                         {/* BYOS mode: vault selector for each secret field */}
                         {useVaultSecrets ? (
-                          <InlineVaultSecretSelector
-                            teamId={selectedTeamId}
-                            selectedSecretPath={
-                              vaultSecrets[env.key]?.path ?? null
+                          <Suspense
+                            fallback={
+                              <div className="text-sm text-muted-foreground">
+                                Loading...
+                              </div>
                             }
-                            selectedSecretKey={
-                              vaultSecrets[env.key]?.key ?? null
-                            }
-                            onSecretPathChange={(path) =>
-                              updateVaultSecret(env.key, "path", path)
-                            }
-                            onSecretKeyChange={(key) =>
-                              updateVaultSecret(env.key, "key", key)
-                            }
-                            disabled={isInstalling}
-                          />
+                          >
+                            <InlineVaultSecretSelector
+                              teamId={selectedTeamId}
+                              selectedSecretPath={
+                                vaultSecrets[env.key]?.path ?? null
+                              }
+                              selectedSecretKey={
+                                vaultSecrets[env.key]?.key ?? null
+                              }
+                              onSecretPathChange={(path) =>
+                                updateVaultSecret(env.key, "path", path)
+                              }
+                              onSecretKeyChange={(key) =>
+                                updateVaultSecret(env.key, "key", key)
+                              }
+                              disabled={isInstalling}
+                            />
+                          </Suspense>
                         ) : (
                           <Input
                             id={`env-${env.key}`}
@@ -470,22 +485,30 @@ export function LocalServerInstallDialog({
 
                         {/* BYOS mode: vault selector for each secret field */}
                         {useVaultSecrets ? (
-                          <InlineVaultSecretSelector
-                            teamId={selectedTeamId}
-                            selectedSecretPath={
-                              vaultSecrets[env.key]?.path ?? null
+                          <Suspense
+                            fallback={
+                              <div className="text-sm text-muted-foreground">
+                                Loading...
+                              </div>
                             }
-                            selectedSecretKey={
-                              vaultSecrets[env.key]?.key ?? null
-                            }
-                            onSecretPathChange={(path) =>
-                              updateVaultSecret(env.key, "path", path)
-                            }
-                            onSecretKeyChange={(key) =>
-                              updateVaultSecret(env.key, "key", key)
-                            }
-                            disabled={isInstalling}
-                          />
+                          >
+                            <InlineVaultSecretSelector
+                              teamId={selectedTeamId}
+                              selectedSecretPath={
+                                vaultSecrets[env.key]?.path ?? null
+                              }
+                              selectedSecretKey={
+                                vaultSecrets[env.key]?.key ?? null
+                              }
+                              onSecretPathChange={(path) =>
+                                updateVaultSecret(env.key, "path", path)
+                              }
+                              onSecretKeyChange={(key) =>
+                                updateVaultSecret(env.key, "key", key)
+                              }
+                              disabled={isInstalling}
+                            />
+                          </Suspense>
                         ) : (
                           <AutoResizeTextarea
                             id={`env-${env.key}`}

@@ -2,6 +2,7 @@
   "recommendations": [
     "biomejs.biome",
     "Tchoupinax.tilt",
-    "ms-kubernetes-tools.vscode-kubernetes-tools"
+    "ms-kubernetes-tools.vscode-kubernetes-tools",
+    "bierner.markdown-mermaid"
   ]
 }

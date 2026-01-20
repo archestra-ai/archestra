@@ -22,6 +22,7 @@ const {
   createChatApiKey,
   updateChatApiKey,
   deleteChatApiKey,
+  invalidateChatModelsCache,
 } = archestraApiSdk;
 
 export function useChatApiKeys() {
@@ -147,6 +148,25 @@ export function useDeleteChatApiKey() {
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+    },
+  });
+}
+
+export function useInvalidateChatModelsCache() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data: responseData, error } = await invalidateChatModelsCache();
+      if (error) {
+        const msg =
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || "Failed to invalidate models cache";
+        toast.error(msg);
+      }
+      return responseData;
+    },
+    onSuccess: () => {
+      toast.success("Models cache refreshed");
     },
   });
 }

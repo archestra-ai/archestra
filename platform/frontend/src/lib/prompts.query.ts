@@ -61,6 +61,7 @@ export function useCreatePrompt() {
       agentId: string;
       userPrompt?: string;
       systemPrompt?: string;
+      allowedChatops?: string[];
     }) => {
       const response = await createPrompt({ body: data });
       return response.data;
@@ -84,6 +85,7 @@ export function useUpdatePrompt() {
         agentId?: string;
         userPrompt?: string;
         systemPrompt?: string;
+        allowedChatops?: string[];
       };
     }) => {
       const response = await updatePrompt({ path: { id }, body: data });

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ProfileSelector } from "@/components/chat/profile-selector";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
+import { useChatOpsStatus } from "@/lib/chatops.query";
 import {
   usePromptAgents,
   useSyncPromptAgents,
@@ -58,6 +60,9 @@ export function PromptDialog({
   const [selectedAgentPromptIds, setSelectedAgentPromptIds] = useState<
     string[]
   >([]);
+  const [allowedChatops, setAllowedChatops] = useState<string[]>([]);
+
+  const { data: chatopsProviders = [] } = useChatOpsStatus();
 
   // Available prompts that can be used as agents (excluding self)
   const availableAgentPrompts = useMemo(() => {
@@ -82,12 +87,20 @@ export function PromptDialog({
         setUserPrompt(prompt.userPrompt || "");
         setSystemPrompt(prompt.systemPrompt || "");
         // Note: agents are loaded separately via currentAgents query
+        // Parse allowedChatops from prompt (may be in different formats from API)
+        const chatopsValue = prompt.allowedChatops;
+        if (Array.isArray(chatopsValue)) {
+          setAllowedChatops(chatopsValue as string[]);
+        } else {
+          setAllowedChatops([]);
+        }
       } else {
         // create
         setName("");
         setUserPrompt("");
         setSystemPrompt("");
         setSelectedAgentPromptIds([]);
+        setAllowedChatops([]);
       }
     } else {
       // reset form
@@ -96,6 +109,7 @@ export function PromptDialog({
       setUserPrompt("");
       setSystemPrompt("");
       setSelectedAgentPromptIds([]);
+      setAllowedChatops([]);
     }
   }, [open, prompt]);
 
@@ -142,6 +156,7 @@ export function PromptDialog({
             agentId,
             userPrompt: trimmedUserPrompt || undefined,
             systemPrompt: trimmedSystemPrompt || undefined,
+            allowedChatops,
           },
         });
         promptId = updated?.id ?? prompt.id;
@@ -152,6 +167,7 @@ export function PromptDialog({
           agentId,
           userPrompt: trimmedUserPrompt || undefined,
           systemPrompt: trimmedSystemPrompt || undefined,
+          allowedChatops,
         });
         promptId = created?.id ?? "";
         toast.success("Agent created successfully");
@@ -180,6 +196,7 @@ export function PromptDialog({
     agentId,
     userPrompt,
     systemPrompt,
+    allowedChatops,
     prompt,
     selectedAgentPromptIds,
     currentAgents.length,
@@ -271,6 +288,45 @@ export function PromptDialog({
               className="min-h-[150px] font-mono"
             />
           </div>
+          {chatopsProviders.filter((provider) => provider.configured).length >
+            0 && (
+            <div className="space-y-2">
+              <Label>ChatOps Integrations</Label>
+              <p className="text-sm text-muted-foreground">
+                Select which chat platforms can trigger this agent
+              </p>
+            </div>
+          )}
+          {chatopsProviders
+            .filter((provider) => provider.configured)
+            .map((provider) => (
+              <div key={provider.id} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`chatops-${provider.id}`}
+                  checked={allowedChatops.includes(provider.id)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAllowedChatops([...allowedChatops, provider.id]);
+                    } else {
+                      setAllowedChatops(
+                        allowedChatops.filter((id) => id !== provider.id),
+                      );
+                    }
+                  }}
+                />
+                <Label
+                  htmlFor={`chatops-${provider.id}`}
+                  className={
+                    !provider.configured
+                      ? "text-muted-foreground cursor-not-allowed font-normal"
+                      : "cursor-pointer font-normal"
+                  }
+                >
+                  {provider.displayName}
+                  {!provider.configured && " (not configured)"}
+                </Label>
+              </div>
+            ))}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

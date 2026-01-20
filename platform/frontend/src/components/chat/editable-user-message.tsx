@@ -206,17 +206,21 @@ export function EditableUserMessage({
             ))}
           </div>
         )}
-        {/* Text message bubble */}
-        <MessageContent>
-          <Response>{text}</Response>
-        </MessageContent>
-        {/* Actions below the message */}
-        <MessageActions
-          textToCopy={text}
-          onEditClick={handleStartEdit}
-          editDisabled={editDisabled}
-          className="absolute -bottom-1 right-0 opacity-0 group-hover/message:opacity-100 transition-opacity"
-        />
+        {/* Text message bubble - only show if there's text */}
+        {text && (
+          <MessageContent>
+            <Response>{text}</Response>
+          </MessageContent>
+        )}
+        {/* Actions below the message - only show edit for messages with text */}
+        {text && (
+          <MessageActions
+            textToCopy={text}
+            onEditClick={handleStartEdit}
+            editDisabled={editDisabled}
+            className="absolute -bottom-1 right-0 opacity-0 group-hover/message:opacity-100 transition-opacity"
+          />
+        )}
       </div>
     </Message>
   );

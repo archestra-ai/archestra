@@ -25,6 +25,8 @@ const messagesTable = pgTable(
     conversationIdIdx: index("messages_conversation_id_idx").on(
       table.conversationId,
     ),
+    // Note: Additional pg_trgm GIN index for search is created in migration 0117_messages_content_trgm_idx.sql:
+    // - messages_content_trgm_idx: GIN index on (content::text)
   }),
 );
 

@@ -711,12 +711,12 @@ These environment variables configure the Incoming Email feature, which allows e
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID`** - Azure AD tenant ID for Microsoft Graph API.
 
   - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
-  - Example: `e6ec2dea-2205-4e2f-afb6-f83e5f588f40`
+  - Example: `eeeee123-2205-4e2f-afb6-f83e5f588f40`
 
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID`** - Azure AD application (client) ID.
 
   - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
-  - Example: `8d184f86-d6a1-4fd6-8783-b2f4931be17b`
+  - Example: `88888dd-d6a1-4fd6-8783-b2f4931be17b`
 
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET`** - Azure AD application client secret.
 
@@ -739,6 +739,51 @@ These environment variables configure the Incoming Email feature, which allows e
   - Optional: If set, subscription is created automatically on server startup
   - Example: `https://api.yourcompany.com/api/webhooks/incoming-email`
   - If not set, configure the subscription manually via Settings > Incoming Email
+
+### ChatOps Configuration
+
+These environment variables configure the ChatOps feature, which allows users to interact with agents through messaging platforms like Microsoft Teams. See [Agents - ChatOps: Microsoft Teams](/docs/platform-agents#chatops-microsoft-teams) for setup instructions.
+
+#### Microsoft Teams
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED`** - Enable Microsoft Teams integration.
+
+  - Default: `false`
+  - Set to `true` to enable the MS Teams chatops provider
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`** - Azure Bot App ID (Client ID).
+
+  - Required when: `ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true`
+  - Example: `88888dd-d6a1-4fd6-8783-b2f4931be17b`
+  - This is the Application (client) ID from your Azure Bot registration
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD`** - Azure Bot App Password (Client Secret).
+
+  - Required when: `ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true`
+  - Note: Keep this value secure; do not commit to version control
+  - This is the client secret from your Azure Bot registration
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`** - Azure AD tenant ID for single-tenant bots.
+
+  - Optional: Leave empty for multi-tenant bots (default)
+  - Set to your Azure AD tenant ID if your Azure Bot is configured as single-tenant
+  - Example: `eeeee123-2205-4e2f-afb6-f83e5f588f40`
+  - Find in Azure Portal: Azure Bot → Configuration → Microsoft App ID (tenant) or Azure AD → Overview → Tenant ID
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Azure AD tenant ID for Microsoft Graph API (thread history).
+
+  - Optional: Only required if you want to fetch conversation history for context
+  - Example: `eeeee123-2205-4e2f-afb6-f83e5f588f40`
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Azure AD application (client) ID for Graph API.
+
+  - Optional: Only required if you want to fetch conversation history for context
+  - Can be the same as `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID` if using the same app registration
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Azure AD application client secret for Graph API.
+
+  - Optional: Only required if you want to fetch conversation history for context
+  - Note: Keep this value secure; do not commit to version control
 
 ### Knowledge Graph Configuration
 

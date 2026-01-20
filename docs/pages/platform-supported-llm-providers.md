@@ -230,3 +230,36 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **API Key format**: Obtain your API key from the [Zhipu AI Platform](https://z.ai/)
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
+
+## Cohere
+
+[Cohere](https://cohere.com/) is an AI platform that provides enterprise-grade language models with strong performance in reasoning, retrieval, and multilingual tasks. Cohere offers models like Command R+ and Command R for various use cases.
+
+### Supported Cohere APIs
+
+- **Chat API** (`/v2/chat`) - ✅ Fully supported
+
+### Cohere Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/cohere/{profile-id}`
+- **Authentication**: Pass your Cohere API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                                    |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_COHERE_BASE_URL`       | No       | Cohere API base URL (default: `https://api.cohere.ai`)                       |
+| `ARCHESTRA_CHAT_COHERE_API_KEY`   | No       | Default API key for Cohere (can be overridden per conversation/team/org)     |
+
+### Popular Models
+
+- **command-r-plus** - Advanced reasoning model with strong performance
+- **command-r** - Balanced model for general use
+- **command** - Fast inference model optimized for speed
+
+### Important Notes
+
+- **NOT OpenAI-compatible**: Cohere uses a custom API format (v2 Chat API) that is not compatible with OpenAI's API structure. The platform handles the conversion automatically.
+- **API Key required**: Cohere requires a valid API key for authentication. Obtain your API key from the [Cohere Platform](https://dashboard.cohere.com/)
+- **Streaming support**: Cohere supports streaming via Server-Sent Events (SSE)
+- **Tool calling**: Cohere supports tool/function calling with its own format

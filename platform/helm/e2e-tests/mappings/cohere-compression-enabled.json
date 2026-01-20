@@ -1,0 +1,41 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-compression"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "files[5]{name,size,type}"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "cohere-chat-compression-enabled",
+      "response": {
+        "id": "cohere-chat-compression-enabled",
+        "text": "Response with compression enabled.",
+        "generation_id": "gen-505",
+        "finish_reason": "COMPLETE"
+      },
+      "model": "command-r-plus",
+      "meta": {
+        "api_version": {
+          "version": "1"
+        },
+        "tokens": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        }
+      }
+    }
+  }
+}

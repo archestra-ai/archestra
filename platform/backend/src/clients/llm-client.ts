@@ -57,6 +57,14 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "zhipuai";
   }
 
+  if (
+    lowerModel.includes("cohere") ||
+    lowerModel.includes("command") ||
+    lowerModel.includes("rerank")
+  ) {
+    return "cohere";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -97,7 +105,8 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.anthropicApiKey ??
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
-      secret?.secret?.zhipuaiApiKey;
+      secret?.secret?.zhipuaiApiKey ??
+      secret?.secret?.cohereApiKey;
     if (secretValue) {
       providerApiKey = secretValue as string;
       apiKeySource = resolvedApiKey.scope;
@@ -125,6 +134,9 @@ export async function resolveProviderApiKey(params: {
       providerApiKey = config.chat.ollama.apiKey;
     } else if (provider === "zhipuai" && config.chat.zhipuai.apiKey) {
       providerApiKey = config.chat.zhipuai.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "cohere" && config.chat.cohere.apiKey) {
+      providerApiKey = config.chat.cohere.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -260,6 +272,21 @@ export function createLLMModel(params: {
       baseURL: `http://localhost:${config.api.port}/v1/zhipuai/${agentId}`,
       headers,
     });
+    return client.chat(modelName);
+  }
+
+  if (provider === "cohere") {
+    // NOTE: Cohere is NOT OpenAI-compatible and doesn't have an official @ai-sdk/cohere package
+    // For now, we'll use OpenAI SDK with custom baseURL pointing to our proxy
+    // The proxy will handle the Cohere v2 Chat API conversion
+    // URL format: /v1/cohere/:agentId/v2/chat
+    // TODO: Create a proper Cohere SDK adapter or wait for @ai-sdk/cohere
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://127.0.0.1:${config.api.port}/v1/cohere/${agentId}`,
+      headers,
+    });
+    // Note: This will proxy through our Cohere adapter which handles v2/chat conversion
     return client.chat(modelName);
   }
 

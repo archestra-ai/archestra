@@ -178,6 +178,30 @@ function parseAnthropicError(
  *
  * @see https://docs.z.ai/api-reference/api-code#errors
  */
+function parseCohereError(responseBody: string): ParsedOpenAIError | null {
+  // Cohere uses a similar error format to OpenAI
+  try {
+    const parsed = JSON.parse(responseBody) as {
+      message?: string;
+      error?: { message?: string; type?: string };
+    };
+    return {
+      type: parsed.error?.type,
+      message: parsed.error?.message || parsed.message,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function mapCohereErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  // Cohere uses similar error codes to OpenAI
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
 function parseZhipuaiError(responseBody: string): ParsedZhipuaiError | null {
   try {
     const parsed = JSON.parse(responseBody);
@@ -932,6 +956,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
+  cohere: parseCohereError,
 };
 
 /**
@@ -939,6 +964,16 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
  * if a new provider is added to SupportedProvider without updating this map.
  */
+function mapCohereErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapCohereErrorToCode(
+    statusCode,
+    parsedError as ParsedOpenAIError | null,
+  );
+}
+
 const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   openai: mapOpenAIErrorWrapper,
   anthropic: mapAnthropicErrorWrapper,
@@ -947,6 +982,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,
+  cohere: mapCohereErrorWrapper,
 };
 
 // =============================================================================

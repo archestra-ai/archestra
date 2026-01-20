@@ -316,6 +316,45 @@ const zhipuaiConfig: CompressionTestConfig = {
   }),
 };
 
+const cohereConfig: CompressionTestConfig = {
+  providerName: "Cohere",
+
+  endpoint: (profileId) => `/v1/cohere/${profileId}/v2/chat`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // Cohere uses tool_results array or content blocks with tool_result type
+  buildRequestWithToolResult: () => ({
+    model: "command-r-plus",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_call",
+            id: "call_123",
+            name: "list_files",
+            parameters: { directory: "." },
+          },
+        ],
+      },
+      {
+        role: "user",
+        tool_results: [
+          {
+            tool_call_id: "call_123",
+            result: TOOL_RESULT_DATA,
+          },
+        ],
+      },
+    ],
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -328,6 +367,7 @@ const testConfigs: CompressionTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  cohereConfig,
 ];
 
 for (const config of testConfigs) {

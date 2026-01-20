@@ -234,6 +234,16 @@ function ChatSettingsContent() {
         header: "Provider",
         cell: ({ row }) => {
           const config = PROVIDER_CONFIG[row.original.provider];
+          // Fallback for unknown/legacy providers
+          if (!config) {
+            return (
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium capitalize">
+                  {row.original.provider}
+                </span>
+              </div>
+            );
+          }
           return (
             <div className="flex items-center gap-2">
               <Image

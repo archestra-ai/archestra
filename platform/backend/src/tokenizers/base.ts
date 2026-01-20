@@ -1,4 +1,12 @@
-import type { Anthropic, Gemini, Ollama, OpenAi, Vllm, Zhipuai } from "@/types";
+import type {
+  Anthropic,
+  Cohere,
+  Gemini,
+  Ollama,
+  OpenAi,
+  Vllm,
+  Zhipuai,
+} from "@/types";
 
 export type ProviderMessage =
   | OpenAi.Types.ChatCompletionsRequest["messages"][number]
@@ -6,7 +14,8 @@ export type ProviderMessage =
   | Gemini.Types.GenerateContentRequest["contents"][number]
   | Vllm.Types.ChatCompletionsRequest["messages"][number]
   | Ollama.Types.ChatCompletionsRequest["messages"][number]
-  | Zhipuai.Types.ChatCompletionsRequest["messages"][number];
+  | Zhipuai.Types.ChatCompletionsRequest["messages"][number]
+  | Cohere.Types.ChatRequest["messages"][number];
 
 /**
  * Base interface for tokenizers
@@ -97,6 +106,19 @@ export abstract class BaseTokenizer implements Tokenizer {
         }
       }
       return text;
+    }
+
+    // Cohere format: content property (string or array of blocks)
+    if ("content" in message) {
+      if (typeof message.content === "string") {
+        return message.content;
+      }
+      if (Array.isArray(message.content)) {
+        return message.content
+          .filter((block) => block.type === "text")
+          .map((block) => block.text)
+          .join("");
+      }
     }
 
     return "";

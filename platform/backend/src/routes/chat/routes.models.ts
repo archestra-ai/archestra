@@ -324,6 +324,62 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Cohere API
+ * Cohere doesn't have a /models endpoint, so we return a list of known models
+ */
+async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
+  // Cohere doesn't expose a models list endpoint
+  // Validate the API key by making a minimal chat request
+  const baseUrl = config.chat.cohere.baseUrl;
+  const url = `${baseUrl}/v2/chat`;
+
+  // Make a minimal chat request to validate the API key
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "Cohere-Version": "2024-11-19",
+    },
+    body: JSON.stringify({
+      model: "command-r-08-2024",
+      messages: [{ role: "user", content: "test" }],
+      max_tokens: 1,
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to validate Cohere API key",
+    );
+    throw new Error(`Failed to validate Cohere API key: ${response.status}`);
+  }
+
+  // Return known Cohere models based on their documentation
+  // https://docs.cohere.com/docs/models
+  // Note: Many models were deprecated on September 15, 2025
+  // Current supported models: command-r-08-2024, command-r-plus-08-2024, command-a-03-2025
+  const knownModels = [
+    { id: "command-r-08-2024", displayName: "Command R (08-2024)" },
+    { id: "command-r-plus-08-2024", displayName: "Command R Plus (08-2024)" },
+    { id: "command-a-03-2025", displayName: "Command A (03-2025)" },
+    // Legacy models (may be deprecated)
+    { id: "command-r7b-12-2024", displayName: "Command R7B" },
+    { id: "command-r7b-12-2024:free", displayName: "Command R7B (Free)" },
+  ];
+
+  return knownModels.map((model) => ({
+    id: model.id,
+    displayName: model.displayName,
+    provider: "cohere" as const,
+    createdAt: undefined,
+  }));
+}
+
+/**
  * Fetch models from Zhipuai API
  */
 async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -548,6 +604,8 @@ async function getProviderApiKey({
       return config.chat.ollama.apiKey || "";
     case "zhipuai":
       return config.chat.zhipuai?.apiKey || null;
+    case "cohere":
+      return config.chat.cohere?.apiKey || null;
     default:
       return null;
   }
@@ -565,6 +623,7 @@ const modelFetchers: Record<
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
   zhipuai: fetchZhipuaiModels,
+  cohere: fetchCohereModels,
 };
 
 /**
@@ -635,6 +694,10 @@ export async function fetchModelsForProvider({
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     } else if (provider === "zhipuai") {
+      if (apiKey) {
+        models = await modelFetchers[provider](apiKey);
+      }
+    } else if (provider === "cohere") {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

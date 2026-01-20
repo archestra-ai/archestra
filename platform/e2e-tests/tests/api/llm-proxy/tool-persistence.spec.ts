@@ -226,6 +226,27 @@ const zhipuaiConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const cohereConfig: ToolPersistenceTestConfig = {
+  providerName: "Cohere",
+
+  endpoint: (agentId) => `/v1/cohere/${agentId}/v2/chat`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "command-r-plus",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameter_definitions: t.parameters.properties,
+    })),
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -238,6 +259,7 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  cohereConfig,
 ];
 
 for (const config of testConfigs) {

@@ -5,6 +5,7 @@ import { schema } from "@/database";
 import {
   Anthropic,
   Cerebras,
+  Cohere,
   Gemini,
   Ollama,
   OpenAi,
@@ -29,6 +30,7 @@ export const InteractionRequestSchema = z.union([
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
+  Cohere.API.ChatRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -39,6 +41,7 @@ export const InteractionResponseSchema = z.union([
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
+  Cohere.API.ChatResponseSchema,
 ]);
 
 /**
@@ -120,6 +123,15 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["cohere:chat"]),
+    request: Cohere.API.ChatRequestSchema,
+    processedRequest: Cohere.API.ChatRequestSchema.nullable().optional(),
+    response: Cohere.API.ChatResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);
 

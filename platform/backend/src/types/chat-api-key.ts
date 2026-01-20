@@ -11,6 +11,7 @@ import { SecretStorageTypeSchema } from "./mcp-server";
 export const SupportedChatProviderSchema = z.enum([
   "anthropic",
   "cerebras",
+  "cohere",
   "gemini",
   "openai",
   "vllm",
@@ -63,15 +64,25 @@ export type InsertChatApiKey = z.infer<typeof InsertChatApiKeySchema>;
 export type UpdateChatApiKey = z.infer<typeof UpdateChatApiKeySchema>;
 
 // Response schema with scope display info
-export const ChatApiKeyWithScopeInfoSchema = SelectChatApiKeySchema.extend({
-  teamName: z.string().nullable().optional(),
-  userName: z.string().nullable().optional(),
-  // BYOS vault reference info (only populated when BYOS is enabled and secret is a vault reference)
-  vaultSecretPath: z.string().nullable().optional(),
-  vaultSecretKey: z.string().nullable().optional(),
-  // Secret storage type (database, vault, external_vault, or none)
-  secretStorageType: SecretStorageTypeSchema.optional(),
-});
+// Note: Dates are converted to ISO strings in the model for JSON serialization
+// The serializerCompiler validates AFTER JSON serialization, so dates will be strings
+// Note: Provider field accepts any string to handle legacy/unknown providers in the database
+export const ChatApiKeyWithScopeInfoSchema = SelectChatApiKeySchema.merge(
+  z.object({
+    // Override provider to accept any string (for backward compatibility with existing data)
+    provider: z.string(),
+    // Override date fields to expect strings (after JSON serialization)
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    teamName: z.string().nullable().optional(),
+    userName: z.string().nullable().optional(),
+    // BYOS vault reference info (only populated when BYOS is enabled and secret is a vault reference)
+    vaultSecretPath: z.string().nullable().optional(),
+    vaultSecretKey: z.string().nullable().optional(),
+    // Secret storage type (database, vault, external_vault, or none)
+    secretStorageType: SecretStorageTypeSchema.optional(),
+  }),
+);
 
 export type ChatApiKeyWithScopeInfo = z.infer<
   typeof ChatApiKeyWithScopeInfoSchema

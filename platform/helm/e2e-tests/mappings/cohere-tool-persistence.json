@@ -1,0 +1,36 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-tool-persistence"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "cohere-chat-tool-persistence",
+      "response": {
+        "id": "cohere-chat-tool-persistence",
+        "text": "Tool persistence test response.",
+        "generation_id": "gen-404",
+        "finish_reason": "COMPLETE"
+      },
+      "model": "command-r-plus",
+      "meta": {
+        "api_version": {
+          "version": "1"
+        },
+        "tokens": {
+          "input_tokens": 150,
+          "output_tokens": 10
+        }
+      }
+    }
+  }
+}

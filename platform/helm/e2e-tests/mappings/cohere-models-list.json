@@ -1,0 +1,51 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/cohere/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "models": [
+        {
+          "name": "command-r-plus",
+          "endpoints": ["chat"],
+          "context_length": 128000,
+          "default_context_length": 128000,
+          "pricing": {
+            "prompt": "0.5",
+            "completion": "2.0"
+          }
+        },
+        {
+          "name": "command-r",
+          "endpoints": ["chat"],
+          "context_length": 128000,
+          "default_context_length": 128000,
+          "pricing": {
+            "prompt": "0.5",
+            "completion": "2.0"
+          }
+        },
+        {
+          "name": "command",
+          "endpoints": ["chat"],
+          "context_length": 4096,
+          "default_context_length": 4096,
+          "pricing": {
+            "prompt": "0.15",
+            "completion": "0.15"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -22,6 +22,9 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
       return new TiktokenTokenizer();
     case "zhipuai":
       return new TiktokenTokenizer();
+    case "cohere":
+      // Cohere uses tiktoken-compatible tokenization
+      return new TiktokenTokenizer();
     default:
       // For any other provider including Gemini, use tiktoken as fallback
       return new TiktokenTokenizer();

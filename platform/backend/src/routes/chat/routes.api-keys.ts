@@ -17,7 +17,6 @@ import {
   ChatApiKeyScopeSchema,
   ChatApiKeyWithScopeInfoSchema,
   constructResponseSchema,
-  SelectChatApiKeySchema,
   type SelectSecret,
   type SupportedChatProvider,
   SupportedChatProviderSchema,
@@ -54,6 +53,42 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         isProfileAdmin,
       );
+
+      // Log the first key structure for debugging if there are keys
+      if (apiKeys.length > 0) {
+        fastify.log.debug(
+          {
+            sampleKey: {
+              id: apiKeys[0].id,
+              createdAt: apiKeys[0].createdAt,
+              updatedAt: apiKeys[0].updatedAt,
+              createdAtType: typeof apiKeys[0].createdAt,
+              updatedAtType: typeof apiKeys[0].updatedAt,
+              allKeys: Object.keys(apiKeys[0]),
+            },
+          },
+          "Sample API key structure before sending",
+        );
+
+        // Manually validate the first key to see what's wrong
+        try {
+          ChatApiKeyWithScopeInfoSchema.parse(apiKeys[0]);
+          fastify.log.debug("Manual validation passed for first key");
+        } catch (validationError) {
+          fastify.log.error(
+            {
+              validationError:
+                validationError instanceof Error
+                  ? validationError.message
+                  : String(validationError),
+              issues: (validationError as { issues?: unknown })?.issues,
+              sampleKey: apiKeys[0],
+            },
+            "Manual validation failed for first key",
+          );
+        }
+      }
+
       return reply.send(apiKeys);
     },
   );
@@ -116,7 +151,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
             },
           ),
-        response: constructResponseSchema(SelectChatApiKeySchema),
+        response: constructResponseSchema(ChatApiKeyWithScopeInfoSchema),
       },
     },
     async ({ body, organizationId, user, headers }, reply) => {
@@ -208,7 +243,25 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamId: body.scope === "team" ? body.teamId : null,
       });
 
-      return reply.send(createdApiKey);
+      // Convert Date objects to ISO strings for JSON serialization
+      const createdApiKeyWithStringDates = {
+        ...createdApiKey,
+        createdAt:
+          createdApiKey.createdAt instanceof Date
+            ? createdApiKey.createdAt.toISOString()
+            : createdApiKey.createdAt,
+        updatedAt:
+          createdApiKey.updatedAt instanceof Date
+            ? createdApiKey.updatedAt.toISOString()
+            : createdApiKey.updatedAt,
+        teamName: null,
+        userName: null,
+        vaultSecretPath: null,
+        vaultSecretKey: null,
+        secretStorageType: undefined,
+      };
+
+      return reply.send(createdApiKeyWithStringDates);
     },
   );
 
@@ -252,7 +305,25 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      return reply.send(apiKey);
+      // Convert Date objects to ISO strings for JSON serialization
+      const apiKeyWithStringDates = {
+        ...apiKey,
+        createdAt:
+          apiKey.createdAt instanceof Date
+            ? apiKey.createdAt.toISOString()
+            : apiKey.createdAt,
+        updatedAt:
+          apiKey.updatedAt instanceof Date
+            ? apiKey.updatedAt.toISOString()
+            : apiKey.updatedAt,
+        teamName: null,
+        userName: null,
+        vaultSecretPath: null,
+        vaultSecretKey: null,
+        secretStorageType: undefined,
+      };
+
+      return reply.send(apiKeyWithStringDates);
     },
   );
 
@@ -302,7 +373,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
             },
           ),
-        response: constructResponseSchema(SelectChatApiKeySchema),
+        response: constructResponseSchema(ChatApiKeyWithScopeInfoSchema),
       },
     },
     async ({ params, body, organizationId, user, headers }, reply) => {
@@ -422,7 +493,26 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, "Chat API key not found");
       }
-      return reply.send(updated);
+
+      // Convert Date objects to ISO strings for JSON serialization
+      const updatedWithStringDates = {
+        ...updated,
+        createdAt:
+          updated.createdAt instanceof Date
+            ? updated.createdAt.toISOString()
+            : updated.createdAt,
+        updatedAt:
+          updated.updatedAt instanceof Date
+            ? updated.updatedAt.toISOString()
+            : updated.updatedAt,
+        teamName: null,
+        userName: null,
+        vaultSecretPath: null,
+        vaultSecretKey: null,
+        secretStorageType: undefined,
+      };
+
+      return reply.send(updatedWithStringDates);
     },
   );
 

@@ -308,6 +308,39 @@ const zhipuaiConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const cohereConfig: ModelOptimizationTestConfig = {
+  providerName: "Cohere",
+  provider: "cohere",
+
+  endpoint: (agentId) => `/v1/cohere/${agentId}/v2/chat`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-cohere-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        parameter_definitions: t.parameters.properties,
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-cohere-baseline",
+  optimizedModel: "e2e-test-cohere-optimized",
+
+  getModelFromResponse: (response) =>
+    response.model || response.response?.id || "",
+};
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -340,6 +373,7 @@ const testConfigs: ModelOptimizationTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  cohereConfig,
 ];
 
 test.describe("LLMProxy-ModelOptimization", () => {

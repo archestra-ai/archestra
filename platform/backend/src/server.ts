@@ -56,6 +56,7 @@ import {
   Anthropic,
   ApiError,
   Cerebras,
+  Cohere,
   Gemini,
   Ollama,
   OpenAi,
@@ -135,6 +136,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Cohere.API.ChatRequestSchema, {
+    id: "CohereChatRequest",
+  });
+  z.globalRegistry.add(Cohere.API.ChatResponseSchema, {
+    id: "CohereChatResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",
@@ -316,10 +323,47 @@ export const createFastifyInstance = () =>
       const message = error.message || "Internal server error";
       const statusCode = 500;
 
-      this.log.error(
-        { error: message, statusCode },
-        "HTTP 50x request error occurred",
-      );
+      // Log full error details for schema validation errors
+      if (
+        message.includes("schema") ||
+        message.includes("Response doesn't match")
+      ) {
+        // Try to extract Zod validation errors from the error object
+        const errorDetails: Record<string, unknown> = {
+          error: message,
+          statusCode,
+          errorStack: error.stack,
+          errorName: error.name,
+        };
+
+        // Check for Zod issues in various possible locations
+        if ("cause" in error && error.cause) {
+          errorDetails.cause = error.cause;
+          if (typeof error.cause === "object" && "issues" in error.cause) {
+            errorDetails.zodIssues = (
+              error.cause as { issues: unknown }
+            ).issues;
+          }
+        }
+        if ("issues" in error) {
+          errorDetails.zodIssues = (error as { issues: unknown }).issues;
+        }
+        if ("validation" in error) {
+          errorDetails.validation = (
+            error as { validation: unknown }
+          ).validation;
+        }
+
+        // Log all error properties
+        errorDetails.errorProperties = Object.keys(error);
+
+        this.log.error(errorDetails, "Schema validation error - full details");
+      } else {
+        this.log.error(
+          { error: message, statusCode },
+          "HTTP 50x request error occurred",
+        );
+      }
 
       return reply.status(statusCode).send({
         error: {

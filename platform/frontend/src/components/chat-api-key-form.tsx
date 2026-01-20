@@ -115,6 +115,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://z.ai/model-api",
     consoleName: "Zhipu AI Platform",
   },
+  cohere: {
+    name: "Cohere",
+    icon: "/icons/cohere.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://dashboard.cohere.com/api-keys",
+    consoleName: "Cohere Dashboard",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };
@@ -187,6 +195,16 @@ export function ChatApiKeyForm({
   const hasApiKeyChanged = apiKey !== PLACEHOLDER_KEY && apiKey !== "";
 
   const providerConfig = PROVIDER_CONFIG[provider];
+
+  // Fallback for unknown/legacy providers
+  const safeProviderConfig = providerConfig || {
+    name: provider.charAt(0).toUpperCase() + provider.slice(1),
+    icon: "/icons/default.png",
+    placeholder: "Enter API key",
+    enabled: false,
+    consoleUrl: "#",
+    consoleName: "Provider Console",
+  };
 
   // Determine if we should show the "configured" styling
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
@@ -312,7 +330,7 @@ export function ChatApiKeyForm({
             <Label htmlFor="chat-api-key-name">Name</Label>
             <Input
               id="chat-api-key-name"
-              placeholder={`My ${providerConfig.name} Key`}
+              placeholder={`My ${safeProviderConfig.name} Key`}
               disabled={isPending}
               {...form.register("name")}
             />
@@ -439,7 +457,7 @@ export function ChatApiKeyForm({
               <SelectContent>
                 {availableTeams.length === 0 ? (
                   <div className="p-2 text-sm text-muted-foreground">
-                    All teams already have a {providerConfig.name} key
+                    All teams already have a {safeProviderConfig.name} key
                   </div>
                 ) : (
                   availableTeams.map((team) => (
@@ -476,7 +494,7 @@ export function ChatApiKeyForm({
               <Input
                 id="chat-api-key-value"
                 type="password"
-                placeholder={providerConfig.placeholder}
+                placeholder={safeProviderConfig.placeholder}
                 disabled={isPending}
                 className={
                   showConfiguredStyling ? "border-green-500 pr-10" : ""
@@ -491,12 +509,12 @@ export function ChatApiKeyForm({
               <p className="text-xs text-muted-foreground">
                 Get your API key from{" "}
                 <Link
-                  href={providerConfig.consoleUrl}
+                  href={safeProviderConfig.consoleUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline hover:text-foreground"
                 >
-                  {providerConfig.consoleName}
+                  {safeProviderConfig.consoleName}
                 </Link>
               </p>
             )}

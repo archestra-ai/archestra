@@ -1,0 +1,36 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-token-cost-limit-test"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "cohere-chat-token-cost-limit",
+      "response": {
+        "id": "cohere-chat-token-cost-limit",
+        "text": "Token cost limit test response.",
+        "generation_id": "gen-303",
+        "finish_reason": "COMPLETE"
+      },
+      "model": "test-cohere-cost-limit",
+      "meta": {
+        "api_version": {
+          "version": "1"
+        },
+        "tokens": {
+          "input_tokens": 1000,
+          "output_tokens": 50
+        }
+      }
+    }
+  }
+}

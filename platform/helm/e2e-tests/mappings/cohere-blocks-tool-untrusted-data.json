@@ -1,0 +1,36 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-blocks-tool-untrusted-data"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "cohere-chat-blocks-tool-untrusted",
+      "response": {
+        "id": "cohere-chat-blocks-tool-untrusted",
+        "text": "I cannot invoke the read_file tool with the file path /etc/passwd as it has been denied by the tool invocation policy.",
+        "generation_id": "gen-909",
+        "finish_reason": "COMPLETE"
+      },
+      "model": "command-r-plus",
+      "meta": {
+        "api_version": {
+          "version": "1"
+        },
+        "tokens": {
+          "input_tokens": 100,
+          "output_tokens": 20
+        }
+      }
+    }
+  }
+}

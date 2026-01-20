@@ -28,15 +28,32 @@ export function useChatApiKeys() {
   return useSuspenseQuery({
     queryKey: ["chat-api-keys"],
     queryFn: async () => {
-      const { data, error } = await getChatApiKeys();
-      if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch chat API keys",
-        );
+      try {
+        const { data, error } = await getChatApiKeys();
+        if (error) {
+          throw new Error(
+            typeof error.error === "string"
+              ? error.error
+              : error.error?.message || "Failed to fetch chat API keys",
+          );
+        }
+        return data ?? [];
+      } catch (err) {
+        // Handle schema validation errors or other unexpected errors
+        if (err instanceof Error) {
+          // If it's already an Error, check if it's a schema validation error
+          if (
+            err.message.includes("schema") ||
+            err.message.includes("Response doesn't match")
+          ) {
+            throw new Error(
+              "Failed to fetch chat API keys: Response validation failed. Please check your authentication.",
+            );
+          }
+          throw err;
+        }
+        throw new Error("Failed to fetch chat API keys: Unknown error");
       }
-      return data ?? [];
     },
   });
 }

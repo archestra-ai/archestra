@@ -164,6 +164,10 @@ export const RouteId = {
     "zhipuaiChatCompletionsWithDefaultAgent",
   ZhipuaiChatCompletionsWithAgent: "zhipuaiChatCompletionsWithAgent",
 
+  // Proxy Routes - Cohere
+  CohereChatWithDefaultAgent: "cohereChatWithDefaultAgent",
+  CohereChatWithAgent: "cohereChatWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   GetChatConversations: "getChatConversations",

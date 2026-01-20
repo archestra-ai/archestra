@@ -1,0 +1,41 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-model-optimization-short"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-cohere-optimized"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "cohere-chat-model-opt-short",
+      "response": {
+        "id": "cohere-chat-model-opt-short",
+        "text": "This is a short response for model optimization test.",
+        "generation_id": "gen-123",
+        "finish_reason": "COMPLETE"
+      },
+      "model": "e2e-test-cohere-optimized",
+      "meta": {
+        "api_version": {
+          "version": "1"
+        },
+        "tokens": {
+          "input_tokens": 150,
+          "output_tokens": 15
+        }
+      }
+    }
+  }
+}

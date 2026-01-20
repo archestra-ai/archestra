@@ -2567,6 +2567,121 @@ export type ZhipuaiChatCompletionResponseInput = {
     }>;
 };
 
+export type CohereChatRequestInput = {
+    model: string;
+    messages: Array<{
+        role: 'user' | 'assistant' | 'chatbot' | 'system';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'tool_call';
+            name: string;
+            parameters: {
+                [key: string]: unknown;
+            };
+            id: string;
+        } | {
+            type: 'tool_result';
+            tool_call_id: string;
+            result: string | {
+                [key: string]: unknown;
+            };
+            is_error?: boolean;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            name: string;
+            parameters: {
+                [key: string]: unknown;
+            };
+        }>;
+        tool_results?: Array<{
+            tool_call_id: string;
+            result: string | {
+                [key: string]: unknown;
+            };
+            is_error?: boolean;
+        }>;
+    }>;
+    tools?: Array<{
+        name: string;
+        description?: string;
+        parameter_definitions: {
+            [key: string]: {
+                type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+                description?: string;
+                enum?: Array<string | number>;
+                properties?: {
+                    [key: string]: unknown;
+                };
+                required?: Array<string>;
+                items?: unknown;
+            };
+        };
+    }>;
+    tool_choice?: 'auto' | 'none' | {
+        type: 'tool';
+        name: string;
+    };
+    temperature?: number;
+    max_tokens?: number;
+    stream?: boolean;
+    preamble?: string;
+    prompt_truncation?: 'AUTO' | 'OFF' | 'LAST_MESSAGES';
+    connectors?: Array<{
+        [key: string]: unknown;
+    }>;
+    search_queries_only?: boolean;
+    documents?: Array<{
+        [key: string]: unknown;
+    }>;
+    citation_quality?: 'fast' | 'accurate' | 'off';
+};
+
+export type CohereChatResponseInput = {
+    id: string;
+    response: {
+        id: string;
+        text: string;
+        generation_id?: string;
+        finish_reason?: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALLS' | 'ERROR' | 'ERROR_TOXIC';
+        tool_calls?: Array<{
+            id: string;
+            name: string;
+            parameters: {
+                [key: string]: unknown;
+            };
+        }>;
+        citations?: Array<{
+            [key: string]: unknown;
+        }>;
+        documents?: Array<{
+            [key: string]: unknown;
+        }>;
+        search_queries?: Array<{
+            [key: string]: unknown;
+        }>;
+        search_results?: Array<{
+            [key: string]: unknown;
+        }>;
+        meta?: {
+            api_version?: {
+                version: string;
+            };
+            billed_units?: {
+                input_tokens?: number;
+                output_tokens?: number;
+            };
+            tokens?: {
+                input_tokens?: number;
+                output_tokens?: number;
+            };
+        };
+    };
+    model?: string;
+};
+
 export type WebSocketMessageInput = {
     type: string;
     payload: {
@@ -5189,6 +5304,121 @@ export type ZhipuaiChatCompletionResponse = {
         refer: string;
         publish_date: string;
     }>;
+};
+
+export type CohereChatRequest = {
+    model: string;
+    messages: Array<{
+        role: 'user' | 'assistant' | 'chatbot' | 'system';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'tool_call';
+            name: string;
+            parameters: {
+                [key: string]: unknown;
+            };
+            id: string;
+        } | {
+            type: 'tool_result';
+            tool_call_id: string;
+            result: string | {
+                [key: string]: unknown;
+            };
+            is_error?: boolean;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            name: string;
+            parameters: {
+                [key: string]: unknown;
+            };
+        }>;
+        tool_results?: Array<{
+            tool_call_id: string;
+            result: string | {
+                [key: string]: unknown;
+            };
+            is_error?: boolean;
+        }>;
+    }>;
+    tools?: Array<{
+        name: string;
+        description?: string;
+        parameter_definitions: {
+            [key: string]: {
+                type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+                description?: string;
+                enum?: Array<string | number>;
+                properties?: {
+                    [key: string]: unknown;
+                };
+                required?: Array<string>;
+                items?: unknown;
+            };
+        };
+    }>;
+    tool_choice?: 'auto' | 'none' | {
+        type: 'tool';
+        name: string;
+    };
+    temperature?: number;
+    max_tokens?: number;
+    stream?: boolean;
+    preamble?: string;
+    prompt_truncation?: 'AUTO' | 'OFF' | 'LAST_MESSAGES';
+    connectors?: Array<{
+        [key: string]: unknown;
+    }>;
+    search_queries_only?: boolean;
+    documents?: Array<{
+        [key: string]: unknown;
+    }>;
+    citation_quality?: 'fast' | 'accurate' | 'off';
+};
+
+export type CohereChatResponse = {
+    id: string;
+    response: {
+        id: string;
+        text: string;
+        generation_id?: string;
+        finish_reason?: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALLS' | 'ERROR' | 'ERROR_TOXIC';
+        tool_calls?: Array<{
+            id: string;
+            name: string;
+            parameters: {
+                [key: string]: unknown;
+            };
+        }>;
+        citations?: Array<{
+            [key: string]: unknown;
+        }>;
+        documents?: Array<{
+            [key: string]: unknown;
+        }>;
+        search_queries?: Array<{
+            [key: string]: unknown;
+        }>;
+        search_results?: Array<{
+            [key: string]: unknown;
+        }>;
+        meta?: {
+            api_version?: {
+                version: string;
+            };
+            billed_units?: {
+                input_tokens?: number;
+                output_tokens?: number;
+            };
+            tokens?: {
+                input_tokens?: number;
+                output_tokens?: number;
+            };
+        };
+    };
+    model?: string;
 };
 
 export type WebSocketMessage = {
@@ -8707,7 +8937,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8727,7 +8957,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -8806,7 +9036,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8822,7 +9052,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -8894,7 +9124,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9066,7 +9296,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9166,7 +9396,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9182,7 +9412,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat/models';
 };
@@ -9253,7 +9483,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         createdAt?: string;
     }>;
 };
@@ -9435,7 +9665,7 @@ export type CreateChatConversationData = {
         promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -9715,7 +9945,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -10347,6 +10577,168 @@ export type UpdateConversationEnabledToolsResponses = {
 };
 
 export type UpdateConversationEnabledToolsResponse = UpdateConversationEnabledToolsResponses[keyof UpdateConversationEnabledToolsResponses];
+
+export type CohereChatWithDefaultAgentData = {
+    body?: CohereChatRequestInput;
+    headers?: {
+        authorization?: string;
+        'cohere-version'?: string;
+        'user-agent'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/cohere/v2/chat';
+};
+
+export type CohereChatWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CohereChatWithDefaultAgentError = CohereChatWithDefaultAgentErrors[keyof CohereChatWithDefaultAgentErrors];
+
+export type CohereChatWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: CohereChatResponse;
+};
+
+export type CohereChatWithDefaultAgentResponse = CohereChatWithDefaultAgentResponses[keyof CohereChatWithDefaultAgentResponses];
+
+export type CohereChatWithAgentData = {
+    body?: CohereChatRequestInput;
+    headers?: {
+        authorization?: string;
+        'cohere-version'?: string;
+        'user-agent'?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/cohere/{agentId}/v2/chat';
+};
+
+export type CohereChatWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CohereChatWithAgentError = CohereChatWithAgentErrors[keyof CohereChatWithAgentErrors];
+
+export type CohereChatWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: CohereChatResponse;
+};
+
+export type CohereChatWithAgentResponse = CohereChatWithAgentResponses[keyof CohereChatWithAgentResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -11053,6 +11445,7 @@ export type GetFeaturesResponses = {
         geminiVertexAiEnabled: boolean;
         vllmEnabled: boolean;
         ollamaEnabled: boolean;
+        cohereEnabled: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
         browserStreamingEnabled: boolean;
         incomingEmail: {
@@ -12109,6 +12502,28 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             createdAt: string;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            request: CohereChatRequest;
+            processedRequest?: CohereChatRequest | null;
+            response: CohereChatResponse;
+            type: 'cohere:chat';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -12629,6 +13044,28 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         createdAt: string;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        request: CohereChatRequest;
+        processedRequest?: CohereChatRequest | null;
+        response: CohereChatResponse;
+        type: 'cohere:chat';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     };
 };
 
@@ -17235,7 +17672,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -17255,7 +17692,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -17338,7 +17775,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -17437,7 +17874,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -17522,7 +17959,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -21268,7 +21705,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21281,7 +21718,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21356,7 +21793,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21520,7 +21957,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21533,7 +21970,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -21610,7 +22047,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai' | 'cohere';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

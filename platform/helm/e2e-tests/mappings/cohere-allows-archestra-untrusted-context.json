@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-allows-archestra-untrusted-context"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "cohere-chat-allows-archestra-untrusted",
+      "response": {
+        "id": "cohere-chat-allows-archestra-untrusted",
+        "text": null,
+        "generation_id": "gen-707",
+        "finish_reason": "TOOL_CALLS",
+        "tool_calls": [
+          {
+            "id": "call_read_file_123",
+            "name": "read_file",
+            "parameters": {
+              "file_path": "/etc/passwd"
+            }
+          },
+          {
+            "id": "call_archestra_whoami_123",
+            "name": "archestra__whoami",
+            "parameters": {}
+          }
+        ]
+      },
+      "model": "command-r-plus",
+      "meta": {
+        "api_version": {
+          "version": "1"
+        },
+        "tokens": {
+          "input_tokens": 150,
+          "output_tokens": 30
+        }
+      }
+    }
+  }
+}

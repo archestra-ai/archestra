@@ -1,0 +1,41 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-model-optimization-long"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-cohere-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "cohere-chat-model-opt-long",
+      "response": {
+        "id": "cohere-chat-model-opt-long",
+        "text": "This is a long response for model optimization test.",
+        "generation_id": "gen-456",
+        "finish_reason": "COMPLETE"
+      },
+      "model": "e2e-test-cohere-baseline",
+      "meta": {
+        "api_version": {
+          "version": "1"
+        },
+        "tokens": {
+          "input_tokens": 2000,
+          "output_tokens": 50
+        }
+      }
+    }
+  }
+}

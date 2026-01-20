@@ -1,0 +1,41 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-model-optimization-with-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-cohere-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "cohere-chat-model-opt-with-tools",
+      "response": {
+        "id": "cohere-chat-model-opt-with-tools",
+        "text": "Model optimization with tools test response.",
+        "generation_id": "gen-202",
+        "finish_reason": "COMPLETE"
+      },
+      "model": "e2e-test-cohere-baseline",
+      "meta": {
+        "api_version": {
+          "version": "1"
+        },
+        "tokens": {
+          "input_tokens": 1200,
+          "output_tokens": 30
+        }
+      }
+    }
+  }
+}

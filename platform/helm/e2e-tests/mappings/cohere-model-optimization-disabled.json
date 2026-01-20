@@ -1,0 +1,41 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/cohere/v2/chat",
+    "headers": {
+      "Authorization": {
+        "contains": "cohere-model-optimization-disabled"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-cohere-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "cohere-chat-model-opt-disabled",
+      "response": {
+        "id": "cohere-chat-model-opt-disabled",
+        "text": "Model optimization disabled test response.",
+        "generation_id": "gen-789",
+        "finish_reason": "COMPLETE"
+      },
+      "model": "e2e-test-cohere-baseline",
+      "meta": {
+        "api_version": {
+          "version": "1"
+        },
+        "tokens": {
+          "input_tokens": 500,
+          "output_tokens": 25
+        }
+      }
+    }
+  }
+}

@@ -167,6 +167,15 @@ class ChatApiKeyModel {
       } = key;
       return {
         ...rest,
+        // Convert Date objects to ISO strings for JSON serialization
+        createdAt:
+          key.createdAt instanceof Date
+            ? key.createdAt.toISOString()
+            : key.createdAt,
+        updatedAt:
+          key.updatedAt instanceof Date
+            ? key.updatedAt.toISOString()
+            : key.updatedAt,
         vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
         vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
         secretStorageType,
@@ -274,6 +283,15 @@ class ChatApiKeyModel {
       } = key;
       return {
         ...rest,
+        // Convert Date objects to ISO strings for JSON serialization
+        createdAt:
+          key.createdAt instanceof Date
+            ? key.createdAt.toISOString()
+            : key.createdAt,
+        updatedAt:
+          key.updatedAt instanceof Date
+            ? key.updatedAt.toISOString()
+            : key.updatedAt,
         vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
         vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
         secretStorageType,

@@ -465,6 +465,9 @@ async function handleStreaming<
     `[${providerName}Proxy] Starting streaming request`,
   );
 
+  // Set model in stream adapter state
+  streamAdapter.state.model = actualModel;
+
   try {
     // Execute streaming request with tracing
     const stream = await utils.tracing.startActiveLlmSpan(
@@ -480,8 +483,18 @@ async function handleStreaming<
       },
     );
 
+    let chunkCount = 0;
     // Process chunks
     for await (const chunk of stream) {
+      chunkCount++;
+      logger.info(
+        {
+          chunkCount,
+          eventType: (chunk as { event_type?: string }).event_type,
+          chunk: JSON.stringify(chunk).substring(0, 200),
+        },
+        `[${providerName}Proxy] Received chunk`,
+      );
       // Track first chunk time
       if (!firstChunkTime) {
         firstChunkTime = Date.now();
@@ -497,6 +510,17 @@ async function handleStreaming<
 
       const result = streamAdapter.processChunk(chunk);
 
+      logger.debug(
+        {
+          chunkCount,
+          hasSseData: !!result.sseData,
+          isToolCallChunk: result.isToolCallChunk,
+          isFinal: result.isFinal,
+          textLength: streamAdapter.state.text.length,
+        },
+        `[${providerName}Proxy] Processed chunk`,
+      );
+
       // Stream non-tool-call data immediately
       if (result.sseData) {
         reply.raw.write(result.sseData);
@@ -507,7 +531,14 @@ async function handleStreaming<
       }
     }
 
-    logger.info("Stream loop completed, processing final events");
+    logger.info(
+      {
+        totalChunks: chunkCount,
+        finalTextLength: streamAdapter.state.text.length,
+        model: streamAdapter.state.model,
+      },
+      "Stream loop completed, processing final events",
+    );
 
     // Evaluate tool invocation policies
     const toolCalls = streamAdapter.state.toolCalls;

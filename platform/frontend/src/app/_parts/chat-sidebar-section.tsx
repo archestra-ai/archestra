@@ -306,41 +306,44 @@ export function ChatSidebarSection() {
                           </TooltipProvider>
                         </div>
                       ) : (
-                        <SidebarMenuButton
-                          onClick={() => handleSelectConversation(conv.id)}
-                          isActive={isCurrentConversation}
-                          className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent justify-between"
-                        >
-                          <span className="flex items-center gap-2 min-w-0 flex-1">
-                            {(hasRecentlyGeneratedTitle || isRegenerating) && (
-                              <AISparkleIcon isAnimating />
-                            )}
-                            {isRegenerating ? (
-                              <span className="text-muted-foreground text-sm truncate">
-                                Generating...
-                              </span>
-                            ) : hasRecentlyGeneratedTitle ? (
-                              <span className="truncate">
-                                <TypingText
-                                  text={
-                                    displayTitle.length > MAX_TITLE_LENGTH
-                                      ? `${displayTitle.slice(0, MAX_TITLE_LENGTH)}...`
-                                      : displayTitle
-                                  }
-                                  typingSpeed={35}
-                                  showCursor
-                                  cursorClassName="bg-primary"
+                        <>
+                          <SidebarMenuButton
+                            onClick={() => handleSelectConversation(conv.id)}
+                            isActive={isCurrentConversation}
+                            className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent"
+                          >
+                            <span className="flex items-center gap-2 min-w-0 flex-1">
+                              {(hasRecentlyGeneratedTitle ||
+                                isRegenerating) && (
+                                <AISparkleIcon isAnimating />
+                              )}
+                              {isRegenerating ? (
+                                <span className="text-muted-foreground text-sm truncate">
+                                  Generating...
+                                </span>
+                              ) : hasRecentlyGeneratedTitle ? (
+                                <span className="truncate">
+                                  <TypingText
+                                    text={
+                                      displayTitle.length > MAX_TITLE_LENGTH
+                                        ? `${displayTitle.slice(0, MAX_TITLE_LENGTH)}...`
+                                        : displayTitle
+                                    }
+                                    typingSpeed={35}
+                                    showCursor
+                                    cursorClassName="bg-primary"
+                                  />
+                                </span>
+                              ) : (
+                                <TruncatedText
+                                  message={displayTitle}
+                                  maxLength={MAX_TITLE_LENGTH}
+                                  className="truncate"
+                                  showTooltip={false}
                                 />
-                              </span>
-                            ) : (
-                              <TruncatedText
-                                message={displayTitle}
-                                maxLength={MAX_TITLE_LENGTH}
-                                className="truncate"
-                                showTooltip={false}
-                              />
-                            )}
-                          </span>
+                              )}
+                            </span>
+                          </SidebarMenuButton>
                           {(canUpdateConversation || canDeleteConversation) && (
                             <DropdownMenu
                               open={isMenuOpen}
@@ -403,7 +406,7 @@ export function ChatSidebarSection() {
                               </DropdownMenuContent>
                             </DropdownMenu>
                           )}
-                        </SidebarMenuButton>
+                        </>
                       )}
                     </div>
                   </SidebarMenuItem>

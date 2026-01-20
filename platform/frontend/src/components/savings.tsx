@@ -76,7 +76,7 @@ export function Savings({
         <TooltipTrigger asChild>
           <span className={`${className || ""} cursor-default`}>
             {formatCost(actualCost)}
-            {totalSavings > 0 && (
+            {savingsPercentNum >= 0.05 && (
               <span className="text-green-600 dark:text-green-400">
                 {" "}
                 (-{savingsPercent}%)

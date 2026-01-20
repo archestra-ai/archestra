@@ -8,6 +8,8 @@ on:
         description: Vercel deploy hook URL for the website
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   trigger-website-deploy:
     name: Trigger Website Vercel Deploy

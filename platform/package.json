@@ -49,5 +49,5 @@
       "hono": "4.11.4"
     }
   },
-  "packageManager": "pnpm@10.27.0"
+  "packageManager": "pnpm@10.28.1"
 }

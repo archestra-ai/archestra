@@ -1319,6 +1319,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "baseline_model": {
+          "name": "baseline_model",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
         "input_tokens": {
           "name": "input_tokens",
           "type": "integer",

@@ -1,1 +1,0 @@
-ALTER TABLE "interactions" ADD COLUMN "baseline_model" varchar;

@@ -31,6 +31,7 @@ import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
+import { hasUIResource, UIResourceTool } from "./ui-resource-tool";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -681,6 +682,19 @@ function MessageTool({
       <TodoWriteTool
         part={part}
         toolResultPart={toolResultPart}
+        errorText={errorText}
+      />
+    );
+  }
+
+  // Check if output contains MCP UI resource
+  const output = toolResultPart?.output ?? part.output;
+  if (hasUIResource(output)) {
+    return (
+      <UIResourceTool
+        part={part}
+        toolResultPart={toolResultPart}
+        toolName={toolName}
         errorText={errorText}
       />
     );

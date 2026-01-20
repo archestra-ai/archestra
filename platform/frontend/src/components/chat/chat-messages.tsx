@@ -51,6 +51,9 @@ interface ChatMessagesProps {
   agentName?: string;
   suggestedPrompt?: string | null;
   onSuggestedPromptClick?: () => void;
+  // MCP UI action callbacks
+  onMcpToolCall?: (toolName: string, params: Record<string, unknown>) => void;
+  onMcpPrompt?: (prompt: string) => void;
 }
 
 // Type guards for tool parts
@@ -83,6 +86,8 @@ export function ChatMessages({
   onMessagesUpdate,
   onUserMessageEdit,
   error = null,
+  onMcpToolCall,
+  onMcpPrompt,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   // Track editing by messageId-partIndex to support multiple text parts per message
@@ -541,6 +546,8 @@ export function ChatMessages({
                           toolResultPart={toolResultPart}
                           toolName={toolName}
                           agentId={agentId}
+                          onMcpToolCall={onMcpToolCall}
+                          onMcpPrompt={onMcpPrompt}
                         />
                       );
                     }
@@ -571,6 +578,8 @@ export function ChatMessages({
                             toolResultPart={toolResultPart}
                             toolName={toolName}
                             agentId={agentId}
+                            onMcpToolCall={onMcpToolCall}
+                            onMcpPrompt={onMcpPrompt}
                           />
                         );
                       }
@@ -648,11 +657,15 @@ function MessageTool({
   toolResultPart,
   toolName,
   agentId,
+  onMcpToolCall,
+  onMcpPrompt,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   agentId?: string;
+  onMcpToolCall?: (toolName: string, params: Record<string, unknown>) => void;
+  onMcpPrompt?: (prompt: string) => void;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -696,6 +709,8 @@ function MessageTool({
         toolResultPart={toolResultPart}
         toolName={toolName}
         errorText={errorText}
+        onToolCall={onMcpToolCall}
+        onPrompt={onMcpPrompt}
       />
     );
   }

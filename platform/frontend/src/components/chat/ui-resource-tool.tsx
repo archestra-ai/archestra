@@ -5,6 +5,7 @@ import { UIResourceRenderer } from "@mcp-ui/client";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { ExternalLinkIcon, LayoutDashboardIcon } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   Tool,
   ToolContent,
@@ -13,6 +14,8 @@ import {
 } from "@/components/ai-elements/tool";
 import { cn } from "@/lib/utils";
 import { extractUIResource, type UIResource } from "./ui-resource.utils";
+
+const SAFE_PROTOCOLS = ["http:", "https:"];
 
 interface UIResourceToolProps {
   part: ToolUIPart | DynamicToolUIPart;
@@ -48,11 +51,27 @@ export function UIResourceTool({
       case "prompt":
         onPrompt?.(action.payload.prompt);
         return { success: true };
-      case "link":
-        window.open(action.payload.url, "_blank", "noopener,noreferrer");
+      case "link": {
+        const url = action.payload.url;
+        try {
+          const parsed = new URL(url);
+          if (!SAFE_PROTOCOLS.includes(parsed.protocol)) {
+            return { success: false, error: "Unsafe URL protocol" };
+          }
+          window.open(url, "_blank", "noopener,noreferrer");
+          return { success: true };
+        } catch {
+          return { success: false, error: "Invalid URL" };
+        }
+      }
+      case "notify": {
+        const message =
+          typeof action.payload === "object" && action.payload !== null
+            ? (action.payload as { message?: string }).message
+            : undefined;
+        toast.info(message || "Notification from MCP UI");
         return { success: true };
-      case "notify":
-        return { success: true };
+      }
       case "intent":
         onPrompt?.(action.payload.intent);
         return { success: true };
@@ -86,6 +105,15 @@ export function UIResourceTool({
   );
 }
 
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return SAFE_PROTOCOLS.includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
 function UIResourceOutput({
   resource,
   onUIAction,
@@ -94,6 +122,9 @@ function UIResourceOutput({
   onUIAction: (action: UIActionResult) => Promise<unknown>;
 }) {
   const isExternalUrl = resource.mimeType === "text/uri-list";
+  const externalUrl = isExternalUrl && resource.text ? resource.text : null;
+  const safeExternalUrl =
+    externalUrl && isSafeUrl(externalUrl) ? externalUrl : null;
 
   return (
     <div className="space-y-2 p-4">
@@ -101,9 +132,9 @@ function UIResourceOutput({
         <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
           Interactive UI
         </h4>
-        {isExternalUrl && resource.text && (
+        {safeExternalUrl && (
           <a
-            href={resource.text}
+            href={safeExternalUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
@@ -113,14 +144,15 @@ function UIResourceOutput({
           </a>
         )}
       </div>
-      <div
+      <section
         className={cn(
           "rounded-md border bg-background overflow-hidden",
           "min-h-[200px] max-h-[600px]",
         )}
+        aria-label="Interactive MCP UI component"
       >
         <UIResourceRenderer resource={resource} onUIAction={onUIAction} />
-      </div>
+      </section>
     </div>
   );
 }

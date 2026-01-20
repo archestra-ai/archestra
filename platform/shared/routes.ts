@@ -151,6 +151,10 @@ export const RouteId = {
     "cerebrasChatCompletionsWithDefaultAgent",
   CerebrasChatCompletionsWithAgent: "cerebrasChatCompletionsWithAgent",
 
+  // Proxy Routes - x.ai (Grok)
+  XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
+  XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",

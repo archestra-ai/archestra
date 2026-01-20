@@ -3,6 +3,7 @@ import {
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   slugify,
+  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
 } from "@shared";
 import {
   and,
@@ -26,6 +27,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { getKnowledgeGraphProviderType } from "@/knowledge-graph";
 import type {
   ExtendedTool,
   InsertTool,
@@ -605,10 +607,18 @@ class ToolModel {
   static async assignDefaultArchestraToolsToAgent(
     agentId: string,
   ): Promise<void> {
+    const assignedDefaultTools = DEFAULT_ARCHESTRA_TOOL_NAMES;
+    if (!getKnowledgeGraphProviderType()) {
+      assignedDefaultTools.splice(
+        assignedDefaultTools.indexOf(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME),
+        1,
+      ); // Remove query_knowledge_graph tool if knowledge graph is not configured
+    }
+
     const defaultTools = await db
       .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, DEFAULT_ARCHESTRA_TOOL_NAMES));
+      .where(inArray(schema.toolsTable.name, assignedDefaultTools));
 
     if (defaultTools.length === 0) {
       // Tools not yet seeded, skip assignment

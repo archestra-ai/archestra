@@ -322,7 +322,7 @@ export class ChatOpsManager {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: `Routed to ${prompt.name}. Use @Archestra /select-agent to change.`,
+          footer: `Via ${prompt.name}`,
           conversationReference: message.metadata?.conversationReference,
         });
       }
@@ -367,28 +367,19 @@ export const chatOpsManager = new ChatOpsManager();
 
 /**
  * Strip the bot footer from message text to avoid LLM repeating it.
- * The footer format is: "\n\n---\n_Routed to X. Use @Archestra /select-agent to change._"
+ * The footer format is: "\n\n---\n_Via X_"
  * Teams may return this in various HTML formats.
  */
 function stripBotFooter(text: string): string {
   // Match the footer pattern in various formats Teams might use
   return (
     text
-      // Markdown format
-      .replace(
-        /\n\n---\n_Routed to .+?\. Use @Archestra \/select-agent to change\._$/i,
-        "",
-      )
+      // Markdown format: "\n\n---\n_Via AgentName_"
+      .replace(/\n\n---\n_Via .+?_$/i, "")
       // HTML with <hr> and <em>
-      .replace(
-        /<hr\s*\/?>\s*<em>Routed to .+?\. Use @Archestra \/select-agent to change\.<\/em>$/i,
-        "",
-      )
-      // Plain text "Routed to..." at end of message (after stripping HTML)
-      .replace(
-        /\s*Routed to .+?\. Use @Archestra \/select-agent to change\.$/i,
-        "",
-      )
+      .replace(/<hr\s*\/?>\s*<em>Via .+?<\/em>$/i, "")
+      // Plain text "Via X" at end of message (after stripping HTML)
+      .replace(/\s*Via .+?$/i, "")
       .trim()
   );
 }

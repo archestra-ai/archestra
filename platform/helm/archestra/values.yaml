@@ -57,12 +57,45 @@ archestra:
 
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable
+  #
+  # Supports Kubernetes environment variable expansion using $(VAR_NAME) syntax.
+  # This allows referencing other environment variables defined in the container.
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/define-interdependent-environment-variables/
+  #
   # Example:
   #   env:
   #     ARCHESTRA_API_BASE_URL: "https://api.example.com"
   #     ARCHESTRA_API_EXTERNAL_BASE_URL: "https://api.archestra.com"  # External URL for connection instructions
   #     CUSTOM_VAR: "custom-value"
+  #     # Reference another env var (defined via envWithValueFrom below)
+  #     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"
   env: {}
+
+  # Environment variables with valueFrom (for fieldRef, resourceFieldRef, configMapKeyRef)
+  # Use this for Kubernetes downward API or other valueFrom sources
+  # This is required if you want to use $(VAR_NAME) expansion referencing pod/node information
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
+  #
+  # Example - expose node IP for OTEL collector endpoint:
+  #   envWithValueFrom:
+  #     - name: NODE_IP
+  #       valueFrom:
+  #         fieldRef:
+  #           fieldPath: status.hostIP
+  #     - name: POD_NAME
+  #       valueFrom:
+  #         fieldRef:
+  #           fieldPath: metadata.name
+  #     - name: POD_NAMESPACE
+  #       valueFrom:
+  #         fieldRef:
+  #           fieldPath: metadata.namespace
+  #     - name: MEMORY_LIMIT
+  #       valueFrom:
+  #         resourceFieldRef:
+  #           containerName: archestra-platform
+  #           resource: limits.memory
+  envWithValueFrom: []
 
   # Environment variables from Kubernetes Secrets
   # This allows you to inject sensitive data from secrets into the container

@@ -271,6 +271,45 @@ export const parseBodyLimit = (
 
 const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 
+const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
+const OTEL_TRACES_PATH = "/v1/traces";
+
+/**
+ * Get OTEL exporter endpoint for traces.
+ * Reads from ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT and intelligently ensures
+ * the URL ends with /v1/traces.
+ *
+ * @param envValue - The environment variable value (for testing)
+ * @returns The full OTEL endpoint URL with /v1/traces suffix
+ */
+export const getOtelExporterOtlpEndpoint = (
+  envValue?: string | undefined,
+): string => {
+  const rawValue =
+    envValue ?? process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+  const value = rawValue?.trim();
+
+  if (!value) {
+    return `${DEFAULT_OTEL_ENDPOINT}${OTEL_TRACES_PATH}`;
+  }
+
+  // Remove trailing slashes for consistent comparison
+  const normalizedUrl = value.replace(/\/+$/, "");
+
+  // If already ends with /v1/traces, return as-is
+  if (normalizedUrl.endsWith(OTEL_TRACES_PATH)) {
+    return normalizedUrl;
+  }
+
+  // If ends with /v1, just append /traces
+  if (normalizedUrl.endsWith("/v1")) {
+    return `${normalizedUrl}/traces`;
+  }
+
+  // Otherwise, append the full /v1/traces path
+  return `${normalizedUrl}${OTEL_TRACES_PATH}`;
+};
+
 export default {
   frontendBaseUrl,
   api: {
@@ -500,9 +539,7 @@ export default {
   observability: {
     otel: {
       traceExporter: {
-        url:
-          process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
-          "http://localhost:4318/v1/traces",
+        url: getOtelExporterOtlpEndpoint(),
         headers: getOtlpAuthHeaders(),
       } satisfies Partial<OTLPExporterNodeConfigBase>,
     },

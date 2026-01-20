@@ -1693,3 +1693,221 @@ tests:
       - equal:
           path: spec.template.spec.nodeSelector["environment"]
           value: production
+
+  # Kubernetes environment variable expansion tests
+  # These tests ensure that $(VAR_NAME) syntax is preserved for K8s env var expansion
+  - it: should preserve K8s env var expansion syntax $(VAR_NAME) in env values
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://$(NODE_IP):4317"
+
+  - it: should preserve multiple K8s env var expansions in single value
+    documentIndex: 1
+    set:
+      archestra.env:
+        CUSTOM_URL: "http://$(NODE_IP):$(NODE_PORT)/api"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_URL
+            value: "http://$(NODE_IP):$(NODE_PORT)/api"
+
+  - it: should preserve K8s env var expansion at start of value
+    documentIndex: 1
+    set:
+      archestra.env:
+        MY_VAR: "$(OTHER_VAR)/suffix"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR
+            value: "$(OTHER_VAR)/suffix"
+
+  - it: should preserve standalone K8s env var expansion
+    documentIndex: 1
+    set:
+      archestra.env:
+        MY_VAR: "$(OTHER_VAR)"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR
+            value: "$(OTHER_VAR)"
+
+  - it: should handle mix of regular and env-expansion values
+    documentIndex: 1
+    set:
+      archestra.env:
+        REGULAR_VAR: "plain-value"
+        EXPANSION_VAR: "http://$(NODE_IP):4317"
+        ANOTHER_REGULAR: "https://example.com"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REGULAR_VAR
+            value: "plain-value"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EXPANSION_VAR
+            value: "http://$(NODE_IP):4317"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ANOTHER_REGULAR
+            value: "https://example.com"
+
+  # envWithValueFrom tests (Kubernetes downward API and valueFrom support)
+  - it: should not add envWithValueFrom when empty
+    documentIndex: 1
+    set:
+      archestra.envWithValueFrom: []
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_IP
+
+  - it: should add env var with fieldRef for downward API
+    documentIndex: 1
+    set:
+      archestra.envWithValueFrom:
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+
+  - it: should add multiple env vars with fieldRef
+    documentIndex: 1
+    set:
+      archestra.envWithValueFrom:
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+
+  - it: should support resourceFieldRef for container resources
+    documentIndex: 1
+    set:
+      archestra.envWithValueFrom:
+        - name: MEMORY_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: archestra-platform
+              resource: limits.memory
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MEMORY_LIMIT
+            valueFrom:
+              resourceFieldRef:
+                containerName: archestra-platform
+                resource: limits.memory
+
+  - it: should support configMapKeyRef via envWithValueFrom
+    documentIndex: 1
+    set:
+      archestra.envWithValueFrom:
+        - name: CONFIG_VALUE
+          valueFrom:
+            configMapKeyRef:
+              name: my-config
+              key: my-key
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CONFIG_VALUE
+            valueFrom:
+              configMapKeyRef:
+                name: my-config
+                key: my-key
+
+  - it: should work with env, envWithValueFrom, and envFromSecrets together
+    documentIndex: 1
+    set:
+      archestra.env:
+        OTEL_ENDPOINT: "http://$(NODE_IP):4317"
+      archestra.envWithValueFrom:
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+      archestra.envFromSecrets:
+        - name: API_KEY
+          secretName: my-secret
+          secretKey: api-key
+    asserts:
+      # Regular env var with expansion syntax
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_ENDPOINT
+            value: "http://$(NODE_IP):4317"
+      # fieldRef env var
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+      # secretKeyRef env var
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: api-key

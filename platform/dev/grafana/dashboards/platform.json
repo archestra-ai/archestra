@@ -1311,66 +1311,6 @@
       "type": "table"
     },
     {
-      "datasource": {
-        "type": "tempo",
-        "uid": "$traces_datasource"
-      },
-      "description": "Click on any trace ID in the \"All Traces\" table above to automatically load detailed trace information.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 17,
-        "w": 12,
-        "x": 12,
-        "y": 43
-      },
-      "id": 24,
-      "options": {
-        "spanFilters": {
-          "criticalPathOnly": false,
-          "matchesOnly": false,
-          "serviceNameOperator": "=",
-          "spanNameOperator": "=",
-          "tags": [
-            {
-              "id": "138105ca-1bf",
-              "operator": "="
-            }
-          ]
-        }
-      },
-      "pluginVersion": "12.2.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "tempo",
-            "uid": "$traces_datasource"
-          },
-          "filters": [
-            {
-              "id": "e12a1615",
-              "operator": "=",
-              "scope": "span"
-            }
-          ],
-          "hide": false,
-          "instant": false,
-          "limit": 20,
-          "metricsQueryType": "range",
-          "query": "${traceId}",
-          "queryType": "traceql",
-          "range": true,
-          "refId": "A",
-          "serviceMapUseNativeHistograms": false,
-          "tableType": "traces"
-        }
-      ],
-      "title": "Individual Trace",
-      "type": "traces"
-    },
-    {
       "collapsed": true,
       "gridPos": {
         "h": 1,
@@ -1622,24 +1562,6 @@
         "query": "tempo",
         "refresh": 1,
         "type": "datasource"
-      },
-      {
-        "current": {
-          "text": "1e0a78bfcd28788eb8efd0d7c6eb9f66",
-          "value": "1e0a78bfcd28788eb8efd0d7c6eb9f66"
-        },
-        "description": "Select a trace ID from the All Traces table above",
-        "label": "Trace ID",
-        "name": "traceId",
-        "options": [
-          {
-            "selected": true,
-            "text": "1e0a78bfcd28788eb8efd0d7c6eb9f66",
-            "value": "1e0a78bfcd28788eb8efd0d7c6eb9f66"
-          }
-        ],
-        "query": "1e0a78bfcd28788eb8efd0d7c6eb9f66",
-        "type": "textbox"
       },
       {
         "allowCustomValue": false,

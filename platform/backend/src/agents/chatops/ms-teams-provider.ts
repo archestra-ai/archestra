@@ -1,6 +1,10 @@
 import { ClientSecretCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
+import type {
+  ChatMessage,
+  ChatMessageAttachment,
+} from "@microsoft/microsoft-graph-types";
 import {
   ActivityTypes,
   CloudAdapter,
@@ -20,19 +24,6 @@ import type {
   ThreadHistoryParams,
 } from "@/types/chatops";
 import { CHATOPS_THREAD_HISTORY } from "./constants";
-
-/** Message structure returned by Microsoft Graph API */
-type GraphMessage = {
-  id: string;
-  replyToId?: string;
-  from?: {
-    user?: { id?: string; displayName?: string };
-    application?: { id?: string; displayName?: string };
-  };
-  body?: { content?: string };
-  attachments?: { contentType?: string; content?: string; name?: string }[];
-  createdDateTime?: string;
-};
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -323,7 +314,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   private async fetchGroupChatHistory(
     params: ThreadHistoryParams,
     limit: number,
-  ): Promise<GraphMessage[]> {
+  ): Promise<ChatMessage[]> {
     const client = this.graphClient;
     if (!client) return [];
 
@@ -360,7 +351,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   private async fetchTeamChannelHistory(
     params: ThreadHistoryParams,
     limit: number,
-  ): Promise<GraphMessage[]> {
+  ): Promise<ChatMessage[]> {
     const client = this.graphClient;
     if (!client) return [];
 
@@ -398,24 +389,27 @@ class MSTeamsProvider implements ChatOpsProvider {
   }
 
   private convertToThreadMessages(
-    messages: GraphMessage[],
+    messages: ChatMessage[],
     excludeMessageId?: string,
   ): ChatThreadMessage[] {
     const botAppId = config.chatops.msTeams.appId;
 
     return messages
-      .filter((msg) => msg.id !== excludeMessageId)
+      .filter((msg) => msg.id && msg.id !== excludeMessageId)
       .map((msg) => {
         const isUserMessage = Boolean(msg.from?.user);
         return {
-          messageId: msg.id,
+          messageId: msg.id as string,
           senderId: isUserMessage
             ? msg.from?.user?.id || "unknown"
             : msg.from?.application?.id || "unknown",
           senderName: isUserMessage
             ? msg.from?.user?.displayName || "Unknown"
             : msg.from?.application?.displayName || "App",
-          text: extractMessageText(msg.body?.content, msg.attachments),
+          text: extractMessageText(
+            msg.body?.content ?? undefined,
+            msg.attachments ?? undefined,
+          ),
           timestamp: msg.createdDateTime
             ? new Date(msg.createdDateTime)
             : new Date(),
@@ -473,7 +467,7 @@ function extractThreadId(activity: {
  */
 function extractMessageText(
   bodyContent?: string,
-  attachments?: { contentType?: string; content?: string; name?: string }[],
+  attachments?: ChatMessageAttachment[],
 ): string {
   const parts: string[] = [];
 

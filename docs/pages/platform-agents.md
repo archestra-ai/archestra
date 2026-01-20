@@ -179,7 +179,7 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 5. After creation, go to **Settings** → **Configuration**
 6. Copy the **Microsoft App ID** — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`
 7. If using **Single Tenant**, note your **Azure AD Tenant ID** (find in Azure AD → Overview) — you'll need this for `ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`
-8. Click **Manage Password** → **New client secret** → copy the secret value for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD`
+8. Click **Manage Password** → **New client secret** → copy the secret value for `ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET`
 9. Set **Messaging endpoint** to `https://your-archestra-domain/api/webhooks/chatops/ms-teams`
 10. Go to **Channels** → add **Microsoft Teams**
 
@@ -202,15 +202,17 @@ Set these environment variables:
 # Required
 ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true
 ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID=<Microsoft App ID>
-ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD=<Client Secret>
+ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET=<Client Secret>
 
 # Optional - for single-tenant Azure Bot (leave empty for multi-tenant)
 ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID=<Azure AD Tenant ID>
 
 # Optional - for thread history (requires Graph API permissions)
-ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID=<Azure AD Tenant ID>
-ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID=<App Registration Client ID>
-ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET=<App Registration Secret>
+# These fall back to the Bot credentials above if not set.
+# Only set if you need separate credentials for Graph API.
+# ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID=<Azure AD Tenant ID>
+# ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID=<App Registration Client ID>
+# ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET=<App Registration Secret>
 ```
 
 Then enable Agent for MS Teams:

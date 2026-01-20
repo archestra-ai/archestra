@@ -47,8 +47,8 @@ class MSTeamsProvider implements ChatOpsProvider {
   private graphClient: GraphServiceClient | null = null;
 
   isConfigured(): boolean {
-    const { enabled, appId, appPassword } = config.chatops.msTeams;
-    return enabled && Boolean(appId) && Boolean(appPassword);
+    const { enabled, appId, appSecret } = config.chatops.msTeams;
+    return enabled && Boolean(appId) && Boolean(appSecret);
   }
 
   async initialize(): Promise<void> {
@@ -57,12 +57,12 @@ class MSTeamsProvider implements ChatOpsProvider {
       return;
     }
 
-    const { appId, appPassword, tenantId, graph } = config.chatops.msTeams;
+    const { appId, appSecret, tenantId, graph } = config.chatops.msTeams;
 
     // Initialize Bot Framework adapter
     const credentialsFactory = tenantId
-      ? new PasswordServiceClientCredentialFactory(appId, appPassword, tenantId)
-      : new PasswordServiceClientCredentialFactory(appId, appPassword);
+      ? new PasswordServiceClientCredentialFactory(appId, appSecret, tenantId)
+      : new PasswordServiceClientCredentialFactory(appId, appSecret);
 
     const auth = new ConfigurationBotFrameworkAuthentication(
       { MicrosoftAppId: appId, MicrosoftAppTenantId: tenantId || undefined },

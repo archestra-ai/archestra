@@ -374,8 +374,10 @@ function stripBotFooter(text: string): string {
  * Find tolerant match length for an agent name at the start of text.
  * Handles "AgentPeter", "Agent Peter", "agent peter" for "Agent Peter".
  * Returns matched length or null if no match.
+ *
+ * @internal Exported for testing
  */
-function findTolerantMatchLength(
+export function findTolerantMatchLength(
   text: string,
   agentName: string,
 ): number | null {

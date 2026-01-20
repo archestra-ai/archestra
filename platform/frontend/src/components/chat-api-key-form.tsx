@@ -115,6 +115,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://z.ai/model-api",
     consoleName: "Zhipu AI Platform",
   },
+  deepseek: {
+    name: "DeepSeek",
+    icon: "/icons/deepseek.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.deepseek.com/api_keys",
+    consoleName: "DeepSeek Platform",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };
@@ -358,8 +366,7 @@ export function ChatApiKeyForm({
                         <Badge variant="secondary" className="ml-2 text-xs">
                           Vertex AI
                         </Badge>
-                      )}
-                    </div>
+                      )}\n                    </div>
                   </SelectItem>
                 );
               })}

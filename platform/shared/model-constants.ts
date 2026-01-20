@@ -10,6 +10,7 @@ export const SupportedProvidersSchema = z.enum([
   "cerebras",
   "vllm",
   "ollama",
+  "xai",
   "zhipuai",
 ]);
 
@@ -20,6 +21,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "cerebras:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
+  "xai:chatCompletions",
   "zhipuai:chatCompletions",
 ]);
 
@@ -36,5 +38,6 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   cerebras: "Cerebras",
   vllm: "vLLM",
   ollama: "Ollama",
+  xai: "x.ai (Grok)",
   zhipuai: "Zhipu AI",
 };

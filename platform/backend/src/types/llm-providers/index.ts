@@ -4,4 +4,5 @@ export { default as Gemini } from "./gemini";
 export { default as Ollama } from "./ollama";
 export { default as OpenAi } from "./openai";
 export { default as Vllm } from "./vllm";
+export { default as Xai } from "./xai";
 export { default as Zhipuai } from "./zhipuai";

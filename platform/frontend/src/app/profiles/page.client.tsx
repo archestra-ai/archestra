@@ -964,9 +964,7 @@ function EditProfileDialog({
           return;
         }
         if (!DOMAIN_VALIDATION_REGEX.test(domain)) {
-          toast.error(
-            "Please enter a valid domain format (e.g., company.com)",
-          );
+          toast.error("Please enter a valid domain format (e.g., company.com)");
           return;
         }
       }
@@ -1262,13 +1260,17 @@ function EditProfileDialog({
                         placeholder="company.com"
                         className={
                           incomingEmailAllowedDomain.trim() &&
-                          !DOMAIN_VALIDATION_REGEX.test(incomingEmailAllowedDomain.trim())
+                          !DOMAIN_VALIDATION_REGEX.test(
+                            incomingEmailAllowedDomain.trim(),
+                          )
                             ? "border-destructive"
                             : ""
                         }
                       />
                       {incomingEmailAllowedDomain.trim() &&
-                      !DOMAIN_VALIDATION_REGEX.test(incomingEmailAllowedDomain.trim()) ? (
+                      !DOMAIN_VALIDATION_REGEX.test(
+                        incomingEmailAllowedDomain.trim(),
+                      ) ? (
                         <p className="text-sm text-destructive">
                           Please enter a valid domain format (e.g., company.com)
                         </p>

@@ -1,7 +1,4 @@
-import {
-  DOMAIN_VALIDATION_REGEX,
-  MAX_DOMAIN_LENGTH,
-} from "@shared";
+import { DOMAIN_VALIDATION_REGEX, MAX_DOMAIN_LENGTH } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,

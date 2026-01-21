@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { PromptHistoryEntry } from "@/database/schemas/prompt";
 import type {
   InsertPrompt,
   Prompt,
+  PromptHistoryEntry,
   PromptVersionsResponse,
   UpdatePrompt,
 } from "@/types";
@@ -33,13 +33,7 @@ class PromptModel {
       .insert(schema.promptsTable)
       .values({
         organizationId,
-        name: input.name,
-        agentId: input.agentId,
-        userPrompt: input.userPrompt || null,
-        systemPrompt: input.systemPrompt || null,
-        allowedChatops: input.allowedChatops || [],
-        version: 1,
-        history: [],
+        ...input,
       })
       .returning();
 
@@ -208,6 +202,12 @@ class PromptModel {
         userPrompt: input.userPrompt ?? prompt.userPrompt,
         systemPrompt: input.systemPrompt ?? prompt.systemPrompt,
         allowedChatops: input.allowedChatops ?? prompt.allowedChatops,
+        incomingEmailEnabled:
+          input.incomingEmailEnabled ?? prompt.incomingEmailEnabled,
+        incomingEmailSecurityMode:
+          input.incomingEmailSecurityMode ?? prompt.incomingEmailSecurityMode,
+        incomingEmailAllowedDomain:
+          input.incomingEmailAllowedDomain ?? prompt.incomingEmailAllowedDomain,
         version: prompt.version + 1,
         history: sql`${schema.promptsTable.history} || ${JSON.stringify([historyEntry])}::jsonb`,
       })

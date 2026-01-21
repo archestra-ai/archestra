@@ -11895,8 +11895,11 @@ export type GetPromptEmailAddressResponses = {
      * Default Response
      */
     200: {
-        enabled: boolean;
+        providerEnabled: boolean;
         emailAddress: string | null;
+        agentIncomingEmailEnabled: boolean;
+        agentSecurityMode: 'private' | 'internal' | 'public';
+        agentAllowedDomain: string | null;
     };
 };
 
@@ -19331,6 +19334,9 @@ export type GetPromptsResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -19348,6 +19354,9 @@ export type CreatePromptData = {
         allowedChatops?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain?: string | null;
     };
     path?: never;
     query?: never;
@@ -19431,6 +19440,9 @@ export type CreatePromptResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -19603,6 +19615,9 @@ export type GetPromptResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -19619,6 +19634,9 @@ export type UpdatePromptData = {
         allowedChatops?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain?: string | null;
     };
     path: {
         id: string;
@@ -19704,6 +19722,9 @@ export type UpdatePromptResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -19798,6 +19819,9 @@ export type GetPromptVersionsResponses = {
             allowedChatops: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown>;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
             createdAt: string;
             updatedAt: string;
         };
@@ -20006,6 +20030,9 @@ export type RollbackPromptResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     };

@@ -19,9 +19,17 @@ import {
 import { OutlookEmailProvider } from "./outlook-provider";
 
 /**
- * Helper to create a prompt for testing
+ * Helper to create a prompt for testing with optional incoming email settings
  */
-async function createTestPrompt(agentId: string, organizationId: string) {
+async function createTestPrompt(
+  agentId: string,
+  organizationId: string,
+  options?: {
+    incomingEmailEnabled?: boolean;
+    incomingEmailSecurityMode?: string;
+    incomingEmailAllowedDomain?: string;
+  },
+) {
   const [prompt] = await db
     .insert(schema.promptsTable)
     .values({
@@ -33,6 +41,10 @@ async function createTestPrompt(agentId: string, organizationId: string) {
       systemPrompt: null,
       version: 1,
       history: [],
+      incomingEmailEnabled: options?.incomingEmailEnabled ?? false,
+      incomingEmailSecurityMode:
+        options?.incomingEmailSecurityMode ?? "private",
+      incomingEmailAllowedDomain: options?.incomingEmailAllowedDomain ?? null,
     })
     .returning();
   return prompt;
@@ -171,12 +183,13 @@ describe("processIncomingEmail", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    // Create a prompt for the agent with incoming email enabled
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    // Create a prompt for the agent
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -223,11 +236,12 @@ describe("processIncomingEmail", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -273,11 +287,12 @@ describe("processIncomingEmail", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -323,11 +338,12 @@ describe("processIncomingEmail", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -381,11 +397,12 @@ describe("processIncomingEmail", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -430,14 +447,16 @@ describe("processIncomingEmail", () => {
   }) => {
     await makeUser(); // Need a user in the system
     const org = await makeOrganization();
-    // Create agent without assigning to any team but with email enabled
+    // Create agent without assigning to any team
     const agent = await makeAgent({
       teams: [],
+    });
+
+    // Create prompt with email enabled
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -480,12 +499,13 @@ describe("processIncomingEmail", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    // Create a prompt for the agent with incoming email enabled
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    // Create a prompt for the agent
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -583,23 +603,12 @@ describe("processIncomingEmail with sendReply option", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const [prompt] = await db
-      .insert(schema.promptsTable)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        name: "Test Prompt",
-        agentId: agent.id,
-        userPrompt: null,
-        systemPrompt: null,
-        version: 1,
-        history: [],
-      })
-      .returning();
 
     const mockSendReply = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = {
@@ -642,23 +651,12 @@ describe("processIncomingEmail with sendReply option", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const [prompt] = await db
-      .insert(schema.promptsTable)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        name: "Test Prompt",
-        agentId: agent.id,
-        userPrompt: null,
-        systemPrompt: null,
-        version: 1,
-        history: [],
-      })
-      .returning();
 
     const mockSendReply = vi.fn().mockResolvedValue("reply-id-123");
     const mockProvider = {
@@ -708,23 +706,12 @@ describe("processIncomingEmail with sendReply option", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const [prompt] = await db
-      .insert(schema.promptsTable)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        name: "Test Prompt",
-        agentId: agent.id,
-        userPrompt: null,
-        systemPrompt: null,
-        version: 1,
-        history: [],
-      })
-      .returning();
 
     vi.mocked(executeA2AMessage).mockResolvedValueOnce({
       messageId: "msg-specific",
@@ -774,23 +761,12 @@ describe("processIncomingEmail with sendReply option", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const [prompt] = await db
-      .insert(schema.promptsTable)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        name: "Test Prompt",
-        agentId: agent.id,
-        userPrompt: null,
-        systemPrompt: null,
-        version: 1,
-        history: [],
-      })
-      .returning();
 
     const mockSendReply = vi
       .fn()
@@ -850,23 +826,12 @@ describe("processIncomingEmail with conversation history", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const [prompt] = await db
-      .insert(schema.promptsTable)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        name: "Context Test Prompt",
-        agentId: agent.id,
-        userPrompt: null,
-        systemPrompt: null,
-        version: 1,
-        history: [],
-      })
-      .returning();
 
     const mockGetConversationHistory = vi.fn().mockResolvedValue([
       {
@@ -944,23 +909,12 @@ describe("processIncomingEmail with conversation history", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const [prompt] = await db
-      .insert(schema.promptsTable)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        name: "No Context Prompt",
-        agentId: agent.id,
-        userPrompt: null,
-        systemPrompt: null,
-        version: 1,
-        history: [],
-      })
-      .returning();
 
     const mockGetConversationHistory = vi.fn();
 
@@ -1012,23 +966,12 @@ describe("processIncomingEmail with conversation history", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const [prompt] = await db
-      .insert(schema.promptsTable)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        name: "Error Handler Prompt",
-        agentId: agent.id,
-        userPrompt: null,
-        systemPrompt: null,
-        version: 1,
-        history: [],
-      })
-      .returning();
 
     const mockGetConversationHistory = vi
       .fn()
@@ -1083,7 +1026,7 @@ describe("processIncomingEmail security modes", () => {
     });
   });
 
-  test("rejects email when incoming email is disabled on the agent", async ({
+  test("rejects email when incoming email is disabled on the prompt", async ({
     makeUser,
     makeOrganization,
     makeTeam,
@@ -1092,13 +1035,14 @@ describe("processIncomingEmail security modes", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    // Create agent with incoming email disabled (default)
     const agent = await makeAgent({
       teams: [team.id],
-      incomingEmailEnabled: false,
     });
 
-    const prompt = await createTestPrompt(agent.id, org.id);
+    // Create prompt with incoming email disabled (default)
+    const prompt = await createTestPrompt(agent.id, org.id, {
+      incomingEmailEnabled: false,
+    });
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -1144,11 +1088,12 @@ describe("processIncomingEmail security modes", () => {
     await makeTeamMember(team.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -1195,11 +1140,12 @@ describe("processIncomingEmail security modes", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -1248,11 +1194,12 @@ describe("processIncomingEmail security modes", () => {
     const team = await makeTeam(org.id, userWithAccess.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -1295,12 +1242,13 @@ describe("processIncomingEmail security modes", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
       incomingEmailAllowedDomain: "company.com",
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -1346,12 +1294,13 @@ describe("processIncomingEmail security modes", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
       incomingEmailAllowedDomain: "company.com",
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -1394,12 +1343,13 @@ describe("processIncomingEmail security modes", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
       incomingEmailAllowedDomain: "COMPANY.COM", // Uppercase
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -1441,11 +1391,12 @@ describe("processIncomingEmail security modes", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -1489,15 +1440,16 @@ describe("processIncomingEmail security modes", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    // Agent has internal mode configured but email is disabled
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    // Prompt has internal mode configured but email is disabled
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: false,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
       incomingEmailAllowedDomain: "company.com",
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {
@@ -1538,14 +1490,15 @@ describe("processIncomingEmail security modes", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
-    // Agent has public mode configured but email is disabled
     const agent = await makeAgent({
       teams: [team.id],
+    });
+
+    // Prompt has public mode configured but email is disabled
+    const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: false,
       incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
     });
-
-    const prompt = await createTestPrompt(agent.id, org.id);
     const promptId = prompt.id;
 
     const mockProvider = {

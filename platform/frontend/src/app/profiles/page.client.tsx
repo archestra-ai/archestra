@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  archestraApiSdk,
-  DOMAIN_VALIDATION_REGEX,
-  E2eTestId,
-  INCOMING_EMAIL_SECURITY_MODE,
-  type IncomingEmailSecurityMode,
-} from "@shared";
+import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
@@ -16,16 +10,13 @@ import {
   DollarSign,
   ExternalLink,
   Eye,
-  Globe,
   Lock,
-  Mail,
   Network,
   Plus,
   Search,
   Server,
   Shield,
   Tag,
-  Users,
   Wrench,
   X,
 } from "lucide-react";
@@ -253,9 +244,6 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
     teams: Array<{ id: string; name: string }>;
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
-    incomingEmailEnabled: boolean;
-    incomingEmailSecurityMode: IncomingEmailSecurityMode;
-    incomingEmailAllowedDomain: string | null;
   } | null>(null);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(
     null,
@@ -467,11 +455,6 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
                   }>) || [],
                 labels: agentData.labels || [],
                 considerContextUntrusted: agentData.considerContextUntrusted,
-                incomingEmailEnabled: agentData.incomingEmailEnabled,
-                incomingEmailSecurityMode:
-                  agentData.incomingEmailSecurityMode as IncomingEmailSecurityMode,
-                incomingEmailAllowedDomain:
-                  agentData.incomingEmailAllowedDomain,
               });
             }}
             onDelete={setDeletingProfileId}
@@ -870,9 +853,6 @@ function EditProfileDialog({
     teams: Array<{ id: string; name: string }>;
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
-    incomingEmailEnabled: boolean;
-    incomingEmailSecurityMode: IncomingEmailSecurityMode;
-    incomingEmailAllowedDomain: string | null;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -884,14 +864,6 @@ function EditProfileDialog({
   const [labels, setLabels] = useState<ProfileLabel[]>(agent.labels || []);
   const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
     agent.considerContextUntrusted,
-  );
-  const [incomingEmailEnabled, setIncomingEmailEnabled] = useState(
-    agent.incomingEmailEnabled,
-  );
-  const [incomingEmailSecurityMode, setIncomingEmailSecurityMode] =
-    useState<IncomingEmailSecurityMode>(agent.incomingEmailSecurityMode);
-  const [incomingEmailAllowedDomain, setIncomingEmailAllowedDomain] = useState(
-    agent.incomingEmailAllowedDomain || "",
   );
   const { data: teams } = useQuery({
     queryKey: ["teams"],
@@ -908,13 +880,6 @@ function EditProfileDialog({
 
   // Non-admin users must have at least one team assigned
   const requiresTeamSelection = !isProfileAdmin && assignedTeamIds.length === 0;
-
-  // Domain validation for internal mode
-  const isInternalModeInvalid =
-    incomingEmailEnabled &&
-    incomingEmailSecurityMode === INCOMING_EMAIL_SECURITY_MODE.INTERNAL &&
-    (!incomingEmailAllowedDomain.trim() ||
-      !DOMAIN_VALIDATION_REGEX.test(incomingEmailAllowedDomain.trim()));
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -951,26 +916,6 @@ function EditProfileDialog({
       const updatedLabels =
         agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
-      // Validate internal mode requires valid domain
-      if (
-        incomingEmailEnabled &&
-        incomingEmailSecurityMode === INCOMING_EMAIL_SECURITY_MODE.INTERNAL
-      ) {
-        const domain = incomingEmailAllowedDomain.trim();
-        if (!domain) {
-          toast.error(
-            "Allowed domain is required when security mode is 'Internal'",
-          );
-          return;
-        }
-        if (!DOMAIN_VALIDATION_REGEX.test(domain)) {
-          toast.error(
-            "Please enter a valid domain format (e.g., company.com)",
-          );
-          return;
-        }
-      }
-
       try {
         await updateProfile.mutateAsync({
           id: agent.id,
@@ -979,13 +924,6 @@ function EditProfileDialog({
             teams: assignedTeamIds,
             labels: updatedLabels,
             considerContextUntrusted,
-            incomingEmailEnabled,
-            incomingEmailSecurityMode,
-            incomingEmailAllowedDomain:
-              incomingEmailSecurityMode ===
-              INCOMING_EMAIL_SECURITY_MODE.INTERNAL
-                ? incomingEmailAllowedDomain.trim()
-                : null,
           },
         });
         toast.success("Profile updated successfully");
@@ -1003,9 +941,6 @@ function EditProfileDialog({
       onOpenChange,
       considerContextUntrusted,
       isProfileAdmin,
-      incomingEmailEnabled,
-      incomingEmailSecurityMode,
-      incomingEmailAllowedDomain,
     ],
   );
 
@@ -1141,147 +1076,6 @@ function EditProfileDialog({
                 </p>
               </div>
             </div>
-
-            {/* Incoming Email Configuration */}
-            <div className="space-y-4 pt-2 border-t">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="edit-incoming-email-enabled"
-                  checked={incomingEmailEnabled}
-                  onCheckedChange={(checked) =>
-                    setIncomingEmailEnabled(checked === true)
-                  }
-                />
-                <div className="grid gap-1">
-                  <Label
-                    htmlFor="edit-incoming-email-enabled"
-                    className="text-sm font-medium cursor-pointer flex items-center gap-2"
-                  >
-                    <Mail className="h-4 w-4" />
-                    Enable incoming email
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Allow this profile to be invoked via email.
-                  </p>
-                </div>
-              </div>
-
-              {incomingEmailEnabled && (
-                <div className="ml-6 space-y-4 animate-in slide-in-from-top-2 duration-200">
-                  <div className="grid gap-2">
-                    <Label>Security Mode</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Control who can invoke this profile via email.
-                    </p>
-                    <div className="grid gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setIncomingEmailSecurityMode(
-                            INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
-                          )
-                        }
-                        className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-all ${
-                          incomingEmailSecurityMode ===
-                          INCOMING_EMAIL_SECURITY_MODE.PRIVATE
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:bg-muted/50"
-                        }`}
-                      >
-                        <Lock className="h-5 w-5 mt-0.5 text-blue-500" />
-                        <div>
-                          <div className="font-medium">Private</div>
-                          <p className="text-sm text-muted-foreground">
-                            Only registered users with access to this profile
-                            can invoke it via email. Sender is authenticated by
-                            their email address.
-                          </p>
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setIncomingEmailSecurityMode(
-                            INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
-                          )
-                        }
-                        className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-all ${
-                          incomingEmailSecurityMode ===
-                          INCOMING_EMAIL_SECURITY_MODE.INTERNAL
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:bg-muted/50"
-                        }`}
-                      >
-                        <Users className="h-5 w-5 mt-0.5 text-amber-500" />
-                        <div>
-                          <div className="font-medium">Internal</div>
-                          <p className="text-sm text-muted-foreground">
-                            Allow emails from a specific domain only (e.g.,
-                            company.com). No user account required.
-                          </p>
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setIncomingEmailSecurityMode(
-                            INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
-                          )
-                        }
-                        className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-all ${
-                          incomingEmailSecurityMode ===
-                          INCOMING_EMAIL_SECURITY_MODE.PUBLIC
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:bg-muted/50"
-                        }`}
-                      >
-                        <Globe className="h-5 w-5 mt-0.5 text-green-500" />
-                        <div>
-                          <div className="font-medium">Public</div>
-                          <p className="text-sm text-muted-foreground">
-                            Anyone can email this profile. Use with caution.
-                          </p>
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {incomingEmailSecurityMode ===
-                    INCOMING_EMAIL_SECURITY_MODE.INTERNAL && (
-                    <div className="grid gap-2 animate-in slide-in-from-top-2 duration-200">
-                      <Label htmlFor="edit-allowed-domain">
-                        Allowed Domain
-                        <span className="text-destructive ml-1">*</span>
-                      </Label>
-                      <Input
-                        id="edit-allowed-domain"
-                        value={incomingEmailAllowedDomain}
-                        onChange={(e) =>
-                          setIncomingEmailAllowedDomain(e.target.value)
-                        }
-                        placeholder="company.com"
-                        className={
-                          incomingEmailAllowedDomain.trim() &&
-                          !DOMAIN_VALIDATION_REGEX.test(incomingEmailAllowedDomain.trim())
-                            ? "border-destructive"
-                            : ""
-                        }
-                      />
-                      {incomingEmailAllowedDomain.trim() &&
-                      !DOMAIN_VALIDATION_REGEX.test(incomingEmailAllowedDomain.trim()) ? (
-                        <p className="text-sm text-destructive">
-                          Please enter a valid domain format (e.g., company.com)
-                        </p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          Only emails from this domain will be accepted.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
           <DialogFooter className="mt-4">
             <Button
@@ -1293,11 +1087,7 @@ function EditProfileDialog({
             </Button>
             <Button
               type="submit"
-              disabled={
-                updateProfile.isPending ||
-                requiresTeamSelection ||
-                isInternalModeInvalid
-              }
+              disabled={updateProfile.isPending || requiresTeamSelection}
             >
               {updateProfile.isPending ? "Updating..." : "Update profile"}
             </Button>

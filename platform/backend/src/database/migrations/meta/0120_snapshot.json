@@ -1,5 +1,5 @@
 {
-  "id": "256ad0d8-efee-460d-b34a-aa03d0df38c2",
+  "id": "1a92c740-805c-4703-a99b-335f0b937cea",
   "prevId": "c445fe81-2d42-424e-ac94-e83ade0cf82d",
   "version": "7",
   "dialect": "postgresql",
@@ -433,26 +433,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "incoming_email_enabled": {
-          "name": "incoming_email_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "incoming_email_security_mode": {
-          "name": "incoming_email_security_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'private'"
-        },
-        "incoming_email_allowed_domain": {
-          "name": "incoming_email_allowed_domain",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -3409,6 +3389,26 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'[]'::jsonb"
+        },
+        "incoming_email_enabled": {
+          "name": "incoming_email_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "incoming_email_security_mode": {
+          "name": "incoming_email_security_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'private'"
+        },
+        "incoming_email_allowed_domain": {
+          "name": "incoming_email_allowed_domain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

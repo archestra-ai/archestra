@@ -260,6 +260,34 @@ class PromptModel {
   }
 
   /**
+   * Get incoming email settings for a prompt.
+   * Lightweight query that only fetches email-related fields.
+   */
+  static async getIncomingEmailSettings(id: string): Promise<{
+    id: string;
+    name: string;
+    incomingEmailEnabled: boolean;
+    incomingEmailSecurityMode: string;
+    incomingEmailAllowedDomain: string | null;
+  } | null> {
+    const [prompt] = await db
+      .select({
+        id: schema.promptsTable.id,
+        name: schema.promptsTable.name,
+        incomingEmailEnabled: schema.promptsTable.incomingEmailEnabled,
+        incomingEmailSecurityMode:
+          schema.promptsTable.incomingEmailSecurityMode,
+        incomingEmailAllowedDomain:
+          schema.promptsTable.incomingEmailAllowedDomain,
+      })
+      .from(schema.promptsTable)
+      .where(eq(schema.promptsTable.id, id))
+      .limit(1);
+
+    return prompt || null;
+  }
+
+  /**
    * Delete a prompt
    */
   static async delete(id: string): Promise<boolean> {

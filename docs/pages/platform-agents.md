@@ -168,8 +168,8 @@ Incoming email is disabled by default for all agents. When enabled, you must cho
 
 To configure incoming email security:
 
-1. Go to **Profiles** page
-2. Click **Edit** on the desired profile
+1. Go to **Agents** page
+2. Click **Edit** on the desired agent
 3. Check **Enable incoming email**
 4. Select a **Security Mode**
 5. For Internal mode, enter the **Allowed Domain**

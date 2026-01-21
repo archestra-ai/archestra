@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   jsonb,
   pgTable,
@@ -35,6 +36,16 @@ const promptsTable = pgTable("prompts", {
     .$type<ChatOpsProviderType[]>()
     .notNull()
     .default([]),
+  // Incoming email settings
+  incomingEmailEnabled: boolean("incoming_email_enabled")
+    .notNull()
+    .default(false),
+  // Security mode: 'private' (user auth), 'internal' (domain), 'public' (no restriction)
+  incomingEmailSecurityMode: text("incoming_email_security_mode")
+    .notNull()
+    .default("private"),
+  // Allowed email domain for 'internal' mode (e.g., 'company.com')
+  incomingEmailAllowedDomain: text("incoming_email_allowed_domain"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

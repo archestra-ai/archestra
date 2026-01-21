@@ -594,33 +594,6 @@ class AgentModel {
       .where(eq(schema.agentsTable.id, id));
     return result.rowCount !== null && result.rowCount > 0;
   }
-
-  /**
-   * Get incoming email settings for an agent.
-   * Lightweight query that only fetches email-related fields.
-   */
-  static async getIncomingEmailSettings(id: string): Promise<{
-    id: string;
-    name: string;
-    incomingEmailEnabled: boolean;
-    incomingEmailSecurityMode: string;
-    incomingEmailAllowedDomain: string | null;
-  } | null> {
-    const [agent] = await db
-      .select({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-        incomingEmailEnabled: schema.agentsTable.incomingEmailEnabled,
-        incomingEmailSecurityMode: schema.agentsTable.incomingEmailSecurityMode,
-        incomingEmailAllowedDomain:
-          schema.agentsTable.incomingEmailAllowedDomain,
-      })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, id))
-      .limit(1);
-
-    return agent || null;
-  }
 }
 
 export default AgentModel;

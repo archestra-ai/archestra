@@ -2,7 +2,6 @@ import { INCOMING_EMAIL_SECURITY_MODE } from "@shared";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import logger from "@/logging";
-import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import ProcessedEmailModel from "@/models/processed-email";
@@ -510,37 +509,37 @@ export async function processIncomingEmail(
     );
   }
 
-  // Verify prompt exists
+  // Get prompt's incoming email settings
+  const promptEmailSettings =
+    await PromptModel.getIncomingEmailSettings(promptId);
+  if (!promptEmailSettings) {
+    throw new Error(`Prompt ${promptId} not found`);
+  }
+
+  // Get the full prompt to access agentId
   const prompt = await PromptModel.findById(promptId);
   if (!prompt) {
     throw new Error(`Prompt ${promptId} not found`);
   }
 
-  // Check agent's incoming email settings
-  const agentEmailSettings = await AgentModel.getIncomingEmailSettings(
-    prompt.agentId,
-  );
-  if (!agentEmailSettings) {
-    throw new Error(`Agent ${prompt.agentId} not found`);
-  }
-
-  // Check if incoming email is enabled for this agent
-  if (!agentEmailSettings.incomingEmailEnabled) {
+  // Check if incoming email is enabled for this prompt
+  if (!promptEmailSettings.incomingEmailEnabled) {
     logger.warn(
       {
         messageId: email.messageId,
+        promptId,
         agentId: prompt.agentId,
         fromAddress: email.fromAddress,
       },
       "[IncomingEmail] Incoming email is not enabled for this agent",
     );
     throw new Error(
-      `Incoming email is not enabled for agent ${agentEmailSettings.name}`,
+      `Incoming email is not enabled for agent ${promptEmailSettings.name}`,
     );
   }
 
   // Apply security mode validation
-  const securityMode = agentEmailSettings.incomingEmailSecurityMode;
+  const securityMode = promptEmailSettings.incomingEmailSecurityMode;
   const senderEmail = email.fromAddress.toLowerCase();
 
   logger.debug(
@@ -614,10 +613,10 @@ export async function processIncomingEmail(
     case INCOMING_EMAIL_SECURITY_MODE.INTERNAL: {
       // Internal mode: Sender email domain must match the allowed domain
       const allowedDomain =
-        agentEmailSettings.incomingEmailAllowedDomain?.toLowerCase();
+        promptEmailSettings.incomingEmailAllowedDomain?.toLowerCase();
       if (!allowedDomain) {
         throw new Error(
-          `Internal mode is configured but no allowed domain is set for agent ${agentEmailSettings.name}`,
+          `Internal mode is configured but no allowed domain is set for agent ${promptEmailSettings.name}`,
         );
       }
 

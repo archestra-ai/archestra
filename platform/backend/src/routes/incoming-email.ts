@@ -9,7 +9,7 @@ import {
 } from "@/agents/incoming-email";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { AgentModel, PromptModel } from "@/models";
+import { PromptModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -279,16 +279,12 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { promptId } = request.params;
 
-      // Verify prompt exists
-      const prompt = await PromptModel.findById(promptId);
-      if (!prompt) {
+      // Get prompt's incoming email settings
+      const promptEmailSettings =
+        await PromptModel.getIncomingEmailSettings(promptId);
+      if (!promptEmailSettings) {
         throw new ApiError(404, "Prompt not found");
       }
-
-      // Get agent's incoming email settings
-      const agentEmailSettings = await AgentModel.getIncomingEmailSettings(
-        prompt.agentId,
-      );
 
       const provider = getEmailProvider();
 
@@ -296,13 +292,11 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send({
           providerEnabled: false,
           emailAddress: null,
-          agentIncomingEmailEnabled:
-            agentEmailSettings?.incomingEmailEnabled ?? false,
+          agentIncomingEmailEnabled: promptEmailSettings.incomingEmailEnabled,
           agentSecurityMode: parseSecurityMode(
-            agentEmailSettings?.incomingEmailSecurityMode,
+            promptEmailSettings.incomingEmailSecurityMode,
           ),
-          agentAllowedDomain:
-            agentEmailSettings?.incomingEmailAllowedDomain ?? null,
+          agentAllowedDomain: promptEmailSettings.incomingEmailAllowedDomain,
         });
       }
 
@@ -311,13 +305,11 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         providerEnabled: true,
         emailAddress,
-        agentIncomingEmailEnabled:
-          agentEmailSettings?.incomingEmailEnabled ?? false,
+        agentIncomingEmailEnabled: promptEmailSettings.incomingEmailEnabled,
         agentSecurityMode: parseSecurityMode(
-          agentEmailSettings?.incomingEmailSecurityMode,
+          promptEmailSettings.incomingEmailSecurityMode,
         ),
-        agentAllowedDomain:
-          agentEmailSettings?.incomingEmailAllowedDomain ?? null,
+        agentAllowedDomain: promptEmailSettings.incomingEmailAllowedDomain,
       });
     },
   );

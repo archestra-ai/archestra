@@ -141,7 +141,7 @@ class McpClient {
     }
     const { tool, catalogItem } = validationResult;
 
-    const targetLocalMcpServerIdResult =
+    const targetMcpServerIdResult =
       await this.determineTargetMcpServerIdForCatalogItem({
         tool,
         toolCall,
@@ -149,12 +149,12 @@ class McpClient {
         tokenAuth,
         catalogItem,
       });
-    if ("error" in targetLocalMcpServerIdResult) {
-      return targetLocalMcpServerIdResult.error;
+    if ("error" in targetMcpServerIdResult) {
+      return targetMcpServerIdResult.error;
     }
-    const { targetLocalMcpServerId } = targetLocalMcpServerIdResult;
+    const { targetMcpServerId } = targetMcpServerIdResult;
     const secretsResult = await this.getSecretsForMcpServer({
-      targetMcpServerId: targetLocalMcpServerId,
+      targetMcpServerId: targetMcpServerId,
       toolCall,
       agentId,
     });
@@ -165,7 +165,7 @@ class McpClient {
 
     // Build connection cache key using the resolved target server ID
     // This ensures each user gets their own connection for dynamic credentials
-    const connectionKey = `${catalogItem.id}:${targetLocalMcpServerId}`;
+    const connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
 
     const executeToolCall = async (
       getTransport: () => Promise<Transport>,
@@ -222,6 +222,25 @@ class McpClient {
         const isOAuthServer = !!catalogItem.oauthConfig;
         const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
           .refresh_token;
+
+        // Track and skip recovery if no refresh token available
+        if (
+          isAuthError &&
+          isOAuthServer &&
+          targetMcpServerId &&
+          !hasRefreshToken
+        ) {
+          await McpServerModel.update(targetMcpServerId, {
+            oauthRefreshError: "no_refresh_token",
+            oauthRefreshFailedAt: new Date(),
+          });
+          logger.warn(
+            { toolName: toolCall.name, targetMcpServerId },
+            "OAuth authentication error: no refresh token available",
+          );
+        }
+
+        // Attempt recovery if possible
         const canAttemptRecovery =
           !isRetry &&
           isAuthError &&
@@ -230,7 +249,7 @@ class McpClient {
           hasRefreshToken;
 
         if (canAttemptRecovery) {
-          const recoveryResult = await this.attemptTokenRefreshAndRetry({
+          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
             secretId,
             catalogId: catalogItem.id,
             connectionKey,
@@ -238,35 +257,15 @@ class McpClient {
             agentId,
             mcpServerName: tool.mcpServerName || "unknown",
             catalogItem,
-            targetLocalMcpServerId,
+            targetMcpServerId,
             executeRetry: (getTransport, secrets) =>
               executeToolCall(getTransport, secrets, true),
           });
 
-          if (recoveryResult) {
-            return recoveryResult;
+          if (retryToolCallResult) {
+            return retryToolCallResult;
           }
           // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
-        } else if (isAuthError && isOAuthServer && targetLocalMcpServerId) {
-          // Track OAuth error when we can't attempt recovery
-          // Error codes: 1=no_refresh_token, 2=retry_failed, 3=auth_failed
-          const errorCode = !hasRefreshToken ? "1" : isRetry ? "2" : "3";
-
-          await McpServerModel.update(targetLocalMcpServerId, {
-            oauthRefreshError: errorCode,
-            oauthRefreshFailedAt: new Date(),
-          });
-
-          logger.warn(
-            {
-              toolName: toolCall.name,
-              targetLocalMcpServerId,
-              errorCode,
-              isRetry,
-              hasRefreshToken,
-            },
-            "OAuth authentication error recorded",
-          );
         }
 
         return await this.createErrorResult(
@@ -280,14 +279,14 @@ class McpClient {
 
     if (!this.shouldLimitConcurrency()) {
       return executeToolCall(
-        () => this.getTransport(catalogItem, targetLocalMcpServerId, secrets),
+        () => this.getTransport(catalogItem, targetMcpServerId, secrets),
         secrets,
       );
     }
 
     const transportKind = await this.getTransportKind(
       catalogItem,
-      targetLocalMcpServerId,
+      targetMcpServerId,
     );
     const concurrencyLimit = this.getConcurrencyLimit(transportKind);
 
@@ -299,7 +298,7 @@ class McpClient {
           () =>
             this.getTransportWithKind(
               catalogItem,
-              targetLocalMcpServerId,
+              targetMcpServerId,
               secrets,
               transportKind,
             ),
@@ -469,9 +468,7 @@ class McpClient {
     agentId: string;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
-  }): Promise<
-    { targetLocalMcpServerId: string } | { error: CommonToolResult }
-  > {
+  }): Promise<{ targetMcpServerId: string } | { error: CommonToolResult }> {
     logger.info(
       {
         toolName: toolCall.name,
@@ -526,11 +523,11 @@ class McpClient {
         {
           toolName: toolCall.name,
           catalogItem: catalogItem,
-          targetLocalMcpServerId: result,
+          targetMcpServerId: result,
         },
         "Determined target MCP server ID for catalog item",
       );
-      return { targetLocalMcpServerId: result };
+      return { targetMcpServerId: result };
     }
 
     // Dynamic credential (resolved on tool call time) case: resolve target MCP server ID based on tokenAuth
@@ -575,7 +572,7 @@ class McpClient {
           },
           `Dynamic resolution: using user-owned server of ${userServer.id} for tool ${toolCall.name}`,
         );
-        return { targetLocalMcpServerId: userServer.id };
+        return { targetMcpServerId: userServer.id };
       }
     }
 
@@ -598,7 +595,7 @@ class McpClient {
               },
               `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
             );
-            return { targetLocalMcpServerId: server.id };
+            return { targetMcpServerId: server.id };
           }
         }
       }
@@ -623,7 +620,7 @@ class McpClient {
               },
               `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
             );
-            return { targetLocalMcpServerId: server.id };
+            return { targetMcpServerId: server.id };
           }
         }
       }
@@ -639,7 +636,7 @@ class McpClient {
         },
         `Dynamic resolution: using org-wide server of ${allServers[0].id} for tool ${toolCall.name}`,
       );
-      return { targetLocalMcpServerId: allServers[0].id };
+      return { targetMcpServerId: allServers[0].id };
     }
 
     // No server found, throw an error
@@ -671,29 +668,27 @@ class McpClient {
 
   private async getTransportKind(
     catalogItem: InternalMcpCatalog,
-    targetLocalMcpServerId: string,
+    targetMcpServerId: string,
   ): Promise<TransportKind> {
     if (catalogItem.serverType === "remote") {
       return "http";
     }
 
-    const usesStreamableHttp = await McpServerRuntimeManager.usesStreamableHttp(
-      targetLocalMcpServerId,
-    );
+    const usesStreamableHttp =
+      await McpServerRuntimeManager.usesStreamableHttp(targetMcpServerId);
     return usesStreamableHttp ? "http" : "stdio";
   }
 
   private async getTransportWithKind(
     catalogItem: InternalMcpCatalog,
-    targetLocalMcpServerId: string,
+    targetMcpServerId: string,
     secrets: Record<string, unknown>,
     transportKind: TransportKind,
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
-        const url = McpServerRuntimeManager.getHttpEndpointUrl(
-          targetLocalMcpServerId,
-        );
+        const url =
+          McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
         if (!url) {
           throw new Error(
             "No HTTP endpoint URL found for streamable-http server",
@@ -734,9 +729,8 @@ class McpClient {
       // Stdio transport - use K8s attach!
       // Use getOrLoadDeployment to handle multi-replica scenarios where the deployment
       // may have been created by a different replica
-      const k8sDeployment = await McpServerRuntimeManager.getOrLoadDeployment(
-        targetLocalMcpServerId,
-      );
+      const k8sDeployment =
+        await McpServerRuntimeManager.getOrLoadDeployment(targetMcpServerId);
       if (!k8sDeployment) {
         throw new Error("Deployment not found for MCP server");
       }
@@ -759,16 +753,16 @@ class McpClient {
 
   private async getTransport(
     catalogItem: InternalMcpCatalog,
-    targetLocalMcpServerId: string,
+    targetMcpServerId: string,
     secrets: Record<string, unknown>,
   ): Promise<Transport> {
     const transportKind = await this.getTransportKind(
       catalogItem,
-      targetLocalMcpServerId,
+      targetMcpServerId,
     );
     return this.getTransportWithKind(
       catalogItem,
-      targetLocalMcpServerId,
+      targetMcpServerId,
       secrets,
       transportKind,
     );
@@ -874,7 +868,7 @@ class McpClient {
     agentId: string;
     mcpServerName: string;
     catalogItem: InternalMcpCatalog;
-    targetLocalMcpServerId: string;
+    targetMcpServerId: string;
     executeRetry: (
       getTransport: () => Promise<Transport>,
       secrets: Record<string, unknown>,
@@ -888,7 +882,7 @@ class McpClient {
       agentId,
       mcpServerName,
       catalogItem,
-      targetLocalMcpServerId,
+      targetMcpServerId,
       executeRetry,
     } = params;
 
@@ -918,9 +912,8 @@ class McpClient {
       );
 
       // Track the refresh failure in the MCP server record
-      // Error code: 0=refresh_failed
-      await McpServerModel.update(targetLocalMcpServerId, {
-        oauthRefreshError: "0",
+      await McpServerModel.update(targetMcpServerId, {
+        oauthRefreshError: "refresh_failed",
         oauthRefreshFailedAt: new Date(),
       });
 
@@ -933,7 +926,7 @@ class McpClient {
     );
 
     // Clear any previous refresh error since refresh succeeded
-    await McpServerModel.update(targetLocalMcpServerId, {
+    await McpServerModel.update(targetMcpServerId, {
       oauthRefreshError: null,
       oauthRefreshFailedAt: null,
     });
@@ -951,11 +944,7 @@ class McpClient {
 
       // Create new transport with updated secrets
       const getUpdatedTransport = () =>
-        this.getTransport(
-          catalogItem,
-          targetLocalMcpServerId,
-          updatedSecret.secret,
-        );
+        this.getTransport(catalogItem, targetMcpServerId, updatedSecret.secret);
 
       return await executeRetry(getUpdatedTransport, updatedSecret.secret);
     } catch (retryError) {

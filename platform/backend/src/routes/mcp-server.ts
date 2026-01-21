@@ -8,6 +8,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  TeamModel,
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -613,7 +614,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, body: { secretId }, user }, reply) => {
+    async ({ params: { id }, body: { secretId }, user, headers }, reply) => {
       // Get the existing MCP server
       const mcpServer = await McpServerModel.findById(id, user.id);
 
@@ -621,12 +622,46 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
-      // Verify user owns this server or is in the team
-      if (mcpServer.ownerId !== user.id && !mcpServer.teamId) {
+      // Check mcpServer create permission (required for re-authentication)
+      const { success: hasMcpServerCreatePermission } = await hasPermission(
+        { mcpServer: ["create"] },
+        headers,
+      );
+
+      if (!hasMcpServerCreatePermission) {
         throw new ApiError(
           403,
-          "You do not have permission to re-authenticate this server",
+          "You need MCP server create permission to re-authenticate",
         );
+      }
+
+      // For personal credentials, only owner can re-authenticate
+      if (!mcpServer.teamId) {
+        if (mcpServer.ownerId !== user.id) {
+          throw new ApiError(
+            403,
+            "Only the credential owner can re-authenticate",
+          );
+        }
+      } else {
+        // For team credentials: user must be team member OR team admin
+        const { success: isTeamAdmin } = await hasPermission(
+          { team: ["admin"] },
+          headers,
+        );
+
+        if (!isTeamAdmin) {
+          const isMember = await TeamModel.isUserInTeam(
+            mcpServer.teamId,
+            user.id,
+          );
+          if (!isMember) {
+            throw new ApiError(
+              403,
+              "Only team members or team admins can re-authenticate",
+            );
+          }
+        }
       }
 
       // Delete the old secret if it exists

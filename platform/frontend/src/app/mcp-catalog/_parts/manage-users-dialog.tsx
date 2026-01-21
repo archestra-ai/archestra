@@ -31,6 +31,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
+import { useTeams } from "@/lib/team.query";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -51,6 +52,15 @@ export function ManageUsersDialog({
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
 
+  // Get user's teams and permissions for re-authentication checks
+  const { data: userTeams } = useTeams();
+  const { data: hasTeamAdminPermission } = useHasPermissions({
+    team: ["admin"],
+  });
+  const { data: hasMcpServerCreatePermission } = useHasPermissions({
+    mcpServer: ["create"],
+  });
+
   // Use the first server for display purposes
   const firstServer = allServers?.[0];
 
@@ -58,18 +68,32 @@ export function ManageUsersDialog({
   const catalogItem = catalogItems?.find((item) => item.id === catalogId);
   const isOAuthServer = !!catalogItem?.oauthConfig;
 
-  // Check if user has permission to update MCP servers (required for re-authentication)
-  const { data: hasUpdatePermission } = useHasPermissions({
-    mcpServer: ["update"],
-  });
-
   // Check if user can re-authenticate a credential
-  // For personal credentials (no teamId), only the owner can re-authenticate
-  // For team credentials, user needs mcpServer update permission
-  const canReauthenticate = (mcpServer: (typeof allServers)[number]) =>
-    mcpServer.teamId
-      ? hasUpdatePermission
-      : mcpServer.ownerId === currentUserId;
+  // Requires: mcpServer: ["create"] AND (owner for personal OR team member/admin for team)
+  const canReauthenticate = (mcpServer: (typeof allServers)[number]) => {
+    // Must have mcpServer create permission
+    if (!hasMcpServerCreatePermission) return false;
+
+    // For personal credentials, only owner can re-authenticate
+    if (!mcpServer.teamId) {
+      return mcpServer.ownerId === currentUserId;
+    }
+
+    // For team credentials: team admin OR member of the team
+    if (hasTeamAdminPermission) return true;
+    return userTeams?.some((team) => team.id === mcpServer.teamId) ?? false;
+  };
+
+  // Get tooltip message for disabled re-authenticate button
+  const getReauthTooltip = (mcpServer: (typeof allServers)[number]): string => {
+    if (!hasMcpServerCreatePermission) {
+      return "You need MCP server create permission to re-authenticate";
+    }
+    if (!mcpServer.teamId) {
+      return "Only the credential owner can re-authenticate";
+    }
+    return "Only team members or team admins can re-authenticate";
+  };
 
   const deleteMcpServerMutation = useDeleteMcpServer();
 
@@ -136,7 +160,7 @@ export function ManageUsersDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className="sm:max-w-[700px]"
+        className="sm:max-w-[800px]"
         data-testid={E2eTestId.ManageCredentialsDialog}
       >
         <DialogHeader>
@@ -177,21 +201,18 @@ export function ManageUsersDialog({
                     >
                       <TableCell className="font-medium max-w-[200px]">
                         <div className="flex items-center gap-2">
-                          {isOAuthServer &&
-                            mcpServer.oauthRefreshError &&
-                            canReauthenticate(mcpServer) && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    Authentication failed. Please
-                                    re-authenticate.
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
+                          {isOAuthServer && mcpServer.oauthRefreshError && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Authentication failed. Please re-authenticate.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                           <span
                             className="truncate"
                             data-testid={E2eTestId.CredentialOwner}
@@ -213,25 +234,39 @@ export function ManageUsersDialog({
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
-                          {isOAuthServer &&
-                            mcpServer.oauthRefreshError &&
-                            canReauthenticate(mcpServer) && (
-                              <Button
-                                onClick={() => handleReauthenticate(mcpServer)}
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs"
-                              >
-                                <RefreshCw className="mr-1 h-3 w-3" />
-                                Re-authenticate
-                              </Button>
-                            )}
+                          {isOAuthServer && mcpServer.oauthRefreshError && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="w-full">
+                                    <Button
+                                      onClick={() =>
+                                        handleReauthenticate(mcpServer)
+                                      }
+                                      disabled={!canReauthenticate(mcpServer)}
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 w-full text-xs"
+                                    >
+                                      <RefreshCw className="mr-1 h-3 w-3" />
+                                      Re-authenticate
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                {!canReauthenticate(mcpServer) && (
+                                  <TooltipContent>
+                                    {getReauthTooltip(mcpServer)}
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                           <Button
                             onClick={() => handleRevoke(mcpServer)}
                             disabled={deleteMcpServerMutation.isPending}
                             size="sm"
                             variant="outline"
-                            className="h-7 text-xs"
+                            className="h-7 w-full text-xs"
                             data-testid={`${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(mcpServer)}`}
                           >
                             <Trash className="mr-1 h-3 w-3" />

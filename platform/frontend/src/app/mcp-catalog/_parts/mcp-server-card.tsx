@@ -138,9 +138,6 @@ export function McpServerCard({
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
   });
-  const { data: hasMcpServerUpdatePermission } = useHasPermissions({
-    mcpServer: ["update"],
-  });
   const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
   // Fetch all MCP servers to get installations for logs dropdown
@@ -219,17 +216,12 @@ export function McpServerCard({
   const errorMessage = installedServer?.localInstallationError;
   const mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
-  // Check for OAuth refresh errors that the current user can fix
-  // Only show warning if: OAuth server + has error + user can re-authenticate
+  // Check for OAuth refresh errors on any credential the user can see
+  // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
   const isOAuthServer = !!item.oauthConfig;
   const hasOAuthRefreshError =
     isOAuthServer &&
-    (mcpServerOfCurrentCatalogItem?.some(
-      (s) =>
-        s.oauthRefreshError &&
-        (s.teamId ? hasMcpServerUpdatePermission : s.ownerId === currentUserId),
-    ) ??
-      false);
+    (mcpServerOfCurrentCatalogItem?.some((s) => s.oauthRefreshError) ?? false);
 
   const isInstalling = Boolean(
     installingItemId === item.id ||

@@ -19,7 +19,6 @@ export const SelectAgentSchema = createSelectSchema(schema.agentsTable).extend({
   teams: z.array(AgentTeamInfoSchema),
   labels: z.array(AgentLabelWithDetailsSchema),
 });
-
 export const InsertAgentSchema = createInsertSchema(schema.agentsTable)
   .extend({
     teams: z.array(z.string()),

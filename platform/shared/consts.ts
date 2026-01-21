@@ -187,6 +187,16 @@ export const IncomingEmailSecurityModes = Object.values(
 );
 
 /**
+ * Constant object for incoming email security mode values.
+ * Use this for type-safe comparisons and UI selects.
+ */
+export const INCOMING_EMAIL_SECURITY_MODE = {
+  PRIVATE: "private",
+  INTERNAL: "internal",
+  PUBLIC: "public",
+} as const satisfies Record<string, IncomingEmailSecurityMode>;
+
+/**
  * Check if a value is a valid incoming email security mode
  */
 export function isValidIncomingEmailSecurityMode(

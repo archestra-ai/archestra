@@ -389,11 +389,11 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   }
 
   getUsage(): UsageView {
-    const usage = this.response.usageMetadata;
-    return {
-      inputTokens: usage?.promptTokenCount ?? 0,
-      outputTokens: usage?.candidatesTokenCount ?? 0,
-    };
+    if (!this.response.usageMetadata) {
+      return { inputTokens: 0, outputTokens: 0 };
+    }
+    const { input, output } = getUsageTokens(this.response.usageMetadata);
+    return { inputTokens: input ?? 0, outputTokens: output ?? 0 };
   }
 
   getOriginalResponse(): GeminiResponse {
@@ -805,6 +805,20 @@ async function convertToolResultsToToon(
 // =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
+
+// =============================================================================
+// USAGE TOKEN HELPERS
+// =============================================================================
+
+export function getUsageTokens(usage: {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+}) {
+  return {
+    input: usage.promptTokenCount,
+    output: usage.candidatesTokenCount,
+  };
+}
 
 export const geminiAdapterFactory: LLMProvider<
   GeminiRequestWithModel,

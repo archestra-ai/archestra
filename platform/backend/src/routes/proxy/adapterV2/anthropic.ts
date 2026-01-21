@@ -551,10 +551,8 @@ class AnthropicResponseAdapter
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.usage.input_tokens,
-      outputTokens: this.response.usage.output_tokens,
-    };
+    const { input, output } = getUsageTokens(this.response.usage);
+    return { inputTokens: input, outputTokens: output };
   }
 
   getOriginalResponse(): AnthropicResponse {
@@ -1072,6 +1070,17 @@ export async function convertToolResultsToToon(
 // =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
+
+// =============================================================================
+// USAGE TOKEN HELPERS
+// =============================================================================
+
+export function getUsageTokens(usage: Anthropic.Types.Usage) {
+  return {
+    input: usage.input_tokens,
+    output: usage.output_tokens,
+  };
+}
 
 export const anthropicAdapterFactory: LLMProvider<
   AnthropicRequest,

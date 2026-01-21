@@ -91,27 +91,14 @@ export async function addCustomSelfHostedCatalogItem({
   const catalogItems = await archestraApiSdk.getInternalMcpCatalog({
     headers: { Cookie: cookieHeaders },
   });
-
-  // Check for API errors
-  if (catalogItems.error) {
-    throw new Error(
-      `Failed to get catalog items: ${JSON.stringify(catalogItems.error)}`,
-    );
+  if (!catalogItems.data) {
+    throw new Error("No catalog items found");
   }
-  if (!catalogItems.data || catalogItems.data.length === 0) {
-    throw new Error(
-      `No catalog items returned from API. Response: ${JSON.stringify(catalogItems)}`,
-    );
-  }
-
-  const newCatalogItem = catalogItems.data.find(
+  const newCatalogItem = catalogItems.data?.find(
     (item) => item.name === catalogItemName,
   );
   if (!newCatalogItem) {
-    const itemNames = catalogItems.data.map((i) => i.name).join(", ");
-    throw new Error(
-      `Failed to find catalog item "${catalogItemName}". Available items: [${itemNames}]`,
-    );
+    throw new Error("Failed to find new catalog item");
   }
   return { id: newCatalogItem.id, name: newCatalogItem.name };
 }
@@ -193,20 +180,12 @@ export async function verifyToolCallResultViaApi({
   toolName: string;
   cookieHeaders: string;
 }) {
-  const defaultAgentResponse = await archestraApiSdk.getDefaultAgent({
+  const { data: defaultProfile } = await archestraApiSdk.getDefaultAgent({
     headers: { Cookie: cookieHeaders },
   });
-  if (defaultAgentResponse.error) {
-    throw new Error(
-      `Failed to get default agent: ${JSON.stringify(defaultAgentResponse.error)}`,
-    );
+  if (!defaultProfile) {
+    throw new Error("Default profile not found");
   }
-  if (!defaultAgentResponse.data) {
-    throw new Error(
-      `No default agent returned from API. Response: ${JSON.stringify(defaultAgentResponse)}`,
-    );
-  }
-  const defaultProfile = defaultAgentResponse.data;
 
   let token: string;
   if (tokenToUse === "default-team") {
@@ -308,80 +287,38 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
   const teamsResponse = await archestraApiSdk.getTeams({
     headers: { Cookie: cookieHeaders },
   });
-
-  // Check for API errors
-  if (teamsResponse.error) {
-    throw new Error(
-      `Failed to get teams: ${JSON.stringify(teamsResponse.error)}`,
-    );
-  }
-  if (!teamsResponse.data || teamsResponse.data.length === 0) {
-    throw new Error(
-      `No teams returned from API. Response: ${JSON.stringify(teamsResponse)}`,
-    );
-  }
-
-  const defaultTeam = teamsResponse.data.find(
+  const defaultTeam = teamsResponse.data?.find(
     (team) => team.name === DEFAULT_TEAM_NAME,
   );
   if (!defaultTeam) {
-    const teamNames = teamsResponse.data.map((t) => t.name).join(", ");
-    throw new Error(
-      `Team "${DEFAULT_TEAM_NAME}" not found. Available teams: [${teamNames}]`,
-    );
+    throw new Error(`Team "${DEFAULT_TEAM_NAME}" not found`);
   }
-  const engineeringTeam = teamsResponse.data.find(
+  const engineeringTeam = teamsResponse.data?.find(
     (team) => team.name === ENGINEERING_TEAM_NAME,
   );
   if (!engineeringTeam) {
-    const teamNames = teamsResponse.data.map((t) => t.name).join(", ");
-    throw new Error(
-      `Team "${ENGINEERING_TEAM_NAME}" not found. Available teams: [${teamNames}]`,
-    );
+    throw new Error(`Team "${ENGINEERING_TEAM_NAME}" not found`);
   }
 
   // 2. Get all profiles and find Default Agent
   const agentsResponse = await archestraApiSdk.getAgents({
     headers: { Cookie: cookieHeaders },
   });
-
-  // Check for API errors
-  if (agentsResponse.error) {
-    throw new Error(
-      `Failed to get agents: ${JSON.stringify(agentsResponse.error)}`,
-    );
-  }
-  if (!agentsResponse.data?.data || agentsResponse.data.data.length === 0) {
-    throw new Error(
-      `No agents returned from API. Response: ${JSON.stringify(agentsResponse)}`,
-    );
-  }
-
-  const defaultProfile = agentsResponse.data.data.find(
+  const defaultProfile = agentsResponse.data?.data?.find(
     (agent) => agent.name === DEFAULT_PROFILE_NAME,
   );
   if (!defaultProfile) {
-    const profileNames = agentsResponse.data.data.map((a) => a.name).join(", ");
-    throw new Error(
-      `Profile "${DEFAULT_PROFILE_NAME}" not found. Available profiles: [${profileNames}]`,
-    );
+    throw new Error(`Profile "${DEFAULT_PROFILE_NAME}" not found`);
   }
 
   // 3. Assign BOTH Default Team and Engineering Team to the profile
-  const updateResponse = await archestraApiSdk.updateAgent({
+  await archestraApiSdk.updateAgent({
     headers: { Cookie: cookieHeaders },
     path: { id: defaultProfile.id },
     body: {
       teams: [defaultTeam.id, engineeringTeam.id],
     },
   });
-
-  // Check for API errors on update
-  if (updateResponse.error) {
-    throw new Error(
-      `Failed to update agent: ${JSON.stringify(updateResponse.error)}`,
-    );
-  }
 }
 
 export async function clickButton({

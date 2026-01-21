@@ -16,13 +16,7 @@ test(
 
     const AGENT_NAME = makeRandomString(10, "Test Profile");
     await goToPage(page, "/profiles");
-
-    // Wait for the "Create Profile" button to be visible before clicking
-    // Firefox/WebKit may take longer to render buttons in CI environments
-    const createButton = page.getByTestId(E2eTestId.CreateAgentButton);
-    await expect(createButton).toBeVisible({ timeout: 30_000 });
-
-    await createButton.click();
+    await page.getByTestId(E2eTestId.CreateAgentButton).click();
     await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
     await page.locator("[type=submit]").click();
 

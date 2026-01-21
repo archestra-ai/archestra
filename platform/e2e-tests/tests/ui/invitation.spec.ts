@@ -19,14 +19,6 @@ test.describe(
       // Wait for the page to fully load (API calls to complete)
       await page.waitForLoadState("networkidle");
 
-      // Wait for the "Invite Member" button to be visible before clicking
-      // Firefox/WebKit may take longer to render buttons in CI environments
-      const inviteButton = page.getByRole("button", {
-        name: /invite member/i,
-        disabled: false,
-      });
-      await expect(inviteButton).toBeVisible({ timeout: 30_000 });
-
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });
 
@@ -62,14 +54,6 @@ test.describe(
 
       // Wait for the page to fully load (API calls to complete)
       await page.waitForLoadState("networkidle");
-
-      // Wait for the "Invite Member" button to be visible before clicking
-      // Firefox/WebKit may take longer to render buttons in CI environments
-      const inviteButton = page.getByRole("button", {
-        name: /invite member/i,
-        disabled: false,
-      });
-      await expect(inviteButton).toBeVisible({ timeout: 30_000 });
 
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });
@@ -143,8 +127,10 @@ test.describe(
         const prefilledEmail = await emailInputSignup.inputValue();
         expect(prefilledEmail).toBe(TEST_EMAIL);
 
-        // Fill in password - use getByLabel since password inputs don't have textbox role
-        const passwordInput = newUserPage.getByLabel(/password/i);
+        // Fill in password
+        const passwordInput = newUserPage.getByRole("textbox", {
+          name: /password/i,
+        });
         await expect(passwordInput).toBeVisible();
         await passwordInput.fill(TEST_PASSWORD);
 

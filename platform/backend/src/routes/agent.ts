@@ -4,7 +4,6 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { initializeMetrics } from "@/llm-metrics";
 import { AgentLabelModel, AgentModel, TeamModel } from "@/models";
-import { validateIncomingEmailSettings } from "@/routes/incoming-email";
 import {
   ApiError,
   constructResponseSchema,
@@ -199,18 +198,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, headers }, reply) => {
-      // Validate incoming email settings (allowed domain required for internal mode)
-      try {
-        validateIncomingEmailSettings(body);
-      } catch (error) {
-        throw new ApiError(
-          400,
-          error instanceof Error
-            ? error.message
-            : "Invalid incoming email settings",
-        );
-      }
-
       // Validate team assignment for non-admin users if teams are being updated
       if (body.teams !== undefined) {
         const { success: isProfileAdmin } = await hasPermission(

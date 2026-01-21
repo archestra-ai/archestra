@@ -2,6 +2,7 @@ import { TimeInMs } from "@shared";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import type { AllowedCacheKey } from "@/types";
 
 /**
  * PostgreSQL-based cache manager for distributed caching.
@@ -98,9 +99,7 @@ class CacheManager {
    */
   async delete(key: AllowedCacheKey): Promise<boolean> {
     try {
-      await db
-        .delete(schema.cacheTable)
-        .where(eq(schema.cacheTable.key, key));
+      await db.delete(schema.cacheTable).where(eq(schema.cacheTable.key, key));
       return true;
     } catch (error) {
       logger.error({ error, key }, "CacheManager: Error deleting cache entry");
@@ -116,7 +115,7 @@ class CacheManager {
     try {
       await db
         .delete(schema.cacheTable)
-        .where(sql`${schema.cacheTable.key} LIKE ${prefix + "%"}`);
+        .where(sql`${schema.cacheTable.key} LIKE ${`${prefix}%`}`);
     } catch (error) {
       logger.error({ error, prefix }, "CacheManager: Error deleting by prefix");
     }
@@ -160,7 +159,10 @@ class CacheManager {
 
       return result.length;
     } catch (error) {
-      logger.error({ error }, "CacheManager: Error cleaning up expired entries");
+      logger.error(
+        { error },
+        "CacheManager: Error cleaning up expired entries",
+      );
       return 0;
     }
   }
@@ -183,18 +185,5 @@ class CacheManager {
     this.cleanupIntervalId.unref();
   }
 }
-
-export const CacheKey = {
-  GetChatModels: "get-chat-models",
-  ChatMcpTools: "chat-mcp-tools",
-  ProcessedEmail: "processed-email",
-  WebhookRateLimit: "webhook-rate-limit",
-  OAuthState: "oauth-state",
-  McpSession: "mcp-session",
-  SsoGroups: "sso-groups",
-} as const;
-export type CacheKey = (typeof CacheKey)[keyof typeof CacheKey];
-
-type AllowedCacheKey = `${CacheKey}` | `${CacheKey}-${string}`;
 
 export const cacheManager = new CacheManager();

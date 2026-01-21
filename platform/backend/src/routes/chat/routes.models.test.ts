@@ -1,8 +1,9 @@
 import type { GoogleGenAI } from "@google/genai";
 import { vi } from "vitest";
-import { CacheKey, cacheManager } from "@/models/cache-manager";
 import config from "@/config";
+import { cacheManager } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
+import { CacheKey } from "@/types";
 import {
   fetchGeminiModels,
   fetchGeminiModelsViaVertexAi,

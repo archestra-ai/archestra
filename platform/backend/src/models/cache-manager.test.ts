@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { afterEach, describe, expect, it } from "@/test";
-import { CacheKey, cacheManager } from "./cache-manager";
+import { CacheKey } from "@/types";
+import { cacheManager } from "./cache-manager";
 
 describe("CacheManager", () => {
   afterEach(async () => {

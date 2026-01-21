@@ -1,7 +1,8 @@
 import type { SsoTeamSyncConfig } from "@shared";
 import logger from "@/logging";
-import { CacheKey, cacheManager } from "@/models/cache-manager";
+import { cacheManager } from "@/models";
 import { extractGroupsWithTemplate } from "@/templating";
+import { CacheKey } from "@/types";
 
 /**
  * Cache for SSO groups during login flow.

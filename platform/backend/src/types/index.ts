@@ -3,6 +3,7 @@ export * from "./agent";
 export * from "./agent-tool";
 export * from "./api";
 export * from "./autonomy-policies";
+export * from "./cache";
 export * from "./chat-api-key";
 export * from "./chatops";
 export * from "./common-llm-format";

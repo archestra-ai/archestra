@@ -8,7 +8,6 @@ import {
   executeArchestraTool,
   getAgentTools,
 } from "@/archestra-mcp-server";
-import { CacheKey, cacheManager } from "@/models/cache-manager";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
@@ -18,6 +17,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { CacheKey } from "@/types";
 
 /**
  * MCP Gateway base URL (internal)
@@ -37,6 +37,21 @@ const clientCache = new Map<string, Client>();
  * Tool cache TTL - 30 seconds to avoid hammering MCP Gateway
  */
 const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
+
+/**
+ * In-memory tool cache per agent + user + prompt + conversation
+ * Note: This cannot use cacheManager because Tool objects contain execute functions
+ * which cannot be serialized to PostgreSQL JSONB. Functions are lost during
+ * serialization/deserialization.
+ *
+ * For multi-pod deployments, sticky sessions should be used to ensure all
+ * requests for a conversation hit the same pod.
+ */
+interface ToolCacheEntry {
+  tools: Record<string, Tool>;
+  expiresAt: number;
+}
+const toolCache = new Map<string, ToolCacheEntry>();
 
 /**
  * Generate cache key from agentId and userId
@@ -69,10 +84,10 @@ export const __test = {
   },
   async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
-      await cacheManager.delete(`${CacheKey.ChatMcpTools}-${cacheKey}`);
+      toolCache.delete(`${CacheKey.ChatMcpTools}-${cacheKey}`);
+    } else {
+      toolCache.clear();
     }
-    // Note: cacheManager doesn't support clearing all keys with a prefix
-    // For tests, individual keys should be cleared explicitly
   },
   getCacheKey,
   isBrowserMcpTool,
@@ -207,24 +222,21 @@ async function selectMCPGatewayToken(
 }
 
 /**
- * Clear cached client for a specific agent (all users)
+ * Clear cached client and tools for a specific agent (all users)
  * Should be called when MCP Gateway sessions are cleared
  *
- * Note: Tool cache entries are stored in cacheManager with keys like
- * "chat-mcp-tools-{agentId}:{userId}". Since we don't track all userIds,
- * tool cache entries will expire naturally via TTL (30 seconds).
- *
- * @param agentId - The agent ID whose clients should be cleared
+ * @param agentId - The agent ID whose clients/tools should be cleared
  */
 export function clearChatMcpClient(agentId: string): void {
   logger.info(
     { agentId },
-    "clearChatMcpClient() called - checking for cached clients",
+    "clearChatMcpClient() called - checking for cached clients and tools",
   );
 
-  let clearedCount = 0;
+  let clientClearedCount = 0;
+  let toolClearedCount = 0;
 
-  // Find and remove all cache entries for this agentId (any user)
+  // Find and remove all client cache entries for this agentId (any user)
   for (const key of clientCache.keys()) {
     if (key.startsWith(`${agentId}:`)) {
       const client = clientCache.get(key);
@@ -242,22 +254,28 @@ export function clearChatMcpClient(agentId: string): void {
           );
         }
         clientCache.delete(key);
-        clearedCount++;
+        clientClearedCount++;
       }
     }
   }
 
-  // Note: Tool cache entries in cacheManager will expire naturally via TTL.
-  // cacheManager doesn't support prefix-based deletion, but with a 30s TTL,
-  // stale entries will be refreshed quickly.
+  // Clear tool cache entries for this agentId
+  for (const key of toolCache.keys()) {
+    if (key.includes(agentId)) {
+      toolCache.delete(key);
+      toolClearedCount++;
+    }
+  }
 
   logger.info(
     {
       agentId,
-      clearedCount,
+      clientClearedCount,
+      toolClearedCount,
       remainingCachedClients: clientCache.size,
+      remainingCachedTools: toolCache.size,
     },
-    "Cleared MCP client cache entries for agent",
+    "Cleared MCP client and tool cache entries for agent",
   );
 }
 
@@ -471,20 +489,23 @@ export async function getChatMcpTools({
     conversationId,
   );
 
-  // Check cache first using cacheManager
-  const cachedTools =
-    await cacheManager.get<Record<string, Tool>>(toolCacheKey);
-  if (cachedTools) {
+  // Check in-memory tool cache first (cannot use cacheManager - Tool objects have execute functions)
+  const cachedEntry = toolCache.get(toolCacheKey);
+  if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
     logger.info(
       {
         agentId,
         userId,
-        toolCount: Object.keys(cachedTools).length,
+        toolCount: Object.keys(cachedEntry.tools).length,
       },
       "Returning cached MCP tools for chat",
     );
     // Apply filtering if enabledToolIds provided and non-empty
-    return await filterToolsByEnabledIds(cachedTools, enabledToolIds);
+    return await filterToolsByEnabledIds(cachedEntry.tools, enabledToolIds);
+  }
+  // Remove expired entry if any
+  if (cachedEntry) {
+    toolCache.delete(toolCacheKey);
   }
 
   logger.info(
@@ -839,8 +860,11 @@ export async function getChatMcpTools({
       }
     }
 
-    // Cache the tools using cacheManager with TTL
-    await cacheManager.set(toolCacheKey, aiTools, TOOL_CACHE_TTL_MS);
+    // Cache tools in-memory with TTL (cannot use cacheManager - Tool objects have execute functions)
+    toolCache.set(toolCacheKey, {
+      tools: aiTools,
+      expiresAt: Date.now() + TOOL_CACHE_TTL_MS,
+    });
 
     // Apply filtering if enabledToolIds provided and non-empty
     return await filterToolsByEnabledIds(aiTools, enabledToolIds);

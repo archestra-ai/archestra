@@ -1,4 +1,5 @@
 import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import type { AllowedCacheKey } from "@/types";
 
 /**
  * Cache table for distributed caching across multiple pods.
@@ -13,7 +14,7 @@ import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 const cacheTable = pgTable(
   "cache",
   {
-    key: text("key").primaryKey(),
+    key: text("key").$type<AllowedCacheKey>().primaryKey(),
     value: jsonb("value").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })

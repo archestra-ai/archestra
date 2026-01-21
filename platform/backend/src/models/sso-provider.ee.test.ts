@@ -1904,7 +1904,7 @@ describe("resolveSsoRole", () => {
       await SsoProviderModel.resolveSsoRole(params);
 
       // Verify nothing was cached (no groups to cache)
-      const cachedData = retrieveSsoGroups(
+      const cachedData = await retrieveSsoGroups(
         provider.providerId,
         "nogroups@example.com",
       );

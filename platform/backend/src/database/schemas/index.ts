@@ -1,10 +1,10 @@
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
-export { default as cacheTable } from "./cache";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
+export { default as cacheTable } from "./cache";
 export {
   type ChatApiKeyScope,
   default as chatApiKeysTable,

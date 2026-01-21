@@ -4,10 +4,14 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
-import { InternalMcpCatalogModel } from "@/models";
-import { CacheKey, cacheManager } from "@/models/cache-manager";
+import { cacheManager, InternalMcpCatalogModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
+import {
+  ApiError,
+  CacheKey,
+  constructResponseSchema,
+  UuidIdSchema,
+} from "@/types";
 
 /**
  * Generate PKCE code verifier

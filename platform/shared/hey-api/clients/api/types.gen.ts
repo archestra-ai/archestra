@@ -15979,7 +15979,7 @@ export type GetMcpServersResponses = {
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
-        oauthRefreshError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -16012,7 +16012,7 @@ export type InstallMcpServerData = {
         reinstallRequired?: boolean;
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
-        oauthRefreshError?: string | null;
+        oauthRefreshError?: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt?: unknown;
         userId?: string;
         userConfigValues?: {
@@ -16105,7 +16105,7 @@ export type InstallMcpServerResponses = {
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
-        oauthRefreshError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -16290,7 +16290,7 @@ export type GetMcpServerResponses = {
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
-        oauthRefreshError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -16398,7 +16398,7 @@ export type ReauthenticateMcpServerResponses = {
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
-        oauthRefreshError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;

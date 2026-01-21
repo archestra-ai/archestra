@@ -55753,7 +55753,11 @@
                       },
                       "oauthRefreshError": {
                         "nullable": true,
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                          "refresh_failed",
+                          "no_refresh_token"
+                        ]
                       },
                       "oauthRefreshFailedAt": {
                         "nullable": true,
@@ -56124,7 +56128,11 @@
                   },
                   "oauthRefreshError": {
                     "nullable": true,
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "refresh_failed",
+                      "no_refresh_token"
+                    ]
                   },
                   "oauthRefreshFailedAt": {
                     "nullable": true
@@ -56233,7 +56241,11 @@
                     },
                     "oauthRefreshError": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "refresh_failed",
+                        "no_refresh_token"
+                      ]
                     },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
@@ -56633,7 +56645,11 @@
                     },
                     "oauthRefreshError": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "refresh_failed",
+                        "no_refresh_token"
+                      ]
                     },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
@@ -57303,7 +57319,11 @@
                     },
                     "oauthRefreshError": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "refresh_failed",
+                        "no_refresh_token"
+                      ]
                     },
                     "oauthRefreshFailedAt": {
                       "nullable": true,

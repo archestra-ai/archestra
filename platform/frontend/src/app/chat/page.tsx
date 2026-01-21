@@ -26,8 +26,6 @@ import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-serve
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { AgentSelector } from "@/components/chat/agent-selector";
-import { BrowserPanel } from "@/components/chat/browser-panel";
-import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
@@ -124,7 +122,6 @@ export default function ChatPage() {
 
   // State for browser panel
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(false);
-  const [isBrowserMinimized, setIsBrowserMinimized] = useState(true);
 
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =
@@ -403,7 +400,7 @@ export default function ChatPage() {
     : (initialAgentId ?? undefined);
 
   // Check if Playwright MCP is available for browser panel
-  const hasPlaywrightMcp = useHasPlaywrightMcpTools(browserToolsAgentId);
+  const { hasPlaywrightMcp } = useHasPlaywrightMcpTools(browserToolsAgentId);
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
@@ -1258,8 +1255,6 @@ export default function ChatPage() {
         isBrowserOpen={
           isBrowserPanelOpen && isBrowserStreamingEnabled && hasPlaywrightMcp
         }
-        isBrowserMinimized={isBrowserMinimized}
-        onBrowserMinimizeToggle={() => setIsBrowserMinimized((prev) => !prev)}
         onBrowserClose={() => setIsBrowserPanelOpen(false)}
         conversationId={conversationId}
       />

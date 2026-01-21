@@ -14,8 +14,6 @@ interface RightSidePanelProps {
 
   // Browser props
   isBrowserOpen: boolean;
-  isBrowserMinimized: boolean;
-  onBrowserMinimizeToggle: () => void;
   onBrowserClose: () => void;
   conversationId: string | undefined;
 }
@@ -25,8 +23,6 @@ export function RightSidePanel({
   isArtifactOpen,
   onArtifactToggle,
   isBrowserOpen,
-  isBrowserMinimized,
-  onBrowserMinimizeToggle,
   onBrowserClose,
   conversationId,
 }: RightSidePanelProps) {
@@ -116,7 +112,7 @@ export function RightSidePanel({
         <div
           className="min-h-0 overflow-hidden"
           style={{
-            flex: isBrowserOpen && !isBrowserMinimized ? "1 1 50%" : "1 1 100%",
+            flex: isBrowserOpen ? "1 1 50%" : "1 1 100%",
           }}
         >
           <ConversationArtifactPanel
@@ -133,21 +129,13 @@ export function RightSidePanel({
         <div
           className="flex-shrink-0"
           style={{
-            height: isBrowserMinimized ? 40 : undefined,
-            flex:
-              !isBrowserMinimized && isArtifactOpen
-                ? "1 1 50%"
-                : !isBrowserMinimized
-                  ? "1 1 100%"
-                  : undefined,
+            flex: isArtifactOpen ? "1 1 50%" : "1 1 100%",
           }}
         >
           <BrowserPanel
             isOpen={isBrowserOpen}
             onClose={onBrowserClose}
             conversationId={conversationId}
-            isMinimized={isBrowserMinimized}
-            onMinimizeToggle={onBrowserMinimizeToggle}
           />
         </div>
       )}

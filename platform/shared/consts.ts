@@ -239,3 +239,15 @@ export const DOMAIN_VALIDATION_REGEX =
  * Maximum domain length per DNS specification (RFC 1035).
  */
 export const MAX_DOMAIN_LENGTH = 253;
+
+/**
+ * Default browser viewport dimensions used by Playwright MCP in browser preview feature.
+ */
+export const DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH = 800;
+export const DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT = 800;
+
+/**
+ * Approximate height of the browser preview header (title bar + URL bar).
+ * Used when calculating popup window dimensions.
+ */
+export const BROWSER_PREVIEW_HEADER_HEIGHT = 77;

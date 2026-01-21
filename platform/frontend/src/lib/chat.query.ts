@@ -385,10 +385,11 @@ export function useAgentDelegationTools(agentId: string | undefined) {
 export function useHasPlaywrightMcpTools(agentId: string | undefined) {
   const toolsQuery = useChatProfileMcpTools(agentId);
 
-  return (
+  const hasPlaywrightMcp =
     toolsQuery.data?.some((tool) => {
       const toolName = tool.name;
       return typeof toolName === "string" && isBrowserMcpTool(toolName);
-    }) ?? false
-  );
+    }) ?? false;
+
+  return { hasPlaywrightMcp, isLoading: toolsQuery.isLoading };
 }

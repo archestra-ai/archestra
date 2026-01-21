@@ -1,4 +1,8 @@
-import { isBrowserMcpTool } from "@shared";
+import {
+  DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
+  DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
+  isBrowserMcpTool,
+} from "@shared";
 import { getChatMcpClient } from "@/clients/chat-mcp-client";
 import logger from "@/logging";
 import { ToolModel } from "@/models";
@@ -1157,6 +1161,63 @@ export class BrowserStreamService {
   }
 
   /**
+   * Find the Playwright browser resize tool for an agent
+   */
+  private async findResizeTool(agentId: string): Promise<string | null> {
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_resize"),
+    );
+  }
+
+  /**
+   * Resize browser window to ensure proper viewport dimensions
+   * Called when creating a new tab to avoid small default viewport
+   */
+  private async resizeBrowser(
+    agentId: string,
+    userContext: BrowserUserContext,
+    width: number = DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
+    height: number = DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
+  ): Promise<void> {
+    const resizeTool = await this.findResizeTool(agentId);
+    if (!resizeTool) {
+      logger.debug(
+        { agentId },
+        "No browser_resize tool available, using default viewport",
+      );
+      return;
+    }
+
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
+    if (!client) {
+      return;
+    }
+
+    try {
+      logger.info({ agentId, width, height }, "Resizing browser viewport");
+
+      const result = await client.callTool({
+        name: resizeTool,
+        arguments: { width, height },
+      });
+
+      if (result.isError) {
+        const errorText = this.extractTextContent(result.content);
+        logger.warn(
+          { agentId, error: errorText },
+          "Failed to resize browser viewport",
+        );
+      }
+    } catch (error) {
+      logger.warn({ agentId, error }, "Error resizing browser viewport");
+    }
+  }
+
+  /**
    * Navigate browser to a URL in a conversation's tab.
    * Updates history in persisted state.
    */
@@ -1194,6 +1255,10 @@ export class BrowserStreamService {
     if (!client) {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
+
+    // Resize browser to ensure proper viewport dimensions before navigation
+    // This ensures the page loads with the correct viewport from the start
+    await this.resizeBrowser(agentId, userContext);
 
     logger.info({ agentId, toolName, url }, "Navigating browser via MCP");
 
@@ -1969,6 +2034,10 @@ export class BrowserStreamService {
     if (!client) {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
+
+    // Resize browser to ensure consistent viewport dimensions for preview
+    // This ensures screenshots match the expected preview size
+    await this.resizeBrowser(agentId, userContext);
 
     logScreenshotInfo(
       { agentId, conversationId, toolName },

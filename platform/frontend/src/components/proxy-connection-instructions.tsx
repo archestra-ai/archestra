@@ -7,19 +7,20 @@ import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import config from "@/lib/config";
+import { cn } from "@/lib/utils";
 
 const { externalProxyUrl, internalProxyUrl } = config.api;
 
 type ProviderOption = SupportedProvider | "claude-code";
-
-const INTERNAL_URL_LABEL = "Internal URL";
-const EXTERNAL_URL_LABEL = "Public URL";
+type ConnectionType = "internal" | "external";
 
 interface ProxyConnectionInstructionsProps {
   agentId?: string;
@@ -30,19 +31,20 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
+  const [connectionType, setConnectionType] =
+    useState<ConnectionType>("external");
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
 
-  const getProxyUrl = (baseUrl: string, provider: ProviderOption) =>
-    agentId
-      ? `${baseUrl}/${getProviderPath(provider)}/${agentId}`
-      : `${baseUrl}/${getProviderPath(provider)}`;
+  const baseUrl =
+    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
 
-  const internalUrl = getProxyUrl(internalProxyUrl, selectedProvider);
-  const externalUrl = getProxyUrl(externalProxyUrl, selectedProvider);
+  const proxyUrl = agentId
+    ? `${baseUrl}/${getProviderPath(selectedProvider)}/${agentId}`
+    : `${baseUrl}/${getProviderPath(selectedProvider)}`;
 
-  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${externalProxyUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
+  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${baseUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
 
   return (
     <div className="space-y-3">
@@ -101,24 +103,69 @@ export function ProxyConnectionInstructions({
           </PopoverContent>
         </Popover>
       </ButtonGroup>
+
+      {/* Connection Type Selector */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Connection type</Label>
+        <RadioGroup
+          value={connectionType}
+          onValueChange={(value) => setConnectionType(value as ConnectionType)}
+          className="flex flex-col gap-3"
+        >
+          <div className="flex items-start gap-3">
+            <RadioGroupItem
+              value="internal"
+              id="llm-internal"
+              className="mt-0.5"
+            />
+            <div className="flex flex-col gap-0.5">
+              <Label
+                htmlFor="llm-internal"
+                className="font-normal cursor-pointer"
+              >
+                Via Internal URL
+              </Label>
+              <span className="text-xs text-muted-foreground">
+                Internal URL for in-cluster communication. This is the URL where
+                the frontend connects to the backend API server.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <RadioGroupItem
+              value="external"
+              id="llm-external"
+              className="mt-0.5"
+              disabled={!externalProxyUrl}
+            />
+            <div className="flex flex-col gap-0.5">
+              <Label
+                htmlFor="llm-external"
+                className={cn(
+                  "font-normal cursor-pointer",
+                  !externalProxyUrl && "opacity-50",
+                )}
+              >
+                Via External URL
+              </Label>
+              <span className="text-xs text-muted-foreground">
+                External URL for connecting to LLM Gateway from outside the
+                Kubernetes cluster.
+              </span>
+            </div>
+          </div>
+        </RadioGroup>
+      </div>
+
       {selectedProvider === "openai" && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Replace your OpenAI base URL:
           </p>
           <UrlReplacementRow
-            label={INTERNAL_URL_LABEL}
             originalUrl="https://api.openai.com/v1/"
-            newUrl={internalUrl}
-            envVar="ARCHESTRA_API_BASE_URL"
+            newUrl={proxyUrl}
           />
-          <UrlReplacementRow
-            label={EXTERNAL_URL_LABEL}
-            originalUrl="https://api.openai.com/v1/"
-            newUrl={externalUrl}
-            envVar="ARCHESTRA_API_EXTERNAL_BASE_URL"
-          />
-          <SeeMoreInDocsRow />
         </div>
       )}
       {selectedProvider === "gemini" && (
@@ -127,18 +174,9 @@ export function ProxyConnectionInstructions({
             Replace your Gemini base URL:
           </p>
           <UrlReplacementRow
-            label={INTERNAL_URL_LABEL}
             originalUrl="https://generativelanguage.googleapis.com/v1/"
-            newUrl={internalUrl}
-            envVar="ARCHESTRA_API_BASE_URL"
+            newUrl={proxyUrl}
           />
-          <UrlReplacementRow
-            label={EXTERNAL_URL_LABEL}
-            originalUrl="https://generativelanguage.googleapis.com/v1/"
-            newUrl={externalUrl}
-            envVar="ARCHESTRA_API_EXTERNAL_BASE_URL"
-          />
-          <SeeMoreInDocsRow />
         </div>
       )}
       {selectedProvider === "anthropic" && (
@@ -147,18 +185,9 @@ export function ProxyConnectionInstructions({
             Replace your Anthropic base URL:
           </p>
           <UrlReplacementRow
-            label={INTERNAL_URL_LABEL}
             originalUrl="https://api.anthropic.com/v1/"
-            newUrl={internalUrl}
-            envVar="ARCHESTRA_API_BASE_URL"
+            newUrl={proxyUrl}
           />
-          <UrlReplacementRow
-            label={EXTERNAL_URL_LABEL}
-            originalUrl="https://api.anthropic.com/v1/"
-            newUrl={externalUrl}
-            envVar="ARCHESTRA_API_EXTERNAL_BASE_URL"
-          />
-          <SeeMoreInDocsRow />
         </div>
       )}
       {selectedProvider === "cerebras" && (
@@ -167,18 +196,9 @@ export function ProxyConnectionInstructions({
             Replace your Cerebras base URL:
           </p>
           <UrlReplacementRow
-            label={INTERNAL_URL_LABEL}
             originalUrl="https://api.cerebras.ai/v1/"
-            newUrl={internalUrl}
-            envVar="ARCHESTRA_API_BASE_URL"
+            newUrl={proxyUrl}
           />
-          <UrlReplacementRow
-            label={EXTERNAL_URL_LABEL}
-            originalUrl="https://api.cerebras.ai/v1/"
-            newUrl={externalUrl}
-            envVar="ARCHESTRA_API_EXTERNAL_BASE_URL"
-          />
-          <SeeMoreInDocsRow />
         </div>
       )}
       {selectedProvider === "claude-code" && (
@@ -195,24 +215,24 @@ export function ProxyConnectionInstructions({
               toastMessage="Command copied to clipboard"
             />
           </div>
-          <p className="text-sm text-muted-foreground">
-            The URL is configurable via the{" "}
-            <CodeText className="text-xs">
-              ARCHESTRA_API_EXTERNAL_BASE_URL
-            </CodeText>{" "}
-            environment variable. See{" "}
-            <a
-              href="https://archestra.ai/docs/platform-deployment#environment-variables"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500"
-            >
-              here
-            </a>{" "}
-            for more details.
-          </p>
         </div>
       )}
+
+      <p className="text-sm text-muted-foreground">
+        The URLs are configurable via{" "}
+        <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText> and{" "}
+        <CodeText className="text-xs">ARCHESTRA_API_EXTERNAL_BASE_URL</CodeText>{" "}
+        environment variables. See{" "}
+        <a
+          href="https://archestra.ai/docs/platform-deployment#environment-variables"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-500"
+        >
+          here
+        </a>{" "}
+        for more details.
+      </p>
     </div>
   );
 }
@@ -250,60 +270,32 @@ function CopyButton({
 }
 
 function UrlReplacementRow({
-  label,
   originalUrl,
   newUrl,
-  envVar,
 }: {
-  label: string;
   originalUrl: string;
   newUrl: string;
-  envVar: string;
 }) {
   if (!newUrl) {
     return null;
   }
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium">{label}</p>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
-          <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
-            {originalUrl}
-          </CodeText>
-        </div>
-        <span className="text-muted-foreground flex-shrink-0">→</span>
-        <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-          <CodeText className="text-xs text-primary whitespace-nowrap">
-            {newUrl}
-          </CodeText>
-          <CopyButton
-            textToCopy={newUrl}
-            toastMessage="Proxy URL copied to clipboard"
-          />
-        </div>
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
+        <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
+          {originalUrl}
+        </CodeText>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Configured via <CodeText className="text-xs">{envVar}</CodeText>{" "}
-        environment variable.
-      </p>
+      <span className="text-muted-foreground flex-shrink-0">→</span>
+      <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+        <CodeText className="text-xs text-primary whitespace-nowrap">
+          {newUrl}
+        </CodeText>
+        <CopyButton
+          textToCopy={newUrl}
+          toastMessage="Proxy URL copied to clipboard"
+        />
+      </div>
     </div>
-  );
-}
-
-function SeeMoreInDocsRow() {
-  return (
-    <p className="text-sm text-muted-foreground">
-      See{" "}
-      <a
-        href="https://archestra.ai/docs/platform-deployment#environment-variables"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-blue-500"
-      >
-        here
-      </a>{" "}
-      for more details.
-    </p>
   );
 }

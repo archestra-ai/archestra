@@ -19335,7 +19335,7 @@ export type GetPromptsResponses = {
             [key: string]: unknown;
         } | Array<unknown>;
         incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: string;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
@@ -19355,7 +19355,7 @@ export type CreatePromptData = {
             [key: string]: unknown;
         } | Array<unknown>;
         incomingEmailEnabled?: boolean;
-        incomingEmailSecurityMode?: string;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
     };
     path?: never;
@@ -19441,7 +19441,7 @@ export type CreatePromptResponses = {
             [key: string]: unknown;
         } | Array<unknown>;
         incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: string;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
@@ -19616,7 +19616,7 @@ export type GetPromptResponses = {
             [key: string]: unknown;
         } | Array<unknown>;
         incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: string;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
@@ -19635,7 +19635,7 @@ export type UpdatePromptData = {
             [key: string]: unknown;
         } | Array<unknown>;
         incomingEmailEnabled?: boolean;
-        incomingEmailSecurityMode?: string;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
     };
     path: {
@@ -19723,7 +19723,7 @@ export type UpdatePromptResponses = {
             [key: string]: unknown;
         } | Array<unknown>;
         incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: string;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
@@ -19820,7 +19820,7 @@ export type GetPromptVersionsResponses = {
                 [key: string]: unknown;
             } | Array<unknown>;
             incomingEmailEnabled: boolean;
-            incomingEmailSecurityMode: string;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
             createdAt: string;
             updatedAt: string;
@@ -20031,7 +20031,7 @@ export type RollbackPromptResponses = {
             [key: string]: unknown;
         } | Array<unknown>;
         incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: string;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;

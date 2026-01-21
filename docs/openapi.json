@@ -67296,7 +67296,12 @@
                         "type": "boolean"
                       },
                       "incomingEmailSecurityMode": {
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                          "private",
+                          "internal",
+                          "public"
+                        ]
                       },
                       "incomingEmailAllowedDomain": {
                         "nullable": true,
@@ -67614,7 +67619,12 @@
                     "type": "boolean"
                   },
                   "incomingEmailSecurityMode": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "internal",
+                      "public"
+                    ]
                   },
                   "incomingEmailAllowedDomain": {
                     "nullable": true,
@@ -67735,7 +67745,12 @@
                       "type": "boolean"
                     },
                     "incomingEmailSecurityMode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
                     },
                     "incomingEmailAllowedDomain": {
                       "nullable": true,
@@ -68108,7 +68123,12 @@
                       "type": "boolean"
                     },
                     "incomingEmailSecurityMode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
                     },
                     "incomingEmailAllowedDomain": {
                       "nullable": true,
@@ -68420,7 +68440,12 @@
                     "type": "boolean"
                   },
                   "incomingEmailSecurityMode": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "internal",
+                      "public"
+                    ]
                   },
                   "incomingEmailAllowedDomain": {
                     "nullable": true,
@@ -68548,7 +68573,12 @@
                       "type": "boolean"
                     },
                     "incomingEmailSecurityMode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
                     },
                     "incomingEmailAllowedDomain": {
                       "nullable": true,
@@ -69174,7 +69204,12 @@
                           "type": "boolean"
                         },
                         "incomingEmailSecurityMode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "private",
+                            "internal",
+                            "public"
+                          ]
                         },
                         "incomingEmailAllowedDomain": {
                           "nullable": true,
@@ -69939,7 +69974,12 @@
                       "type": "boolean"
                     },
                     "incomingEmailSecurityMode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
                     },
                     "incomingEmailAllowedDomain": {
                       "nullable": true,

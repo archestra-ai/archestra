@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  DOMAIN_VALIDATION_REGEX,
   type IncomingEmailSecurityMode,
 } from "@shared";
 import { Loader2, Mail } from "lucide-react";
@@ -171,6 +172,21 @@ export function PromptDialog({
     if (!trimmedName || !agentId) {
       toast.error("Name and Profile are required");
       return;
+    }
+
+    // Validate domain format when internal security mode is selected
+    if (incomingEmailEnabled && incomingEmailSecurityMode === "internal") {
+      const trimmedDomain = incomingEmailAllowedDomain.trim();
+      if (!trimmedDomain) {
+        toast.error("Allowed domain is required for internal security mode");
+        return;
+      }
+      if (!DOMAIN_VALIDATION_REGEX.test(trimmedDomain)) {
+        toast.error(
+          "Invalid domain format. Please enter a valid domain (e.g., company.com)",
+        );
+        return;
+      }
     }
 
     try {

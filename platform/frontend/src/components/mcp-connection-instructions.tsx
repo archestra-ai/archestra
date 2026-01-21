@@ -523,6 +523,22 @@ export function McpConnectionInstructions({
         </RadioGroup>
       </div>
 
+      <p className="text-sm text-muted-foreground">
+        The URLs are configurable via{" "}
+        <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText> and{" "}
+        <CodeText className="text-xs">ARCHESTRA_API_EXTERNAL_BASE_URL</CodeText>{" "}
+        environment variables. See{" "}
+        <a
+          href="https://archestra.ai/docs/platform-deployment#environment-variables"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-500"
+        >
+          here
+        </a>{" "}
+        for more details.
+      </p>
+
       <div className="space-y-3">
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
@@ -594,24 +610,6 @@ export function McpConnectionInstructions({
             </pre>
           </div>
         </div>
-
-        <p className="text-sm text-muted-foreground">
-          The URLs are configurable via{" "}
-          <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText> and{" "}
-          <CodeText className="text-xs">
-            ARCHESTRA_API_EXTERNAL_BASE_URL
-          </CodeText>{" "}
-          environment variables. See{" "}
-          <a
-            href="https://archestra.ai/docs/platform-deployment#environment-variables"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500"
-          >
-            here
-          </a>{" "}
-          for more details.
-        </p>
       </div>
     </div>
   );

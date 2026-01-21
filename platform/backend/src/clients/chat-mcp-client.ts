@@ -8,7 +8,6 @@ import {
   executeArchestraTool,
   getAgentTools,
 } from "@/archestra-mcp-server";
-import { CacheKey, cacheManager } from "@/models/cache-manager";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
@@ -18,6 +17,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { CacheKey, cacheManager } from "@/models/cache-manager";
 
 /**
  * MCP Gateway base URL (internal)

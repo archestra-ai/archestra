@@ -168,9 +168,6 @@ importers:
       botframework-connector:
         specifier: ^4.23.3
         version: 4.23.3
-      cache-manager:
-        specifier: ^7.2.7
-        version: 7.2.7
       dotenv:
         specifier: ^17.2.2
         version: 17.2.3

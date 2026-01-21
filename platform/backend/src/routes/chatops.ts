@@ -7,13 +7,13 @@ import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
 } from "@/agents/chatops/constants";
-import { CacheKey, cacheManager } from "@/models/cache-manager";
 import logger from "@/logging";
 import {
   ChatOpsChannelBindingModel,
   OrganizationModel,
   PromptModel,
 } from "@/models";
+import { CacheKey, cacheManager } from "@/models/cache-manager";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   type ChatOpsProviderType,

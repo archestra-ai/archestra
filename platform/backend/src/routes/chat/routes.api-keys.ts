@@ -4,8 +4,8 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { CacheKey, cacheManager } from "@/models/cache-manager";
 import { ChatApiKeyModel, TeamModel } from "@/models";
+import { CacheKey, cacheManager } from "@/models/cache-manager";
 import { testProviderApiKey } from "@/routes/chat/routes.models";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import {

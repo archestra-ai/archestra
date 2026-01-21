@@ -7,10 +7,10 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
-import { CacheKey, cacheManager } from "@/models/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
+import { CacheKey, cacheManager } from "@/models/cache-manager";
 import {
   createGoogleGenAIClient,
   isVertexAiEnabled,

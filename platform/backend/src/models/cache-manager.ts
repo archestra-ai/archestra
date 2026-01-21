@@ -98,9 +98,7 @@ class CacheManager {
    */
   async delete(key: AllowedCacheKey): Promise<boolean> {
     try {
-      await db
-        .delete(schema.cacheTable)
-        .where(eq(schema.cacheTable.key, key));
+      await db.delete(schema.cacheTable).where(eq(schema.cacheTable.key, key));
       return true;
     } catch (error) {
       logger.error({ error, key }, "CacheManager: Error deleting cache entry");
@@ -116,7 +114,7 @@ class CacheManager {
     try {
       await db
         .delete(schema.cacheTable)
-        .where(sql`${schema.cacheTable.key} LIKE ${prefix + "%"}`);
+        .where(sql`${schema.cacheTable.key} LIKE ${`${prefix}%`}`);
     } catch (error) {
       logger.error({ error, prefix }, "CacheManager: Error deleting by prefix");
     }
@@ -160,7 +158,10 @@ class CacheManager {
 
       return result.length;
     } catch (error) {
-      logger.error({ error }, "CacheManager: Error cleaning up expired entries");
+      logger.error(
+        { error },
+        "CacheManager: Error cleaning up expired entries",
+      );
       return 0;
     }
   }

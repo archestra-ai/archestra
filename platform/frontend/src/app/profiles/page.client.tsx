@@ -908,6 +908,15 @@ function EditProfileDialog({
   // Non-admin users must have at least one team assigned
   const requiresTeamSelection = !isProfileAdmin && assignedTeamIds.length === 0;
 
+  // Domain validation for internal mode
+  const domainRegex =
+    /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+  const isInternalModeInvalid =
+    incomingEmailEnabled &&
+    incomingEmailSecurityMode === INCOMING_EMAIL_SECURITY_MODE.INTERNAL &&
+    (!incomingEmailAllowedDomain.trim() ||
+      !domainRegex.test(incomingEmailAllowedDomain.trim()));
+
   const handleAddTeam = useCallback(
     (teamId: string) => {
       if (teamId && !assignedTeamIds.includes(teamId)) {
@@ -943,15 +952,24 @@ function EditProfileDialog({
       const updatedLabels =
         agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
-      // Validate internal mode requires domain
+      // Validate internal mode requires valid domain
       if (
-        incomingEmailSecurityMode === INCOMING_EMAIL_SECURITY_MODE.INTERNAL &&
-        !incomingEmailAllowedDomain.trim()
+        incomingEmailEnabled &&
+        incomingEmailSecurityMode === INCOMING_EMAIL_SECURITY_MODE.INTERNAL
       ) {
-        toast.error(
-          "Allowed domain is required when security mode is 'Internal'",
-        );
-        return;
+        const domain = incomingEmailAllowedDomain.trim();
+        if (!domain) {
+          toast.error(
+            "Allowed domain is required when security mode is 'Internal'",
+          );
+          return;
+        }
+        if (!domainRegex.test(domain)) {
+          toast.error(
+            "Please enter a valid domain format (e.g., company.com)",
+          );
+          return;
+        }
       }
 
       try {
@@ -1243,10 +1261,23 @@ function EditProfileDialog({
                           setIncomingEmailAllowedDomain(e.target.value)
                         }
                         placeholder="company.com"
+                        className={
+                          incomingEmailAllowedDomain.trim() &&
+                          !domainRegex.test(incomingEmailAllowedDomain.trim())
+                            ? "border-destructive"
+                            : ""
+                        }
                       />
-                      <p className="text-sm text-muted-foreground">
-                        Only emails from this domain will be accepted.
-                      </p>
+                      {incomingEmailAllowedDomain.trim() &&
+                      !domainRegex.test(incomingEmailAllowedDomain.trim()) ? (
+                        <p className="text-sm text-destructive">
+                          Please enter a valid domain format (e.g., company.com)
+                        </p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Only emails from this domain will be accepted.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1263,7 +1294,11 @@ function EditProfileDialog({
             </Button>
             <Button
               type="submit"
-              disabled={updateProfile.isPending || requiresTeamSelection}
+              disabled={
+                updateProfile.isPending ||
+                requiresTeamSelection ||
+                isInternalModeInvalid
+              }
             >
               {updateProfile.isPending ? "Updating..." : "Update profile"}
             </Button>

@@ -60,8 +60,17 @@ export type InsertAgent = z.infer<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
 
 /**
+ * Regex pattern for validating domain format.
+ * Matches domains like: company.com, sub.company.com, my-company.co.uk
+ * Does not match: spaces, special characters (except hyphen), domains starting/ending with hyphen
+ */
+const DOMAIN_REGEX = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+
+/**
  * Validate incoming email settings.
- * Throws an error if security mode is 'internal' but no allowed domain is set.
+ * Throws an error if:
+ * - Security mode is 'internal' but no allowed domain is set
+ * - Security mode is 'internal' and the allowed domain format is invalid
  */
 export function validateIncomingEmailSettings(
   data: Partial<UpdateAgent>,
@@ -74,6 +83,13 @@ export function validateIncomingEmailSettings(
     ) {
       throw new Error(
         "incomingEmailAllowedDomain is required when security mode is 'internal'",
+      );
+    }
+
+    const domain = data.incomingEmailAllowedDomain.trim();
+    if (!DOMAIN_REGEX.test(domain)) {
+      throw new Error(
+        "incomingEmailAllowedDomain must be a valid domain format (e.g., company.com)",
       );
     }
   }

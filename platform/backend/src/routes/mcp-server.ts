@@ -99,7 +99,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ body, user }, reply) => {
+    async ({ body, user, headers }, reply) => {
       let {
         agentIds,
         secretId,
@@ -144,6 +144,46 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             400,
             "Personal MCP server installations are not allowed when Readonly Vault is enabled. Please select a team.",
           );
+        }
+
+        // Validate permissions for team installations
+        // WHY: We want to restrict who can create team-wide MCP server installations:
+        // - Members should NOT be able to create team installations (they lack mcpServer:update)
+        // - Editors can create team installations ONLY for teams they are members of
+        // - Admins (with team:admin) can create team installations for ANY team
+        // This prevents members from installing MCP servers that affect the whole team.
+        if (serverData.teamId) {
+          const { success: hasTeamAdmin } = await hasPermission(
+            { team: ["admin"] },
+            headers,
+          );
+
+          if (!hasTeamAdmin) {
+            // WHY: mcpServer:update distinguishes editors from members
+            // Editors have this permission, members don't
+            const { success: hasMcpServerUpdate } = await hasPermission(
+              { mcpServer: ["update"] },
+              headers,
+            );
+
+            if (!hasMcpServerUpdate) {
+              throw new ApiError(
+                403,
+                "You don't have permission to create team MCP server installations",
+              );
+            }
+
+            const isMember = await TeamModel.isUserInTeam(
+              serverData.teamId,
+              user.id,
+            );
+            if (!isMember) {
+              throw new ApiError(
+                403,
+                "You can only create MCP server installations for teams you are a member of",
+              );
+            }
+          }
         }
 
         // Validate no duplicate installations for this catalog item

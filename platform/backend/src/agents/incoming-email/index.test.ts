@@ -1479,4 +1479,101 @@ describe("processIncomingEmail security modes", () => {
       }),
     );
   });
+
+  test("rejects email when incoming email is disabled even with internal mode", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    // Agent has internal mode configured but email is disabled
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: false,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
+      incomingEmailAllowedDomain: "company.com",
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-disabled-internal-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "user@company.com", // From allowed domain, but email disabled
+      subject: "Test",
+      body: "Test body",
+      receivedAt: new Date(),
+    };
+
+    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
+      "Incoming email is not enabled for agent",
+    );
+    expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+  });
+
+  test("rejects email when incoming email is disabled even with public mode", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    // Agent has public mode configured but email is disabled
+    const agent = await makeAgent({
+      teams: [team.id],
+      incomingEmailEnabled: false,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id);
+    const promptId = prompt.id;
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-disabled-public-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "anyone@anywhere.com", // Public mode, but email disabled
+      subject: "Test",
+      body: "Test body",
+      receivedAt: new Date(),
+    };
+
+    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow(
+      "Incoming email is not enabled for agent",
+    );
+    expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+  });
 });

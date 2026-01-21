@@ -1,5 +1,39 @@
 import { describe, expect, test } from "vitest";
-import { validateIncomingEmailSettings } from "./agent";
+import { parseSecurityMode, validateIncomingEmailSettings } from "./agent";
+
+describe("parseSecurityMode", () => {
+  test("returns 'private' for valid private mode", () => {
+    expect(parseSecurityMode("private")).toBe("private");
+  });
+
+  test("returns 'internal' for valid internal mode", () => {
+    expect(parseSecurityMode("internal")).toBe("internal");
+  });
+
+  test("returns 'public' for valid public mode", () => {
+    expect(parseSecurityMode("public")).toBe("public");
+  });
+
+  test("returns 'private' for undefined", () => {
+    expect(parseSecurityMode(undefined)).toBe("private");
+  });
+
+  test("returns 'private' for null", () => {
+    expect(parseSecurityMode(null)).toBe("private");
+  });
+
+  test("returns 'private' for unknown mode", () => {
+    expect(parseSecurityMode("unknown")).toBe("private");
+  });
+
+  test("returns 'private' for empty string", () => {
+    expect(parseSecurityMode("")).toBe("private");
+  });
+
+  test("returns 'private' for invalid type", () => {
+    expect(parseSecurityMode("PRIVATE")).toBe("private"); // case sensitive
+  });
+});
 
 describe("validateIncomingEmailSettings", () => {
   test("throws when internal mode has no allowed domain", () => {
@@ -72,6 +106,29 @@ describe("validateIncomingEmailSettings", () => {
         incomingEmailAllowedDomain: "company.c",
       }),
     ).toThrow("must be a valid domain format");
+  });
+
+  test("throws when domain exceeds maximum length (253 characters)", () => {
+    // Create a domain that exceeds 253 characters
+    const longDomain = `${"a".repeat(250)}.com`;
+    expect(() =>
+      validateIncomingEmailSettings({
+        incomingEmailSecurityMode: "internal",
+        incomingEmailAllowedDomain: longDomain,
+      }),
+    ).toThrow("exceeds maximum length of 253 characters");
+  });
+
+  test("accepts domain at maximum length (253 characters)", () => {
+    // Create a domain exactly at 253 characters
+    const maxLengthDomain = `${"a".repeat(249)}.com`;
+    expect(maxLengthDomain.length).toBe(253);
+    expect(() =>
+      validateIncomingEmailSettings({
+        incomingEmailSecurityMode: "internal",
+        incomingEmailAllowedDomain: maxLengthDomain,
+      }),
+    ).not.toThrow();
   });
 
   test("accepts valid simple domain", () => {

@@ -195,3 +195,16 @@ export function isValidIncomingEmailSecurityMode(
     value as IncomingEmailSecurityMode,
   );
 }
+
+/**
+ * Regex pattern for validating domain format.
+ * Matches domains like: company.com, sub.company.com, my-company.co.uk
+ * Does not match: spaces, special characters (except hyphen), domains starting/ending with hyphen
+ */
+export const DOMAIN_VALIDATION_REGEX =
+  /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+
+/**
+ * Maximum domain length per DNS specification (RFC 1035).
+ */
+export const MAX_DOMAIN_LENGTH = 253;

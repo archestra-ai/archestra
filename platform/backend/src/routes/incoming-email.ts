@@ -14,6 +14,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  parseSecurityMode,
 } from "@/types";
 
 /**
@@ -297,11 +298,9 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
           emailAddress: null,
           agentIncomingEmailEnabled:
             agentEmailSettings?.incomingEmailEnabled ?? false,
-          agentSecurityMode:
-            (agentEmailSettings?.incomingEmailSecurityMode as
-              | "private"
-              | "internal"
-              | "public") ?? "private",
+          agentSecurityMode: parseSecurityMode(
+            agentEmailSettings?.incomingEmailSecurityMode,
+          ),
           agentAllowedDomain:
             agentEmailSettings?.incomingEmailAllowedDomain ?? null,
         });
@@ -314,11 +313,9 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         emailAddress,
         agentIncomingEmailEnabled:
           agentEmailSettings?.incomingEmailEnabled ?? false,
-        agentSecurityMode:
-          (agentEmailSettings?.incomingEmailSecurityMode as
-            | "private"
-            | "internal"
-            | "public") ?? "private",
+        agentSecurityMode: parseSecurityMode(
+          agentEmailSettings?.incomingEmailSecurityMode,
+        ),
         agentAllowedDomain:
           agentEmailSettings?.incomingEmailAllowedDomain ?? null,
       });

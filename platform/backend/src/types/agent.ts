@@ -1,4 +1,8 @@
 import {
+  DOMAIN_VALIDATION_REGEX,
+  MAX_DOMAIN_LENGTH,
+} from "@shared";
+import {
   createInsertSchema,
   createSelectSchema,
   createUpdateSchema,
@@ -20,6 +24,21 @@ export const IncomingEmailSecurityModeSchema = z.enum([
   "internal",
   "public",
 ]);
+
+export type IncomingEmailSecurityMode = z.infer<
+  typeof IncomingEmailSecurityModeSchema
+>;
+
+/**
+ * Parse and validate an incoming email security mode.
+ * Returns the validated mode or defaults to "private" if invalid.
+ */
+export function parseSecurityMode(
+  mode: string | undefined | null,
+): IncomingEmailSecurityMode {
+  const result = IncomingEmailSecurityModeSchema.safeParse(mode);
+  return result.success ? result.data : "private";
+}
 
 export const SelectAgentSchema = createSelectSchema(schema.agentsTable).extend({
   tools: z.array(SelectToolSchema),
@@ -60,17 +79,10 @@ export type InsertAgent = z.infer<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
 
 /**
- * Regex pattern for validating domain format.
- * Matches domains like: company.com, sub.company.com, my-company.co.uk
- * Does not match: spaces, special characters (except hyphen), domains starting/ending with hyphen
- */
-const DOMAIN_REGEX =
-  /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
-
-/**
  * Validate incoming email settings.
  * Throws an error if:
  * - Security mode is 'internal' but no allowed domain is set
+ * - Security mode is 'internal' and the allowed domain exceeds max length
  * - Security mode is 'internal' and the allowed domain format is invalid
  */
 export function validateIncomingEmailSettings(
@@ -88,7 +100,14 @@ export function validateIncomingEmailSettings(
     }
 
     const domain = data.incomingEmailAllowedDomain.trim();
-    if (!DOMAIN_REGEX.test(domain)) {
+
+    if (domain.length > MAX_DOMAIN_LENGTH) {
+      throw new Error(
+        `incomingEmailAllowedDomain exceeds maximum length of ${MAX_DOMAIN_LENGTH} characters`,
+      );
+    }
+
+    if (!DOMAIN_VALIDATION_REGEX.test(domain)) {
       throw new Error(
         "incomingEmailAllowedDomain must be a valid domain format (e.g., company.com)",
       );

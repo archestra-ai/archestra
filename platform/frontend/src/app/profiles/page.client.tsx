@@ -2,6 +2,7 @@
 
 import {
   archestraApiSdk,
+  DOMAIN_VALIDATION_REGEX,
   E2eTestId,
   INCOMING_EMAIL_SECURITY_MODE,
   type IncomingEmailSecurityMode,
@@ -909,13 +910,11 @@ function EditProfileDialog({
   const requiresTeamSelection = !isProfileAdmin && assignedTeamIds.length === 0;
 
   // Domain validation for internal mode
-  const domainRegex =
-    /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
   const isInternalModeInvalid =
     incomingEmailEnabled &&
     incomingEmailSecurityMode === INCOMING_EMAIL_SECURITY_MODE.INTERNAL &&
     (!incomingEmailAllowedDomain.trim() ||
-      !domainRegex.test(incomingEmailAllowedDomain.trim()));
+      !DOMAIN_VALIDATION_REGEX.test(incomingEmailAllowedDomain.trim()));
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -964,8 +963,10 @@ function EditProfileDialog({
           );
           return;
         }
-        if (!domainRegex.test(domain)) {
-          toast.error("Please enter a valid domain format (e.g., company.com)");
+        if (!DOMAIN_VALIDATION_REGEX.test(domain)) {
+          toast.error(
+            "Please enter a valid domain format (e.g., company.com)",
+          );
           return;
         }
       }
@@ -1261,13 +1262,13 @@ function EditProfileDialog({
                         placeholder="company.com"
                         className={
                           incomingEmailAllowedDomain.trim() &&
-                          !domainRegex.test(incomingEmailAllowedDomain.trim())
+                          !DOMAIN_VALIDATION_REGEX.test(incomingEmailAllowedDomain.trim())
                             ? "border-destructive"
                             : ""
                         }
                       />
                       {incomingEmailAllowedDomain.trim() &&
-                      !domainRegex.test(incomingEmailAllowedDomain.trim()) ? (
+                      !DOMAIN_VALIDATION_REGEX.test(incomingEmailAllowedDomain.trim()) ? (
                         <p className="text-sm text-destructive">
                           Please enter a valid domain format (e.g., company.com)
                         </p>

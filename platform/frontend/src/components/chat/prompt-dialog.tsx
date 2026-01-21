@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  type IncomingEmailSecurityMode,
-} from "@shared";
+import type { archestraApiTypes, IncomingEmailSecurityMode } from "@shared";
 import { Loader2, Mail } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";

@@ -143,10 +143,8 @@ test.describe(
         const prefilledEmail = await emailInputSignup.inputValue();
         expect(prefilledEmail).toBe(TEST_EMAIL);
 
-        // Fill in password
-        const passwordInput = newUserPage.getByRole("textbox", {
-          name: /password/i,
-        });
+        // Fill in password - use getByLabel since password inputs don't have textbox role
+        const passwordInput = newUserPage.getByLabel(/password/i);
         await expect(passwordInput).toBeVisible();
         await passwordInput.fill(TEST_PASSWORD);
 

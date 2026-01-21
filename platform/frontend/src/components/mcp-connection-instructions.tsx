@@ -17,6 +17,7 @@ import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -31,7 +32,9 @@ import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
-const { externalProxyUrl: apiBaseUrl } = config.api;
+const { externalProxyUrl, internalProxyUrl } = config.api;
+
+type ConnectionType = "internal" | "external";
 
 interface McpConnectionInstructionsProps {
   agentId: string;
@@ -54,6 +57,8 @@ export function McpConnectionInstructions({
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
+  const [connectionType, setConnectionType] =
+    useState<ConnectionType>("external");
 
   // Fetch tokens filtered by the selected profile's teams
   const { data: tokensData } = useTokens({ profileId: selectedProfileId });
@@ -114,7 +119,9 @@ export function McpConnectionInstructions({
   );
 
   // Use the new URL format with selected profile ID
-  const mcpUrl = `${apiBaseUrl}/mcp/${selectedProfileId}`;
+  const baseUrl =
+    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
+  const mcpUrl = `${baseUrl}/mcp/${selectedProfileId}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -469,11 +476,113 @@ export function McpConnectionInstructions({
         </Select>
       </div>
 
+      {/* Connection Type Selector */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Connection type</Label>
+        <RadioGroup
+          value={connectionType}
+          onValueChange={(value) => setConnectionType(value as ConnectionType)}
+          className="flex flex-col gap-3"
+        >
+          <div className="flex items-start gap-3">
+            <RadioGroupItem value="internal" id="internal" className="mt-0.5" />
+            <div className="flex flex-col gap-0.5">
+              <Label htmlFor="internal" className="font-normal cursor-pointer">
+                Internal URL
+              </Label>
+              <span className="text-xs text-muted-foreground">
+                Internal URL where the frontend connects to the backend API
+                server.
+              </span>
+            </div>
+          </div>
+          {externalProxyUrl && (
+            <div className="flex items-start gap-3">
+              <RadioGroupItem
+                value="external"
+                id="external"
+                className="mt-0.5"
+              />
+              <div className="flex flex-col gap-0.5">
+                <Label
+                  htmlFor="external"
+                  className="font-normal cursor-pointer"
+                >
+                  Public URL
+                </Label>
+                <span className="text-xs text-muted-foreground">
+                  Public URL for connecting to MCP Gateway from outside the
+                  Kubernetes cluster.
+                </span>
+              </div>
+            </div>
+          )}
+        </RadioGroup>
+      </div>
+
       <div className="space-y-3">
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
             Configuration for MCP clients:
           </p>
+
+          <div className="flex justify-between gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 bg-transparent"
+              onClick={handleExposeToken}
+              disabled={
+                isLoadingToken ||
+                (!isPersonalTokenSelected && !hasProfileAdminPermission)
+              }
+            >
+              {isLoadingToken ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Loading...</span>
+                </>
+              ) : showExposedToken ? (
+                <>
+                  <EyeOff className="h-4 w-4" />
+                  <span>Hide token</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="h-4 w-4" />
+                  <span>Expose token</span>
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 bg-transparent"
+              onClick={
+                isPersonalTokenSelected || hasProfileAdminPermission
+                  ? handleCopyConfig
+                  : handleCopyConfigWithoutRealToken
+              }
+              disabled={isCopyingConfig}
+            >
+              {isCopyingConfig ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Copying...</span>
+                </>
+              ) : copiedConfig ? (
+                <>
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  <span>Copy with exposed token</span>
+                </>
+              )}
+            </Button>
+          </div>
 
           <div className="bg-muted rounded-md p-3 relative">
             <pre className="text-xs whitespace-pre-wrap break-all">
@@ -481,72 +590,16 @@ export function McpConnectionInstructions({
                 {mcpConfig}
               </CodeText>
             </pre>
-            <div className="absolute top-2 right-2 flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-2"
-                onClick={handleExposeToken}
-                disabled={
-                  isLoadingToken ||
-                  (!isPersonalTokenSelected && !hasProfileAdminPermission)
-                }
-              >
-                {isLoadingToken ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Loading...</span>
-                  </>
-                ) : showExposedToken ? (
-                  <>
-                    <EyeOff className="h-4 w-4" />
-                    <span>Hide token</span>
-                  </>
-                ) : (
-                  <>
-                    <Eye className="h-4 w-4" />
-                    <span>Expose token</span>
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-2"
-                onClick={
-                  isPersonalTokenSelected || hasProfileAdminPermission
-                    ? handleCopyConfig
-                    : handleCopyConfigWithoutRealToken
-                }
-                disabled={isCopyingConfig}
-              >
-                {isCopyingConfig ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Copying...</span>
-                  </>
-                ) : copiedConfig ? (
-                  <>
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4" />
-                    <span>Copy with exposed token</span>
-                  </>
-                )}
-              </Button>
-            </div>
           </div>
         </div>
 
         <p className="text-sm text-muted-foreground">
-          The URL is configurable via the{" "}
+          The URLs are configurable via{" "}
+          <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText> and{" "}
           <CodeText className="text-xs">
             ARCHESTRA_API_EXTERNAL_BASE_URL
           </CodeText>{" "}
-          environment variable. See{" "}
+          environment variables. See{" "}
           <a
             href="https://archestra.ai/docs/platform-deployment#environment-variables"
             target="_blank"

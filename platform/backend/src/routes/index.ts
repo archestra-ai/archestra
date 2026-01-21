@@ -35,7 +35,7 @@ export { default as organizationRoleRoutes } from "./organization-role";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
 export { default as promptAgentRoutes } from "./prompt-agents";
 export { default as promptRoutes } from "./prompts";
-// Proxy routes - all providers use V2 (unified handler)
+// Proxy routes
 export const anthropicProxyRoutes = anthropicProxyRoutesV2;
 export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;
 export const geminiProxyRoutes = geminiProxyRoutesV2;

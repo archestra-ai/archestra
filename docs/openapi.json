@@ -18311,21 +18311,6 @@
                           "considerContextUntrusted": {
                             "type": "boolean"
                           },
-                          "incomingEmailEnabled": {
-                            "type": "boolean"
-                          },
-                          "incomingEmailSecurityMode": {
-                            "type": "string",
-                            "enum": [
-                              "private",
-                              "internal",
-                              "public"
-                            ]
-                          },
-                          "incomingEmailAllowedDomain": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -18479,9 +18464,6 @@
                           "isDemo",
                           "isDefault",
                           "considerContextUntrusted",
-                          "incomingEmailEnabled",
-                          "incomingEmailSecurityMode",
-                          "incomingEmailAllowedDomain",
                           "createdAt",
                           "updatedAt",
                           "tools",
@@ -18777,21 +18759,6 @@
                   "considerContextUntrusted": {
                     "type": "boolean"
                   },
-                  "incomingEmailEnabled": {
-                    "type": "boolean"
-                  },
-                  "incomingEmailSecurityMode": {
-                    "type": "string",
-                    "enum": [
-                      "private",
-                      "internal",
-                      "public"
-                    ]
-                  },
-                  "incomingEmailAllowedDomain": {
-                    "nullable": true,
-                    "type": "string"
-                  },
                   "teams": {
                     "type": "array",
                     "items": {
@@ -18860,21 +18827,6 @@
                     },
                     "considerContextUntrusted": {
                       "type": "boolean"
-                    },
-                    "incomingEmailEnabled": {
-                      "type": "boolean"
-                    },
-                    "incomingEmailSecurityMode": {
-                      "type": "string",
-                      "enum": [
-                        "private",
-                        "internal",
-                        "public"
-                      ]
-                    },
-                    "incomingEmailAllowedDomain": {
-                      "nullable": true,
-                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -19029,9 +18981,6 @@
                     "isDemo",
                     "isDefault",
                     "considerContextUntrusted",
-                    "incomingEmailEnabled",
-                    "incomingEmailSecurityMode",
-                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -19290,21 +19239,6 @@
                       "considerContextUntrusted": {
                         "type": "boolean"
                       },
-                      "incomingEmailEnabled": {
-                        "type": "boolean"
-                      },
-                      "incomingEmailSecurityMode": {
-                        "type": "string",
-                        "enum": [
-                          "private",
-                          "internal",
-                          "public"
-                        ]
-                      },
-                      "incomingEmailAllowedDomain": {
-                        "nullable": true,
-                        "type": "string"
-                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -19458,9 +19392,6 @@
                       "isDemo",
                       "isDefault",
                       "considerContextUntrusted",
-                      "incomingEmailEnabled",
-                      "incomingEmailSecurityMode",
-                      "incomingEmailAllowedDomain",
                       "createdAt",
                       "updatedAt",
                       "tools",
@@ -19718,21 +19649,6 @@
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
-                    "incomingEmailEnabled": {
-                      "type": "boolean"
-                    },
-                    "incomingEmailSecurityMode": {
-                      "type": "string",
-                      "enum": [
-                        "private",
-                        "internal",
-                        "public"
-                      ]
-                    },
-                    "incomingEmailAllowedDomain": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -19886,9 +19802,6 @@
                     "isDemo",
                     "isDefault",
                     "considerContextUntrusted",
-                    "incomingEmailEnabled",
-                    "incomingEmailSecurityMode",
-                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -20157,21 +20070,6 @@
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
-                    "incomingEmailEnabled": {
-                      "type": "boolean"
-                    },
-                    "incomingEmailSecurityMode": {
-                      "type": "string",
-                      "enum": [
-                        "private",
-                        "internal",
-                        "public"
-                      ]
-                    },
-                    "incomingEmailAllowedDomain": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -20325,9 +20223,6 @@
                     "isDemo",
                     "isDefault",
                     "considerContextUntrusted",
-                    "incomingEmailEnabled",
-                    "incomingEmailSecurityMode",
-                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -20575,21 +20470,6 @@
                   "considerContextUntrusted": {
                     "type": "boolean"
                   },
-                  "incomingEmailEnabled": {
-                    "type": "boolean"
-                  },
-                  "incomingEmailSecurityMode": {
-                    "type": "string",
-                    "enum": [
-                      "private",
-                      "internal",
-                      "public"
-                    ]
-                  },
-                  "incomingEmailAllowedDomain": {
-                    "nullable": true,
-                    "type": "string"
-                  },
                   "teams": {
                     "type": "array",
                     "items": {
@@ -20665,21 +20545,6 @@
                     },
                     "considerContextUntrusted": {
                       "type": "boolean"
-                    },
-                    "incomingEmailEnabled": {
-                      "type": "boolean"
-                    },
-                    "incomingEmailSecurityMode": {
-                      "type": "string",
-                      "enum": [
-                        "private",
-                        "internal",
-                        "public"
-                      ]
-                    },
-                    "incomingEmailAllowedDomain": {
-                      "nullable": true,
-                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -20834,9 +20699,6 @@
                     "isDemo",
                     "isDefault",
                     "considerContextUntrusted",
-                    "incomingEmailEnabled",
-                    "incomingEmailSecurityMode",
-                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -66950,6 +66812,16 @@
                           }
                         ]
                       },
+                      "incomingEmailEnabled": {
+                        "type": "boolean"
+                      },
+                      "incomingEmailSecurityMode": {
+                        "type": "string"
+                      },
+                      "incomingEmailAllowedDomain": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -66969,6 +66841,9 @@
                       "version",
                       "history",
                       "allowedChatops",
+                      "incomingEmailEnabled",
+                      "incomingEmailSecurityMode",
+                      "incomingEmailAllowedDomain",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -67254,6 +67129,16 @@
                         "items": {}
                       }
                     ]
+                  },
+                  "incomingEmailEnabled": {
+                    "type": "boolean"
+                  },
+                  "incomingEmailSecurityMode": {
+                    "type": "string"
+                  },
+                  "incomingEmailAllowedDomain": {
+                    "nullable": true,
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -67366,6 +67251,16 @@
                         }
                       ]
                     },
+                    "incomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "incomingEmailSecurityMode": {
+                      "type": "string"
+                    },
+                    "incomingEmailAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -67385,6 +67280,9 @@
                     "version",
                     "history",
                     "allowedChatops",
+                    "incomingEmailEnabled",
+                    "incomingEmailSecurityMode",
+                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -67726,6 +67624,16 @@
                         }
                       ]
                     },
+                    "incomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "incomingEmailSecurityMode": {
+                      "type": "string"
+                    },
+                    "incomingEmailAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -67745,6 +67653,9 @@
                     "version",
                     "history",
                     "allowedChatops",
+                    "incomingEmailEnabled",
+                    "incomingEmailSecurityMode",
+                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -68024,6 +67935,16 @@
                         "items": {}
                       }
                     ]
+                  },
+                  "incomingEmailEnabled": {
+                    "type": "boolean"
+                  },
+                  "incomingEmailSecurityMode": {
+                    "type": "string"
+                  },
+                  "incomingEmailAllowedDomain": {
+                    "nullable": true,
+                    "type": "string"
                   }
                 }
               }
@@ -68143,6 +68064,16 @@
                         }
                       ]
                     },
+                    "incomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "incomingEmailSecurityMode": {
+                      "type": "string"
+                    },
+                    "incomingEmailAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -68162,6 +68093,9 @@
                     "version",
                     "history",
                     "allowedChatops",
+                    "incomingEmailEnabled",
+                    "incomingEmailSecurityMode",
+                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -68756,6 +68690,16 @@
                             }
                           ]
                         },
+                        "incomingEmailEnabled": {
+                          "type": "boolean"
+                        },
+                        "incomingEmailSecurityMode": {
+                          "type": "string"
+                        },
+                        "incomingEmailAllowedDomain": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -68775,6 +68719,9 @@
                         "version",
                         "history",
                         "allowedChatops",
+                        "incomingEmailEnabled",
+                        "incomingEmailSecurityMode",
+                        "incomingEmailAllowedDomain",
                         "createdAt",
                         "updatedAt"
                       ],
@@ -69508,6 +69455,16 @@
                         }
                       ]
                     },
+                    "incomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "incomingEmailSecurityMode": {
+                      "type": "string"
+                    },
+                    "incomingEmailAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -69527,6 +69484,9 @@
                     "version",
                     "history",
                     "allowedChatops",
+                    "incomingEmailEnabled",
+                    "incomingEmailSecurityMode",
+                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt"
                   ],

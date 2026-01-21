@@ -5446,9 +5446,6 @@ export type GetAgentsResponses = {
             isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
-            incomingEmailEnabled: boolean;
-            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-            incomingEmailAllowedDomain: string | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -5510,9 +5507,6 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
-        incomingEmailEnabled?: boolean;
-        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain?: string | null;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -5595,9 +5589,6 @@ export type CreateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5720,9 +5711,6 @@ export type GetAllAgentsResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5845,9 +5833,6 @@ export type GetDefaultAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6051,9 +6036,6 @@ export type GetAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6106,9 +6088,6 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
-        incomingEmailEnabled?: boolean;
-        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain?: string | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -6193,9 +6172,6 @@ export type UpdateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -19242,6 +19218,9 @@ export type GetPromptsResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: string;
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -19259,6 +19238,9 @@ export type CreatePromptData = {
         allowedChatops?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: string;
+        incomingEmailAllowedDomain?: string | null;
     };
     path?: never;
     query?: never;
@@ -19342,6 +19324,9 @@ export type CreatePromptResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: string;
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -19514,6 +19499,9 @@ export type GetPromptResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: string;
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -19530,6 +19518,9 @@ export type UpdatePromptData = {
         allowedChatops?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: string;
+        incomingEmailAllowedDomain?: string | null;
     };
     path: {
         id: string;
@@ -19615,6 +19606,9 @@ export type UpdatePromptResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: string;
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -19709,6 +19703,9 @@ export type GetPromptVersionsResponses = {
             allowedChatops: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown>;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: string;
+            incomingEmailAllowedDomain: string | null;
             createdAt: string;
             updatedAt: string;
         };
@@ -19917,6 +19914,9 @@ export type RollbackPromptResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: string;
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
     };

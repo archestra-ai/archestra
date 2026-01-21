@@ -3,7 +3,7 @@ import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js"
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { cacheManager, CacheKey } from "@/cache-manager";
+import { cacheManager, CacheKey } from "@/models/cache-manager";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";

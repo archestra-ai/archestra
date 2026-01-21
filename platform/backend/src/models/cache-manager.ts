@@ -1,12 +1,13 @@
+import { TimeInMs } from "@shared";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
 /**
- * PostgreSQL-based cache store for distributed caching.
+ * PostgreSQL-based cache manager for distributed caching.
  *
- * Provides a simple key-value store with TTL support using PostgreSQL.
- * This enables cache sharing across multiple pods in a Kubernetes deployment.
+ * Provides a simple key-value store with TTL support using the cache table.
+ * All cache operations are automatically shared across all application pods.
  *
  * Features:
  * - Automatic TTL expiration (checked on read)
@@ -14,19 +15,21 @@ import logger from "@/logging";
  * - JSONB storage for flexible value types
  * - Upsert semantics (set overwrites existing keys)
  */
-class PostgresCacheStore {
+class CacheManager {
   private cleanupIntervalId: NodeJS.Timeout | null = null;
   private static readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+  private defaultTtl = TimeInMs.Hour;
 
   constructor() {
     this.startCleanupInterval();
+    logger.info("CacheManager: Initialized with PostgreSQL storage");
   }
 
   /**
    * Get a value from the cache.
    * Returns undefined if the key doesn't exist or has expired.
    */
-  async get<T>(key: string): Promise<T | undefined> {
+  async get<T>(key: AllowedCacheKey): Promise<T | undefined> {
     try {
       const result = await db
         .select()
@@ -45,22 +48,26 @@ class PostgresCacheStore {
 
       return result[0].value as T;
     } catch (error) {
-      logger.error({ error, key }, "PostgresCacheStore: Error getting cache entry");
+      logger.error({ error, key }, "CacheManager: Error getting cache entry");
       return undefined;
     }
   }
 
   /**
-   * Set a value in the cache with a TTL.
+   * Set a value in the cache with optional TTL.
    * If the key already exists, it will be overwritten.
    *
    * @param key - Cache key
    * @param value - Value to store (will be serialized as JSONB)
-   * @param ttlMs - Time-to-live in milliseconds
+   * @param ttl - Time-to-live in milliseconds (defaults to 1 hour)
    */
-  async set<T>(key: string, value: T, ttlMs: number): Promise<void> {
+  async set<T>(
+    key: AllowedCacheKey,
+    value: T,
+    ttl?: number,
+  ): Promise<T | undefined> {
     try {
-      const expiresAt = new Date(Date.now() + ttlMs);
+      const expiresAt = new Date(Date.now() + (ttl ?? this.defaultTtl));
 
       await db
         .insert(schema.cacheTable)
@@ -77,26 +84,26 @@ class PostgresCacheStore {
             expiresAt,
           },
         });
+
+      return value;
     } catch (error) {
-      logger.error({ error, key }, "PostgresCacheStore: Error setting cache entry");
+      logger.error({ error, key }, "CacheManager: Error setting cache entry");
       throw error;
     }
   }
 
   /**
    * Delete a value from the cache.
-   * Returns true if the key was deleted, false if it didn't exist.
+   * Returns true if the operation succeeded.
    */
-  async delete(key: string): Promise<boolean> {
+  async delete(key: AllowedCacheKey): Promise<boolean> {
     try {
-      const result = await db
+      await db
         .delete(schema.cacheTable)
-        .where(eq(schema.cacheTable.key, key))
-        .returning({ key: schema.cacheTable.key });
-
-      return result.length > 0;
+        .where(eq(schema.cacheTable.key, key));
+      return true;
     } catch (error) {
-      logger.error({ error, key }, "PostgresCacheStore: Error deleting cache entry");
+      logger.error({ error, key }, "CacheManager: Error deleting cache entry");
       return false;
     }
   }
@@ -105,25 +112,39 @@ class PostgresCacheStore {
    * Delete all entries with keys matching a prefix.
    * Useful for invalidating related cache entries.
    */
-  async deleteByPrefix(prefix: string): Promise<number> {
+  async deleteByPrefix(prefix: AllowedCacheKey): Promise<void> {
     try {
-      const result = await db
+      await db
         .delete(schema.cacheTable)
-        .where(sql`${schema.cacheTable.key} LIKE ${prefix + "%"}`)
-        .returning({ key: schema.cacheTable.key });
-
-      return result.length;
+        .where(sql`${schema.cacheTable.key} LIKE ${prefix + "%"}`);
     } catch (error) {
-      logger.error({ error, prefix }, "PostgresCacheStore: Error deleting by prefix");
-      return 0;
+      logger.error({ error, prefix }, "CacheManager: Error deleting by prefix");
     }
+  }
+
+  /**
+   * Wrap a function with caching. If the key exists and hasn't expired,
+   * return the cached value. Otherwise, call the function and cache the result.
+   */
+  async wrap<T>(
+    key: AllowedCacheKey,
+    fnc: () => Promise<T>,
+    { ttl }: { ttl?: number; refreshThreshold?: number } = {},
+  ): Promise<T> {
+    const cached = await this.get<T>(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const result = await fnc();
+    await this.set(key, result, ttl);
+    return result;
   }
 
   /**
    * Clean up expired cache entries.
    * Called periodically by the cleanup interval.
    */
-  async cleanupExpired(): Promise<number> {
+  private async cleanupExpired(): Promise<number> {
     try {
       const result = await db
         .delete(schema.cacheTable)
@@ -133,13 +154,13 @@ class PostgresCacheStore {
       if (result.length > 0) {
         logger.debug(
           { deletedCount: result.length },
-          "PostgresCacheStore: Cleaned up expired entries",
+          "CacheManager: Cleaned up expired entries",
         );
       }
 
       return result.length;
     } catch (error) {
-      logger.error({ error }, "PostgresCacheStore: Error cleaning up expired entries");
+      logger.error({ error }, "CacheManager: Error cleaning up expired entries");
       return 0;
     }
   }
@@ -154,25 +175,26 @@ class PostgresCacheStore {
 
     this.cleanupIntervalId = setInterval(() => {
       this.cleanupExpired().catch((error) => {
-        logger.error({ error }, "PostgresCacheStore: Cleanup interval error");
+        logger.error({ error }, "CacheManager: Cleanup interval error");
       });
-    }, PostgresCacheStore.CLEANUP_INTERVAL_MS);
+    }, CacheManager.CLEANUP_INTERVAL_MS);
 
     // Don't prevent process exit
     this.cleanupIntervalId.unref();
   }
-
-  /**
-   * Stop the background cleanup interval.
-   * Call this during graceful shutdown.
-   */
-  stopCleanupInterval(): void {
-    if (this.cleanupIntervalId) {
-      clearInterval(this.cleanupIntervalId);
-      this.cleanupIntervalId = null;
-    }
-  }
 }
 
-// Singleton instance
-export const postgresCacheStore = new PostgresCacheStore();
+export const CacheKey = {
+  GetChatModels: "get-chat-models",
+  ChatMcpTools: "chat-mcp-tools",
+  ProcessedEmail: "processed-email",
+  WebhookRateLimit: "webhook-rate-limit",
+  OAuthState: "oauth-state",
+  McpSession: "mcp-session",
+  SsoGroups: "sso-groups",
+} as const;
+export type CacheKey = (typeof CacheKey)[keyof typeof CacheKey];
+
+type AllowedCacheKey = `${CacheKey}` | `${CacheKey}-${string}`;
+
+export const cacheManager = new CacheManager();

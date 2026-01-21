@@ -7,7 +7,7 @@ import {
   type OutlookEmailProvider,
   processIncomingEmail,
 } from "@/agents/incoming-email";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager } from "@/models/cache-manager";
 import logger from "@/logging";
 import { PromptModel } from "@/models";
 import {

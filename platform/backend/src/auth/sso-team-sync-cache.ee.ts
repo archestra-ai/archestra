@@ -1,5 +1,5 @@
 import type { SsoTeamSyncConfig } from "@shared";
-import { cacheManager, CacheKey } from "@/cache-manager";
+import { cacheManager, CacheKey } from "@/models/cache-manager";
 import logger from "@/logging";
 import { extractGroupsWithTemplate } from "@/templating";
 

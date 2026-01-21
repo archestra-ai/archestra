@@ -92,20 +92,6 @@ export const getDatabaseUrl = (): string => {
 };
 
 /**
- * Check if distributed caching is enabled.
- *
- * When false (default): Uses fast in-memory caching. Ideal for single-pod deployments
- * and quickstart/development scenarios.
- *
- * When true: Uses PostgreSQL-based distributed caching. Required for multi-pod
- * production deployments to ensure cache consistency across replicas.
- * This stores cache data in the same PostgreSQL database used by the application.
- */
-export const isDistributedCacheEnabled = (): boolean => {
-  return process.env.ARCHESTRA_DISTRIBUTED_CACHE === "true";
-};
-
-/**
  * Parse port from ARCHESTRA_API_BASE_URL if provided
  */
 const getPortFromUrl = (): number => {
@@ -428,9 +414,6 @@ export default {
   },
   database: {
     url: getDatabaseUrl(),
-  },
-  cache: {
-    distributed: isDistributedCacheEnabled(),
   },
   llm: {
     openai: {

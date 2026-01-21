@@ -8,7 +8,7 @@ import {
   executeArchestraTool,
   getAgentTools,
 } from "@/archestra-mcp-server";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager } from "@/models/cache-manager";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {

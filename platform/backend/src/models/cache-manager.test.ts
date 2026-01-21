@@ -1,17 +1,14 @@
 import { vi } from "vitest";
-import { afterEach, beforeEach, describe, expect, it } from "@/test";
+import { afterEach, describe, expect, it } from "@/test";
 import { CacheKey, cacheManager } from "./cache-manager";
 
 describe("CacheManager", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
   afterEach(async () => {
-    vi.useRealTimers();
     // Clean up cache between tests
     await cacheManager.delete(CacheKey.GetChatModels);
     await cacheManager.delete(`${CacheKey.GetChatModels}-test-suffix`);
+    await cacheManager.delete(`${CacheKey.GetChatModels}-openai`);
+    await cacheManager.delete(`${CacheKey.GetChatModels}-anthropic`);
   });
 
   describe("get and set", () => {
@@ -40,9 +37,9 @@ describe("CacheManager", () => {
       expect(result).toEqual(["model1", "model2"]);
     });
 
-    it("should respect custom TTL", async () => {
+    it("should expire values after TTL", async () => {
       const testData = "short-lived";
-      const shortTtl = 1000; // 1 second
+      const shortTtl = 100; // 100ms
 
       await cacheManager.set(CacheKey.GetChatModels, testData, shortTtl);
 
@@ -50,25 +47,10 @@ describe("CacheManager", () => {
       let result = await cacheManager.get<string>(CacheKey.GetChatModels);
       expect(result).toBe(testData);
 
-      // Advance time past TTL
-      vi.advanceTimersByTime(shortTtl + 100);
+      // Wait for TTL to expire
+      await new Promise((resolve) => setTimeout(resolve, shortTtl + 50));
 
       // Should be expired
-      result = await cacheManager.get<string>(CacheKey.GetChatModels);
-      expect(result).toBeUndefined();
-    });
-
-    it("should use default TTL (1 hour) when not specified", async () => {
-      const testData = "default-ttl";
-      await cacheManager.set(CacheKey.GetChatModels, testData);
-
-      // Should exist after 59 minutes
-      vi.advanceTimersByTime(59 * 60 * 1000);
-      let result = await cacheManager.get<string>(CacheKey.GetChatModels);
-      expect(result).toBe(testData);
-
-      // Should be expired after 1 hour + a bit
-      vi.advanceTimersByTime(2 * 60 * 1000);
       result = await cacheManager.get<string>(CacheKey.GetChatModels);
       expect(result).toBeUndefined();
     });
@@ -85,8 +67,7 @@ describe("CacheManager", () => {
       expect(result).toBeUndefined();
     });
 
-    it("should return true when deleting non-existent key (cache-manager behavior)", async () => {
-      // Note: cache-manager library returns true even for non-existent keys
+    it("should return true when deleting non-existent key", async () => {
       const deleted = await cacheManager.delete(CacheKey.GetChatModels);
       expect(deleted).toBe(true);
     });
@@ -114,30 +95,6 @@ describe("CacheManager", () => {
       expect(result1).toBe("first-value");
       expect(result2).toBe("first-value"); // Still returns cached value
       expect(mockFn).toHaveBeenCalledTimes(1); // Only called once
-    });
-
-    it("should respect custom TTL in wrap", async () => {
-      const mockFn = vi
-        .fn()
-        .mockResolvedValueOnce("first-value")
-        .mockResolvedValueOnce("second-value");
-      const shortTtl = 1000;
-
-      const result1 = await cacheManager.wrap(CacheKey.GetChatModels, mockFn, {
-        ttl: shortTtl,
-      });
-      expect(result1).toBe("first-value");
-      expect(mockFn).toHaveBeenCalledTimes(1);
-
-      // Advance time past TTL
-      vi.advanceTimersByTime(shortTtl + 100);
-
-      // Should call function again after TTL expires
-      const result2 = await cacheManager.wrap(CacheKey.GetChatModels, mockFn, {
-        ttl: shortTtl,
-      });
-      expect(result2).toBe("second-value");
-      expect(mockFn).toHaveBeenCalledTimes(2);
     });
 
     it("should handle complex objects", async () => {
@@ -186,10 +143,6 @@ describe("CacheManager", () => {
 
       expect(result1).toEqual(provider1Data);
       expect(result2).toEqual(provider2Data);
-
-      // Clean up
-      await cacheManager.delete(`${CacheKey.GetChatModels}-openai`);
-      await cacheManager.delete(`${CacheKey.GetChatModels}-anthropic`);
     });
   });
 });

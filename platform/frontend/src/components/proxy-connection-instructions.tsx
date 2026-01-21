@@ -5,22 +5,22 @@ import { Check, ChevronDown, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import {
+  type ConnectionType,
+  ConnectionTypeSelector,
+} from "@/components/connection-type-selector";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import config from "@/lib/config";
-import { cn } from "@/lib/utils";
 
 const { externalProxyUrl, internalProxyUrl } = config.api;
 
 type ProviderOption = SupportedProvider | "claude-code";
-type ConnectionType = "internal" | "external";
 
 interface ProxyConnectionInstructionsProps {
   agentId?: string;
@@ -32,7 +32,7 @@ export function ProxyConnectionInstructions({
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
   const [connectionType, setConnectionType] =
-    useState<ConnectionType>("external");
+    useState<ConnectionType>("internal");
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
@@ -104,58 +104,12 @@ export function ProxyConnectionInstructions({
         </Popover>
       </ButtonGroup>
 
-      {/* Connection Type Selector */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Connection type</Label>
-        <RadioGroup
-          value={connectionType}
-          onValueChange={(value) => setConnectionType(value as ConnectionType)}
-          className="flex flex-col gap-3"
-        >
-          <div className="flex items-start gap-3">
-            <RadioGroupItem
-              value="internal"
-              id="llm-internal"
-              className="mt-0.5"
-            />
-            <div className="flex flex-col gap-0.5">
-              <Label
-                htmlFor="llm-internal"
-                className="font-normal cursor-pointer"
-              >
-                Via Internal URL
-              </Label>
-              <span className="text-xs text-muted-foreground">
-                Internal URL for in-cluster communication. This is the URL where
-                the frontend connects to the backend API server.
-              </span>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <RadioGroupItem
-              value="external"
-              id="llm-external"
-              className="mt-0.5"
-              disabled={!externalProxyUrl}
-            />
-            <div className="flex flex-col gap-0.5">
-              <Label
-                htmlFor="llm-external"
-                className={cn(
-                  "font-normal cursor-pointer",
-                  !externalProxyUrl && "opacity-50",
-                )}
-              >
-                Via External URL
-              </Label>
-              <span className="text-xs text-muted-foreground">
-                External URL for connecting to LLM Gateway from outside the
-                Kubernetes cluster.
-              </span>
-            </div>
-          </div>
-        </RadioGroup>
-      </div>
+      <ConnectionTypeSelector
+        value={connectionType}
+        onChange={setConnectionType}
+        gatewayName="LLM Gateway"
+        idPrefix="llm"
+      />
 
       {selectedProvider === "openai" && (
         <div className="space-y-4">
@@ -217,22 +171,6 @@ export function ProxyConnectionInstructions({
           </div>
         </div>
       )}
-
-      <p className="text-sm text-muted-foreground">
-        The URLs are configurable via{" "}
-        <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText> and{" "}
-        <CodeText className="text-xs">ARCHESTRA_API_EXTERNAL_BASE_URL</CodeText>{" "}
-        environment variables. See{" "}
-        <a
-          href="https://archestra.ai/docs/platform-deployment#environment-variables"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-500"
-        >
-          here
-        </a>{" "}
-        for more details.
-      </p>
     </div>
   );
 }

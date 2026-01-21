@@ -14,10 +14,13 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import {
+  type ConnectionType,
+  ConnectionTypeSelector,
+} from "@/components/connection-type-selector";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -31,11 +34,8 @@ import config from "@/lib/config";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
-import { cn } from "@/lib/utils";
 
 const { externalProxyUrl, internalProxyUrl } = config.api;
-
-type ConnectionType = "internal" | "external";
 
 interface McpConnectionInstructionsProps {
   agentId: string;
@@ -59,7 +59,7 @@ export function McpConnectionInstructions({
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
   const [connectionType, setConnectionType] =
-    useState<ConnectionType>("external");
+    useState<ConnectionType>("internal");
 
   // Fetch tokens filtered by the selected profile's teams
   const { data: tokensData } = useTokens({ profileId: selectedProfileId });
@@ -477,67 +477,12 @@ export function McpConnectionInstructions({
         </Select>
       </div>
 
-      {/* Connection Type Selector */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Connection type</Label>
-        <RadioGroup
-          value={connectionType}
-          onValueChange={(value) => setConnectionType(value as ConnectionType)}
-          className="flex flex-col gap-3"
-        >
-          <div className="flex items-start gap-3">
-            <RadioGroupItem value="internal" id="internal" className="mt-0.5" />
-            <div className="flex flex-col gap-0.5">
-              <Label htmlFor="internal" className="font-normal cursor-pointer">
-                Via Internal URL
-              </Label>
-              <span className="text-xs text-muted-foreground">
-                Internal URL for in-cluster communication. This is the URL where
-                the frontend connects to the backend API server.
-              </span>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <RadioGroupItem
-              value="external"
-              id="external"
-              className="mt-0.5"
-              disabled={!externalProxyUrl}
-            />
-            <div className="flex flex-col gap-0.5">
-              <Label
-                htmlFor="external"
-                className={cn(
-                  "font-normal cursor-pointer",
-                  !externalProxyUrl && "opacity-50",
-                )}
-              >
-                Via External URL
-              </Label>
-              <span className="text-xs text-muted-foreground">
-                External URL for connecting to MCP Gateway from outside the
-                Kubernetes cluster.
-              </span>
-            </div>
-          </div>
-        </RadioGroup>
-      </div>
-
-      <p className="text-sm text-muted-foreground">
-        The URLs are configurable via{" "}
-        <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText> and{" "}
-        <CodeText className="text-xs">ARCHESTRA_API_EXTERNAL_BASE_URL</CodeText>{" "}
-        environment variables. See{" "}
-        <a
-          href="https://archestra.ai/docs/platform-deployment#environment-variables"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-500"
-        >
-          here
-        </a>{" "}
-        for more details.
-      </p>
+      <ConnectionTypeSelector
+        value={connectionType}
+        onChange={setConnectionType}
+        gatewayName="MCP Gateway"
+        idPrefix="mcp"
+      />
 
       <div className="space-y-3">
         <div className="space-y-2">

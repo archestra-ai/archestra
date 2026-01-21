@@ -6,10 +6,13 @@ import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import {
+  type ConnectionType,
+  ConnectionTypeSelector,
+} from "@/components/connection-type-selector";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -24,11 +27,8 @@ import { useFeatures } from "@/lib/features.query";
 import { usePromptEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
-import { cn } from "@/lib/utils";
 
 const { externalProxyUrl, internalProxyUrl } = config.api;
-
-type ConnectionType = "internal" | "external";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
@@ -57,7 +57,7 @@ export function A2AConnectionInstructions({
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [connectionType, setConnectionType] =
-    useState<ConnectionType>("external");
+    useState<ConnectionType>("internal");
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
     null,
@@ -405,73 +405,12 @@ curl -X GET "${agentCardUrl}" \\
       </div>
 
       {/* Connection Type Selector */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Connection type</Label>
-        <RadioGroup
-          value={connectionType}
-          onValueChange={(value) => setConnectionType(value as ConnectionType)}
-          className="flex flex-col gap-3"
-        >
-          <div className="flex items-start gap-3">
-            <RadioGroupItem
-              value="internal"
-              id="a2a-internal"
-              className="mt-0.5"
-            />
-            <div className="flex flex-col gap-0.5">
-              <Label
-                htmlFor="a2a-internal"
-                className="font-normal cursor-pointer"
-              >
-                Via Internal URL
-              </Label>
-              <span className="text-xs text-muted-foreground">
-                Internal URL for in-cluster communication. This is the URL where
-                the frontend connects to the backend API server.
-              </span>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <RadioGroupItem
-              value="external"
-              id="a2a-external"
-              className="mt-0.5"
-              disabled={!externalProxyUrl}
-            />
-            <div className="flex flex-col gap-0.5">
-              <Label
-                htmlFor="a2a-external"
-                className={cn(
-                  "font-normal cursor-pointer",
-                  !externalProxyUrl && "opacity-50",
-                )}
-              >
-                Via External URL
-              </Label>
-              <span className="text-xs text-muted-foreground">
-                External URL for connecting to A2A Gateway from outside the
-                Kubernetes cluster.
-              </span>
-            </div>
-          </div>
-        </RadioGroup>
-      </div>
-
-      <p className="text-sm text-muted-foreground">
-        The URLs are configurable via{" "}
-        <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText> and{" "}
-        <CodeText className="text-xs">ARCHESTRA_API_EXTERNAL_BASE_URL</CodeText>{" "}
-        environment variables. See{" "}
-        <a
-          href="https://archestra.ai/docs/platform-deployment#environment-variables"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-500"
-        >
-          here
-        </a>{" "}
-        for more details.
-      </p>
+      <ConnectionTypeSelector
+        value={connectionType}
+        onChange={setConnectionType}
+        gatewayName="A2A Gateway"
+        idPrefix="a2a"
+      />
 
       {/* cURL Examples */}
       <div className="space-y-3">

@@ -31,6 +31,7 @@ import config from "@/lib/config";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
+import { cn } from "@/lib/utils";
 
 const { externalProxyUrl, internalProxyUrl } = config.api;
 
@@ -491,32 +492,34 @@ export function McpConnectionInstructions({
                 Internal URL
               </Label>
               <span className="text-xs text-muted-foreground">
-                Internal URL where the frontend connects to the backend API
-                server.
+                Internal URL for in-cluster communication. This is the URL where
+                the frontend connects to the backend API server.
               </span>
             </div>
           </div>
-          {externalProxyUrl && (
-            <div className="flex items-start gap-3">
-              <RadioGroupItem
-                value="external"
-                id="external"
-                className="mt-0.5"
-              />
-              <div className="flex flex-col gap-0.5">
-                <Label
-                  htmlFor="external"
-                  className="font-normal cursor-pointer"
-                >
-                  Public URL
-                </Label>
-                <span className="text-xs text-muted-foreground">
-                  Public URL for connecting to MCP Gateway from outside the
-                  Kubernetes cluster.
-                </span>
-              </div>
+          <div className="flex items-start gap-3">
+            <RadioGroupItem
+              value="external"
+              id="external"
+              className="mt-0.5"
+              disabled={!externalProxyUrl}
+            />
+            <div className="flex flex-col gap-0.5">
+              <Label
+                htmlFor="external"
+                className={cn(
+                  "font-normal cursor-pointer",
+                  !externalProxyUrl && "opacity-50",
+                )}
+              >
+                Public URL
+              </Label>
+              <span className="text-xs text-muted-foreground">
+                Public URL for connecting to MCP Gateway from outside the
+                Kubernetes cluster.
+              </span>
             </div>
-          )}
+          </div>
         </RadioGroup>
       </div>
 

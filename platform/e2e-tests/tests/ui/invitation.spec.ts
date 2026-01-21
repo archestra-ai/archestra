@@ -19,6 +19,14 @@ test.describe(
       // Wait for the page to fully load (API calls to complete)
       await page.waitForLoadState("networkidle");
 
+      // Wait for the "Invite Member" button to be visible before clicking
+      // Firefox/WebKit may take longer to render buttons in CI environments
+      const inviteButton = page.getByRole("button", {
+        name: /invite member/i,
+        disabled: false,
+      });
+      await expect(inviteButton).toBeVisible({ timeout: 30_000 });
+
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });
 
@@ -54,6 +62,14 @@ test.describe(
 
       // Wait for the page to fully load (API calls to complete)
       await page.waitForLoadState("networkidle");
+
+      // Wait for the "Invite Member" button to be visible before clicking
+      // Firefox/WebKit may take longer to render buttons in CI environments
+      const inviteButton = page.getByRole("button", {
+        name: /invite member/i,
+        disabled: false,
+      });
+      await expect(inviteButton).toBeVisible({ timeout: 30_000 });
 
       // Click the "Invite Member" button to open the dialog
       await clickButton({ page, options: { name: /invite member/i } });

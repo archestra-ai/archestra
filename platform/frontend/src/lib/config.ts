@@ -46,6 +46,23 @@ export const getExternalBaseUrl = (): string => {
 };
 
 /**
+ * Get the internal proxy URL for in-cluster communication.
+ * This is the URL that agents inside the cluster should use to connect to Archestra.
+ * Uses getBackendBaseUrl() which reads from ARCHESTRA_API_BASE_URL.
+ */
+export const getInternalProxyUrl = (): string => {
+  const proxyUrlSuffix = "/v1";
+  const baseUrl = getBackendBaseUrl();
+
+  if (baseUrl.endsWith(proxyUrlSuffix)) {
+    return baseUrl;
+  } else if (baseUrl.endsWith("/")) {
+    return `${baseUrl.slice(0, -1)}${proxyUrlSuffix}`;
+  }
+  return `${baseUrl}${proxyUrlSuffix}`;
+};
+
+/**
  * Get the display proxy URL for showing to users.
  * This is the URL that external agents should use to connect to Archestra.
  * Uses getExternalBaseUrl() to support separate internal/external URLs in K8s deployments.
@@ -99,6 +116,12 @@ export default {
      */
     get displayProxyUrl() {
       return getDisplayProxyUrl();
+    },
+    /**
+     * Internal URL for in-cluster communication.
+     */
+    get internalProxyUrl() {
+      return getInternalProxyUrl();
     },
     /**
      * Base URL for frontend requests (empty to use relative URLs with Next.js rewrites).

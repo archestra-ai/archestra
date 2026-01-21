@@ -14,9 +14,12 @@ import {
 } from "@/components/ui/popover";
 import config from "@/lib/config";
 
-const { displayProxyUrl: apiProxyUrl } = config.api;
+const { displayProxyUrl: externalProxyUrl, internalProxyUrl } = config.api;
 
 type ProviderOption = SupportedProvider | "claude-code";
+
+const INTERNAL_URL_LABEL = "Internal URL";
+const EXTERNAL_URL_LABEL = "Public URL";
 
 interface ProxyConnectionInstructionsProps {
   agentId?: string;
@@ -25,28 +28,21 @@ interface ProxyConnectionInstructionsProps {
 export function ProxyConnectionInstructions({
   agentId,
 }: ProxyConnectionInstructionsProps) {
-  const [copied, setCopied] = useState(false);
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
 
-  const proxyUrl = agentId
-    ? `${apiProxyUrl}/${selectedProvider === "claude-code" ? "anthropic" : selectedProvider}/${agentId}`
-    : `${apiProxyUrl}/${selectedProvider === "claude-code" ? "anthropic" : selectedProvider}`;
+  const getProviderPath = (provider: ProviderOption) =>
+    provider === "claude-code" ? "anthropic" : provider;
 
-  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${apiProxyUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
+  const getProxyUrl = (baseUrl: string, provider: ProviderOption) =>
+    agentId
+      ? `${baseUrl}/${getProviderPath(provider)}/${agentId}`
+      : `${baseUrl}/${getProviderPath(provider)}`;
 
-  const handleCopy = useCallback(async () => {
-    const textToCopy =
-      selectedProvider === "claude-code" ? claudeCodeCommand : proxyUrl;
-    await navigator.clipboard.writeText(textToCopy);
-    setCopied(true);
-    toast.success(
-      selectedProvider === "claude-code"
-        ? "Command copied to clipboard"
-        : "Proxy URL copied to clipboard",
-    );
-    setTimeout(() => setCopied(false), 2000);
-  }, [proxyUrl, claudeCodeCommand, selectedProvider]);
+  const internalUrl = getProxyUrl(internalProxyUrl, selectedProvider);
+  const externalUrl = getProxyUrl(externalProxyUrl, selectedProvider);
+
+  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${externalProxyUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
 
   return (
     <div className="space-y-3">
@@ -106,131 +102,83 @@ export function ProxyConnectionInstructions({
         </Popover>
       </ButtonGroup>
       {selectedProvider === "openai" && (
-        <div className="space-y-2">
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Replace your OpenAI base URL:
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
-              <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
-                https://api.openai.com/v1/
-              </CodeText>
-            </div>
-            <span className="text-muted-foreground flex-shrink-0">→</span>
-            <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-              <CodeText className="text-xs text-primary whitespace-nowrap">
-                {proxyUrl}
-              </CodeText>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 flex-shrink-0"
-                onClick={handleCopy}
-              >
-                {copied ? (
-                  <Check className="h-3 w-3 text-green-500" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </Button>
-            </div>
-          </div>
+          <UrlReplacementRow
+            label={INTERNAL_URL_LABEL}
+            originalUrl="https://api.openai.com/v1/"
+            newUrl={internalUrl}
+            envVar="ARCHESTRA_API_BASE_URL"
+          />
+          <UrlReplacementRow
+            label={EXTERNAL_URL_LABEL}
+            originalUrl="https://api.openai.com/v1/"
+            newUrl={externalUrl}
+            envVar="ARCHESTRA_API_EXTERNAL_BASE_URL"
+          />
+          <SeeMoreInDocsRow />
         </div>
       )}
       {selectedProvider === "gemini" && (
-        <div className="space-y-2">
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Replace your Gemini base URL:
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
-              <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
-                https://generativelanguage.googleapis.com/v1/
-              </CodeText>
-            </div>
-            <span className="text-muted-foreground flex-shrink-0">→</span>
-            <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-              <CodeText className="text-xs text-primary whitespace-nowrap">
-                {proxyUrl}
-              </CodeText>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 flex-shrink-0"
-                onClick={handleCopy}
-              >
-                {copied ? (
-                  <Check className="h-3 w-3 text-green-500" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </Button>
-            </div>
-          </div>
+          <UrlReplacementRow
+            label={INTERNAL_URL_LABEL}
+            originalUrl="https://generativelanguage.googleapis.com/v1/"
+            newUrl={internalUrl}
+            envVar="ARCHESTRA_API_BASE_URL"
+          />
+          <UrlReplacementRow
+            label={EXTERNAL_URL_LABEL}
+            originalUrl="https://generativelanguage.googleapis.com/v1/"
+            newUrl={externalUrl}
+            envVar="ARCHESTRA_API_EXTERNAL_BASE_URL"
+          />
+          <SeeMoreInDocsRow />
         </div>
       )}
       {selectedProvider === "anthropic" && (
-        <div className="space-y-2">
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Replace your Anthropic base URL:
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
-              <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
-                https://api.anthropic.com/v1/
-              </CodeText>
-            </div>
-            <span className="text-muted-foreground flex-shrink-0">→</span>
-            <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-              <CodeText className="text-xs text-primary whitespace-nowrap">
-                {proxyUrl}
-              </CodeText>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 flex-shrink-0"
-                onClick={handleCopy}
-              >
-                {copied ? (
-                  <Check className="h-3 w-3 text-green-500" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </Button>
-            </div>
-          </div>
+          <UrlReplacementRow
+            label={INTERNAL_URL_LABEL}
+            originalUrl="https://api.anthropic.com/v1/"
+            newUrl={internalUrl}
+            envVar="ARCHESTRA_API_BASE_URL"
+          />
+          <UrlReplacementRow
+            label={EXTERNAL_URL_LABEL}
+            originalUrl="https://api.anthropic.com/v1/"
+            newUrl={externalUrl}
+            envVar="ARCHESTRA_API_EXTERNAL_BASE_URL"
+          />
+          <SeeMoreInDocsRow />
         </div>
       )}
       {selectedProvider === "cerebras" && (
-        <div className="space-y-2">
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Replace your Cerebras base URL:
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
-              <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
-                https://api.cerebras.ai/v1/
-              </CodeText>
-            </div>
-            <span className="text-muted-foreground flex-shrink-0">→</span>
-            <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-              <CodeText className="text-xs text-primary whitespace-nowrap">
-                {proxyUrl}
-              </CodeText>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 flex-shrink-0"
-                onClick={handleCopy}
-              >
-                {copied ? (
-                  <Check className="h-3 w-3 text-green-500" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </Button>
-            </div>
-          </div>
+          <UrlReplacementRow
+            label={INTERNAL_URL_LABEL}
+            originalUrl="https://api.cerebras.ai/v1/"
+            newUrl={internalUrl}
+            envVar="ARCHESTRA_API_BASE_URL"
+          />
+          <UrlReplacementRow
+            label={EXTERNAL_URL_LABEL}
+            originalUrl="https://api.cerebras.ai/v1/"
+            newUrl={externalUrl}
+            envVar="ARCHESTRA_API_EXTERNAL_BASE_URL"
+          />
+          <SeeMoreInDocsRow />
         </div>
       )}
       {selectedProvider === "claude-code" && (
@@ -242,35 +190,120 @@ export function ProxyConnectionInstructions({
             <CodeText className="text-xs text-primary flex-1">
               {claudeCodeCommand}
             </CodeText>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 flex-shrink-0"
-              onClick={handleCopy}
-            >
-              {copied ? (
-                <Check className="h-3 w-3 text-green-500" />
-              ) : (
-                <Copy className="h-3 w-3" />
-              )}
-            </Button>
+            <CopyButton
+              textToCopy={claudeCodeCommand}
+              toastMessage="Command copied to clipboard"
+            />
           </div>
+          <p className="text-sm text-muted-foreground">
+            The URL is configurable via the{" "}
+            <CodeText className="text-xs">
+              ARCHESTRA_API_EXTERNAL_BASE_URL
+            </CodeText>{" "}
+            environment variable. See{" "}
+            <a
+              href="https://archestra.ai/docs/platform-deployment#environment-variables"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500"
+            >
+              here
+            </a>{" "}
+            for more details.
+          </p>
         </div>
       )}
-      <p className="text-sm text-muted-foreground">
-        The URL is configurable via the{" "}
-        <CodeText className="text-xs">ARCHESTRA_API_EXTERNAL_BASE_URL</CodeText>{" "}
-        environment variable. See{" "}
-        <a
-          href="https://archestra.ai/docs/platform-deployment#environment-variables"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-500"
-        >
-          here
-        </a>{" "}
-        for more details.
+    </div>
+  );
+}
+
+function CopyButton({
+  textToCopy,
+  toastMessage,
+}: {
+  textToCopy: string;
+  toastMessage: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    await navigator.clipboard.writeText(textToCopy);
+    setCopied(true);
+    toast.success(toastMessage);
+    setTimeout(() => setCopied(false), 2000);
+  }, [textToCopy, toastMessage]);
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-6 w-6 flex-shrink-0"
+      onClick={handleCopy}
+    >
+      {copied ? (
+        <Check className="h-3 w-3 text-green-500" />
+      ) : (
+        <Copy className="h-3 w-3" />
+      )}
+    </Button>
+  );
+}
+
+function UrlReplacementRow({
+  label,
+  originalUrl,
+  newUrl,
+  envVar,
+}: {
+  label: string;
+  originalUrl: string;
+  newUrl: string;
+  envVar: string;
+}) {
+  if (!newUrl) {
+    return null;
+  }
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium">{label}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 shrink-0">
+          <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
+            {originalUrl}
+          </CodeText>
+        </div>
+        <span className="text-muted-foreground flex-shrink-0">→</span>
+        <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+          <CodeText className="text-xs text-primary whitespace-nowrap">
+            {newUrl}
+          </CodeText>
+          <CopyButton
+            textToCopy={newUrl}
+            toastMessage="Proxy URL copied to clipboard"
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Configured via <CodeText className="text-xs">{envVar}</CodeText>{" "}
+        environment variable.
       </p>
     </div>
+  );
+}
+
+function SeeMoreInDocsRow() {
+  return (
+    <p className="text-sm text-muted-foreground">
+      See{" "}
+      <a
+        href="https://archestra.ai/docs/platform-deployment#environment-variables"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-500"
+      >
+        here
+      </a>{" "}
+      for more details.
+    </p>
   );
 }

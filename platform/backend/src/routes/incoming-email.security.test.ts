@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { parseSecurityMode, validateIncomingEmailSettings } from "./prompt";
+import {
+  parseSecurityMode,
+  validateIncomingEmailSettings,
+} from "./incoming-email";
 
 describe("parseSecurityMode", () => {
   test("returns 'private' for valid private mode", () => {

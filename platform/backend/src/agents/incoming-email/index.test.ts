@@ -1,4 +1,7 @@
-import { INCOMING_EMAIL_SECURITY_MODE } from "@shared";
+import {
+  INCOMING_EMAIL_SECURITY_MODE,
+  type IncomingEmailSecurityMode,
+} from "@shared";
 import { vi } from "vitest";
 
 // Mock the a2a-executor service - must be before other imports
@@ -26,7 +29,7 @@ async function createTestPrompt(
   organizationId: string,
   options?: {
     incomingEmailEnabled?: boolean;
-    incomingEmailSecurityMode?: string;
+    incomingEmailSecurityMode?: IncomingEmailSecurityMode;
     incomingEmailAllowedDomain?: string;
   },
 ) {

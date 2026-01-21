@@ -4,6 +4,7 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { initializeMetrics } from "@/llm-metrics";
 import { AgentLabelModel, AgentModel, TeamModel } from "@/models";
+import { validateIncomingEmailSettings } from "@/routes/incoming-email";
 import {
   ApiError,
   constructResponseSchema,
@@ -15,7 +16,6 @@ import {
   SelectAgentSchema,
   UpdateAgentSchema,
   UuidIdSchema,
-  validateIncomingEmailSettings,
 } from "@/types";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {

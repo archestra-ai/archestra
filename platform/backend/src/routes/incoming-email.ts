@@ -1,4 +1,10 @@
-import { RouteId } from "@shared";
+import {
+  DOMAIN_VALIDATION_REGEX,
+  type IncomingEmailSecurityMode,
+  isValidIncomingEmailSecurityMode,
+  MAX_DOMAIN_LENGTH,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -14,8 +20,58 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  parseSecurityMode,
+  type UpdatePrompt,
 } from "@/types";
+
+/**
+ * Parse and validate an incoming email security mode.
+ * Returns the validated mode or defaults to "private" if invalid.
+ */
+export function parseSecurityMode(
+  mode: string | undefined | null,
+): IncomingEmailSecurityMode {
+  if (mode && isValidIncomingEmailSecurityMode(mode)) {
+    return mode;
+  }
+  return "private";
+}
+
+/**
+ * Validate incoming email settings.
+ * Throws an error if:
+ * - Security mode is 'internal' but no allowed domain is set
+ * - Security mode is 'internal' and the allowed domain exceeds max length
+ * - Security mode is 'internal' and the allowed domain format is invalid
+ */
+export function validateIncomingEmailSettings(
+  data: Partial<UpdatePrompt>,
+): void {
+  if (data.incomingEmailSecurityMode === "internal") {
+    if (
+      data.incomingEmailAllowedDomain === undefined ||
+      data.incomingEmailAllowedDomain === null ||
+      data.incomingEmailAllowedDomain.trim() === ""
+    ) {
+      throw new Error(
+        "incomingEmailAllowedDomain is required when security mode is 'internal'",
+      );
+    }
+
+    const domain = data.incomingEmailAllowedDomain.trim();
+
+    if (domain.length > MAX_DOMAIN_LENGTH) {
+      throw new Error(
+        `incomingEmailAllowedDomain exceeds maximum length of ${MAX_DOMAIN_LENGTH} characters`,
+      );
+    }
+
+    if (!DOMAIN_VALIDATION_REGEX.test(domain)) {
+      throw new Error(
+        "incomingEmailAllowedDomain must be a valid domain format (e.g., company.com)",
+      );
+    }
+  }
+}
 
 /**
  * Incoming Email webhook routes

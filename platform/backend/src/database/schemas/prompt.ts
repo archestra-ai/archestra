@@ -1,3 +1,4 @@
+import type { IncomingEmailSecurityMode } from "@shared";
 import {
   boolean,
   integer,
@@ -42,6 +43,7 @@ const promptsTable = pgTable("prompts", {
     .default(false),
   // Security mode: 'private' (user auth), 'internal' (domain), 'public' (no restriction)
   incomingEmailSecurityMode: text("incoming_email_security_mode")
+    .$type<IncomingEmailSecurityMode>()
     .notNull()
     .default("private"),
   // Allowed email domain for 'internal' mode (e.g., 'company.com')

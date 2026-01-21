@@ -1,10 +1,4 @@
-import {
-  DEFAULT_PROFILE_NAME,
-  INCOMING_EMAIL_SECURITY_MODE,
-  type IncomingEmailSecurityMode,
-  isArchestraMcpServerTool,
-  isValidIncomingEmailSecurityMode,
-} from "@shared";
+import { DEFAULT_PROFILE_NAME, isArchestraMcpServerTool } from "@shared";
 import {
   and,
   asc,
@@ -32,34 +26,6 @@ import type {
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
 import ToolModel from "./tool";
-
-/**
- * Ensure security mode is a valid enum value.
- * Returns the validated mode or defaults to 'private' if invalid.
- */
-function toSecurityMode(mode: string): IncomingEmailSecurityMode {
-  if (isValidIncomingEmailSecurityMode(mode)) {
-    return mode;
-  }
-  return INCOMING_EMAIL_SECURITY_MODE.PRIVATE;
-}
-
-/**
- * Type for the raw agent data from database before type casting
- */
-type RawAgentData = Omit<Agent, "incomingEmailSecurityMode"> & {
-  incomingEmailSecurityMode: string;
-};
-
-/**
- * Convert raw agent data to properly typed Agent
- */
-function toAgent(raw: RawAgentData): Agent {
-  return {
-    ...raw,
-    incomingEmailSecurityMode: toSecurityMode(raw.incomingEmailSecurityMode),
-  };
-}
 
 class AgentModel {
   static async create({
@@ -100,12 +66,12 @@ class AgentModel {
         .where(eq(schema.agentToolsTable.agentId, createdAgent.id)),
     ]);
 
-    return toAgent({
+    return {
       ...createdAgent,
       tools: assignedTools.map((row) => row.tool),
       teams: teamDetails,
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
-    });
+    };
   }
 
   static async findAll(
@@ -157,15 +123,12 @@ class AgentModel {
       const tool = row.tools;
 
       if (!agentsMap.has(agent.id)) {
-        agentsMap.set(
-          agent.id,
-          toAgent({
-            ...agent,
-            tools: [],
-            teams: [] as Array<{ id: string; name: string }>,
-            labels: [],
-          }),
-        );
+        agentsMap.set(agent.id, {
+          ...agent,
+          tools: [],
+          teams: [] as Array<{ id: string; name: string }>,
+          labels: [],
+        });
       }
 
       // Add tool if it exists (leftJoin returns null for agents with no tools)
@@ -336,15 +299,12 @@ class AgentModel {
       const tool = row.tools;
 
       if (!agentsMap.has(agent.id)) {
-        agentsMap.set(
-          agent.id,
-          toAgent({
-            ...agent,
-            tools: [],
-            teams: [] as Array<{ id: string; name: string }>,
-            labels: [],
-          }),
-        );
+        agentsMap.set(agent.id, {
+          ...agent,
+          tools: [],
+          teams: [] as Array<{ id: string; name: string }>,
+          labels: [],
+        });
       }
 
       // Add tool if it exists and is not an Archestra MCP tool (leftJoin returns null for agents with no tools)
@@ -469,12 +429,12 @@ class AgentModel {
     const teams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const labels = await AgentLabelModel.getLabelsForAgent(id);
 
-    return toAgent({
+    return {
       ...agent,
       tools,
       teams,
       labels,
-    });
+    };
   }
 
   static async getAgentOrCreateDefault(name?: string): Promise<Agent> {
@@ -502,12 +462,12 @@ class AgentModel {
             tool !== null && !isArchestraMcpServerTool(tool.name),
         );
 
-      return toAgent({
+      return {
         ...agent,
         tools,
         teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
         labels: await AgentLabelModel.getLabelsForAgent(agent.id),
-      });
+      };
     }
 
     // No default agent exists, create one
@@ -523,9 +483,7 @@ class AgentModel {
     id: string,
     { teams, labels, ...agent }: Partial<UpdateAgent>,
   ): Promise<Agent | null> {
-    // Type from drizzle - security mode is string, not enum
-    type RawAgentRecord = typeof schema.agentsTable.$inferSelect;
-    let updatedAgent: RawAgentRecord | undefined;
+    let updatedAgent: Omit<Agent, "tools" | "teams" | "labels"> | undefined;
 
     // If setting isDefault to true, unset all other agents' isDefault first
     if (agent.isDefault === true) {
@@ -580,12 +538,12 @@ class AgentModel {
     const currentTeams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const currentLabels = await AgentLabelModel.getLabelsForAgent(id);
 
-    return toAgent({
+    return {
       ...updatedAgent,
       tools,
       teams: currentTeams,
       labels: currentLabels,
-    });
+    };
   }
 
   static async delete(id: string): Promise<boolean> {

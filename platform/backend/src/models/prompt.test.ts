@@ -2,7 +2,7 @@ import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import PromptModel from "./prompt";
 
-describe("PromptModel Fix", () => {
+describe("PromptModel", () => {
   test("update moves prompt history when agentId changes", async ({
     makeOrganization,
   }) => {

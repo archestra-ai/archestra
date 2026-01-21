@@ -2,7 +2,6 @@
 
 import {
   type archestraApiTypes,
-  INCOMING_EMAIL_SECURITY_MODE,
   type IncomingEmailSecurityMode,
 } from "@shared";
 import { Loader2, Mail } from "lucide-react";
@@ -75,7 +74,7 @@ export function PromptDialog({
   const [allowedChatops, setAllowedChatops] = useState<string[]>([]);
   const [incomingEmailEnabled, setIncomingEmailEnabled] = useState(false);
   const [incomingEmailSecurityMode, setIncomingEmailSecurityMode] =
-    useState<IncomingEmailSecurityMode>(INCOMING_EMAIL_SECURITY_MODE.PRIVATE);
+    useState<IncomingEmailSecurityMode>("private");
   const [incomingEmailAllowedDomain, setIncomingEmailAllowedDomain] =
     useState("");
 
@@ -115,7 +114,7 @@ export function PromptDialog({
         setIncomingEmailEnabled(prompt.incomingEmailEnabled ?? false);
         setIncomingEmailSecurityMode(
           (prompt.incomingEmailSecurityMode as IncomingEmailSecurityMode) ??
-            INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
+            "private",
         );
         setIncomingEmailAllowedDomain(prompt.incomingEmailAllowedDomain ?? "");
       } else {
@@ -126,7 +125,7 @@ export function PromptDialog({
         setSelectedAgentPromptIds([]);
         setAllowedChatops([]);
         setIncomingEmailEnabled(false);
-        setIncomingEmailSecurityMode(INCOMING_EMAIL_SECURITY_MODE.PRIVATE);
+        setIncomingEmailSecurityMode("private");
         setIncomingEmailAllowedDomain("");
       }
     } else {
@@ -138,7 +137,7 @@ export function PromptDialog({
       setSelectedAgentPromptIds([]);
       setAllowedChatops([]);
       setIncomingEmailEnabled(false);
-      setIncomingEmailSecurityMode(INCOMING_EMAIL_SECURITY_MODE.PRIVATE);
+      setIncomingEmailSecurityMode("private");
       setIncomingEmailAllowedDomain("");
     }
   }, [open, prompt]);
@@ -190,8 +189,7 @@ export function PromptDialog({
             incomingEmailEnabled,
             incomingEmailSecurityMode,
             incomingEmailAllowedDomain:
-              incomingEmailSecurityMode ===
-              INCOMING_EMAIL_SECURITY_MODE.INTERNAL
+              incomingEmailSecurityMode === "internal"
                 ? incomingEmailAllowedDomain.trim()
                 : null,
           },
@@ -208,7 +206,7 @@ export function PromptDialog({
           incomingEmailEnabled,
           incomingEmailSecurityMode,
           incomingEmailAllowedDomain:
-            incomingEmailSecurityMode === INCOMING_EMAIL_SECURITY_MODE.INTERNAL
+            incomingEmailSecurityMode === "internal"
               ? incomingEmailAllowedDomain.trim()
               : null,
         });
@@ -414,31 +412,27 @@ export function PromptDialog({
                       <SelectValue placeholder="Select security mode" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={INCOMING_EMAIL_SECURITY_MODE.PRIVATE}>
+                      <SelectItem value="private">
                         Private - Only registered users
                       </SelectItem>
-                      <SelectItem value={INCOMING_EMAIL_SECURITY_MODE.INTERNAL}>
+                      <SelectItem value="internal">
                         Internal - Only from specific domain
                       </SelectItem>
-                      <SelectItem value={INCOMING_EMAIL_SECURITY_MODE.PUBLIC}>
+                      <SelectItem value="public">
                         Public - Anyone can email
                       </SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-sm text-muted-foreground">
-                    {incomingEmailSecurityMode ===
-                      INCOMING_EMAIL_SECURITY_MODE.PRIVATE &&
+                    {incomingEmailSecurityMode === "private" &&
                       "Only emails from registered Archestra users with access to this agent will be processed."}
-                    {incomingEmailSecurityMode ===
-                      INCOMING_EMAIL_SECURITY_MODE.INTERNAL &&
+                    {incomingEmailSecurityMode === "internal" &&
                       "Only emails from the specified domain will be processed."}
-                    {incomingEmailSecurityMode ===
-                      INCOMING_EMAIL_SECURITY_MODE.PUBLIC &&
+                    {incomingEmailSecurityMode === "public" &&
                       "Any email will be processed. Use with caution."}
                   </p>
                 </div>
-                {incomingEmailSecurityMode ===
-                  INCOMING_EMAIL_SECURITY_MODE.INTERNAL && (
+                {incomingEmailSecurityMode === "internal" && (
                   <div className="space-y-2">
                     <Label htmlFor="incomingEmailAllowedDomain">
                       Allowed Domain

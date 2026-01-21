@@ -1,4 +1,3 @@
-import { INCOMING_EMAIL_SECURITY_MODE } from "@shared";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth";
 import config from "@/config";

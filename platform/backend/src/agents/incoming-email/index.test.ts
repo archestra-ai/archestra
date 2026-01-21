@@ -1,7 +1,4 @@
-import {
-  INCOMING_EMAIL_SECURITY_MODE,
-  type IncomingEmailSecurityMode,
-} from "@shared";
+import type { IncomingEmailSecurityMode } from "@shared";
 import { vi } from "vitest";
 
 // Mock the a2a-executor service - must be before other imports
@@ -197,7 +194,7 @@ describe("processIncomingEmail", () => {
     // Create a prompt for the agent with incoming email enabled
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
     const promptId = prompt.id;
 
@@ -249,7 +246,7 @@ describe("processIncomingEmail", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
     const promptId = prompt.id;
 
@@ -300,7 +297,7 @@ describe("processIncomingEmail", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
     const promptId = prompt.id;
 
@@ -351,7 +348,7 @@ describe("processIncomingEmail", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
     const promptId = prompt.id;
 
@@ -410,7 +407,7 @@ describe("processIncomingEmail", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
     const promptId = prompt.id;
 
@@ -464,7 +461,7 @@ describe("processIncomingEmail", () => {
     // Create prompt with email enabled
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
     const promptId = prompt.id;
 
@@ -513,7 +510,7 @@ describe("processIncomingEmail", () => {
     // Create a prompt for the agent with incoming email enabled
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
     const promptId = prompt.id;
 
@@ -616,7 +613,7 @@ describe("processIncomingEmail with sendReply option", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
 
     const mockSendReply = vi.fn().mockResolvedValue("reply-id");
@@ -664,7 +661,7 @@ describe("processIncomingEmail with sendReply option", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
 
     const mockSendReply = vi.fn().mockResolvedValue("reply-id-123");
@@ -719,7 +716,7 @@ describe("processIncomingEmail with sendReply option", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
 
     vi.mocked(executeA2AMessage).mockResolvedValueOnce({
@@ -774,7 +771,7 @@ describe("processIncomingEmail with sendReply option", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
 
     const mockSendReply = vi
@@ -839,7 +836,7 @@ describe("processIncomingEmail with conversation history", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
 
     const mockGetConversationHistory = vi.fn().mockResolvedValue([
@@ -922,7 +919,7 @@ describe("processIncomingEmail with conversation history", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
 
     const mockGetConversationHistory = vi.fn();
@@ -979,7 +976,7 @@ describe("processIncomingEmail with conversation history", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
 
     const mockGetConversationHistory = vi
@@ -1103,7 +1100,7 @@ describe("processIncomingEmail security modes", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
+      incomingEmailSecurityMode: "private",
     });
     const promptId = prompt.id;
 
@@ -1155,7 +1152,7 @@ describe("processIncomingEmail security modes", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
+      incomingEmailSecurityMode: "private",
     });
     const promptId = prompt.id;
 
@@ -1209,7 +1206,7 @@ describe("processIncomingEmail security modes", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
+      incomingEmailSecurityMode: "private",
     });
     const promptId = prompt.id;
 
@@ -1261,7 +1258,7 @@ describe("processIncomingEmail security modes", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
+      incomingEmailSecurityMode: "private",
     });
     const promptId = prompt.id;
 
@@ -1325,7 +1322,7 @@ describe("processIncomingEmail security modes", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
+      incomingEmailSecurityMode: "internal",
       incomingEmailAllowedDomain: "company.com",
     });
     const promptId = prompt.id;
@@ -1377,7 +1374,7 @@ describe("processIncomingEmail security modes", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
+      incomingEmailSecurityMode: "internal",
       incomingEmailAllowedDomain: "company.com",
     });
     const promptId = prompt.id;
@@ -1426,7 +1423,7 @@ describe("processIncomingEmail security modes", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
+      incomingEmailSecurityMode: "internal",
       incomingEmailAllowedDomain: "COMPANY.COM", // Uppercase
     });
     const promptId = prompt.id;
@@ -1474,7 +1471,7 @@ describe("processIncomingEmail security modes", () => {
 
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: true,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
     const promptId = prompt.id;
 
@@ -1526,7 +1523,7 @@ describe("processIncomingEmail security modes", () => {
     // Prompt has internal mode configured but email is disabled
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: false,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.INTERNAL,
+      incomingEmailSecurityMode: "internal",
       incomingEmailAllowedDomain: "company.com",
     });
     const promptId = prompt.id;
@@ -1576,7 +1573,7 @@ describe("processIncomingEmail security modes", () => {
     // Prompt has public mode configured but email is disabled
     const prompt = await createTestPrompt(agent.id, org.id, {
       incomingEmailEnabled: false,
-      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PUBLIC,
+      incomingEmailSecurityMode: "public",
     });
     const promptId = prompt.id;
 

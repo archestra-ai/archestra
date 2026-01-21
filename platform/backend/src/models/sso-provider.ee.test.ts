@@ -1832,7 +1832,7 @@ describe("resolveSsoRole", () => {
       await SsoProviderModel.resolveSsoRole(params);
 
       // Verify groups were cached
-      const cachedData = retrieveSsoGroups(
+      const cachedData = await retrieveSsoGroups(
         provider.providerId,
         "groupuser@example.com",
       );
@@ -1858,7 +1858,7 @@ describe("resolveSsoRole", () => {
       await SsoProviderModel.resolveSsoRole(params);
 
       // Verify groups were cached even without role mapping
-      const cachedData = retrieveSsoGroups(
+      const cachedData = await retrieveSsoGroups(
         provider.providerId,
         "noroles@example.com",
       );
@@ -1938,7 +1938,7 @@ describe("resolveSsoRole", () => {
       await SsoProviderModel.resolveSsoRole(params);
 
       // Groups extracted from token (we only use ID token claims now)
-      const cachedData = retrieveSsoGroups(
+      const cachedData = await retrieveSsoGroups(
         provider.providerId,
         "tokenuser@example.com",
       );

@@ -1,29 +1,84 @@
 import { TimeInMs } from "@shared";
-import { createCache } from "cache-manager";
+import { createCache, type Cache } from "cache-manager";
+import config from "@/config";
+import logger from "@/logging";
+import { postgresCacheStore } from "@/postgres-cache-store";
 
+/**
+ * Unified cache manager that supports both in-memory and distributed (PostgreSQL) caching.
+ *
+ * Modes:
+ * - In-memory (default): Fast, single-pod only. Ideal for quickstart/development.
+ * - PostgreSQL: Distributed across pods. Required for multi-pod production deployments.
+ *
+ * The mode is controlled by ARCHESTRA_DISTRIBUTED_CACHE=true environment variable.
+ * When using Helm, this is automatically set to "true" for production deployments.
+ */
 class CacheManager {
-  private cache: ReturnType<typeof createCache>;
+  private memoryCache: Cache | null = null;
+  private isDistributed: boolean;
+  private defaultTtl: number;
 
   constructor() {
-    this.cache = createCache({
-      ttl: TimeInMs.Hour,
-    });
+    this.isDistributed = config.cache.distributed;
+    this.defaultTtl = TimeInMs.Hour;
+
+    if (this.isDistributed) {
+      logger.info(
+        "CacheManager: Using PostgreSQL distributed cache (multi-pod safe)",
+      );
+    } else {
+      logger.info(
+        "CacheManager: Using in-memory cache (set ARCHESTRA_DISTRIBUTED_CACHE=true for multi-pod support)",
+      );
+      this.memoryCache = createCache({
+        ttl: this.defaultTtl,
+      });
+    }
   }
 
+  /**
+   * Check if the cache is using distributed storage (PostgreSQL).
+   */
+  isDistributedCache(): boolean {
+    return this.isDistributed;
+  }
+
+  /**
+   * Get a value from the cache.
+   */
   async get<T>(key: AllowedCacheKey): Promise<T | undefined> {
-    return this.cache.get<T>(key);
+    if (this.isDistributed) {
+      return postgresCacheStore.get<T>(key);
+    }
+    return this.memoryCache!.get<T>(key);
   }
 
+  /**
+   * Set a value in the cache with optional TTL.
+   */
   async set<T>(
     key: AllowedCacheKey,
     value: T,
     ttl?: number,
   ): Promise<T | undefined> {
-    return this.cache.set(key, value, ttl);
+    const effectiveTtl = ttl ?? this.defaultTtl;
+
+    if (this.isDistributed) {
+      await postgresCacheStore.set(key, value, effectiveTtl);
+      return value;
+    }
+    return this.memoryCache!.set(key, value, effectiveTtl);
   }
 
+  /**
+   * Delete a value from the cache.
+   */
   async delete(key: AllowedCacheKey): Promise<boolean> {
-    return this.cache.del(key);
+    if (this.isDistributed) {
+      return postgresCacheStore.delete(key);
+    }
+    return this.memoryCache!.del(key);
   }
 
   /**
@@ -31,24 +86,42 @@ class CacheManager {
    * This is useful for invalidating all related cache entries at once.
    */
   async deleteByPrefix(prefix: AllowedCacheKey): Promise<void> {
-    // https://www.npmjs.com/package/cache-manager#doing-iteration-on-stores
-    const store = this.cache.stores[0];
+    if (this.isDistributed) {
+      await postgresCacheStore.deleteByPrefix(prefix);
+      return;
+    }
 
+    // In-memory: iterate and delete
+    const store = this.memoryCache!.stores[0];
     if (store?.iterator) {
       for await (const [key] of store.iterator({})) {
         if (key.startsWith(prefix)) {
-          await this.cache.del(key);
+          await this.memoryCache!.del(key);
         }
       }
     }
   }
 
+  /**
+   * Wrap a function with caching. If the key exists and hasn't expired,
+   * return the cached value. Otherwise, call the function and cache the result.
+   */
   async wrap<T>(
     key: AllowedCacheKey,
     fnc: () => Promise<T>,
     { ttl, refreshThreshold }: { ttl?: number; refreshThreshold?: number } = {},
   ): Promise<T> {
-    return this.cache.wrap(key, fnc, { ttl, refreshThreshold });
+    if (this.isDistributed) {
+      // For distributed cache, implement wrap manually
+      const cached = await postgresCacheStore.get<T>(key);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const result = await fnc();
+      await postgresCacheStore.set(key, result, ttl ?? this.defaultTtl);
+      return result;
+    }
+    return this.memoryCache!.wrap(key, fnc, { ttl, refreshThreshold });
   }
 }
 

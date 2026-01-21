@@ -1,64 +1,67 @@
 import type { SsoTeamSyncConfig } from "@shared";
+import { cacheManager, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import { extractGroupsWithTemplate } from "@/templating";
 
 /**
- * Temporary in-memory cache for SSO groups during login flow.
+ * Cache for SSO groups during login flow.
  *
  * This cache stores the user's SSO groups from the token/userInfo
  * so they can be used in the after hook for team synchronization.
  *
  * The cache is keyed by a composite of providerId and user email.
  * Entries automatically expire after 60 seconds to prevent stale data.
+ *
+ * When Redis is configured (ARCHESTRA_CACHE_REDIS_URL), this cache is
+ * distributed across all pods, ensuring SSO team sync works correctly
+ * in multi-pod deployments.
  */
 
 interface SsoGroupsCacheEntry {
   groups: string[];
   organizationId: string;
-  timestamp: number;
 }
 
-const SSO_GROUPS_CACHE = new Map<string, SsoGroupsCacheEntry>();
 const CACHE_TTL_MS = 60_000; // 60 seconds
 
 /**
  * Generate a cache key from provider ID and user email
  */
-function getCacheKey(providerId: string, email: string): string {
-  return `${providerId}:${email.toLowerCase()}`;
+function getCacheKey(providerId: string, email: string): `${typeof CacheKey.SsoGroups}-${string}` {
+  return `${CacheKey.SsoGroups}-${providerId}:${email.toLowerCase()}`;
 }
 
 /**
  * Store SSO groups for a user during login
  */
-export function cacheSsoGroups(
+export async function cacheSsoGroups(
   providerId: string,
   email: string,
   organizationId: string,
   groups: string[],
-): void {
+): Promise<void> {
   const key = getCacheKey(providerId, email);
   logger.debug(
     { providerId, email, organizationId, groupCount: groups.length },
     "[ssoTeamSyncCache] Caching SSO groups",
   );
-  SSO_GROUPS_CACHE.set(key, {
-    groups,
-    organizationId,
-    timestamp: Date.now(),
-  });
+  await cacheManager.set<SsoGroupsCacheEntry>(
+    key,
+    { groups, organizationId },
+    CACHE_TTL_MS,
+  );
 }
 
 /**
  * Retrieve and remove SSO groups for a user after login
  * Returns null if no entry exists or if the entry has expired
  */
-export function retrieveSsoGroups(
+export async function retrieveSsoGroups(
   providerId: string,
   email: string,
-): { groups: string[]; organizationId: string } | null {
+): Promise<{ groups: string[]; organizationId: string } | null> {
   const key = getCacheKey(providerId, email);
-  const entry = SSO_GROUPS_CACHE.get(key);
+  const entry = await cacheManager.get<SsoGroupsCacheEntry>(key);
 
   logger.debug(
     { providerId, email, found: !!entry },
@@ -73,18 +76,8 @@ export function retrieveSsoGroups(
     return null;
   }
 
-  // Remove the entry regardless of expiry
-  SSO_GROUPS_CACHE.delete(key);
-
-  // Check if expired
-  const age = Date.now() - entry.timestamp;
-  if (age > CACHE_TTL_MS) {
-    logger.debug(
-      { providerId, email, ageMs: age, ttlMs: CACHE_TTL_MS },
-      "[ssoTeamSyncCache] Cached groups expired",
-    );
-    return null;
-  }
+  // Remove the entry after retrieval (one-time use)
+  await cacheManager.delete(key);
 
   logger.debug(
     {
@@ -210,27 +203,3 @@ export function extractGroupsFromClaims(
 
   return [];
 }
-
-/**
- * Clean up expired cache entries.
- * Call periodically to prevent memory leaks.
- */
-export function cleanupExpiredEntries(): void {
-  const now = Date.now();
-  let cleaned = 0;
-  for (const [key, entry] of SSO_GROUPS_CACHE.entries()) {
-    if (now - entry.timestamp > CACHE_TTL_MS) {
-      SSO_GROUPS_CACHE.delete(key);
-      cleaned++;
-    }
-  }
-  if (cleaned > 0) {
-    logger.debug(
-      { cleanedEntries: cleaned, remainingEntries: SSO_GROUPS_CACHE.size },
-      "[ssoTeamSyncCache] Cleaned expired entries",
-    );
-  }
-}
-
-// Run cleanup every 5 minutes
-setInterval(cleanupExpiredEntries, 5 * 60 * 1000);

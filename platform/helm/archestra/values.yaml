@@ -132,6 +132,18 @@ archestra:
     limits:
       memory: "3Gi"
 
+  # Distributed caching configuration
+  # Required for multi-pod deployments to ensure cache consistency across replicas
+  # Uses PostgreSQL for cache storage (no additional infrastructure needed)
+  distributedCache:
+    # Enable distributed caching using PostgreSQL
+    # When enabled, cache data (OAuth state, SSO groups, rate limits) is stored in
+    # the database instead of in-memory, allowing cache sharing across pods.
+    #
+    # Set to true for production deployments with multiple replicas.
+    # Can be left false for single-pod deployments or quickstart scenarios.
+    enabled: true
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers

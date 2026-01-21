@@ -250,7 +250,7 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Popular Models
 
-- `llama-3.1-70b-versatile` - High-performance model for complex tasks
+- `groq/compound` - **Recommended default** - Compound system with GPT-OSS 120B and Llama 4, includes Web Search, Code Execution, Browser Automation, Wolfram Alpha, and JSON Object Mode
 - `llama-3.1-8b-instant` - Fast, efficient model for quick responses
 - `mixtral-8x7b-32768` - Mixtral model with large context window
 - `gemma-7b-it` - Google's Gemma model optimized for instruction following

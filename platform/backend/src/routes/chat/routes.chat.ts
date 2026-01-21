@@ -90,6 +90,8 @@ async function getSmartDefaultModel(
             return { model: "gemini-2.5-pro", provider: "gemini" };
           case "openai":
             return { model: "gpt-4o", provider: "openai" };
+          case "groq":
+            return { model: "groq/compound", provider: "groq" };
         }
       }
     }
@@ -220,9 +222,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use stored provider if available, otherwise detect from model name for backward compatibility
       // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
       // so we can safely use detectProviderFromModel for them.
+      let selectedModel = conversation.selectedModel;
+      
+      // Runtime fix: Replace decommissioned Groq model if still in use
+      // This provides a safety net in case migration hasn't run yet
+      if (selectedModel === "llama-3.1-70b-versatile") {
+        logger.warn(
+          { conversationId, oldModel: selectedModel },
+          "Replacing decommissioned Groq model with groq/compound",
+        );
+        selectedModel = "groq/compound";
+        // Update conversation in database asynchronously (don't block request)
+        ConversationModel.update(
+          conversationId,
+          user.id,
+          organizationId,
+          {
+            selectedModel: "groq/compound",
+          },
+        ).catch((err) => {
+          logger.error(
+            { conversationId, error: err },
+            "Failed to update conversation model in database",
+          );
+        });
+      }
+      
       const provider =
         (conversation.selectedProvider as SupportedChatProvider | null) ??
-        detectProviderFromModel(conversation.selectedModel);
+        detectProviderFromModel(selectedModel);
 
       logger.info(
         {
@@ -233,7 +261,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           toolCount: Object.keys(mcpTools).length,
           hasCustomToolSelection: hasCustomSelection,
           enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
-          model: conversation.selectedModel,
+          model: selectedModel,
           provider,
           providerSource: conversation.selectedProvider ? "stored" : "detected",
           promptId: prompt?.id,
@@ -251,7 +279,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         agentId: conversation.agentId,
-        model: conversation.selectedModel,
+        model: selectedModel,
         provider,
         conversationId,
         externalAgentId,

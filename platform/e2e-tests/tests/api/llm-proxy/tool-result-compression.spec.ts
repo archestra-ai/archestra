@@ -327,23 +327,32 @@ const groqConfig: CompressionTestConfig = {
     Authorization: `Bearer ${wiremockStub}`,
     "Content-Type": "application/json",
   }),
-  buildRequest: (content, tools) => {
-    const request: Record<string, unknown> = {
-      model: "llama-3.1-70b-versatile",
-      messages: [{ role: "user", content }],
-    };
-    if (tools && tools.length > 0) {
-      request.tools = tools.map((t) => ({
-        type: "function",
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters,
-        },
-      }));
-    }
-    return request;
-  },
+  // Groq uses OpenAI-compatible format: tool results are sent as separate "tool" role messages
+  buildRequestWithToolResult: () => ({
+    model: "llama-3.1-8b-instant",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
 };
 
 const testConfigs: CompressionTestConfig[] = [

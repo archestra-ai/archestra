@@ -17,7 +17,7 @@
       "id": "20260114011737450622882b094144",
       "object": "chat.completion",
       "created": 1768324666,
-      "model": "llama-3.1-70b-versatile",
+      "model": "llama-3.1-8b-instant",
       "choices": [
         {
           "index": 0,

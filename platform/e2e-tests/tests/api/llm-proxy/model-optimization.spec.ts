@@ -340,11 +340,11 @@ const groqConfig: ModelOptimizationTestConfig = {
     "Content-Type": "application/json",
   }),
   buildRequest: (content, tools) => ({
-    model: "llama-3.1-70b-versatile",
+    model: "llama-3.1-8b-instant",
     messages: [{ role: "user", content }],
     ...(tools && { tools }),
   }),
-  baselineModel: "llama-3.1-70b-versatile",
+  baselineModel: "llama-3.1-8b-instant",
   optimizedModel: "llama-3.1-8b-instant",
   getModelFromResponse: (response) => response.model,
 };

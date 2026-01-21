@@ -602,6 +602,9 @@ async function handleStreaming<
     }
 
     const usage = streamAdapter.state.usage;
+    
+    // Always save interaction, even if there's no usage (for error tracking)
+    // This ensures failed requests are visible in logs
     if (usage) {
       reportLLMTokens(
         providerName,
@@ -659,6 +662,40 @@ async function handleStreaming<
         outputTokens: usage.outputTokens,
         cost: actualCost?.toFixed(10) ?? null,
         baselineCost: baselineCost?.toFixed(10) ?? null,
+        toonTokensBefore: toonStats.tokensBefore,
+        toonTokensAfter: toonStats.tokensAfter,
+        toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+      });
+    } else {
+      // Save interaction even without usage (error case)
+      // This ensures failed requests are visible in logs for debugging
+      logger.info(
+        {
+          provider: providerName,
+          model: actualModel,
+          agentId: agent.id,
+          sessionId,
+          streamCompleted,
+        },
+        "Saving interaction without usage (error or incomplete stream)",
+      );
+      
+      await InteractionModel.create({
+        profileId: agent.id,
+        externalAgentId,
+        userId,
+        sessionId,
+        sessionSource,
+        type: provider.interactionType,
+        request: originalRequest as unknown as InteractionRequest,
+        processedRequest: request as unknown as InteractionRequest,
+        response:
+          streamAdapter.toProviderResponse() as unknown as InteractionResponse,
+        model: actualModel,
+        inputTokens: null,
+        outputTokens: null,
+        cost: null,
+        baselineCost: null,
         toonTokensBefore: toonStats.tokensBefore,
         toonTokensAfter: toonStats.tokensAfter,
         toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,

@@ -443,9 +443,9 @@ async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
   };
 
   // Filter to chat-compatible models
-  // Include: llama-, mixtral-, gemma- models
+  // Include: groq/, llama-, mixtral-, gemma- models
   // Exclude: -embedding models only
-  const chatModelPrefixes = ["llama-", "mixtral-", "gemma-"];
+  const chatModelPrefixes = ["groq/", "llama-", "mixtral-", "gemma-"];
   const excludePatterns = ["-embedding"];
 
   const apiModels = data.data
@@ -473,8 +473,8 @@ async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
   // Add common models that may not be listed in /models endpoint
   const commonModels: ModelInfo[] = [
     {
-      id: "llama-3.1-70b-versatile",
-      displayName: "llama-3.1-70b-versatile",
+      id: "groq/compound",
+      displayName: "groq/compound (Web Search, Code Execution, Browser Automation)",
       provider: "groq" as const,
       createdAt: new Date().toISOString(),
     },
@@ -711,10 +711,13 @@ export async function fetchModelsForProvider({
   // vLLM and Ollama typically don't require API keys, but need base URL configured
   const isVllmEnabled = provider === "vllm" && config.llm.vllm.enabled;
   const isOllamaEnabled = provider === "ollama" && config.llm.ollama.enabled;
+  // Groq has a base URL configured, so it's enabled
+  const isGroqEnabled = provider === "groq" && !!config.llm.groq.baseUrl;
 
   // For Gemini with Vertex AI, we don't need an API key - authentication is via ADC
-  // For vLLM and Ollama, API key is optional but base URL must be configured
-  if (!apiKey && !vertexAiEnabled && !isVllmEnabled && !isOllamaEnabled) {
+  // For vLLM, Ollama, and Groq, API key is optional but base URL must be configured
+  // Groq common models (like groq/compound) are always available
+  if (!apiKey && !vertexAiEnabled && !isVllmEnabled && !isOllamaEnabled && !isGroqEnabled) {
     logger.debug(
       { provider, organizationId },
       "No API key available for provider",
@@ -747,8 +750,43 @@ export async function fetchModelsForProvider({
         models = await modelFetchers[provider](apiKey);
       }
     } else if (provider === "groq" && isGroqEnabled) {
+      // Groq common models (like groq/compound) are always available
+      // Fetch additional models from API if API key is provided
       if (apiKey) {
-        models = await modelFetchers[provider](apiKey);
+        try {
+          models = await modelFetchers[provider](apiKey);
+        } catch (error) {
+          logger.warn(
+            { error: error instanceof Error ? error.message : String(error) },
+            "Failed to fetch Groq models from API, using common models only",
+          );
+          // Fall through to return common models
+        }
+      }
+      // If no API key or API fetch failed, return common models
+      // Common models are added in fetchGroqModels function
+      if (models.length === 0) {
+        // Return common models even without API key
+        models = [
+          {
+            id: "groq/compound",
+            displayName: "groq/compound (Web Search, Code Execution, Browser Automation)",
+            provider: "groq" as const,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "llama-3.1-8b-instant",
+            displayName: "llama-3.1-8b-instant",
+            provider: "groq" as const,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "mixtral-8x7b-32768",
+            displayName: "mixtral-8x7b-32768",
+            provider: "groq" as const,
+            createdAt: new Date().toISOString(),
+          },
+        ];
       }
     }
     logger.info(

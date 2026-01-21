@@ -655,7 +655,7 @@ export class GroqDualLlmClient implements DualLlmClient {
   private client: OpenAI;
   private model: string;
 
-  constructor(apiKey: string, model = "llama-3.1-70b-versatile") {
+  constructor(apiKey: string, model = "groq/compound") {
     logger.debug({ model }, "[dualLlmClient] Groq: initializing client");
     if (!apiKey) {
       throw new Error("API key required for Groq dual LLM");

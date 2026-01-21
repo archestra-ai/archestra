@@ -54,7 +54,17 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         isProfileAdmin,
       );
-      return reply.send(apiKeys);
+
+      const parsed = ChatApiKeyWithScopeInfoSchema.array().safeParse(apiKeys);
+      if (!parsed.success) {
+        fastify.log.error(
+          { issues: parsed.error.issues, sample: apiKeys[0] },
+          "chat-api-keys response validation failed",
+        );
+        throw new ApiError(500, "chat-api-keys response validation failed");
+      }
+
+      return reply.send(parsed.data);
     },
   );
 
@@ -84,7 +94,20 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         query.provider,
       );
-      return reply.send(apiKeys);
+
+      const parsed = ChatApiKeyWithScopeInfoSchema.array().safeParse(apiKeys);
+      if (!parsed.success) {
+        fastify.log.error(
+          { issues: parsed.error.issues, sample: apiKeys[0] },
+          "available-chat-api-keys response validation failed",
+        );
+        throw new ApiError(
+          500,
+          "available-chat-api-keys response validation failed",
+        );
+      }
+
+      return reply.send(parsed.data);
     },
   );
 

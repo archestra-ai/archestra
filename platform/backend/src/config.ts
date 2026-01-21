@@ -394,8 +394,10 @@ export default {
         "https://api.z.ai/api/paas/v4",
     },
     groq: {
-      enabled: Boolean(process.env.ARCHESTRA_GROQ_BASE_URL),
-      baseUrl: process.env.ARCHESTRA_GROQ_BASE_URL,
+      enabled: true, // Groq is always enabled with default base URL
+      baseUrl:
+        process.env.ARCHESTRA_GROQ_BASE_URL ||
+        "https://api.groq.com/openai/v1",
       useV2Routes: process.env.ARCHESTRA_GROQ_USE_V2_ROUTES !== "false",
     },
   },

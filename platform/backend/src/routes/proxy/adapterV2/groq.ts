@@ -1091,7 +1091,7 @@ async function convertToolResultsToToon(
 // ADAPTER FACTORY
 // =============================================================================
 
-export const GroqAdapterFactory: LLMProvider<
+export const groqAdapterFactory: LLMProvider<
   GroqRequest,
   GroqResponse,
   GroqMessages,

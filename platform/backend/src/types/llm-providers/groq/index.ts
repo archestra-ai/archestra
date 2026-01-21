@@ -7,7 +7,7 @@
  * NOTE: Groq types are very similar to OpenAI since Groq implements the OpenAI API.
  * The main differences are:
  * - Groq requires API keys
- * - Groq provides fast inference with models like llama-3.1-70b-versatile, mixtral-8x7b-32768
+ * - Groq provides fast inference with models like llama-3.1-8b-instant, mixtral-8x7b-32768
  */
 import type OpenAIProvider from "openai";
 import type { z } from "zod";

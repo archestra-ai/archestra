@@ -24,7 +24,7 @@ const GroqProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
   // Only register HTTP proxy if Groq is configured (has baseUrl)
   // Routes are always registered for OpenAPI schema generation
-  if (config.llm.groq.enabled) {
+  if (config.llm.groq.baseUrl) {
     await fastify.register(fastifyHttpProxy, {
       upstream: config.llm.groq.baseUrl as string,
       prefix: API_PREFIX,
@@ -105,7 +105,7 @@ const GroqProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      if (!config.llm.groq.enabled) {
+      if (!config.llm.groq.baseUrl) {
         return reply.status(500).send({
           error: {
             message:
@@ -157,7 +157,7 @@ const GroqProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      if (!config.llm.groq.enabled) {
+      if (!config.llm.groq.baseUrl) {
         return reply.status(500).send({
           error: {
             message:

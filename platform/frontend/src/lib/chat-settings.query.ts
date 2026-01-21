@@ -7,6 +7,23 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  // Prefer SDK error format ({ error: string | { message: string } })
+  if (error && typeof error === "object" && "error" in (error as any)) {
+    const inner = (error as any).error;
+    if (typeof inner === "string") {
+      return inner;
+    }
+    if (inner?.message) {
+      return inner.message;
+    }
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+};
+
 export type SupportedChatProvider =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
 
@@ -28,15 +45,18 @@ export function useChatApiKeys() {
   return useSuspenseQuery({
     queryKey: ["chat-api-keys"],
     queryFn: async () => {
-      const { data, error } = await getChatApiKeys();
-      if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch chat API keys",
-        );
+      try {
+        const { data, error } = await getChatApiKeys();
+        if (error) {
+          throw new Error(
+            getErrorMessage(error, "Failed to fetch chat API keys"),
+          );
+        }
+        return data ?? [];
+      } catch (err) {
+        // Catch SDK schema validation errors (e.g., "Response doesn't match the schema")
+        throw new Error(getErrorMessage(err, "Failed to fetch chat API keys"));
       }
-      return data ?? [];
     },
   });
 }
@@ -45,17 +65,24 @@ export function useAvailableChatApiKeys(provider?: SupportedChatProvider) {
   return useQuery({
     queryKey: ["available-chat-api-keys", provider],
     queryFn: async () => {
-      const { data, error } = await getAvailableChatApiKeys({
-        query: provider ? { provider } : undefined,
-      });
-      if (error) {
+      try {
+        const { data, error } = await getAvailableChatApiKeys({
+          query: provider ? { provider } : undefined,
+        });
+        if (error) {
+          throw new Error(
+            getErrorMessage(
+              error,
+              "Failed to fetch available chat API keys",
+            ),
+          );
+        }
+        return data ?? [];
+      } catch (err) {
         throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch available chat API keys",
+          getErrorMessage(err, "Failed to fetch available chat API keys"),
         );
       }
-      return data ?? [];
     },
   });
 }

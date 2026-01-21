@@ -165,20 +165,41 @@ export type ModelSelectorLogoProps = Omit<
     | (string & {});
 };
 
+// Providers that have local PNG icons in /icons/ directory
+const LOCAL_ICON_PROVIDERS = [
+  "openai",
+  "anthropic",
+  "google",
+  "gemini",
+  "cerebras",
+  "vllm",
+  "ollama",
+  "zhipuai",
+  "groq",
+] as const;
+
 export const ModelSelectorLogo = ({
   provider,
   className,
   ...props
-}: ModelSelectorLogoProps) => (
-  <img
-    {...props}
-    alt={`${provider} logo`}
-    className={cn("size-3 dark:invert", className)}
-    height={12}
-    src={`https://models.dev/logos/${provider}.svg`}
-    width={12}
-  />
-);
+}: ModelSelectorLogoProps) => {
+  // Use local PNG icon if available, otherwise fall back to CDN SVG
+  const iconSrc =
+    LOCAL_ICON_PROVIDERS.includes(provider as (typeof LOCAL_ICON_PROVIDERS)[number])
+      ? `/icons/${provider}.png`
+      : `https://models.dev/logos/${provider}.svg`;
+
+  return (
+    <img
+      {...props}
+      alt={`${provider} logo`}
+      className={cn("size-3 dark:invert", className)}
+      height={12}
+      src={iconSrc}
+      width={12}
+    />
+  );
+};
 
 export type ModelSelectorLogoGroupProps = ComponentProps<"div">;
 

@@ -2,6 +2,7 @@ import { isVaultReference, parseVaultReference } from "@shared";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
+import { SupportedChatProviderSchema } from "@/types";
 import type {
   ChatApiKey,
   ChatApiKeyScope,
@@ -152,26 +153,38 @@ class ChatApiKeyModel {
       .orderBy(schema.chatApiKeysTable.createdAt);
 
     // Parse vault references from secrets and compute storage type
-    return apiKeys.map((key) => {
-      const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      const secretStorageType = computeSecretStorageType(
-        key.secretId,
-        key.secretIsVault,
-        key.secretIsByosVault,
+    return apiKeys
+      .map((key) => {
+        const vaultRef = parseVaultReferenceFromSecret(key.secret);
+        const secretStorageType = computeSecretStorageType(
+          key.secretId,
+          key.secretIsVault,
+          key.secretIsByosVault,
+        );
+        const {
+          secret: _secret,
+          secretIsVault: _isVault,
+          secretIsByosVault: _isByosVault,
+          ...rest
+        } = key;
+        return {
+          ...rest,
+          // Normalize undefined to null for nullable fields from left joins
+          teamName: rest.teamName ?? null,
+          userName: rest.userName ?? null,
+          secretId: rest.secretId ?? null,
+          userId: rest.userId ?? null,
+          teamId: rest.teamId ?? null,
+          // Keep dates as Date objects to match Zod schema (createSelectSchema returns z.date())
+          vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
+          vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
+          secretStorageType,
+        };
+      })
+      // Filter out any keys whose provider is not in SupportedChatProviderSchema (e.g. legacy providers like "cohere")
+      .filter((key) =>
+        SupportedChatProviderSchema.safeParse(key.provider).success,
       );
-      const {
-        secret: _secret,
-        secretIsVault: _isVault,
-        secretIsByosVault: _isByosVault,
-        ...rest
-      } = key;
-      return {
-        ...rest,
-        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
-        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
-        secretStorageType,
-      };
-    });
   }
 
   /**
@@ -259,26 +272,38 @@ class ChatApiKeyModel {
       .orderBy(schema.chatApiKeysTable.createdAt);
 
     // Parse vault references from secrets and compute storage type
-    return apiKeys.map((key) => {
-      const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      const secretStorageType = computeSecretStorageType(
-        key.secretId,
-        key.secretIsVault,
-        key.secretIsByosVault,
+    return apiKeys
+      .map((key) => {
+        const vaultRef = parseVaultReferenceFromSecret(key.secret);
+        const secretStorageType = computeSecretStorageType(
+          key.secretId,
+          key.secretIsVault,
+          key.secretIsByosVault,
+        );
+        const {
+          secret: _secret,
+          secretIsVault: _isVault,
+          secretIsByosVault: _isByosVault,
+          ...rest
+        } = key;
+        return {
+          ...rest,
+          // Normalize undefined to null for nullable fields from left joins
+          teamName: rest.teamName ?? null,
+          userName: rest.userName ?? null,
+          secretId: rest.secretId ?? null,
+          userId: rest.userId ?? null,
+          teamId: rest.teamId ?? null,
+          // Keep dates as Date objects to match Zod schema (createSelectSchema returns z.date())
+          vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
+          vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
+          secretStorageType,
+        };
+      })
+      // Filter out any keys whose provider is not in SupportedChatProviderSchema (e.g. legacy providers like "cohere")
+      .filter((key) =>
+        SupportedChatProviderSchema.safeParse(key.provider).success,
       );
-      const {
-        secret: _secret,
-        secretIsVault: _isVault,
-        secretIsByosVault: _isByosVault,
-        ...rest
-      } = key;
-      return {
-        ...rest,
-        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
-        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
-        secretStorageType,
-      };
-    });
   }
 
   /**

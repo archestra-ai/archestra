@@ -239,7 +239,7 @@ const groqConfig: ToolPersistenceTestConfig = {
   }),
   buildRequest: (content, tools) => {
     const request: Record<string, unknown> = {
-      model: "llama-3.1-70b-versatile",
+      model: "llama-3.1-8b-instant",
       messages: [{ role: "user", content }],
     };
     if (tools && tools.length > 0) {

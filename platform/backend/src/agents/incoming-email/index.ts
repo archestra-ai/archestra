@@ -1,5 +1,6 @@
 import { INCOMING_EMAIL_SECURITY_MODE } from "@shared";
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import AgentTeamModel from "@/models/agent-team";
@@ -509,21 +510,14 @@ export async function processIncomingEmail(
     );
   }
 
-  // Get prompt's incoming email settings
-  const promptEmailSettings =
-    await PromptModel.getIncomingEmailSettings(promptId);
-  if (!promptEmailSettings) {
-    throw new Error(`Prompt ${promptId} not found`);
-  }
-
-  // Get the full prompt to access agentId
+  // Get prompt
   const prompt = await PromptModel.findById(promptId);
   if (!prompt) {
     throw new Error(`Prompt ${promptId} not found`);
   }
 
   // Check if incoming email is enabled for this prompt
-  if (!promptEmailSettings.incomingEmailEnabled) {
+  if (!prompt.incomingEmailEnabled) {
     logger.warn(
       {
         messageId: email.messageId,
@@ -533,13 +527,11 @@ export async function processIncomingEmail(
       },
       "[IncomingEmail] Incoming email is not enabled for this agent",
     );
-    throw new Error(
-      `Incoming email is not enabled for agent ${promptEmailSettings.name}`,
-    );
+    throw new Error(`Incoming email is not enabled for agent ${prompt.name}`);
   }
 
   // Apply security mode validation
-  const securityMode = promptEmailSettings.incomingEmailSecurityMode;
+  const securityMode = prompt.incomingEmailSecurityMode;
   const senderEmail = email.fromAddress.toLowerCase();
 
   logger.debug(
@@ -556,7 +548,7 @@ export async function processIncomingEmail(
   let userId: string = "system";
 
   switch (securityMode) {
-    case INCOMING_EMAIL_SECURITY_MODE.PRIVATE: {
+    case "private": {
       // Private mode: Sender must be an Archestra user with access to the agent
       const user = await UserModel.findByEmail(senderEmail);
       if (!user) {
@@ -573,11 +565,19 @@ export async function processIncomingEmail(
         );
       }
 
-      // Check if user has access to the agent via team membership
+      // Check if user is a profile admin (can access all agents)
+      const isProfileAdmin = await userHasPermission(
+        user.id,
+        prompt.organizationId,
+        "profile",
+        "admin",
+      );
+
+      // Check if user has access to the agent via team membership or admin permission
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         user.id,
         prompt.agentId,
-        false, // not admin
+        isProfileAdmin,
       );
 
       if (!hasAccess) {
@@ -587,6 +587,7 @@ export async function processIncomingEmail(
             agentId: prompt.agentId,
             userId: user.id,
             senderEmail,
+            isProfileAdmin,
           },
           "[IncomingEmail] Private mode: user does not have access to this agent",
         );
@@ -604,19 +605,19 @@ export async function processIncomingEmail(
           agentId: prompt.agentId,
           userId: user.id,
           senderEmail,
+          isProfileAdmin,
         },
         "[IncomingEmail] Private mode: sender authenticated via email",
       );
       break;
     }
 
-    case INCOMING_EMAIL_SECURITY_MODE.INTERNAL: {
+    case "internal": {
       // Internal mode: Sender email domain must match the allowed domain
-      const allowedDomain =
-        promptEmailSettings.incomingEmailAllowedDomain?.toLowerCase();
+      const allowedDomain = prompt.incomingEmailAllowedDomain?.toLowerCase();
       if (!allowedDomain) {
         throw new Error(
-          `Internal mode is configured but no allowed domain is set for agent ${promptEmailSettings.name}`,
+          `Internal mode is configured but no allowed domain is set for agent ${prompt.name}`,
         );
       }
 
@@ -649,7 +650,7 @@ export async function processIncomingEmail(
       break;
     }
 
-    case INCOMING_EMAIL_SECURITY_MODE.PUBLIC: {
+    case "public": {
       // Public mode: No restrictions on sender
       logger.info(
         {

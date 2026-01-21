@@ -1,3 +1,4 @@
+import { IncomingEmailSecurityModeSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -6,12 +7,34 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-// Re-export PromptHistoryEntry type from schema
-export type { PromptHistoryEntry } from "@/database/schemas/prompt";
+/**
+ * Represents a historical version of a prompt stored in the history JSONB array
+ */
+export interface PromptHistoryEntry {
+  version: number;
+  userPrompt: string | null;
+  systemPrompt: string | null;
+  createdAt: string; // ISO timestamp
+}
 
-export const SelectPromptSchema = createSelectSchema(schema.promptsTable);
+const selectExtendedFields = {
+  incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
+};
 
-export const InsertPromptSchema = createInsertSchema(schema.promptsTable).omit({
+// For inserts, make incomingEmailSecurityMode optional since it has a database default
+const insertExtendedFields = {
+  incomingEmailSecurityMode: IncomingEmailSecurityModeSchema.optional(),
+};
+
+export const SelectPromptSchema = createSelectSchema(
+  schema.promptsTable,
+  selectExtendedFields,
+);
+
+export const InsertPromptSchema = createInsertSchema(
+  schema.promptsTable,
+  insertExtendedFields,
+).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -19,7 +42,10 @@ export const InsertPromptSchema = createInsertSchema(schema.promptsTable).omit({
   history: true,
 });
 
-export const UpdatePromptSchema = createUpdateSchema(schema.promptsTable).omit({
+export const UpdatePromptSchema = createUpdateSchema(
+  schema.promptsTable,
+  insertExtendedFields, // Use optional schema for updates too
+).omit({
   id: true,
   createdAt: true,
   updatedAt: true,

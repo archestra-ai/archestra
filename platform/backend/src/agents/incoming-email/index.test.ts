@@ -9,7 +9,13 @@ vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: vi.fn(),
 }));
 
+// Mock the auth utils for permission checks
+vi.mock("@/auth", () => ({
+  userHasPermission: vi.fn(),
+}));
+
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import { userHasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { IncomingEmail } from "@/types";
@@ -1027,6 +1033,8 @@ describe("processIncomingEmail security modes", () => {
       text: "Agent security response",
       finishReason: "end_turn",
     });
+    // Default: user is not a profile admin
+    vi.mocked(userHasPermission).mockResolvedValue(false);
   });
 
   test("rejects email when incoming email is disabled on the prompt", async ({
@@ -1232,6 +1240,74 @@ describe("processIncomingEmail security modes", () => {
       "user noaccess@company.com does not have access to this agent",
     );
     expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+  });
+
+  test("private mode: accepts email from admin user without team membership", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeAgent,
+  }) => {
+    // Create an admin user (user exists but is not a team member)
+    const adminUser = await makeUser({ email: "admin@company.com" });
+    // Create another user who owns the team
+    const teamOwner = await makeUser({ email: "owner@company.com" });
+    const org = await makeOrganization();
+    // Create a team owned by teamOwner, admin is NOT a member
+    const team = await makeTeam(org.id, teamOwner.id);
+    const agent = await makeAgent({
+      teams: [team.id],
+    });
+
+    const prompt = await createTestPrompt(agent.id, org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: INCOMING_EMAIL_SECURITY_MODE.PRIVATE,
+    });
+    const promptId = prompt.id;
+
+    // Mock: adminUser IS a profile admin
+    vi.mocked(userHasPermission).mockResolvedValue(true);
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => promptId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-private-admin-${Date.now()}`,
+      toAddress: `agents+agent-${promptId}@test.com`,
+      fromAddress: "admin@company.com", // Admin user email
+      subject: "Test",
+      body: "Admin access test",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    // Admin should be able to access agent even without team membership
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: adminUser.id,
+        message: "Admin access test",
+      }),
+    );
+
+    // Verify userHasPermission was called with correct args
+    expect(vi.mocked(userHasPermission)).toHaveBeenCalledWith(
+      adminUser.id,
+      org.id,
+      "profile",
+      "admin",
+    );
   });
 
   test("internal mode: accepts email from allowed domain", async ({

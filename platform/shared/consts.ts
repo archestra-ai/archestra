@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
@@ -172,17 +174,16 @@ export const TimeInMs = {
  * - internal: Only allows emails from a specific domain
  * - public: No sender restrictions (anyone can email the agent)
  */
-export const INCOMING_EMAIL_SECURITY_MODE = {
-  PRIVATE: "private",
-  INTERNAL: "internal",
-  PUBLIC: "public",
-} as const;
-
-export type IncomingEmailSecurityMode =
-  (typeof INCOMING_EMAIL_SECURITY_MODE)[keyof typeof INCOMING_EMAIL_SECURITY_MODE];
-
-export const INCOMING_EMAIL_SECURITY_MODES = Object.values(
-  INCOMING_EMAIL_SECURITY_MODE,
+export const IncomingEmailSecurityModeSchema = z.enum([
+  "private",
+  "internal",
+  "public",
+]);
+export type IncomingEmailSecurityMode = z.infer<
+  typeof IncomingEmailSecurityModeSchema
+>;
+export const IncomingEmailSecurityModes = Object.values(
+  IncomingEmailSecurityModeSchema.enum,
 );
 
 /**
@@ -191,7 +192,7 @@ export const INCOMING_EMAIL_SECURITY_MODES = Object.values(
 export function isValidIncomingEmailSecurityMode(
   value: string,
 ): value is IncomingEmailSecurityMode {
-  return INCOMING_EMAIL_SECURITY_MODES.includes(
+  return IncomingEmailSecurityModes.includes(
     value as IncomingEmailSecurityMode,
   );
 }

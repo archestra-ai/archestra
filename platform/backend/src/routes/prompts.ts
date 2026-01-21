@@ -3,7 +3,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { AgentTeamModel, PromptModel, ToolModel } from "@/models";
-import { validateIncomingEmailSettings } from "@/routes/incoming-email";
 import {
   ApiError,
   constructResponseSchema,
@@ -63,18 +62,6 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId }, reply) => {
-      // Validate incoming email settings if present
-      try {
-        validateIncomingEmailSettings(body);
-      } catch (error) {
-        throw new ApiError(
-          400,
-          error instanceof Error
-            ? error.message
-            : "Invalid incoming email settings",
-        );
-      }
-
       return reply.send(await PromptModel.create(organizationId, body));
     },
   );
@@ -129,18 +116,6 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!existingPrompt) {
         throw new ApiError(404, "Prompt not found");
-      }
-
-      // Validate incoming email settings if present
-      try {
-        validateIncomingEmailSettings(body);
-      } catch (error) {
-        throw new ApiError(
-          400,
-          error instanceof Error
-            ? error.message
-            : "Invalid incoming email settings",
-        );
       }
 
       const updated = await PromptModel.update(params.id, body);

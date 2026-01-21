@@ -62,7 +62,7 @@ export const AgentNode = memo(({ data }: NodeProps<AgentNodeType>) => {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onConnectAgent(data.promptId)}>
               <Link2 className="mr-2 size-4" />
-              A2A Connect
+              Connect
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onDeleteAgent(data.promptId)}

@@ -8,18 +8,8 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ChatOpsProviderType } from "@/types/chatops";
+import type { ChatOpsProviderType, PromptHistoryEntry } from "@/types";
 import agentsTable from "./agent";
-
-/**
- * Represents a historical version of a prompt stored in the history JSONB array
- */
-export interface PromptHistoryEntry {
-  version: number;
-  userPrompt: string | null;
-  systemPrompt: string | null;
-  createdAt: string; // ISO timestamp
-}
 
 const promptsTable = pgTable("prompts", {
   id: uuid("id").primaryKey().defaultRandom(),

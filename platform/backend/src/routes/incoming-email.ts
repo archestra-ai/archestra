@@ -1,10 +1,4 @@
-import {
-  DOMAIN_VALIDATION_REGEX,
-  type IncomingEmailSecurityMode,
-  isValidIncomingEmailSecurityMode,
-  MAX_DOMAIN_LENGTH,
-  RouteId,
-} from "@shared";
+import { IncomingEmailSecurityModeSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -20,58 +14,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  type UpdatePrompt,
 } from "@/types";
-
-/**
- * Parse and validate an incoming email security mode.
- * Returns the validated mode or defaults to "private" if invalid.
- */
-export function parseSecurityMode(
-  mode: string | undefined | null,
-): IncomingEmailSecurityMode {
-  if (mode && isValidIncomingEmailSecurityMode(mode)) {
-    return mode;
-  }
-  return "private";
-}
-
-/**
- * Validate incoming email settings.
- * Throws an error if:
- * - Security mode is 'internal' but no allowed domain is set
- * - Security mode is 'internal' and the allowed domain exceeds max length
- * - Security mode is 'internal' and the allowed domain format is invalid
- */
-export function validateIncomingEmailSettings(
-  data: Partial<UpdatePrompt>,
-): void {
-  if (data.incomingEmailSecurityMode === "internal") {
-    if (
-      data.incomingEmailAllowedDomain === undefined ||
-      data.incomingEmailAllowedDomain === null ||
-      data.incomingEmailAllowedDomain.trim() === ""
-    ) {
-      throw new Error(
-        "incomingEmailAllowedDomain is required when security mode is 'internal'",
-      );
-    }
-
-    const domain = data.incomingEmailAllowedDomain.trim();
-
-    if (domain.length > MAX_DOMAIN_LENGTH) {
-      throw new Error(
-        `incomingEmailAllowedDomain exceeds maximum length of ${MAX_DOMAIN_LENGTH} characters`,
-      );
-    }
-
-    if (!DOMAIN_VALIDATION_REGEX.test(domain)) {
-      throw new Error(
-        "incomingEmailAllowedDomain must be a valid domain format (e.g., company.com)",
-      );
-    }
-  }
-}
 
 /**
  * Incoming Email webhook routes
@@ -121,22 +64,6 @@ async function isRateLimited(ip: string): Promise<boolean> {
   );
   return false;
 }
-
-/**
- * Schema for subscription status response
- */
-const SubscriptionStatusSchema = z.object({
-  isActive: z.boolean(),
-  subscription: z
-    .object({
-      id: z.string(),
-      subscriptionId: z.string(),
-      provider: z.string(),
-      webhookUrl: z.string(),
-      expiresAt: z.string().datetime(),
-    })
-    .nullable(),
-});
 
 /**
  * Schema for setup response
@@ -302,20 +229,6 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Schema for email address response
-   * Includes both global provider status and agent-level settings
-   */
-  const EmailAddressResponseSchema = z.object({
-    // Global incoming email provider status
-    providerEnabled: z.boolean(),
-    emailAddress: z.string().nullable(),
-    // Agent-level incoming email settings
-    agentIncomingEmailEnabled: z.boolean(),
-    agentSecurityMode: z.enum(["private", "internal", "public"]),
-    agentAllowedDomain: z.string().nullable(),
-  });
-
-  /**
    * Endpoint to get the agent email address for a prompt
    * Used by the frontend to display the email address for an agent
    */
@@ -329,16 +242,29 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           promptId: z.string().uuid(),
         }),
-        response: constructResponseSchema(EmailAddressResponseSchema),
+        /**
+         * Schema for email address response
+         * Includes both global provider status and agent-level settings
+         */
+        response: constructResponseSchema(
+          z.object({
+            // Global incoming email provider status
+            providerEnabled: z.boolean(),
+            emailAddress: z.string().nullable(),
+            // Agent-level incoming email settings
+            agentIncomingEmailEnabled: z.boolean(),
+            agentSecurityMode: IncomingEmailSecurityModeSchema,
+            agentAllowedDomain: z.string().nullable(),
+          }),
+        ),
       },
     },
     async (request, reply) => {
       const { promptId } = request.params;
 
       // Get prompt's incoming email settings
-      const promptEmailSettings =
-        await PromptModel.getIncomingEmailSettings(promptId);
-      if (!promptEmailSettings) {
+      const prompt = await PromptModel.findById(promptId);
+      if (!prompt) {
         throw new ApiError(404, "Prompt not found");
       }
 
@@ -348,11 +274,9 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send({
           providerEnabled: false,
           emailAddress: null,
-          agentIncomingEmailEnabled: promptEmailSettings.incomingEmailEnabled,
-          agentSecurityMode: parseSecurityMode(
-            promptEmailSettings.incomingEmailSecurityMode,
-          ),
-          agentAllowedDomain: promptEmailSettings.incomingEmailAllowedDomain,
+          agentIncomingEmailEnabled: prompt.incomingEmailEnabled,
+          agentSecurityMode: prompt.incomingEmailSecurityMode,
+          agentAllowedDomain: prompt.incomingEmailAllowedDomain,
         });
       }
 
@@ -361,11 +285,9 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         providerEnabled: true,
         emailAddress,
-        agentIncomingEmailEnabled: promptEmailSettings.incomingEmailEnabled,
-        agentSecurityMode: parseSecurityMode(
-          promptEmailSettings.incomingEmailSecurityMode,
-        ),
-        agentAllowedDomain: promptEmailSettings.incomingEmailAllowedDomain,
+        agentIncomingEmailEnabled: prompt.incomingEmailEnabled,
+        agentSecurityMode: prompt.incomingEmailSecurityMode,
+        agentAllowedDomain: prompt.incomingEmailAllowedDomain,
       });
     },
   );
@@ -381,7 +303,20 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get the current incoming email webhook subscription status",
         tags: ["Incoming Email"],
-        response: constructResponseSchema(SubscriptionStatusSchema),
+        response: constructResponseSchema(
+          z.object({
+            isActive: z.boolean(),
+            subscription: z
+              .object({
+                id: z.string(),
+                subscriptionId: z.string(),
+                provider: z.string(),
+                webhookUrl: z.string(),
+                expiresAt: z.string().datetime(),
+              })
+              .nullable(),
+          }),
+        ),
       },
     },
     async (_, reply) => {

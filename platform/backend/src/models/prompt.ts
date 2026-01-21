@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { PromptHistoryEntry } from "@/database/schemas/prompt";
 import type {
   InsertPrompt,
   Prompt,
+  PromptHistoryEntry,
   PromptVersionsResponse,
   UpdatePrompt,
 } from "@/types";
@@ -33,13 +33,7 @@ class PromptModel {
       .insert(schema.promptsTable)
       .values({
         organizationId,
-        name: input.name,
-        agentId: input.agentId,
-        userPrompt: input.userPrompt || null,
-        systemPrompt: input.systemPrompt || null,
-        allowedChatops: input.allowedChatops || [],
-        version: 1,
-        history: [],
+        ...input,
       })
       .returning();
 
@@ -208,6 +202,12 @@ class PromptModel {
         userPrompt: input.userPrompt ?? prompt.userPrompt,
         systemPrompt: input.systemPrompt ?? prompt.systemPrompt,
         allowedChatops: input.allowedChatops ?? prompt.allowedChatops,
+        incomingEmailEnabled:
+          input.incomingEmailEnabled ?? prompt.incomingEmailEnabled,
+        incomingEmailSecurityMode:
+          input.incomingEmailSecurityMode ?? prompt.incomingEmailSecurityMode,
+        incomingEmailAllowedDomain:
+          input.incomingEmailAllowedDomain ?? prompt.incomingEmailAllowedDomain,
         version: prompt.version + 1,
         history: sql`${schema.promptsTable.history} || ${JSON.stringify([historyEntry])}::jsonb`,
       })
@@ -257,34 +257,6 @@ class PromptModel {
       .returning();
 
     return updated || null;
-  }
-
-  /**
-   * Get incoming email settings for a prompt.
-   * Lightweight query that only fetches email-related fields.
-   */
-  static async getIncomingEmailSettings(id: string): Promise<{
-    id: string;
-    name: string;
-    incomingEmailEnabled: boolean;
-    incomingEmailSecurityMode: string;
-    incomingEmailAllowedDomain: string | null;
-  } | null> {
-    const [prompt] = await db
-      .select({
-        id: schema.promptsTable.id,
-        name: schema.promptsTable.name,
-        incomingEmailEnabled: schema.promptsTable.incomingEmailEnabled,
-        incomingEmailSecurityMode:
-          schema.promptsTable.incomingEmailSecurityMode,
-        incomingEmailAllowedDomain:
-          schema.promptsTable.incomingEmailAllowedDomain,
-      })
-      .from(schema.promptsTable)
-      .where(eq(schema.promptsTable.id, id))
-      .limit(1);
-
-    return prompt || null;
   }
 
   /**

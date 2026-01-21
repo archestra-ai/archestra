@@ -965,9 +965,7 @@ function EditProfileDialog({
           return;
         }
         if (!domainRegex.test(domain)) {
-          toast.error(
-            "Please enter a valid domain format (e.g., company.com)",
-          );
+          toast.error("Please enter a valid domain format (e.g., company.com)");
           return;
         }
       }

@@ -64,7 +64,8 @@ export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
  * Matches domains like: company.com, sub.company.com, my-company.co.uk
  * Does not match: spaces, special characters (except hyphen), domains starting/ending with hyphen
  */
-const DOMAIN_REGEX = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+const DOMAIN_REGEX =
+  /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
 
 /**
  * Validate incoming email settings.

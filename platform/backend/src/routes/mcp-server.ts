@@ -686,8 +686,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else {
         // For team credentials: user must have team:admin OR (mcpServer:update AND team membership)
         // WHY: This matches the team installation permission requirements - only editors and admins
-        // can manage team credentials, members cannot. 
-        // Same rules apply for re-authenticate them.
+        // can manage team credentials, members cannot.
+        // Same rules apply for re-authentication.
         const { success: isTeamAdmin } = await hasPermission(
           { team: ["admin"] },
           headers,

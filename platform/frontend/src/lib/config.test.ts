@@ -6,9 +6,9 @@ vi.mock("next-runtime-env", () => ({
 }));
 
 import {
+  _getExternalBaseUrl,
   getBackendBaseUrl,
-  getDisplayProxyUrl,
-  getExternalBaseUrl,
+  getExternalProxyUrl,
   getWebSocketUrl,
 } from "./config";
 
@@ -99,7 +99,7 @@ describe("getExternalBaseUrl", () => {
       "https://api.archestra.com";
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://localhost:9000";
 
-    const result = getExternalBaseUrl();
+    const result = _getExternalBaseUrl();
 
     expect(result).toBe("https://api.archestra.com");
   });
@@ -109,7 +109,7 @@ describe("getExternalBaseUrl", () => {
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://internal.example.com";
 
-    const result = getExternalBaseUrl();
+    const result = _getExternalBaseUrl();
 
     expect(result).toBe("https://internal.example.com");
   });
@@ -119,7 +119,7 @@ describe("getExternalBaseUrl", () => {
     delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
     delete process.env.ARCHESTRA_API_BASE_URL;
 
-    const result = getExternalBaseUrl();
+    const result = _getExternalBaseUrl();
 
     expect(result).toBe("http://localhost:9000");
   });
@@ -129,13 +129,13 @@ describe("getExternalBaseUrl", () => {
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://internal.example.com";
 
-    const result = getExternalBaseUrl();
+    const result = _getExternalBaseUrl();
 
     expect(result).toBe("https://internal.example.com");
   });
 });
 
-describe("getDisplayProxyUrl", () => {
+describe("getExternalProxyUrl", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -152,7 +152,7 @@ describe("getDisplayProxyUrl", () => {
     delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
     delete process.env.ARCHESTRA_API_BASE_URL;
 
-    const result = getDisplayProxyUrl();
+    const result = getExternalProxyUrl();
 
     expect(result).toBe("http://localhost:9000/v1");
   });
@@ -162,7 +162,7 @@ describe("getDisplayProxyUrl", () => {
       "https://api.archestra.com";
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://localhost:9000";
 
-    const result = getDisplayProxyUrl();
+    const result = getExternalProxyUrl();
 
     expect(result).toBe("https://api.archestra.com/v1");
   });
@@ -172,7 +172,7 @@ describe("getDisplayProxyUrl", () => {
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://api.example.com/v1";
 
-    const result = getDisplayProxyUrl();
+    const result = getExternalProxyUrl();
 
     expect(result).toBe("https://api.example.com/v1");
   });
@@ -181,7 +181,7 @@ describe("getDisplayProxyUrl", () => {
     delete process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL;
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "https://api.example.com/";
 
-    const result = getDisplayProxyUrl();
+    const result = getExternalProxyUrl();
 
     expect(result).toBe("https://api.example.com/v1");
   });
@@ -190,7 +190,7 @@ describe("getDisplayProxyUrl", () => {
     delete process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL;
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "https://api.example.com";
 
-    const result = getDisplayProxyUrl();
+    const result = getExternalProxyUrl();
 
     expect(result).toBe("https://api.example.com/v1");
   });
@@ -200,7 +200,7 @@ describe("getDisplayProxyUrl", () => {
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://api.example.com/proxy";
 
-    const result = getDisplayProxyUrl();
+    const result = getExternalProxyUrl();
 
     expect(result).toBe("https://api.example.com/proxy/v1");
   });
@@ -210,7 +210,7 @@ describe("getDisplayProxyUrl", () => {
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://api.example.com/proxy/";
 
-    const result = getDisplayProxyUrl();
+    const result = getExternalProxyUrl();
 
     expect(result).toBe("https://api.example.com/proxy/v1");
   });
@@ -219,7 +219,7 @@ describe("getDisplayProxyUrl", () => {
     delete process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL;
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://localhost:8080";
 
-    const result = getDisplayProxyUrl();
+    const result = getExternalProxyUrl();
 
     expect(result).toBe("http://localhost:8080/v1");
   });
@@ -228,7 +228,7 @@ describe("getDisplayProxyUrl", () => {
     delete process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL;
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "";
 
-    const result = getDisplayProxyUrl();
+    const result = getExternalProxyUrl();
 
     expect(result).toBe("http://localhost:9000/v1");
   });

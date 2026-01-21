@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/popover";
 import config from "@/lib/config";
 
-const { displayProxyUrl: externalProxyUrl, internalProxyUrl } = config.api;
+const { externalProxyUrl, internalProxyUrl } = config.api;
 
 type ProviderOption = SupportedProvider | "claude-code";
 

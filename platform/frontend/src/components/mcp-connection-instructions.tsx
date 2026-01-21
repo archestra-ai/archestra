@@ -31,7 +31,7 @@ import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
-const { displayProxyUrl: apiBaseUrl } = config.api;
+const { externalProxyUrl: apiBaseUrl } = config.api;
 
 interface McpConnectionInstructionsProps {
   agentId: string;

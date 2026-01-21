@@ -75,8 +75,8 @@ export function A2AConnectionInstructions({
     setTimeout(() => setCopiedEmail(false), 2000);
   }, [agentEmailAddress]);
 
-  // Get base URL from config (displayProxyUrl includes /v1)
-  const baseUrl = config.api.displayProxyUrl;
+  // Get base URL from config (externalProxyUrl includes /v1)
+  const baseUrl = config.api.externalProxyUrl;
 
   // A2A endpoint
   const a2aEndpoint = `${baseUrl}/a2a/${prompt.id}`;

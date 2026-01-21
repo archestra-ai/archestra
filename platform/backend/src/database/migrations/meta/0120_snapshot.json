@@ -1,5 +1,5 @@
 {
-  "id": "f9b9ed4d-2b54-46a1-b685-21b032779686",
+  "id": "b0644edc-66e4-483c-9b55-60560d701a94",
   "prevId": "c445fe81-2d42-424e-ac94-e83ade0cf82d",
   "version": "7",
   "dialect": "postgresql",
@@ -2563,7 +2563,8 @@
         },
         "oauth_refresh_error": {
           "name": "oauth_refresh_error",
-          "type": "text",
+          "type": "oauth_refresh_error_enum",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         },
@@ -4887,7 +4888,16 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.oauth_refresh_error_enum": {
+      "name": "oauth_refresh_error_enum",
+      "schema": "public",
+      "values": [
+        "refresh_failed",
+        "no_refresh_token"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},

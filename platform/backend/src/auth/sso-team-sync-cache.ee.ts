@@ -1,6 +1,6 @@
 import type { SsoTeamSyncConfig } from "@shared";
-import { cacheManager, CacheKey } from "@/models/cache-manager";
 import logger from "@/logging";
+import { CacheKey, cacheManager } from "@/models/cache-manager";
 import { extractGroupsWithTemplate } from "@/templating";
 
 /**
@@ -11,10 +11,6 @@ import { extractGroupsWithTemplate } from "@/templating";
  *
  * The cache is keyed by a composite of providerId and user email.
  * Entries automatically expire after 60 seconds to prevent stale data.
- *
- * When Redis is configured (ARCHESTRA_CACHE_REDIS_URL), this cache is
- * distributed across all pods, ensuring SSO team sync works correctly
- * in multi-pod deployments.
  */
 
 interface SsoGroupsCacheEntry {
@@ -27,7 +23,10 @@ const CACHE_TTL_MS = 60_000; // 60 seconds
 /**
  * Generate a cache key from provider ID and user email
  */
-function getCacheKey(providerId: string, email: string): `${typeof CacheKey.SsoGroups}-${string}` {
+function getCacheKey(
+  providerId: string,
+  email: string,
+): `${typeof CacheKey.SsoGroups}-${string}` {
   return `${CacheKey.SsoGroups}-${providerId}:${email.toLowerCase()}`;
 }
 

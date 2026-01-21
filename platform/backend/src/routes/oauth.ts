@@ -3,9 +3,9 @@ import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js"
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { cacheManager, CacheKey } from "@/models/cache-manager";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
+import { CacheKey, cacheManager } from "@/models/cache-manager";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
@@ -226,8 +226,6 @@ async function registerOAuthClient(
 
 /**
  * OAuth state data stored in cache during the OAuth flow.
- * When Redis is configured (ARCHESTRA_CACHE_REDIS_URL), this is distributed
- * across all pods, ensuring OAuth callbacks work correctly in multi-pod deployments.
  */
 interface OAuthStateData {
   catalogId: string;
@@ -242,21 +240,32 @@ const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 /**
  * Generate cache key for OAuth state
  */
-function getOAuthStateCacheKey(state: string): `${typeof CacheKey.OAuthState}-${string}` {
+function getOAuthStateCacheKey(
+  state: string,
+): `${typeof CacheKey.OAuthState}-${string}` {
   return `${CacheKey.OAuthState}-${state}`;
 }
 
 /**
  * Store OAuth state in cache
  */
-async function setOAuthState(state: string, data: OAuthStateData): Promise<void> {
-  await cacheManager.set(getOAuthStateCacheKey(state), data, OAUTH_STATE_TTL_MS);
+async function setOAuthState(
+  state: string,
+  data: OAuthStateData,
+): Promise<void> {
+  await cacheManager.set(
+    getOAuthStateCacheKey(state),
+    data,
+    OAUTH_STATE_TTL_MS,
+  );
 }
 
 /**
  * Retrieve and delete OAuth state from cache
  */
-async function getAndDeleteOAuthState(state: string): Promise<OAuthStateData | null> {
+async function getAndDeleteOAuthState(
+  state: string,
+): Promise<OAuthStateData | null> {
   const key = getOAuthStateCacheKey(state);
   const data = await cacheManager.get<OAuthStateData>(key);
   if (data) {

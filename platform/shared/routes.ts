@@ -234,7 +234,8 @@ export const RouteId = {
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
-  GetUser: "getUser",
+  GetUserById: "getUserById",
+  GetUserByEmail: "getUserByEmail",
   CreateUser: "createUser",
   UpdateUser: "updateUser",
   DeleteUser: "deleteUser",

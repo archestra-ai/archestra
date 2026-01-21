@@ -123,8 +123,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgents]: {
     profile: ["read"],
   },
-  [RouteId.GetUser]: {
+  [RouteId.GetUserByEmail]: {
     user: ["read"],
+  },
+  [RouteId.GetUserById]: {
+    user: ["read"]
+  },
+  [RouteId.CreateUser]: {
+    user: ["create"]
+  },
+  [RouteId.UpdateUser]: {
+    user: ["update"]
+  },
+  [RouteId.DeleteUser]: {
+    user: ["delete"]
   },
   [RouteId.GetAllAgents]: {
     profile: ["read"],

@@ -489,7 +489,7 @@ export function McpConnectionInstructions({
             <RadioGroupItem value="internal" id="internal" className="mt-0.5" />
             <div className="flex flex-col gap-0.5">
               <Label htmlFor="internal" className="font-normal cursor-pointer">
-                Internal URL
+                Via Internal URL
               </Label>
               <span className="text-xs text-muted-foreground">
                 Internal URL for in-cluster communication. This is the URL where
@@ -512,10 +512,10 @@ export function McpConnectionInstructions({
                   !externalProxyUrl && "opacity-50",
                 )}
               >
-                Public URL
+                Via External URL
               </Label>
               <span className="text-xs text-muted-foreground">
-                Public URL for connecting to MCP Gateway from outside the
+                External URL for connecting to MCP Gateway from outside the
                 Kubernetes cluster.
               </span>
             </div>
@@ -529,65 +529,64 @@ export function McpConnectionInstructions({
             Configuration for MCP clients:
           </p>
 
-          <div className="flex justify-between gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 bg-transparent"
-              onClick={handleExposeToken}
-              disabled={
-                isLoadingToken ||
-                (!isPersonalTokenSelected && !hasProfileAdminPermission)
-              }
-            >
-              {isLoadingToken ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Loading...</span>
-                </>
-              ) : showExposedToken ? (
-                <>
-                  <EyeOff className="h-4 w-4" />
-                  <span>Hide token</span>
-                </>
-              ) : (
-                <>
-                  <Eye className="h-4 w-4" />
-                  <span>Expose token</span>
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 bg-transparent"
-              onClick={
-                isPersonalTokenSelected || hasProfileAdminPermission
-                  ? handleCopyConfig
-                  : handleCopyConfigWithoutRealToken
-              }
-              disabled={isCopyingConfig}
-            >
-              {isCopyingConfig ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Copying...</span>
-                </>
-              ) : copiedConfig ? (
-                <>
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy with exposed token</span>
-                </>
-              )}
-            </Button>
-          </div>
-
           <div className="bg-muted rounded-md p-3 relative">
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2 bg-transparent"
+                onClick={handleExposeToken}
+                disabled={
+                  isLoadingToken ||
+                  (!isPersonalTokenSelected && !hasProfileAdminPermission)
+                }
+              >
+                {isLoadingToken ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Loading...</span>
+                  </>
+                ) : showExposedToken ? (
+                  <>
+                    <EyeOff className="h-4 w-4" />
+                    <span>Hide token</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-4 w-4" />
+                    <span>Expose token</span>
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2 bg-transparent"
+                onClick={
+                  isPersonalTokenSelected || hasProfileAdminPermission
+                    ? handleCopyConfig
+                    : handleCopyConfigWithoutRealToken
+                }
+                disabled={isCopyingConfig}
+              >
+                {isCopyingConfig ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Copying...</span>
+                  </>
+                ) : copiedConfig ? (
+                  <>
+                    <Check className="h-4 w-4 text-green-500" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    <span>Copy with exposed token</span>
+                  </>
+                )}
+              </Button>
+            </div>
             <pre className="text-xs whitespace-pre-wrap break-all">
               <CodeText className="text-sm whitespace pre-wrap break-all">
                 {mcpConfig}

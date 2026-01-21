@@ -177,7 +177,9 @@ describe("chat-mcp-client tool caching", () => {
     // Note: With cacheManager, functions and symbols cannot be serialized,
     // so we compare the tool names and descriptions rather than full equality
     expect(Object.keys(second)).toEqual(["lookup_email"]);
-    expect(second.lookup_email.description).toEqual(first.lookup_email.description);
+    expect(second.lookup_email.description).toEqual(
+      first.lookup_email.description,
+    );
     // Most importantly, listTools should only be called once due to caching
     expect(mockClient.listTools).toHaveBeenCalledTimes(1);
 

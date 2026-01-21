@@ -1,5 +1,5 @@
 {
-  "id": "1a92c740-805c-4703-a99b-335f0b937cea",
+  "id": "b0644edc-66e4-483c-9b55-60560d701a94",
   "prevId": "c445fe81-2d42-424e-ac94-e83ade0cf82d",
   "version": "7",
   "dialect": "postgresql",
@@ -2561,6 +2561,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "oauth_refresh_error": {
+          "name": "oauth_refresh_error",
+          "type": "oauth_refresh_error_enum",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oauth_refresh_failed_at": {
+          "name": "oauth_refresh_failed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -3389,26 +3402,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'[]'::jsonb"
-        },
-        "incoming_email_enabled": {
-          "name": "incoming_email_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "incoming_email_security_mode": {
-          "name": "incoming_email_security_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'private'"
-        },
-        "incoming_email_allowed_domain": {
-          "name": "incoming_email_allowed_domain",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -4895,7 +4888,16 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.oauth_refresh_error_enum": {
+      "name": "oauth_refresh_error_enum",
+      "schema": "public",
+      "values": [
+        "refresh_failed",
+        "no_refresh_token"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},

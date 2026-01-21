@@ -210,7 +210,12 @@ async function registerOAuthClient(
       );
     }
 
-    return await response.json();
+    const result = await response.json();
+    logger.info(
+      { registrationResult: result },
+      "registerOAuthClient: Dynamic client registration response",
+    );
+    return result;
   } catch (error) {
     throw new Error(
       `Dynamic client registration failed: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -230,6 +235,7 @@ const oauthStateStore = new Map<
     timestamp: number;
     clientId?: string;
     clientSecret?: string;
+    registrationResult?: Record<string, unknown>;
   }
 >();
 
@@ -247,6 +253,204 @@ setInterval(
   },
   10 * 60 * 1000,
 );
+
+/**
+ * Refresh an OAuth access token using the stored refresh token.
+ * This function is called when an access token is expired or about to expire.
+ *
+ * @param secretId - The ID of the secret containing the OAuth tokens
+ * @param catalogId - The ID of the catalog item (MCP server) for OAuth config
+ * @returns true if refresh was successful, false otherwise
+ */
+export async function refreshOAuthToken(
+  secretId: string,
+  catalogId: string,
+): Promise<boolean> {
+  try {
+    const secret = await secretManager().getSecret(secretId);
+    if (!secret?.secret) {
+      logger.warn({ secretId }, "refreshOAuthToken: Secret not found");
+      return false;
+    }
+
+    const currentTokens = secret.secret as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      expires_at?: number;
+      token_type?: string;
+      // When using dynamic oauth client registration (for example huggingace mcp), store the client credentials in the secret
+      // to be able to refresh the token.
+      client_id?: string;
+      client_secret?: string;
+    };
+
+    if (!currentTokens.refresh_token) {
+      logger.warn(
+        { secretId },
+        "refreshOAuthToken: No refresh token available",
+      );
+      return false;
+    }
+
+    // Get catalog item with OAuth configuration
+    const catalogItem =
+      await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalogId);
+    if (!catalogItem?.oauthConfig) {
+      logger.warn(
+        { catalogId },
+        "refreshOAuthToken: Catalog item or OAuth config not found",
+      );
+      return false;
+    }
+
+    const oauthConfig = catalogItem.oauthConfig;
+
+    // Discover token endpoint
+    let tokenEndpoint: string;
+    let discoveryServerUrl = oauthConfig.server_url;
+
+    // Try resource metadata discovery first if supported
+    if (oauthConfig.supports_resource_metadata) {
+      try {
+        const resourceMetadata = await discoverOAuthResourceMetadata(
+          oauthConfig.server_url,
+        );
+        if (
+          resourceMetadata.authorization_servers &&
+          Array.isArray(resourceMetadata.authorization_servers) &&
+          resourceMetadata.authorization_servers.length > 0
+        ) {
+          discoveryServerUrl = resourceMetadata.authorization_servers[0];
+        }
+      } catch {
+        // Continue with standard discovery
+      }
+    }
+
+    try {
+      const metadata =
+        await discoverAuthorizationServerMetadata(discoveryServerUrl);
+      tokenEndpoint = metadata.token_endpoint;
+    } catch {
+      // Fallback to config or constructed endpoint
+      tokenEndpoint =
+        oauthConfig.token_endpoint || `${oauthConfig.server_url}/token`;
+    }
+
+    // Use client credentials from OAuth config first (source of truth),
+    // fall back to stored values (for dynamic client registration cases)
+    const clientId = oauthConfig.client_id || currentTokens.client_id;
+    const clientSecret =
+      oauthConfig.client_secret || currentTokens.client_secret;
+
+    if (!clientId) {
+      logger.warn(
+        { secretId, catalogId },
+        "refreshOAuthToken: No client_id available for token refresh",
+      );
+      return false;
+    }
+
+    logger.info(
+      {
+        secretId,
+        catalogId,
+        tokenEndpoint,
+        hasStoredClientId: !!currentTokens.client_id,
+        hasConfigClientId: !!oauthConfig.client_id,
+        usingClientId: clientId ? `${clientId.substring(0, 8)}...` : "(empty)",
+      },
+      "refreshOAuthToken: Attempting token refresh",
+    );
+
+    // Exchange refresh token for new access token
+    const tokenResponse = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: currentTokens.refresh_token,
+        client_id: clientId,
+        ...(clientSecret && {
+          client_secret: clientSecret,
+        }),
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      logger.error(
+        { secretId, status: tokenResponse.status, error: errorText },
+        "refreshOAuthToken: Token refresh request failed",
+      );
+      return false;
+    }
+
+    const tokenData = (await tokenResponse.json()) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      error?: string;
+      error_description?: string;
+    };
+
+    if (!tokenData.access_token) {
+      logger.error(
+        {
+          secretId,
+          error: tokenData.error,
+          errorDescription: tokenData.error_description,
+        },
+        "refreshOAuthToken: No access token in refresh response",
+      );
+      return false;
+    }
+
+    // Store entire OAuth response to preserve provider-specific fields (scope, id_token, etc.)
+    const updatedSecretPayload = {
+      ...currentTokens,
+      ...tokenData,
+      // Use new refresh token if provided, otherwise keep the old one
+      refresh_token: tokenData.refresh_token || currentTokens.refresh_token,
+      // Add computed expiration timestamp for reliable expiration checking
+      ...(tokenData.expires_in && {
+        expires_at: Date.now() + tokenData.expires_in * 1000,
+      }),
+      // Store client credentials for token refresh (config takes precedence, fallback to stored)
+      ...(clientId && { client_id: clientId }),
+      ...(clientSecret && { client_secret: clientSecret }),
+    };
+
+    // Update the secret in storage
+    await secretManager().updateSecret(secretId, updatedSecretPayload);
+
+    logger.info(
+      {
+        secretId,
+        catalogId,
+        hasNewRefreshToken: !!tokenData.refresh_token,
+        expiresIn: tokenData.expires_in,
+      },
+      "refreshOAuthToken: Token refresh successful",
+    );
+
+    return true;
+  } catch (error) {
+    logger.error(
+      {
+        secretId,
+        catalogId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "refreshOAuthToken: Unexpected error during token refresh",
+    );
+    return false;
+  }
+}
 
 const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -407,25 +611,25 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // If we don't have client credentials and registration endpoint is available, try dynamic registration
+      let registrationResult: Record<string, unknown> | undefined;
       if (!clientId && registrationEndpoint) {
         try {
           fastify.log.info(
             { registrationEndpoint },
             "Attempting dynamic client registration",
           );
-          const registrationResult = await registerOAuthClient(
-            registrationEndpoint,
-            {
-              client_name: `Archestra Platform - ${catalogItem.name}`,
-              redirect_uris: [redirectUri],
-              grant_types: ["authorization_code", "refresh_token"],
-              response_types: ["code"],
-              scope: scopesToUse.join(" "),
-            },
-          );
+          registrationResult = await registerOAuthClient(registrationEndpoint, {
+            client_name: `Archestra Platform - ${catalogItem.name}`,
+            redirect_uris: [redirectUri],
+            grant_types: ["authorization_code", "refresh_token"],
+            response_types: ["code"],
+            scope: scopesToUse.join(" "),
+          });
 
-          clientId = registrationResult.client_id;
-          clientSecret = registrationResult.client_secret;
+          clientId = registrationResult?.client_id as string;
+          clientSecret = registrationResult?.client_secret as
+            | string
+            | undefined;
 
           fastify.log.info(
             { client_id: clientId },
@@ -455,6 +659,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         timestamp: Date.now(),
         clientId,
         clientSecret,
+        registrationResult,
       });
 
       // Build authorization URL using the discovered authorization endpoint
@@ -689,13 +894,16 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Create secret entry with the OAuth tokens
       // Use forceDB=true when BYOS is enabled because OAuth tokens are generated values,
       // not user-provided vault references
+      // Store entire OAuth response to preserve provider-specific fields (scope, id_token, etc.)
       const secretPayload = {
-        access_token: tokenData.access_token,
-        ...(tokenData.refresh_token && {
-          refresh_token: tokenData.refresh_token,
+        ...tokenData,
+        // Add computed expiration timestamp for reliable expiration checking
+        ...(tokenData.expires_in && {
+          expires_at: Date.now() + tokenData.expires_in * 1000,
         }),
-        ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
-        token_type: "Bearer",
+        // Store client credentials for token refresh (may come from dynamic registration)
+        ...(clientId && { client_id: clientId }),
+        ...(clientSecret && { client_secret: clientSecret }),
       };
 
       logger.info(

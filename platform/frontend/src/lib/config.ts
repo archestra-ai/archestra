@@ -30,14 +30,13 @@ export const getBackendBaseUrl = (): string => {
 };
 
 /**
- * Get the external base URL for displaying connection instructions to users.
- * This is the URL that external agents should use to connect to Archestra from outside the cluster.
- *
  * Priority:
  * 1. NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL (explicit external URL)
  * 2. Falls back to getBackendBaseUrl() for backwards compatibility
+ *
+ * Exported for testing purposes.
  */
-export const getExternalBaseUrl = (): string => {
+export const _getExternalBaseUrl = (): string => {
   const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL");
   if (externalUrl) {
     return externalUrl;
@@ -46,13 +45,28 @@ export const getExternalBaseUrl = (): string => {
 };
 
 /**
- * Get the display proxy URL for showing to users.
- * This is the URL that external agents should use to connect to Archestra.
- * Uses getExternalBaseUrl() to support separate internal/external URLs in K8s deployments.
+ * Get the internal proxy URL for in-cluster communication.
+ * This is the URL that agents inside the cluster should use to connect to Archestra.
+ * Uses getBackendBaseUrl() which reads from ARCHESTRA_API_BASE_URL.
  */
-export const getDisplayProxyUrl = (): string => {
+export const getInternalProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
-  const baseUrl = getExternalBaseUrl();
+  const baseUrl = getBackendBaseUrl();
+
+  if (baseUrl.endsWith(proxyUrlSuffix)) {
+    return baseUrl;
+  } else if (baseUrl.endsWith("/")) {
+    return `${baseUrl.slice(0, -1)}${proxyUrlSuffix}`;
+  }
+  return `${baseUrl}${proxyUrlSuffix}`;
+};
+
+/**
+ * Get the display proxy URL for showing to users.
+ */
+export const getExternalProxyUrl = (): string => {
+  const proxyUrlSuffix = "/v1";
+  const baseUrl = _getExternalBaseUrl();
 
   if (baseUrl.endsWith(proxyUrlSuffix)) {
     return baseUrl;
@@ -97,8 +111,14 @@ export default {
     /**
      * Display URL for showing to users (absolute URL for external agents).
      */
-    get displayProxyUrl() {
-      return getDisplayProxyUrl();
+    get externalProxyUrl() {
+      return getExternalProxyUrl();
+    },
+    /**
+     * Internal URL for in-cluster communication.
+     */
+    get internalProxyUrl() {
+      return getInternalProxyUrl();
     },
     /**
      * Base URL for frontend requests (empty to use relative URLs with Next.js rewrites).

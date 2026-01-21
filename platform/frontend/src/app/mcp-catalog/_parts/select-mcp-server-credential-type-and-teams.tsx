@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useMcpServers } from "@/lib/mcp-server.query";
@@ -42,6 +43,13 @@ export function SelectMcpServerCredentialTypeAndTeams({
   const { data: installedServers } = useMcpServers();
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
+
+  // WHY: Check mcpServer:update permission to determine if user can create team installations
+  // Editors have this permission, members don't. This prevents members from installing
+  // MCP servers that affect the whole team - only editors and admins can do that.
+  const { data: hasMcpServerUpdate } = useHasPermissions({
+    mcpServer: ["update"],
+  });
 
   // Compute existing installations for this catalog item
   const { hasPersonalInstallation, teamsWithInstallation } = useMemo(() => {
@@ -137,7 +145,11 @@ export function SelectMcpServerCredentialTypeAndTeams({
   }, [credentialType, availableTeams, onTeamChange]);
 
   const isPersonalDisabled = hasPersonalInstallation || byosEnabled;
-  const isTeamDisabled = availableTeams.length === 0;
+  // WHY: Team option is disabled if:
+  // 1. No teams available (user is not a member of any team with available slots)
+  // 2. User lacks mcpServer:update permission (members don't have it, only editors/admins do)
+  // This enforces that only editors and admins can create team-wide MCP server installations.
+  const isTeamDisabled = availableTeams.length === 0 || !hasMcpServerUpdate;
 
   return (
     <div className="space-y-4">
@@ -188,9 +200,15 @@ export function SelectMcpServerCredentialTypeAndTeams({
               Team{" "}
               {isTeamDisabled && (
                 <span className="text-xs text-muted-foreground">
-                  {teams?.length === 0
-                    ? "You can share credential with a team only if you are a member of it. There are no teams available."
-                    : "All your teams already have this server installed."}
+                  {/* WHY: Show different messages based on why team option is disabled:
+                      1. No permission - members can't create team installations
+                      2. No teams - user isn't a member of any team
+                      3. All teams used - all user's teams already have this server */}
+                  {!hasMcpServerUpdate
+                    ? "(you don't have permission to create team installations)"
+                    : teams?.length === 0
+                      ? "(you are not a member of any team)"
+                      : "(all your teams already have this server installed)"}
                 </span>
               )}
             </Label>

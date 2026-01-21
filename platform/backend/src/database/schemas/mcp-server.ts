@@ -1,4 +1,11 @@
-import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import type {
   InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatus,
@@ -7,6 +14,14 @@ import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
 import { team } from "./team";
 import usersTable from "./user";
+
+// OAuth refresh error codes:
+// - refresh_failed: refresh was attempted but failed
+// - no_refresh_token: can't attempt recovery, no refresh token available
+export const oauthRefreshErrorEnum = pgEnum("oauth_refresh_error_enum", [
+  "refresh_failed",
+  "no_refresh_token",
+]);
 
 const mcpServerTable = pgTable("mcp_server", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -34,6 +49,8 @@ const mcpServerTable = pgTable("mcp_server", {
     .default("idle")
     .$type<LocalMcpServerInstallationStatus>(),
   localInstallationError: text("local_installation_error"),
+  oauthRefreshError: oauthRefreshErrorEnum("oauth_refresh_error"),
+  oauthRefreshFailedAt: timestamp("oauth_refresh_failed_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

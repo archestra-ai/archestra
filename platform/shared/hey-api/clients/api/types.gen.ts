@@ -15982,6 +15982,8 @@ export type GetMcpServersResponses = {
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -16013,6 +16015,8 @@ export type InstallMcpServerData = {
         reinstallRequired?: boolean;
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
+        oauthRefreshError?: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshFailedAt?: unknown;
         userId?: string;
         userConfigValues?: {
             [key: string]: string;
@@ -16104,6 +16108,8 @@ export type InstallMcpServerResponses = {
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -16287,6 +16293,8 @@ export type GetMcpServerResponses = {
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -16307,6 +16315,114 @@ export type GetMcpServerResponses = {
 };
 
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
+
+export type ReauthenticateMcpServerData = {
+    body: {
+        secretId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/reauthenticate';
+};
+
+export type ReauthenticateMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ReauthenticateMcpServerError = ReauthenticateMcpServerErrors[keyof ReauthenticateMcpServerErrors];
+
+export type ReauthenticateMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        catalogId: string;
+        serverType: 'local' | 'remote' | 'builtin';
+        secretId: string | null;
+        ownerId: string | null;
+        teamId: string | null;
+        reinstallRequired: boolean;
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+        localInstallationError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshFailedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        ownerEmail?: string | null;
+        catalogName?: string | null;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: {
+            teamId: string;
+            name: string;
+            createdAt: string;
+        } | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+    };
+};
+
+export type ReauthenticateMcpServerResponse = ReauthenticateMcpServerResponses[keyof ReauthenticateMcpServerResponses];
 
 export type GetMcpServerInstallationStatusData = {
     body?: never;

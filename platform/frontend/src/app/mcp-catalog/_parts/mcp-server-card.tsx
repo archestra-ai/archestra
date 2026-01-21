@@ -2,6 +2,7 @@
 
 import { type archestraApiTypes, E2eTestId } from "@shared";
 import {
+  AlertTriangle,
   FileText,
   Info,
   MoreVertical,
@@ -215,6 +216,13 @@ export function McpServerCard({
   const errorMessage = installedServer?.localInstallationError;
   const mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
+  // Check for OAuth refresh errors on any credential the user can see
+  // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
+  const isOAuthServer = !!item.oauthConfig;
+  const hasOAuthRefreshError =
+    isOAuthServer &&
+    (mcpServerOfCurrentCatalogItem?.some((s) => s.oauthRefreshError) ?? false);
+
   const isInstalling = Boolean(
     installingItemId === item.id ||
       installationStatus === "pending" ||
@@ -331,6 +339,24 @@ export function McpServerCard({
           >
             {mcpServersCount}
           </span>
+          {hasOAuthRefreshError && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="font-medium mb-1">Authentication failed</p>
+                  <p className="text-xs text-muted-foreground">
+                    Some credentials need re-authentication.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Click Manage to fix.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </span>
       </div>
       {mcpServersCount > 0 && (
@@ -361,6 +387,24 @@ export function McpServerCard({
           </WithoutPermissions>
           :{" "}
           <span className="font-medium text-foreground">{mcpServersCount}</span>
+          {hasOAuthRefreshError && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="font-medium mb-1">Authentication failed</p>
+                  <p className="text-xs text-muted-foreground">
+                    Some credentials need re-authentication.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Click Manage to fix.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </span>
       </div>
       {mcpServersCount > 0 && (

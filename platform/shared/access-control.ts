@@ -317,6 +317,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
+  [RouteId.ReauthenticateMcpServer]: {
+    mcpServer: ["update"],
+  },
   [RouteId.RestartMcpServer]: {
     mcpServer: ["update"],
   },

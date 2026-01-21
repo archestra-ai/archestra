@@ -1,5 +1,9 @@
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import config from "@/config";
@@ -12,6 +16,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
@@ -136,7 +141,7 @@ class McpClient {
     }
     const { tool, catalogItem } = validationResult;
 
-    const targetLocalMcpServerIdResult =
+    const targetMcpServerIdResult =
       await this.determineTargetMcpServerIdForCatalogItem({
         tool,
         toolCall,
@@ -144,26 +149,28 @@ class McpClient {
         tokenAuth,
         catalogItem,
       });
-    if ("error" in targetLocalMcpServerIdResult) {
-      return targetLocalMcpServerIdResult.error;
+    if ("error" in targetMcpServerIdResult) {
+      return targetMcpServerIdResult.error;
     }
-    const { targetLocalMcpServerId } = targetLocalMcpServerIdResult;
+    const { targetMcpServerId } = targetMcpServerIdResult;
     const secretsResult = await this.getSecretsForMcpServer({
-      targetMcpServerId: targetLocalMcpServerId,
+      targetMcpServerId: targetMcpServerId,
       toolCall,
       agentId,
     });
     if ("error" in secretsResult) {
       return secretsResult.error;
     }
-    const { secrets } = secretsResult;
+    const { secrets, secretId } = secretsResult;
 
     // Build connection cache key using the resolved target server ID
     // This ensures each user gets their own connection for dynamic credentials
-    const connectionKey = `${catalogItem.id}:${targetLocalMcpServerId}`;
+    const connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
 
     const executeToolCall = async (
       getTransport: () => Promise<Transport>,
+      currentSecrets: Record<string, unknown>,
+      isRetry = false,
     ): Promise<CommonToolResult> => {
       try {
         // Get the appropriate transport
@@ -203,24 +210,83 @@ class McpClient {
           tool.responseModifierTemplate,
         );
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+
+        // Check if this is an authentication error (401) and we can attempt refresh
+        const isAuthError =
+          error instanceof UnauthorizedError ||
+          (error instanceof StreamableHTTPError && error.code === 401);
+
+        // Only attempt token refresh for OAuth servers with a refresh token
+        const isOAuthServer = !!catalogItem.oauthConfig;
+        const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
+          .refresh_token;
+
+        // Track and skip recovery if no refresh token available
+        if (
+          isAuthError &&
+          isOAuthServer &&
+          targetMcpServerId &&
+          !hasRefreshToken
+        ) {
+          await McpServerModel.update(targetMcpServerId, {
+            oauthRefreshError: "no_refresh_token",
+            oauthRefreshFailedAt: new Date(),
+          });
+          logger.warn(
+            { toolName: toolCall.name, targetMcpServerId },
+            "OAuth authentication error: no refresh token available",
+          );
+        }
+
+        // Attempt recovery if possible
+        const canAttemptRecovery =
+          !isRetry &&
+          isAuthError &&
+          isOAuthServer &&
+          secretId &&
+          hasRefreshToken;
+
+        if (canAttemptRecovery) {
+          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+            secretId,
+            catalogId: catalogItem.id,
+            connectionKey,
+            toolCall,
+            agentId,
+            mcpServerName: tool.mcpServerName || "unknown",
+            catalogItem,
+            targetMcpServerId,
+            executeRetry: (getTransport, secrets) =>
+              executeToolCall(getTransport, secrets, true),
+          });
+
+          if (retryToolCallResult) {
+            return retryToolCallResult;
+          }
+          // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
+        }
+
         return await this.createErrorResult(
           toolCall,
           agentId,
-          error instanceof Error ? error.message : "Unknown error",
+          errorMessage,
           tool.mcpServerName || "unknown",
         );
       }
     };
 
     if (!this.shouldLimitConcurrency()) {
-      return executeToolCall(() =>
-        this.getTransport(catalogItem, targetLocalMcpServerId, secrets),
+      return executeToolCall(
+        () => this.getTransport(catalogItem, targetMcpServerId, secrets),
+        secrets,
       );
     }
 
     const transportKind = await this.getTransportKind(
       catalogItem,
-      targetLocalMcpServerId,
+      targetMcpServerId,
     );
     const concurrencyLimit = this.getConcurrencyLimit(transportKind);
 
@@ -228,13 +294,15 @@ class McpClient {
       connectionKey,
       concurrencyLimit,
       () =>
-        executeToolCall(() =>
-          this.getTransportWithKind(
-            catalogItem,
-            targetLocalMcpServerId,
-            secrets,
-            transportKind,
-          ),
+        executeToolCall(
+          () =>
+            this.getTransportWithKind(
+              catalogItem,
+              targetMcpServerId,
+              secrets,
+              transportKind,
+            ),
+          secrets,
         ),
     );
   }
@@ -356,7 +424,8 @@ class McpClient {
     toolCall: CommonToolCall;
     agentId: string;
   }): Promise<
-    { secrets: Record<string, unknown> } | { error: CommonToolResult }
+    | { secrets: Record<string, unknown>; secretId?: string }
+    | { error: CommonToolResult }
   > {
     const mcpServer = await McpServerModel.findById(targetMcpServerId);
     if (!mcpServer) {
@@ -379,7 +448,7 @@ class McpClient {
           },
           `Found secrets for MCP server ${targetMcpServerId}`,
         );
-        return { secrets: secret.secret };
+        return { secrets: secret.secret, secretId: mcpServer.secretId };
       }
     }
     return { secrets: {} };
@@ -399,9 +468,7 @@ class McpClient {
     agentId: string;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
-  }): Promise<
-    { targetLocalMcpServerId: string } | { error: CommonToolResult }
-  > {
+  }): Promise<{ targetMcpServerId: string } | { error: CommonToolResult }> {
     logger.info(
       {
         toolName: toolCall.name,
@@ -456,11 +523,11 @@ class McpClient {
         {
           toolName: toolCall.name,
           catalogItem: catalogItem,
-          targetLocalMcpServerId: result,
+          targetMcpServerId: result,
         },
         "Determined target MCP server ID for catalog item",
       );
-      return { targetLocalMcpServerId: result };
+      return { targetMcpServerId: result };
     }
 
     // Dynamic credential (resolved on tool call time) case: resolve target MCP server ID based on tokenAuth
@@ -505,7 +572,7 @@ class McpClient {
           },
           `Dynamic resolution: using user-owned server of ${userServer.id} for tool ${toolCall.name}`,
         );
-        return { targetLocalMcpServerId: userServer.id };
+        return { targetMcpServerId: userServer.id };
       }
     }
 
@@ -528,7 +595,7 @@ class McpClient {
               },
               `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
             );
-            return { targetLocalMcpServerId: server.id };
+            return { targetMcpServerId: server.id };
           }
         }
       }
@@ -553,7 +620,7 @@ class McpClient {
               },
               `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
             );
-            return { targetLocalMcpServerId: server.id };
+            return { targetMcpServerId: server.id };
           }
         }
       }
@@ -569,7 +636,7 @@ class McpClient {
         },
         `Dynamic resolution: using org-wide server of ${allServers[0].id} for tool ${toolCall.name}`,
       );
-      return { targetLocalMcpServerId: allServers[0].id };
+      return { targetMcpServerId: allServers[0].id };
     }
 
     // No server found, throw an error
@@ -601,29 +668,27 @@ class McpClient {
 
   private async getTransportKind(
     catalogItem: InternalMcpCatalog,
-    targetLocalMcpServerId: string,
+    targetMcpServerId: string,
   ): Promise<TransportKind> {
     if (catalogItem.serverType === "remote") {
       return "http";
     }
 
-    const usesStreamableHttp = await McpServerRuntimeManager.usesStreamableHttp(
-      targetLocalMcpServerId,
-    );
+    const usesStreamableHttp =
+      await McpServerRuntimeManager.usesStreamableHttp(targetMcpServerId);
     return usesStreamableHttp ? "http" : "stdio";
   }
 
   private async getTransportWithKind(
     catalogItem: InternalMcpCatalog,
-    targetLocalMcpServerId: string,
+    targetMcpServerId: string,
     secrets: Record<string, unknown>,
     transportKind: TransportKind,
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
-        const url = McpServerRuntimeManager.getHttpEndpointUrl(
-          targetLocalMcpServerId,
-        );
+        const url =
+          McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
         if (!url) {
           throw new Error(
             "No HTTP endpoint URL found for streamable-http server",
@@ -664,9 +729,8 @@ class McpClient {
       // Stdio transport - use K8s attach!
       // Use getOrLoadDeployment to handle multi-replica scenarios where the deployment
       // may have been created by a different replica
-      const k8sDeployment = await McpServerRuntimeManager.getOrLoadDeployment(
-        targetLocalMcpServerId,
-      );
+      const k8sDeployment =
+        await McpServerRuntimeManager.getOrLoadDeployment(targetMcpServerId);
       if (!k8sDeployment) {
         throw new Error("Deployment not found for MCP server");
       }
@@ -689,16 +753,16 @@ class McpClient {
 
   private async getTransport(
     catalogItem: InternalMcpCatalog,
-    targetLocalMcpServerId: string,
+    targetMcpServerId: string,
     secrets: Record<string, unknown>,
   ): Promise<Transport> {
     const transportKind = await this.getTransportKind(
       catalogItem,
-      targetLocalMcpServerId,
+      targetMcpServerId,
     );
     return this.getTransportWithKind(
       catalogItem,
-      targetLocalMcpServerId,
+      targetMcpServerId,
       secrets,
       transportKind,
     );
@@ -788,6 +852,115 @@ class McpClient {
 
     await this.persistToolCall(agentId, mcpServerName, toolCall, toolResult);
     return toolResult;
+  }
+
+  /**
+   * Attempt to recover from an authentication error by refreshing the OAuth token
+   * and retrying the tool call.
+   *
+   * @returns The result of the retried tool call, or null if refresh failed
+   */
+  private async attemptTokenRefreshAndRetry(params: {
+    secretId: string;
+    catalogId: string;
+    connectionKey: string;
+    toolCall: CommonToolCall;
+    agentId: string;
+    mcpServerName: string;
+    catalogItem: InternalMcpCatalog;
+    targetMcpServerId: string;
+    executeRetry: (
+      getTransport: () => Promise<Transport>,
+      secrets: Record<string, unknown>,
+    ) => Promise<CommonToolResult>;
+  }): Promise<CommonToolResult | null> {
+    const {
+      secretId,
+      catalogId,
+      connectionKey,
+      toolCall,
+      agentId,
+      mcpServerName,
+      catalogItem,
+      targetMcpServerId,
+      executeRetry,
+    } = params;
+
+    logger.info(
+      { toolName: toolCall.name, secretId, catalogId },
+      "attemptTokenRefreshAndRetry: authentication error detected, attempting token refresh and retry",
+    );
+
+    // Invalidate existing client since token is going to be changed
+    const existingClient = this.activeConnections.get(connectionKey);
+    if (existingClient) {
+      try {
+        await existingClient.close();
+      } catch {
+        // Ignore close errors
+      }
+      this.activeConnections.delete(connectionKey);
+    }
+
+    // Attempt refresh
+    const refreshResult = await refreshOAuthToken(secretId, catalogId);
+
+    if (!refreshResult) {
+      logger.warn(
+        { toolName: toolCall.name, secretId },
+        "attemptTokenRefreshAndRetry: token refresh failed",
+      );
+
+      // Track the refresh failure in the MCP server record
+      await McpServerModel.update(targetMcpServerId, {
+        oauthRefreshError: "refresh_failed",
+        oauthRefreshFailedAt: new Date(),
+      });
+
+      return null;
+    }
+
+    logger.info(
+      { toolName: toolCall.name, secretId },
+      "attemptTokenRefreshAndRetry: token refreshed, retrying tool call",
+    );
+
+    // Clear any previous refresh error since refresh succeeded
+    await McpServerModel.update(targetMcpServerId, {
+      oauthRefreshError: null,
+      oauthRefreshFailedAt: null,
+    });
+
+    try {
+      // Re-fetch updated secrets and retry once
+      const updatedSecret = await secretManager().getSecret(secretId);
+      if (!updatedSecret?.secret) {
+        logger.warn(
+          { toolName: toolCall.name, secretId },
+          "attemptTokenRefreshAndRetry: failed to fetch updated secret after refresh",
+        );
+        return null;
+      }
+
+      // Create new transport with updated secrets
+      const getUpdatedTransport = () =>
+        this.getTransport(catalogItem, targetMcpServerId, updatedSecret.secret);
+
+      return await executeRetry(getUpdatedTransport, updatedSecret.secret);
+    } catch (retryError) {
+      const retryErrorMsg =
+        retryError instanceof Error ? retryError.message : String(retryError);
+      logger.error(
+        { toolName: toolCall.name, error: retryErrorMsg },
+        "attemptTokenRefreshAndRetry: retry after token refresh also failed",
+      );
+      return await this.createErrorResult(
+        toolCall,
+        agentId,
+        retryErrorMsg,
+        mcpServerName,
+      );
+    }
   }
 
   /**

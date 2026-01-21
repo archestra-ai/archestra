@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.0.29](https://github.com/archestra-ai/archestra/compare/platform-v1.0.28...platform-v1.0.29) (2026-01-21)
+
+
+### Bug Fixes
+
+* fix .env.example ([#2271](https://github.com/archestra-ai/archestra/issues/2271)) ([2136fa8](https://github.com/archestra-ai/archestra/commit/2136fa82e44c7c388e3ed3c3b72b0436f450f811))
+* fix a2a if executed from ms teams ([#2255](https://github.com/archestra-ai/archestra/issues/2255)) ([cb0dbd3](https://github.com/archestra-ai/archestra/commit/cb0dbd3ffa7ac1ae35a0dcbf75c22713e2f69b81))
+* handle mcp oauth token refresh ([#2266](https://github.com/archestra-ai/archestra/issues/2266)) ([4d2decf](https://github.com/archestra-ai/archestra/commit/4d2decf2233df6482c5c39e45b79fc8c3f8f8f8f))
+* invalidate models cache ([#2235](https://github.com/archestra-ai/archestra/issues/2235)) ([0865e23](https://github.com/archestra-ai/archestra/commit/0865e23c4f996c67c91eef73f44795539ab6a0d6))
+* use tool_result instead of toon key ([#1912](https://github.com/archestra-ai/archestra/issues/1912)) ([e2d6d21](https://github.com/archestra-ai/archestra/commit/e2d6d2100c04c935ef6275e8faad129ebdb836de))
+
+
+### Dependencies
+
+* **cve:** patch `node` base CVE (CVE-2026-23745) ([#2269](https://github.com/archestra-ai/archestra/issues/2269)) ([318d02e](https://github.com/archestra-ai/archestra/commit/318d02ebd574508713289f5d6a2b5cdce6c9f519))
+* **cve:** patch `tar` CVE-2026-23950 ([#2277](https://github.com/archestra-ai/archestra/issues/2277)) ([7ca99f7](https://github.com/archestra-ai/archestra/commit/7ca99f7696dfe4368345ef7078abc6c3f95171ef))
+
+
+### Miscellaneous Chores
+
+* fix rendering zero savings ([#2253](https://github.com/archestra-ai/archestra/issues/2253)) ([d019322](https://github.com/archestra-ai/archestra/commit/d0193229ed8a9c8bf49591900cb3a3c2dfa112d5))
+* improve otel exporter config, add `envWithValueFrom` to `helm` chart, remove TraceId variable from Grafana Dashboard ([#2261](https://github.com/archestra-ai/archestra/issues/2261)) ([7b92b72](https://github.com/archestra-ai/archestra/commit/7b92b72d1efcd72f002de28c3b40235c987487df))
+* increase sidebar width + remove docs sub-section ([#2265](https://github.com/archestra-ai/archestra/issues/2265)) ([c19b7e6](https://github.com/archestra-ai/archestra/commit/c19b7e6d19a27135235b1a2c839ff0d00b0d0e9b))
+* ms teams improvements ([#2251](https://github.com/archestra-ai/archestra/issues/2251)) ([3872667](https://github.com/archestra-ai/archestra/commit/38726677d8e816d2424b588f1368ab675d9b87d6))
+* not jumping show/hide artifact ([#2241](https://github.com/archestra-ai/archestra/issues/2241)) ([5d4d745](https://github.com/archestra-ai/archestra/commit/5d4d7456453832fcdf87859469d82437b10bd305))
+* polish costs in the session/logs ([#2224](https://github.com/archestra-ai/archestra/issues/2224)) ([87d564d](https://github.com/archestra-ai/archestra/commit/87d564da785dbea790ec0bc3cbe95b52fd480c03))
+* show both internal and external URLs in connect instructions ([#2276](https://github.com/archestra-ai/archestra/issues/2276)) ([c07fa39](https://github.com/archestra-ai/archestra/commit/c07fa39205b3fd8f1d4d85215886fad2960e437e))
+* use $__rate_interval in Grafana dashboard queries ([#2256](https://github.com/archestra-ai/archestra/issues/2256)) ([3593eff](https://github.com/archestra-ai/archestra/commit/3593eff16d157946c5e13e2b89cd5e3c71744b1b))
+
 ## [1.0.28](https://github.com/archestra-ai/archestra/compare/platform-v1.0.27...platform-v1.0.28) (2026-01-19)
 
 

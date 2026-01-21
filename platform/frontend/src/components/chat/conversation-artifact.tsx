@@ -15,6 +15,8 @@ interface ConversationArtifactPanelProps {
   isOpen: boolean;
   onToggle: () => void;
   className?: string;
+  /** When true, the panel fills its container and doesn't manage its own width/resize */
+  embedded?: boolean;
 }
 
 export function ConversationArtifactPanel({
@@ -22,6 +24,7 @@ export function ConversationArtifactPanel({
   isOpen,
   onToggle,
   className,
+  embedded = false,
 }: ConversationArtifactPanelProps) {
   const [width, setWidth] = useState(() => {
     if (typeof window !== "undefined") {
@@ -301,29 +304,34 @@ export function ConversationArtifactPanel({
   return (
     <div
       ref={panelRef}
-      style={{ width: `${width}px` }}
+      style={embedded ? undefined : { width: `${width}px` }}
       className={cn(
-        "h-full border-l bg-background flex flex-col relative",
+        "h-full bg-background flex flex-col relative",
+        !embedded && "border-l",
         className,
       )}
     >
-      {/* Resize handle */}
-      {/* biome-ignore lint/a11y/useSemanticElements: This is a draggable resize handle, not a semantic separator */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1 hover:w-2 cursor-col-resize bg-transparent hover:bg-primary/10 transition-all"
-        onMouseDown={handleMouseDown}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize artifact panel"
-        aria-valuenow={width}
-        aria-valuemin={300}
-        aria-valuemax={window.innerWidth * 0.7}
-        tabIndex={0}
-      >
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 opacity-0 hover:opacity-100 transition-opacity">
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
+      {/* Resize handle - only shown when not embedded */}
+      {!embedded && (
+        // biome-ignore lint/a11y/useSemanticElements: This is a draggable resize handle, not a semantic separator
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1 hover:w-2 cursor-col-resize bg-transparent hover:bg-primary/10 transition-all"
+          onMouseDown={handleMouseDown}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize artifact panel"
+          aria-valuenow={width}
+          aria-valuemin={300}
+          aria-valuemax={
+            typeof window !== "undefined" ? window.innerWidth * 0.7 : 1000
+          }
+          tabIndex={0}
+        >
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 opacity-0 hover:opacity-100 transition-opacity">
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Panel header */}
       <div className="border-b px-4 py-2 flex items-center justify-between">

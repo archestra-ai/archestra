@@ -149,3 +149,31 @@ button:disabled {
 div[role="option"] {
   cursor: pointer;
 }
+
+/* Browser preview popup - hide sidebar, main wrapper, and show only content */
+.browser-preview-popup [data-slot="sidebar"] {
+  display: none !important;
+}
+
+.browser-preview-popup [data-slot="sidebar-gap"] {
+  display: none !important;
+}
+
+.browser-preview-popup [data-slot="sidebar-container"] {
+  display: none !important;
+}
+
+/* Hide the mobile header */
+.browser-preview-popup header {
+  display: none !important;
+}
+
+/* Hide the Version component */
+.browser-preview-popup .hide-version + div {
+  display: none !important;
+}
+
+/* Make main content full width */
+.browser-preview-popup main {
+  width: 100% !important;
+}

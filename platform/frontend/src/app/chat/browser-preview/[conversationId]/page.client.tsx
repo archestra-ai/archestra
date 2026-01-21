@@ -4,14 +4,10 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Globe,
   Keyboard,
   Loader2,
-  Maximize2,
-  Minimize2,
   Type,
-  X,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -28,31 +24,17 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { useChatSession } from "@/contexts/global-chat-context";
 import { useBrowserStream } from "@/hooks/use-browser-stream";
-import { cn } from "@/lib/utils";
 
-interface BrowserPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
-  conversationId: string | undefined;
-  isMinimized: boolean;
-  onMinimizeToggle: () => void;
+interface BrowserPreviewClientProps {
+  conversationId: string;
 }
 
-export function BrowserPanel({
-  isOpen,
-  onClose,
+export function BrowserPreviewClient({
   conversationId,
-  isMinimized,
-  onMinimizeToggle,
-}: BrowserPanelProps) {
+}: BrowserPreviewClientProps) {
   const [typeText, setTypeText] = useState("");
-
   const imageRef = useRef<HTMLImageElement>(null);
-  const chatSession = useChatSession(conversationId);
-  const chatMessages = chatSession?.messages ?? [];
-  const setChatMessages = chatSession?.setMessages;
 
   const {
     screenshot,
@@ -71,9 +53,7 @@ export function BrowserPanel({
     setIsEditingUrl,
   } = useBrowserStream({
     conversationId,
-    isActive: isOpen,
-    chatMessages,
-    setChatMessages,
+    isActive: true,
   });
 
   const handleNavigate = useCallback(
@@ -144,69 +124,14 @@ export function BrowserPanel({
     [isConnected, isInteracting, click],
   );
 
-  const handleOpenInNewTab = useCallback(() => {
-    if (!conversationId) return;
-    window.open(`/chat/browser-preview/${conversationId}`, "_blank");
-  }, [conversationId]);
-
-  if (!isOpen) return null;
-
-  // Minimized state - just a header bar
-  if (isMinimized) {
-    return (
-      <div className="border-t bg-muted/50 px-3 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-medium">Browser Preview</span>
-          {isConnected && (
-            <span
-              className="w-2 h-2 rounded-full bg-green-500"
-              title="Connected"
-            />
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={handleOpenInNewTab}
-            title="Open in new tab"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onMinimizeToggle}
-            title="Expand"
-          >
-            <Maximize2 className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onClose}
-            title="Close"
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Expanded state - full panel
   return (
-    <div className={cn("flex flex-col border-t bg-background h-full")}>
-      {/* Header */}
-      <div className="flex flex-col gap-2 p-2 bg-muted/50 border-b">
+    <div className="h-screen w-full flex flex-col bg-background">
+      {/* Header with controls */}
+      <div className="flex flex-col gap-2 p-3 bg-muted/50 border-b">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs font-medium">Browser Preview</span>
+            <Globe className="h-5 w-5 text-muted-foreground" />
+            <span className="text-sm font-medium">Browser Preview</span>
             {isConnected && (
               <span
                 className="w-2 h-2 rounded-full bg-green-500"
@@ -221,16 +146,16 @@ export function BrowserPanel({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6"
+                  className="h-8 w-8"
                   disabled={!isConnected || isInteracting}
                   title="Type text into focused input"
                 >
-                  <Type className="h-3 w-3" />
+                  <Type className="h-4 w-4" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-64" align="end">
                 <form onSubmit={handleType} className="space-y-2">
-                  <div className="text-xs font-medium">
+                  <div className="text-sm font-medium">
                     Type into focused input
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -240,13 +165,13 @@ export function BrowserPanel({
                     placeholder="Text to type..."
                     value={typeText}
                     onChange={(e) => setTypeText(e.target.value)}
-                    className="text-xs min-h-[60px]"
+                    className="text-sm min-h-[60px]"
                     autoFocus
                   />
                   <Button
                     type="submit"
                     size="sm"
-                    className="w-full h-7 text-xs"
+                    className="w-full"
                     disabled={!typeText}
                   >
                     Type
@@ -261,21 +186,20 @@ export function BrowserPanel({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6"
+                  className="h-8 w-8"
                   disabled={!isConnected || isInteracting}
                   title="Press key"
                 >
-                  <Keyboard className="h-3 w-3" />
+                  <Keyboard className="h-4 w-4" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-48" align="end">
                 <div className="space-y-2">
-                  <div className="text-xs font-medium">Press Key</div>
+                  <div className="text-sm font-medium">Press Key</div>
                   <div className="grid grid-cols-2 gap-1">
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs"
                       onClick={() => pressKey("Enter")}
                     >
                       Enter
@@ -283,7 +207,6 @@ export function BrowserPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs"
                       onClick={() => pressKey("Tab")}
                     >
                       Tab
@@ -291,7 +214,6 @@ export function BrowserPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs"
                       onClick={() => pressKey("Escape")}
                     >
                       Escape
@@ -299,7 +221,6 @@ export function BrowserPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs"
                       onClick={() => pressKey("Backspace")}
                     >
                       Backspace
@@ -313,43 +234,22 @@ export function BrowserPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="h-8 w-8"
               onClick={() => pressKey("PageUp")}
               disabled={!isConnected || isInteracting}
               title="Scroll up"
             >
-              <ChevronUp className="h-3 w-3" />
+              <ChevronUp className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="h-8 w-8"
               onClick={() => pressKey("PageDown")}
               disabled={!isConnected || isInteracting}
               title="Scroll down"
             >
-              <ChevronDown className="h-3 w-3" />
-            </Button>
-
-            <div className="w-px h-4 bg-border mx-1" />
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={handleOpenInNewTab}
-              title="Open in new tab"
-            >
-              <ExternalLink className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={onMinimizeToggle}
-              title="Minimize"
-            >
-              <Minimize2 className="h-3 w-3" />
+              <ChevronDown className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -360,12 +260,12 @@ export function BrowserPanel({
             type="button"
             variant="outline"
             size="icon"
-            className="h-7 w-7 flex-shrink-0"
+            className="h-9 w-9 flex-shrink-0"
             onClick={navigateBack}
             disabled={isNavigating || !isConnected}
             title="Go back"
           >
-            <ArrowLeft className="h-3 w-3" />
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <Input
             type="text"
@@ -373,36 +273,35 @@ export function BrowserPanel({
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             onFocus={() => setIsEditingUrl(true)}
-            className="h-7 text-xs"
+            className="h-9"
             disabled={isNavigating || !isConnected}
           />
           <Button
             type="submit"
-            size="sm"
-            className="h-7 px-3 text-xs"
+            className="h-9 px-4"
             disabled={isNavigating || !urlInput.trim() || !isConnected}
           >
-            {isNavigating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Go"}
+            {isNavigating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Go"}
           </Button>
         </form>
       </div>
 
       {/* Error display */}
       {error && (
-        <div className="text-xs text-destructive bg-destructive/10 border-b border-destructive/20 px-2 py-1">
+        <div className="text-sm text-destructive bg-destructive/10 border-b border-destructive/20 px-3 py-2">
           {error}
         </div>
       )}
 
       {/* Content - Screenshot with clickable overlay */}
-      <div className="flex-1 overflow-auto bg-black min-h-0">
+      <div className="flex-1 overflow-auto bg-black min-h-0 relative">
         {isConnecting && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-2">
               <div className="animate-pulse">
-                <Globe className="h-12 w-12 text-muted-foreground mx-auto" />
+                <Globe className="h-16 w-16 text-muted-foreground mx-auto" />
               </div>
-              <p className="text-sm text-muted-foreground">Connecting...</p>
+              <p className="text-lg text-muted-foreground">Connecting...</p>
             </div>
           </div>
         )}
@@ -433,21 +332,21 @@ export function BrowserPanel({
         {!isConnecting && !screenshot && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-2">
-              <Globe className="h-12 w-12 text-muted-foreground mx-auto" />
-              <p className="text-sm text-muted-foreground">
+              <Globe className="h-16 w-16 text-muted-foreground mx-auto" />
+              <p className="text-lg text-muted-foreground">
                 Enter a URL above to start browsing
               </p>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Loading overlay */}
-      {isInteracting && (
-        <div className="absolute inset-0 bg-black/20 flex items-center justify-center pointer-events-none">
-          <Loader2 className="h-8 w-8 animate-spin text-white" />
-        </div>
-      )}
+        {/* Loading overlay */}
+        {isInteracting && (
+          <div className="absolute inset-0 bg-black/20 flex items-center justify-center pointer-events-none">
+            <Loader2 className="h-12 w-12 animate-spin text-white" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

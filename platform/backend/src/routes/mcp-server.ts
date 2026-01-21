@@ -684,13 +684,31 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       } else {
-        // For team credentials: user must be team member OR team admin
+        // For team credentials: user must have team:admin OR (mcpServer:update AND team membership)
+        // WHY: This matches the team installation permission requirements - only editors and admins
+        // can manage team credentials, members cannot. 
+        // Same rules apply for re-authenticate them.
         const { success: isTeamAdmin } = await hasPermission(
           { team: ["admin"] },
           headers,
         );
 
         if (!isTeamAdmin) {
+          // WHY: mcpServer:update distinguishes editors from members
+          // Editors have this permission, members don't
+          const { success: hasMcpServerUpdate } = await hasPermission(
+            { mcpServer: ["update"] },
+            headers,
+          );
+
+          if (!hasMcpServerUpdate) {
+            throw new ApiError(
+              403,
+              "You don't have permission to re-authenticate team credentials",
+            );
+          }
+
+          // WHY: Even editors can only re-authenticate for their own teams
           const isMember = await TeamModel.isUserInTeam(
             mcpServer.teamId,
             user.id,
@@ -698,7 +716,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (!isMember) {
             throw new ApiError(
               403,
-              "Only team members or team admins can re-authenticate",
+              "You can only re-authenticate credentials for teams you are a member of",
             );
           }
         }

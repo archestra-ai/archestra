@@ -60,6 +60,9 @@ export function ManageUsersDialog({
   const { data: hasMcpServerCreatePermission } = useHasPermissions({
     mcpServer: ["create"],
   });
+  const { data: hasMcpServerUpdatePermission } = useHasPermissions({
+    mcpServer: ["update"],
+  });
 
   // Use the first server for display purposes
   const firstServer = allServers?.[0];
@@ -69,7 +72,10 @@ export function ManageUsersDialog({
   const isOAuthServer = !!catalogItem?.oauthConfig;
 
   // Check if user can re-authenticate a credential
-  // Requires: mcpServer: ["create"] AND (owner for personal OR team member/admin for team)
+  // WHY: Permission requirements match team installation rules for consistency:
+  // - Personal: mcpServer:create AND owner
+  // - Team: team:admin OR (mcpServer:update AND team membership)
+  // Members cannot re-authenticate team credentials, only editors and admins can.
   const canReauthenticate = (mcpServer: (typeof allServers)[number]) => {
     // Must have mcpServer create permission
     if (!hasMcpServerCreatePermission) return false;
@@ -79,8 +85,13 @@ export function ManageUsersDialog({
       return mcpServer.ownerId === currentUserId;
     }
 
-    // For team credentials: team admin OR member of the team
+    // For team credentials: team:admin OR (mcpServer:update AND team membership)
     if (hasTeamAdminPermission) return true;
+
+    // WHY: Editors have mcpServer:update, members don't
+    // This ensures only editors and admins can manage team credentials
+    if (!hasMcpServerUpdatePermission) return false;
+
     return userTeams?.some((team) => team.id === mcpServer.teamId) ?? false;
   };
 
@@ -92,7 +103,11 @@ export function ManageUsersDialog({
     if (!mcpServer.teamId) {
       return "Only the credential owner can re-authenticate";
     }
-    return "Only team members or team admins can re-authenticate";
+    // WHY: Different messages for different failure reasons
+    if (!hasMcpServerUpdatePermission) {
+      return "You don't have permission to re-authenticate team credentials";
+    }
+    return "You can only re-authenticate credentials for teams you are a member of";
   };
 
   const deleteMcpServerMutation = useDeleteMcpServer();

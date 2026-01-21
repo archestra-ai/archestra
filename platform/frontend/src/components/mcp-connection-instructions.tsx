@@ -14,6 +14,10 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import {
+  type ConnectionType,
+  ConnectionTypeSelector,
+} from "@/components/connection-type-selector";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -31,7 +35,7 @@ import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
-const { displayProxyUrl: apiBaseUrl } = config.api;
+const { externalProxyUrl, internalProxyUrl } = config.api;
 
 interface McpConnectionInstructionsProps {
   agentId: string;
@@ -54,6 +58,8 @@ export function McpConnectionInstructions({
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
+  const [connectionType, setConnectionType] =
+    useState<ConnectionType>("internal");
 
   // Fetch tokens filtered by the selected profile's teams
   const { data: tokensData } = useTokens({ profileId: selectedProfileId });
@@ -114,7 +120,9 @@ export function McpConnectionInstructions({
   );
 
   // Use the new URL format with selected profile ID
-  const mcpUrl = `${apiBaseUrl}/mcp/${selectedProfileId}`;
+  const baseUrl =
+    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
+  const mcpUrl = `${baseUrl}/mcp/${selectedProfileId}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -469,6 +477,13 @@ export function McpConnectionInstructions({
         </Select>
       </div>
 
+      <ConnectionTypeSelector
+        value={connectionType}
+        onChange={setConnectionType}
+        gatewayName="MCP Gateway"
+        idPrefix="mcp"
+      />
+
       <div className="space-y-3">
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
@@ -476,16 +491,11 @@ export function McpConnectionInstructions({
           </p>
 
           <div className="bg-muted rounded-md p-3 relative">
-            <pre className="text-xs whitespace-pre-wrap break-all">
-              <CodeText className="text-sm whitespace pre-wrap break-all">
-                {mcpConfig}
-              </CodeText>
-            </pre>
-            <div className="absolute top-2 right-2 flex gap-2">
+            <div className="flex justify-end gap-2">
               <Button
                 variant="ghost"
                 size="sm"
-                className="gap-2"
+                className="gap-2 bg-transparent"
                 onClick={handleExposeToken}
                 disabled={
                   isLoadingToken ||
@@ -512,7 +522,7 @@ export function McpConnectionInstructions({
               <Button
                 variant="ghost"
                 size="sm"
-                className="gap-2"
+                className="gap-2 bg-transparent"
                 onClick={
                   isPersonalTokenSelected || hasProfileAdminPermission
                     ? handleCopyConfig
@@ -538,25 +548,13 @@ export function McpConnectionInstructions({
                 )}
               </Button>
             </div>
+            <pre className="text-xs whitespace-pre-wrap break-all">
+              <CodeText className="text-sm whitespace pre-wrap break-all">
+                {mcpConfig}
+              </CodeText>
+            </pre>
           </div>
         </div>
-
-        <p className="text-sm text-muted-foreground">
-          The URL is configurable via the{" "}
-          <CodeText className="text-xs">
-            ARCHESTRA_API_EXTERNAL_BASE_URL
-          </CodeText>{" "}
-          environment variable. See{" "}
-          <a
-            href="https://archestra.ai/docs/platform-deployment#environment-variables"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500"
-          >
-            here
-          </a>{" "}
-          for more details.
-        </p>
       </div>
     </div>
   );

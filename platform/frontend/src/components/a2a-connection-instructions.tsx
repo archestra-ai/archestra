@@ -6,6 +6,10 @@ import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import {
+  type ConnectionType,
+  ConnectionTypeSelector,
+} from "@/components/connection-type-selector";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -23,6 +27,8 @@ import { useFeatures } from "@/lib/features.query";
 import { usePromptEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
+
+const { externalProxyUrl, internalProxyUrl } = config.api;
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
@@ -50,6 +56,8 @@ export function A2AConnectionInstructions({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
+  const [connectionType, setConnectionType] =
+    useState<ConnectionType>("internal");
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
     null,
@@ -75,8 +83,9 @@ export function A2AConnectionInstructions({
     setTimeout(() => setCopiedEmail(false), 2000);
   }, [agentEmailAddress]);
 
-  // Get base URL from config (displayProxyUrl includes /v1)
-  const baseUrl = config.api.displayProxyUrl;
+  // Get base URL from config based on connection type
+  const baseUrl =
+    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
 
   // A2A endpoint
   const a2aEndpoint = `${baseUrl}/a2a/${prompt.id}`;
@@ -394,6 +403,14 @@ curl -X GET "${agentCardUrl}" \\
           </SelectContent>
         </Select>
       </div>
+
+      {/* Connection Type Selector */}
+      <ConnectionTypeSelector
+        value={connectionType}
+        onChange={setConnectionType}
+        gatewayName="A2A Gateway"
+        idPrefix="a2a"
+      />
 
       {/* cURL Examples */}
       <div className="space-y-3">

@@ -5,6 +5,25 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
+# Patch CVE-2026-23745: tar <=7.5.2 has path traversal vulnerability
+# tar is bundled in pnpm's corepack distribution and needs to be patched
+# Patch ALL pnpm versions in corepack cache to ensure comprehensive fix
+RUN corepack prepare pnpm@10.28.1 --activate && \
+    TAR_SHA256="9d95d0cf786786360f97c1e414caea8a14452dc337fda17ba256ae7762c2ec66" && \
+    PNPM_TAR_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/tar" -type d 2>/dev/null) && \
+    [ -n "$PNPM_TAR_PATHS" ] || { echo "WARNING: No tar directories found to patch"; exit 0; } && \
+    for PNPM_TAR_PATH in $PNPM_TAR_PATHS; do \
+        echo "Patching tar in $PNPM_TAR_PATH" && \
+        TMP_DIR=$(mktemp -d) && \
+        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.3.tgz && \
+        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
+        tar -tzf "$TMP_DIR/tar.tgz" >/dev/null 2>&1 || { echo "ERROR: Downloaded tarball is corrupt"; rm -rf "$TMP_DIR"; exit 1; } && \
+        rm -rf "$PNPM_TAR_PATH"/* && \
+        tar -xzf "$TMP_DIR/tar.tgz" -C "$PNPM_TAR_PATH" --strip-components=1 && \
+        rm -rf "$TMP_DIR"; \
+    done && \
+    echo "Patched tar to 7.5.3 in all pnpm corepack caches"
+
 # Dependencies stage
 FROM base AS deps
 WORKDIR /app

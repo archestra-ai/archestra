@@ -135,6 +135,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateUser]: {
     user: ["update"]
   },
+  [RouteId.UpdateUserRole]: {
+    user: ["update"],
+    member: ["update"],
+  },
+  [RouteId.DeleteUserRole]: {
+    user: ["update"],
+    member: ["delete"],
+  },
+  [RouteId.GetUserRole]: {
+    user: ["read"],
+    member: ["read"],
+  },
   [RouteId.DeleteUser]: {
     user: ["delete"]
   },

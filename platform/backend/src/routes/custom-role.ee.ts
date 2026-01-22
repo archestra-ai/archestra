@@ -58,7 +58,6 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { name, permission } = request.body;
       const { organizationId, user } = request;
 
-      // Get user's permissions to validate they can grant these permissions
       const userPermissions = await UserModel.getUserPermissions(
         user.id,
         organizationId,
@@ -154,12 +153,10 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      // Cannot update predefined roles
       if (OrganizationRoleModel.isPredefinedRole(roleId)) {
         throw new ApiError(403, "Cannot update predefined roles");
       }
 
-      // Check if role exists
       const existingRole = await OrganizationRoleModel.getById(
         roleId,
         organizationId,
@@ -169,7 +166,6 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Role not found");
       }
 
-      // Validate permissions if being changed
       if (permission) {
         const userPermissions = await UserModel.getUserPermissions(
           user.id,
@@ -189,7 +185,6 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Build update data
       const updateData: Record<string, unknown> = {};
       if (name) updateData.name = name;
       if (permission) updateData.permission = permission;

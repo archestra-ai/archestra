@@ -238,6 +238,9 @@ export const RouteId = {
   GetUserByEmail: "getUserByEmail",
   CreateUser: "createUser",
   UpdateUser: "updateUser",
+  UpdateUserRole: "updateUserRole",
+  DeleteUserRole: "deleteUserRole",
+  GetUserRole: "GetUserRole",
   DeleteUser: "deleteUser",
 
   // Token Price Routes

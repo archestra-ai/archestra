@@ -2,7 +2,7 @@ import { MEMBER_ROLE_NAME, PermissionsSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
-import { ApiError, constructResponseSchema, UserSchema } from "@/types";
+import { ApiError, constructResponseSchema, MemberSchema, UserSchema } from "@/types";
 import { OrganizationModel, UserModel } from "@/models";
 import logger from "@/logging";
 import z from "zod";
@@ -87,7 +87,6 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
-  // Create User (Admin)
   fastify.route({
     method: "POST",
     url: "/api/user",
@@ -151,7 +150,6 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch (error) {
         request.log.error(error);
         if (error && typeof error === 'object' && 'status' in error) {
-          // biome-ignore lint/suspicious/noExplicitAny: error typing
           const apiError = error as any;
           return reply.status(apiError.status || 500).send(apiError.body || { message: "Failed to create user" });
         }
@@ -160,7 +158,6 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
-  // Update User (Admin)
   fastify.route({
     method: "PATCH",
     url: "/api/user/:id",
@@ -183,7 +180,6 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const updateData = request.body;
 
       try {
-        // Check if user exists
         const user = await UserModel.getById(id);
         if (!user) {
           return reply.status(404).send();
@@ -191,12 +187,11 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         await UserModel.patch(id, updateData);
 
-        // Fetch updated user to return
         const updatedUser = await UserModel.getById(id);
         if (!updatedUser) {
           return reply.status(404).send();
         }
-        return reply.send({ ...updatedUser });
+        return reply.send(updatedUser);
 
       } catch (error) {
         request.log.error(error);
@@ -205,7 +200,6 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
   });
 
-  // Delete User (Admin)
   fastify.route({
     method: "DELETE",
     url: "/api/user/:id",
@@ -227,15 +221,12 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async handler(request, reply) {
       const { id } = request.params;
       try {
-        // Check if user exists
         const user = await UserModel.getById(id);
         logger.info(user, id);
         if (!user) {
           return reply.status(404).send();
         }
 
-        // Using UserModel.delete which deletes from DB.
-        // Be certain this is what is desired from the request.
         await UserModel.delete(id);
         return reply.send({ success: true });
       } catch (error) {
@@ -244,6 +235,134 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     }
   });
+
+  fastify.route({
+    method: "PATCH",
+    url: "/api/user/:id/role/:roleNonUUIDIdentifier",
+    schema: {
+      operationId: RouteId.UpdateUserRole,
+      description: "Assign a role to a user",
+      tags: ["User"],
+      params: z.object({
+        id: z.string(),
+        roleNonUUIDIdentifier: z.string(),
+      }),
+      response: constructResponseSchema(MemberSchema)
+    },
+    async handler(request, reply) {
+      const { id, roleNonUUIDIdentifier } = request.params;
+      const { organizationId } = request;
+
+      try {
+        const member = await MemberModel.getByUserId(id, organizationId);
+        if (!member) {
+          return reply.status(404).send();
+        }
+
+        const updatedMember = await MemberModel.updateRole(id, organizationId, roleNonUUIDIdentifier);
+
+        return reply.send(updatedMember);
+      } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send();
+      }
+    },
+  });
+
+  fastify.route({
+    method: "GET",
+    url: "/api/user/:id/role",
+    schema: {
+      operationId: RouteId.GetUserRole,
+      description: "Get user role",
+      tags: ["User"],
+      params: z.object({
+        id: z.string(),
+      }),
+      response: constructResponseSchema(MemberSchema)
+    },
+    async handler(request, reply) {
+      let targetOrgId = request.organizationId;
+
+      if (!targetOrgId) {
+        const defaultOrg = await OrganizationModel.getOrCreateDefaultOrganization();
+        targetOrgId = defaultOrg.id;
+        request.log.info(
+          { defaultOrgId: targetOrgId },
+          "No organizationId provided, using default organization"
+        );
+      }
+      const { id } = request.params;
+
+      try {
+        const member = await MemberModel.getByUserId(id, targetOrgId);
+        if (!member) {
+          return reply.status(404).send();
+        }
+
+        return reply.send(member);
+      } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send();
+      }
+    },
+  });
+
+  fastify.route({
+    method: "DELETE",
+    url: "/api/user/:userId/role/:roleNonUUIDIdentifier",
+    schema: {
+      operationId: RouteId.DeleteUserRole,
+      description: "Delete a role from a user",
+      tags: ["User"],
+      params: z.object({
+        userId: z.string(),
+        roleNonUUIDIdentifier: z.string()
+      }),
+      response: constructResponseSchema(MemberSchema)
+    },
+    async handler(request, reply) {
+      const { userId, roleNonUUIDIdentifier } = request.params;
+      let targetOrgId = request.organizationId;
+
+      if (!targetOrgId) {
+        const defaultOrg = await OrganizationModel.getOrCreateDefaultOrganization();
+        targetOrgId = defaultOrg.id;
+        request.log.info(
+          { defaultOrgId: targetOrgId },
+          "No organizationId provided, using default organization"
+        );
+      }
+
+      try {
+        const member = await MemberModel.getByUserId(userId, targetOrgId);
+        if (!member) {
+          return reply.status(404).send();
+        }
+
+        const role = await OrganizationRoleModel.getByIdentifier(roleNonUUIDIdentifier, targetOrgId);
+        if (!role) {
+          return reply.status(404).send();
+        }
+
+        if (member.role !== role.role) {
+          return reply.status(400).send();
+        }
+
+        const updatedMember = await MemberModel.updateRole(
+          userId,
+          targetOrgId,
+          MEMBER_ROLE_NAME
+        );
+
+        return reply.send(updatedMember);
+      } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send();
+      }
+    },
+  });
+
 };
 
 export default userRoutes;

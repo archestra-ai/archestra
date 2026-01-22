@@ -39,9 +39,6 @@ export function ConnectionTypeSelector({
     })),
   ];
 
-  // Determine if external URLs are configured
-  const hasExternalUrls = externalProxyUrls.length > 0;
-
   return (
     <div className="space-y-2">
       <Label

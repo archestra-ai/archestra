@@ -74,7 +74,10 @@ export async function retrieveSsoGroups(
 ): Promise<{ groups: string[]; organizationId: string } | null> {
   const key = getCacheKey(providerId, email);
   const cacheManager = await getCacheManager();
-  const entry = await cacheManager.get<SsoGroupsCacheEntry>(key);
+
+  // Use atomic getAndDelete to prevent race conditions where multiple
+  // concurrent requests could retrieve the same SSO groups
+  const entry = await cacheManager.getAndDelete<SsoGroupsCacheEntry>(key);
 
   logger.debug(
     { providerId, email, found: !!entry },
@@ -88,9 +91,6 @@ export async function retrieveSsoGroups(
     );
     return null;
   }
-
-  // Remove the entry after retrieval (one-time use)
-  await cacheManager.delete(key);
 
   logger.debug(
     {

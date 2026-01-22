@@ -16,7 +16,7 @@ This document is human-built, shouldn't be updated with AI. Don't change anythin
 
 In this guide we will use an autonomous Python agent to demonstrate how seamlessly agents written with Pydantic AI can be reconfigured to use Archestra as a security layer.
 
-The full example can be found on: [https://github.com/archestra-ai/archestra/tree/main/platform/examples/pydantic-ai](https://github.com/archestra-ai/archestra/tree/main/platform/examples/pydantic-ai)
+The full example can be found on: [https://github.com/archestra-ai/examples/tree/main/pydantic-ai](https://github.com/archestra-ai/examples/tree/main/pydantic-ai)
 
 ## Problem
 
@@ -53,8 +53,8 @@ No special permissions are needed - a token with default public repository acces
 First, let's see how the agent behaves without any security layer:
 
 ```shell
-git clone git@github.com:archestra-ai/archestra.git
-cd platform/examples/pydantic-ai
+git clone git@github.com:archestra-ai/examples.git
+cd examples/pydantic-ai
 
 # Create .env file with your keys
 cat > .env << EOF

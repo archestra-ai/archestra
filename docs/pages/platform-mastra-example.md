@@ -48,7 +48,7 @@ docker-compose -f docker-compose-mastra.yml up
 # Archestra Platform UI runs at http://localhost:3000
 ```
 
-This launches the [example of a Mastra application with a GitHub agent](http://github.com/archestra-ai/archestra/tree/main/platform/examples/mastra-ai).
+This launches the [example of a Mastra application with a GitHub agent](https://github.com/archestra-ai/examples/tree/main/mastra-ai).
 
 ### 1. Create a malicious GitHub issue and resolve it
 

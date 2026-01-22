@@ -1,4 +1,4 @@
-import { cacheManager } from "@/models";
+import { cacheManager } from "@/cache-manager";
 import type { AllowedCacheKey } from "@/types";
 
 /**

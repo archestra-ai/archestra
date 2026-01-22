@@ -1,7 +1,3 @@
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import type { z } from "zod";
-import { schema } from "@/database";
-
 /**
  * Predefined cache key prefixes for the distributed cache.
  *
@@ -38,10 +34,3 @@ export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
 export type AllowedCacheKey =
   | `${CacheKeyPrefix}`
   | `${CacheKeyPrefix}-${string}`;
-
-// Database schemas using drizzle-zod
-export const SelectCacheSchema = createSelectSchema(schema.cacheTable);
-export const InsertCacheSchema = createInsertSchema(schema.cacheTable);
-
-export type CacheEntry = z.infer<typeof SelectCacheSchema>;
-export type InsertCacheEntry = z.infer<typeof InsertCacheSchema>;

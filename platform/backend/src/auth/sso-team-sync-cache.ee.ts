@@ -5,11 +5,10 @@ import { CacheKey } from "@/types";
 
 // Lazy import to avoid triggering database connection during module loading
 // (e.g., during codegen when sso.ee is conditionally imported by better-auth)
-let _cacheManager: typeof import("@/models/cache-manager").cacheManager | null =
-  null;
+let _cacheManager: typeof import("@/cache-manager").cacheManager | null = null;
 async function getCacheManager() {
   if (!_cacheManager) {
-    const mod = await import("@/models/cache-manager");
+    const mod = await import("@/cache-manager");
     _cacheManager = mod.cacheManager;
   }
   return _cacheManager;

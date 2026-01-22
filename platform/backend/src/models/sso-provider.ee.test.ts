@@ -18,6 +18,28 @@ vi.mock("@/logging", () => ({
   },
 }));
 
+// Mock cacheManager for SSO groups caching tests
+const mockCacheStore = new Map<string, unknown>();
+vi.mock("@/cache-manager", () => ({
+  cacheManager: {
+    get: vi.fn(async (key: string) => mockCacheStore.get(key)),
+    set: vi.fn(async (key: string, value: unknown, _ttl?: number) => {
+      mockCacheStore.set(key, value);
+      return value;
+    }),
+    delete: vi.fn(async (key: string) => {
+      const existed = mockCacheStore.has(key);
+      mockCacheStore.delete(key);
+      return existed;
+    }),
+    getAndDelete: vi.fn(async (key: string) => {
+      const value = mockCacheStore.get(key);
+      mockCacheStore.delete(key);
+      return value;
+    }),
+  },
+}));
+
 const mockProvider = {
   id: "test-provider-id",
   providerId: "TestOIDC",

@@ -5,7 +5,7 @@ import { isRateLimited, type RateLimitEntry } from "./utils";
 
 // Mock cacheManager
 const mockCache = new Map<string, RateLimitEntry>();
-vi.mock("@/models", () => ({
+vi.mock("@/cache-manager", () => ({
   cacheManager: {
     get: vi.fn(async (key: string) => mockCache.get(key)),
     set: vi.fn(async (key: string, value: RateLimitEntry) => {

@@ -41,6 +41,7 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
+import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -53,7 +54,6 @@ import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
-import { cacheManager } from "@/models/cache-manager";
 import {
   Anthropic,
   ApiError,

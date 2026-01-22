@@ -3,7 +3,6 @@ export { default as AgentModel } from "./agent";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
-export { cacheManager } from "./cache-manager";
 export { default as ChatApiKeyModel } from "./chat-api-key";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";

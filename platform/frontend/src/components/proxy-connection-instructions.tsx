@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/popover";
 import config from "@/lib/config";
 
-const { internalProxyUrl } = config.api;
+const { externalProxyUrls, internalProxyUrl } = config.api;
 
 type ProviderOption = SupportedProvider | "claude-code";
 
@@ -32,18 +32,16 @@ export function ProxyConnectionInstructions({
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
   const [connectionUrl, setConnectionUrl] =
-    useState<ConnectionUrl>(internalProxyUrl);
+    useState<ConnectionUrl>(externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl);
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
 
-  const baseUrl = connectionUrl;
-
   const proxyUrl = agentId
-    ? `${baseUrl}/${getProviderPath(selectedProvider)}/${agentId}`
-    : `${baseUrl}/${getProviderPath(selectedProvider)}`;
+    ? `${connectionUrl}/${getProviderPath(selectedProvider)}/${agentId}`
+    : `${connectionUrl}/${getProviderPath(selectedProvider)}`;
 
-  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${baseUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
+  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${connectionUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
 
   return (
     <div className="space-y-3">
@@ -106,7 +104,6 @@ export function ProxyConnectionInstructions({
       <ConnectionTypeSelector
         value={connectionUrl}
         onChange={setConnectionUrl}
-        gatewayName="LLM Gateway"
         idPrefix="llm"
       />
 

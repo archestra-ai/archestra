@@ -19,34 +19,24 @@ export type ConnectionUrl = string;
 interface ConnectionTypeSelectorProps {
   value: ConnectionUrl;
   onChange: (value: ConnectionUrl) => void;
-  gatewayName: string;
   idPrefix: string;
 }
 
 export function ConnectionTypeSelector({
   value,
   onChange,
-  gatewayName,
   idPrefix,
 }: ConnectionTypeSelectorProps) {
   // Build options: internal URL first, then external URLs
-  const options = [
-    { url: internalProxyUrl, label: "Internal", isInternal: true },
-    ...externalProxyUrls.map((url) => ({
-      url,
-      label: url,
-      isInternal: false,
-    })),
-  ];
+  const options = externalProxyUrls.map((url) => ({
+    url,
+    label: url,
+  }));
 
-  return (
-    <div className="space-y-2">
-      <Label
-        htmlFor={`${idPrefix}-connection-url`}
-        className="text-sm font-medium"
-      >
-        Connection Base URL
-      </Label>
+  const staticUrl = externalProxyUrls.length === 1 ? externalProxyUrls[0] : internalProxyUrl;
+
+  const selectOrStaticExternalUrl =
+    options.length > 1 ? (
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger id={`${idPrefix}-connection-url`} className="w-full">
           <SelectValue placeholder="Select a connection URL">
@@ -58,19 +48,28 @@ export function ConnectionTypeSelector({
             <SelectItem key={option.url} value={option.url}>
               <div className="flex flex-col gap-0.5 items-start">
                 <CodeText className="text-xs">{option.url}</CodeText>
-                <span className="text-[10px] text-muted-foreground">
-                  {option.isInternal
-                    ? `Internal URL for in-cluster communication`
-                    : `External URL for connecting from outside the cluster`}
-                </span>
               </div>
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+    ) : (
+      <div className="my-2">
+        <CodeText className="text-xs">{staticUrl}</CodeText>
+      </div>
+    );
 
+  return (
+    <div className="space-y-2">
+      <Label
+        htmlFor={`${idPrefix}-connection-url`}
+        className="text-sm font-medium"
+      >
+        Connection Base URL
+      </Label>
+      {selectOrStaticExternalUrl}
       <p className="text-sm text-muted-foreground">
-        The URL is configurable via{" "}
+        The URL{externalProxyUrls.length > 1 ? "s" : ""} {externalProxyUrls.length > 1 ? "are" : "is"} configurable via{" "}
         <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText>{" "}
         environment variable. See{" "}
         <a

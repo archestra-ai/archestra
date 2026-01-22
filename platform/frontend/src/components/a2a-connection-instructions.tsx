@@ -27,7 +27,7 @@ import { usePromptEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
-const { internalProxyUrl } = config.api;
+const { externalProxyUrls, internalProxyUrl } = config.api;
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
@@ -56,7 +56,7 @@ export function A2AConnectionInstructions({
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [connectionUrl, setConnectionUrl] =
-    useState<ConnectionUrl>(internalProxyUrl);
+    useState<ConnectionUrl>(externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl);
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
     null,
@@ -82,11 +82,8 @@ export function A2AConnectionInstructions({
     setTimeout(() => setCopiedEmail(false), 2000);
   }, [agentEmailAddress]);
 
-  // Get base URL from selected connection URL
-  const baseUrl = connectionUrl;
-
   // A2A endpoint
-  const a2aEndpoint = `${baseUrl}/a2a/${prompt.id}`;
+  const a2aEndpoint = `${connectionUrl}/a2a/${prompt.id}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -194,7 +191,7 @@ export function A2AConnectionInstructions({
   }, [prompt.id]);
 
   // Agent Card URL for discovery
-  const agentCardUrl = `${baseUrl}/a2a/${prompt.id}/.well-known/agent.json`;
+  const agentCardUrl = `${connectionUrl}/a2a/${prompt.id}/.well-known/agent.json`;
 
   // cURL example code for sending messages
   const curlCode = useMemo(
@@ -269,6 +266,12 @@ curl -X GET "${agentCardUrl}" \\
 
   return (
     <div className="space-y-6">
+      {/* Connection Type Selector */}
+      <ConnectionTypeSelector
+        value={connectionUrl}
+        onChange={setConnectionUrl}
+        idPrefix="a2a"
+      />
       {/* A2A Endpoint URL */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">A2A Endpoint URL</Label>
@@ -401,14 +404,6 @@ curl -X GET "${agentCardUrl}" \\
           </SelectContent>
         </Select>
       </div>
-
-      {/* Connection Type Selector */}
-      <ConnectionTypeSelector
-        value={connectionUrl}
-        onChange={setConnectionUrl}
-        gatewayName="A2A Gateway"
-        idPrefix="a2a"
-      />
 
       {/* cURL Examples */}
       <div className="space-y-3">

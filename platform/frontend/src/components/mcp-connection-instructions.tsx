@@ -35,7 +35,7 @@ import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
-const { internalProxyUrl } = config.api;
+const { externalProxyUrls, internalProxyUrl } = config.api;
 
 interface McpConnectionInstructionsProps {
   agentId: string;
@@ -59,7 +59,7 @@ export function McpConnectionInstructions({
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
   const [connectionUrl, setConnectionUrl] =
-    useState<ConnectionUrl>(internalProxyUrl);
+    useState<ConnectionUrl>(externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl);
 
   // Fetch tokens filtered by the selected profile's teams
   const { data: tokensData } = useTokens({ profileId: selectedProfileId });
@@ -119,9 +119,7 @@ export function McpConnectionInstructions({
     [mcpServers],
   );
 
-  // Use the new URL format with selected profile ID
-  const baseUrl = connectionUrl;
-  const mcpUrl = `${baseUrl}/mcp/${selectedProfileId}`;
+  const mcpUrl = `${connectionUrl}/mcp/${selectedProfileId}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -479,7 +477,6 @@ export function McpConnectionInstructions({
       <ConnectionTypeSelector
         value={connectionUrl}
         onChange={setConnectionUrl}
-        gatewayName="MCP Gateway"
         idPrefix="mcp"
       />
 

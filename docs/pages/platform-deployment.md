@@ -481,9 +481,9 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
   - Required for production deployments with external database
 
-- **`ARCHESTRA_API_BASE_URL`** - Public URL(s) for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway from outside the Kubernetes cluster.
+- **`ARCHESTRA_API_BASE_URL`** - Archestra API Base URL(s) for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway.
 
-  This URL is displayed in the UI connection instructions to help users configure their agents. It does not affect internal routing.
+  This URL is displayed in the UI connection instructions to help users configure their agents. It doesn\'t affect internal routing (Archestra frontend communicates with backend via `http://localhost:9000`).
 
   - Default: Falls back to `http://localhost:9000`
   - Supports multiple comma-separated URLs for different connection options (e.g., internal K8s URL and external ingress)

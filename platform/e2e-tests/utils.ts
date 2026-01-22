@@ -155,10 +155,12 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 
   await manageToolsButton.click();
-  await page
+  // Wait for the dialog to open and the button to be visible before clicking
+  const assignToolButton = page
     .getByRole("button", { name: "Assign Tool to Profiles" })
-    .first()
-    .click();
+    .first();
+  await assignToolButton.waitFor({ state: "visible", timeout: 15000 });
+  await assignToolButton.click();
   await page.getByRole("checkbox").first().click();
   await page.waitForLoadState("networkidle");
   const combobox = page.getByRole("combobox");

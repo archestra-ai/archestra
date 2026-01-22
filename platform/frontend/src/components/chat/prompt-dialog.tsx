@@ -5,7 +5,7 @@ import {
   DOMAIN_VALIDATION_REGEX,
   type IncomingEmailSecurityMode,
 } from "@shared";
-import { Loader2, Mail } from "lucide-react";
+import { Loader2, Mail, MessageSquare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
@@ -287,187 +287,209 @@ export function PromptDialog({
             )}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="promptName">Name *</Label>
-            <Input
-              id="promptName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter prompt name"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="agentId">Tools *</Label>
-            <p className="text-sm text-muted-foreground">
-              Select profile with the tools that will be available
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <ProfileSelector
-                currentAgentId={agentId}
-                onProfileChange={setProfileId}
-              />
-              {agentId && <ChatToolsDisplay agentId={agentId} readOnly />}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Agents</Label>
-            <p className="text-sm text-muted-foreground">
-              Select other agents to delegate tasks
-            </p>
-            <MultiSelect
-              value={selectedAgentPromptIds}
-              onValueChange={setSelectedAgentPromptIds}
-              items={availableAgentPrompts}
-              placeholder="Select agents..."
-              disabled={availableAgentPrompts.length === 0}
-            />
-            {availableAgentPrompts.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No other agent available
-              </p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="systemPrompt">System Prompt</Label>
-            <Textarea
-              id="systemPrompt"
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              placeholder="Enter system prompt (instructions for the LLM)"
-              className="min-h-[150px] font-mono"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="userPrompt">User Prompt</Label>
-            <Textarea
-              id="userPrompt"
-              value={userPrompt}
-              onChange={(e) => setUserPrompt(e.target.value)}
-              placeholder="Enter user prompt (shown to user, sent to LLM)"
-              className="min-h-[150px] font-mono"
-            />
-          </div>
-          {chatopsProviders.filter((provider) => provider.configured).length >
-            0 && (
+        <div className="space-y-6">
+          {/* Agent Configuration Section */}
+          <div className="space-y-4">
             <div className="space-y-2">
-              <Label>ChatOps Integrations</Label>
-              <p className="text-sm text-muted-foreground">
-                Select which chat platforms can trigger this agent
-              </p>
-            </div>
-          )}
-          {chatopsProviders
-            .filter((provider) => provider.configured)
-            .map((provider) => (
-              <div key={provider.id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`chatops-${provider.id}`}
-                  checked={allowedChatops.includes(provider.id)}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      setAllowedChatops([...allowedChatops, provider.id]);
-                    } else {
-                      setAllowedChatops(
-                        allowedChatops.filter((id) => id !== provider.id),
-                      );
-                    }
-                  }}
-                />
-                <Label
-                  htmlFor={`chatops-${provider.id}`}
-                  className={
-                    !provider.configured
-                      ? "text-muted-foreground cursor-not-allowed font-normal"
-                      : "cursor-pointer font-normal"
-                  }
-                >
-                  {provider.displayName}
-                  {!provider.configured && " (not configured)"}
-                </Label>
-              </div>
-            ))}
-          {/* Incoming Email Settings */}
-          <div className="space-y-4 border-t pt-4">
-            <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-muted-foreground" />
-              <Label className="text-base font-medium">
-                Incoming Email Settings
-              </Label>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="incomingEmailEnabled">
-                  Enable Email Trigger
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Allow this agent to be triggered via email
-                </p>
-              </div>
-              <Switch
-                id="incomingEmailEnabled"
-                checked={incomingEmailEnabled}
-                onCheckedChange={setIncomingEmailEnabled}
+              <Label htmlFor="promptName">Name *</Label>
+              <Input
+                id="promptName"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter prompt name"
               />
             </div>
-            {incomingEmailEnabled && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="incomingEmailSecurityMode">
-                    Security Mode
-                  </Label>
-                  <Select
-                    value={incomingEmailSecurityMode}
-                    onValueChange={(value) =>
-                      setIncomingEmailSecurityMode(
-                        value as IncomingEmailSecurityMode,
-                      )
-                    }
+            <div className="space-y-2">
+              <Label htmlFor="agentId">Tools *</Label>
+              <p className="text-sm text-muted-foreground">
+                Select profile with the tools that will be available
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <ProfileSelector
+                  currentAgentId={agentId}
+                  onProfileChange={setProfileId}
+                />
+                {agentId && <ChatToolsDisplay agentId={agentId} readOnly />}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Agents</Label>
+              <p className="text-sm text-muted-foreground">
+                Select other agents to delegate tasks
+              </p>
+              <MultiSelect
+                value={selectedAgentPromptIds}
+                onValueChange={setSelectedAgentPromptIds}
+                items={availableAgentPrompts}
+                placeholder="Select agents..."
+                disabled={availableAgentPrompts.length === 0}
+              />
+              {availableAgentPrompts.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No other agent available
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="systemPrompt">System Prompt</Label>
+              <Textarea
+                id="systemPrompt"
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                placeholder="Enter system prompt (instructions for the LLM)"
+                className="min-h-[150px] font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="userPrompt">User Prompt</Label>
+              <Textarea
+                id="userPrompt"
+                value={userPrompt}
+                onChange={(e) => setUserPrompt(e.target.value)}
+                placeholder="Enter user prompt (shown to user, sent to LLM)"
+                className="min-h-[150px] font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Integrations Section */}
+          <div className="space-y-4 border-t pt-4">
+            <h3 className="text-sm font-semibold text-foreground">
+              Integrations
+            </h3>
+
+            {/* Incoming Email Subsection */}
+            <div className="space-y-3 rounded-lg border p-4">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <Label className="font-medium">Incoming Email</Label>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="incomingEmailEnabled"
+                    className="text-sm font-normal"
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select security mode" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="private">
-                        Private - Only registered users
-                      </SelectItem>
-                      <SelectItem value="internal">
-                        Internal - Only from specific domain
-                      </SelectItem>
-                      <SelectItem value="public">
-                        Public - Anyone can email
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                    Enable Email Trigger
+                  </Label>
                   <p className="text-sm text-muted-foreground">
-                    {incomingEmailSecurityMode === "private" &&
-                      "Only emails from registered Archestra users with access to this agent will be processed."}
-                    {incomingEmailSecurityMode === "internal" &&
-                      "Only emails from the specified domain will be processed."}
-                    {incomingEmailSecurityMode === "public" &&
-                      "Any email will be processed. Use with caution."}
+                    Allow this agent to be triggered via email
                   </p>
                 </div>
-                {incomingEmailSecurityMode === "internal" && (
+                <Switch
+                  id="incomingEmailEnabled"
+                  checked={incomingEmailEnabled}
+                  onCheckedChange={setIncomingEmailEnabled}
+                />
+              </div>
+              {incomingEmailEnabled && (
+                <div className="space-y-3 pt-2">
                   <div className="space-y-2">
-                    <Label htmlFor="incomingEmailAllowedDomain">
-                      Allowed Domain
+                    <Label htmlFor="incomingEmailSecurityMode">
+                      Security Mode
                     </Label>
-                    <Input
-                      id="incomingEmailAllowedDomain"
-                      value={incomingEmailAllowedDomain}
-                      onChange={(e) =>
-                        setIncomingEmailAllowedDomain(e.target.value)
+                    <Select
+                      value={incomingEmailSecurityMode}
+                      onValueChange={(value) =>
+                        setIncomingEmailSecurityMode(
+                          value as IncomingEmailSecurityMode,
+                        )
                       }
-                      placeholder="company.com"
-                    />
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select security mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="private">
+                          Private - Only registered users
+                        </SelectItem>
+                        <SelectItem value="internal">
+                          Internal - Only from specific domain
+                        </SelectItem>
+                        <SelectItem value="public">
+                          Public - Anyone can email
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                     <p className="text-sm text-muted-foreground">
-                      Only emails from this domain will be processed (e.g.,
-                      company.com)
+                      {incomingEmailSecurityMode === "private" &&
+                        "Only emails from registered Archestra users with access to this agent will be processed."}
+                      {incomingEmailSecurityMode === "internal" &&
+                        "Only emails from the specified domain will be processed."}
+                      {incomingEmailSecurityMode === "public" &&
+                        "Any email will be processed. Use with caution."}
                     </p>
                   </div>
-                )}
-              </>
+                  {incomingEmailSecurityMode === "internal" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="incomingEmailAllowedDomain">
+                        Allowed Domain
+                      </Label>
+                      <Input
+                        id="incomingEmailAllowedDomain"
+                        value={incomingEmailAllowedDomain}
+                        onChange={(e) =>
+                          setIncomingEmailAllowedDomain(e.target.value)
+                        }
+                        placeholder="company.com"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Only emails from this domain will be processed (e.g.,
+                        company.com)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ChatOps Subsection */}
+            {chatopsProviders.filter((provider) => provider.configured).length >
+              0 && (
+              <div className="space-y-3 rounded-lg border p-4">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  <Label className="font-medium">ChatOps</Label>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Select which chat platforms can trigger this agent
+                </p>
+                <div className="space-y-2">
+                  {chatopsProviders
+                    .filter((provider) => provider.configured)
+                    .map((provider) => (
+                      <div
+                        key={provider.id}
+                        className="flex items-center space-x-2"
+                      >
+                        <Checkbox
+                          id={`chatops-${provider.id}`}
+                          checked={allowedChatops.includes(provider.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setAllowedChatops([
+                                ...allowedChatops,
+                                provider.id,
+                              ]);
+                            } else {
+                              setAllowedChatops(
+                                allowedChatops.filter(
+                                  (id) => id !== provider.id,
+                                ),
+                              );
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`chatops-${provider.id}`}
+                          className="cursor-pointer font-normal"
+                        >
+                          {provider.displayName}
+                        </Label>
+                      </div>
+                    ))}
+                </div>
+              </div>
             )}
           </div>
         </div>

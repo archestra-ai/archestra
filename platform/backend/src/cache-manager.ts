@@ -319,7 +319,7 @@ interface LRUCacheEntry<T> {
 }
 
 /**
- * In-memory LRU cache manager using Keyv with QuickLRU storage adapter.
+ * In-memory LRU cache manager using QuickLRU.
  *
  * Unlike the distributed CacheManager (PostgreSQL-backed), this cache is
  * local to each pod/process and uses LRU eviction for memory management.
@@ -336,7 +336,6 @@ interface LRUCacheEntry<T> {
  * - Type-safe get/set operations
  */
 export class LRUCacheManager<T = unknown> {
-  private keyv: Keyv;
   private lruStore: QuickLRU<string, LRUCacheEntry<T>>;
   private defaultTtl: number;
   private onEviction?: (key: string, value: unknown) => void;
@@ -345,7 +344,6 @@ export class LRUCacheManager<T = unknown> {
     this.defaultTtl = options.defaultTtl ?? TimeInMs.Hour;
     this.onEviction = options.onEviction;
 
-    // Create QuickLRU store with eviction callback
     this.lruStore = new QuickLRU<string, LRUCacheEntry<T>>({
       maxSize: options.maxSize,
       onEviction: (key: string, entry: LRUCacheEntry<T>) => {
@@ -353,13 +351,6 @@ export class LRUCacheManager<T = unknown> {
           this.onEviction(key, entry.value);
         }
       },
-    });
-
-    // Wrap with Keyv for consistent API
-    this.keyv = new Keyv({ store: this.lruStore as unknown as Map<string, T> });
-
-    this.keyv.on("error", (err) => {
-      logger.error({ err }, "LRUCacheManager: Keyv error");
     });
   }
 

@@ -1033,7 +1033,8 @@ class InteractionModel {
     // For each session, find the last "main" interaction and title
     for (const [sessionKey, sessionInteractions] of groupedBySession) {
       let lastMainInteraction: (typeof interactions)[0] | null = null;
-      let claudeCodeTitle: string | null = null;
+      // undefined = not yet found, null = found but no text, string = found with text
+      let claudeCodeTitle: string | null | undefined;
 
       // Interactions are already ordered by created_at DESC
       for (const interaction of sessionInteractions) {
@@ -1042,7 +1043,7 @@ class InteractionModel {
         // Check for title generation request (Claude Code)
         if (
           requestStr.includes("Please write a 5-10 word title") &&
-          !claudeCodeTitle
+          claudeCodeTitle === undefined
         ) {
           // Extract title from response
           const response = interaction.response as {
@@ -1077,8 +1078,8 @@ class InteractionModel {
           }
         }
 
-        // Early exit if we found both
-        if (lastMainInteraction && claudeCodeTitle !== null) {
+        // Early exit if we found both (undefined = not yet searched for title)
+        if (lastMainInteraction && claudeCodeTitle !== undefined) {
           break;
         }
       }
@@ -1087,7 +1088,7 @@ class InteractionModel {
         result.set(sessionKey, {
           request: lastMainInteraction?.request ?? null,
           type: lastMainInteraction?.type ?? "",
-          claudeCodeTitle,
+          claudeCodeTitle: claudeCodeTitle ?? null,
         });
       }
     }

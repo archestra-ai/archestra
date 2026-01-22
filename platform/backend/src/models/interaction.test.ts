@@ -1801,6 +1801,75 @@ describe("InteractionModel", () => {
       );
     });
 
+    test("handles title generation request with malformed response (no text)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Real request (should be returned as lastInteractionRequest)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-malformed-title",
+        request: {
+          model: "claude-3-5-sonnet",
+          messages: [
+            {
+              role: "user",
+              content: "Help me write a Python script for data analysis",
+            },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "claude-3-5-sonnet",
+          choices: [],
+        },
+        type: "anthropic:messages",
+      });
+
+      // Title generation request with malformed response (missing text)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-malformed-title",
+        request: {
+          model: "claude-3-5-sonnet",
+          messages: [
+            {
+              role: "user",
+              content:
+                "Please write a 5-10 word title summarizing this conversation.",
+            },
+          ],
+        },
+        response: {
+          id: "msg_title",
+          content: [], // Empty content array - no text
+          model: "claude-3-5-sonnet",
+          role: "assistant",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          type: "message",
+          usage: { input_tokens: 100, output_tokens: 0 },
+        },
+        type: "anthropic:messages",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "session-malformed-title" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      // Should have the main interaction but null for title
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].claudeCodeTitle).toBeNull();
+    });
+
     test("returns null for lastInteractionRequest when all messages are too short", async ({
       makeAdmin,
     }) => {

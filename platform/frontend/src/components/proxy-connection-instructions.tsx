@@ -31,8 +31,9 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
-  const [connectionUrl, setConnectionUrl] =
-    useState<ConnectionUrl>(externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl);
+  const [connectionUrl, setConnectionUrl] = useState<ConnectionUrl>(
+    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
+  );
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;

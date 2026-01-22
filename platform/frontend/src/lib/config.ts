@@ -22,7 +22,10 @@ export const getBackendBaseUrl = (): string => {
   }
 
   // Server-side only: try non-public env var (for API routes and SSR)
-  if (typeof window === "undefined" && process.env.ARCHESTRA_INTERNAL_API_BASE_URL) {
+  if (
+    typeof window === "undefined" &&
+    process.env.ARCHESTRA_INTERNAL_API_BASE_URL
+  ) {
     return process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
   }
 

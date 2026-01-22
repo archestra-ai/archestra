@@ -33,7 +33,8 @@ export function ConnectionTypeSelector({
     label: url,
   }));
 
-  const staticUrl = externalProxyUrls.length === 1 ? externalProxyUrls[0] : internalProxyUrl;
+  const staticUrl =
+    externalProxyUrls.length === 1 ? externalProxyUrls[0] : internalProxyUrl;
 
   const selectOrStaticExternalUrl =
     options.length > 1 ? (
@@ -69,7 +70,8 @@ export function ConnectionTypeSelector({
       </Label>
       {selectOrStaticExternalUrl}
       <p className="text-sm text-muted-foreground">
-        The URL{externalProxyUrls.length > 1 ? "s" : ""} {externalProxyUrls.length > 1 ? "are" : "is"} configurable via{" "}
+        The URL{externalProxyUrls.length > 1 ? "s" : ""}{" "}
+        {externalProxyUrls.length > 1 ? "are" : "is"} configurable via{" "}
         <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText>{" "}
         environment variable. See{" "}
         <a

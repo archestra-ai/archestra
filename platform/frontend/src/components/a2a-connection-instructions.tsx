@@ -55,8 +55,9 @@ export function A2AConnectionInstructions({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
-  const [connectionUrl, setConnectionUrl] =
-    useState<ConnectionUrl>(externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl);
+  const [connectionUrl, setConnectionUrl] = useState<ConnectionUrl>(
+    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
+  );
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
     null,

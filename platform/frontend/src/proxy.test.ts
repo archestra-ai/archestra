@@ -20,7 +20,8 @@ function createMockRequest(options: {
 describe("proxy", () => {
   const originalEnv = {
     ARCHESTRA_FRONTEND_URL: process.env.ARCHESTRA_FRONTEND_URL,
-    ARCHESTRA_INTERNAL_API_BASE_URL: process.env.ARCHESTRA_INTERNAL_API_BASE_URL,
+    ARCHESTRA_INTERNAL_API_BASE_URL:
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL,
   };
 
   beforeEach(() => {
@@ -39,7 +40,8 @@ describe("proxy", () => {
       delete process.env.ARCHESTRA_FRONTEND_URL;
     }
     if (originalEnv.ARCHESTRA_INTERNAL_API_BASE_URL) {
-      process.env.ARCHESTRA_INTERNAL_API_BASE_URL = originalEnv.ARCHESTRA_INTERNAL_API_BASE_URL;
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL =
+        originalEnv.ARCHESTRA_INTERNAL_API_BASE_URL;
     } else {
       delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
     }

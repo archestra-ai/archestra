@@ -33,7 +33,8 @@ describe("getBackendBaseUrl", () => {
   });
 
   it("should return NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL when set", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "https://api.example.com";
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
+      "https://api.example.com";
 
     const result = getBackendBaseUrl();
 
@@ -64,7 +65,8 @@ describe("getBackendBaseUrl", () => {
   });
 
   it("should handle URLs with ports", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "http://localhost:8080";
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
+      "http://localhost:8080";
 
     const result = getBackendBaseUrl();
 
@@ -164,8 +166,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should remove trailing slash and append /v1 when URL ends with /", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
-      "https://api.example.com/";
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "https://api.example.com/";
 
     const result = getExternalProxyUrls();
 
@@ -261,7 +262,8 @@ describe("getWebSocketUrl", () => {
     });
 
     it("should convert http to ws", () => {
-      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "http://api.example.com";
+      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
+        "http://api.example.com";
 
       const result = getWebSocketUrl();
 
@@ -278,7 +280,8 @@ describe("getWebSocketUrl", () => {
     });
 
     it("should handle URLs with ports", () => {
-      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "http://localhost:8080";
+      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
+        "http://localhost:8080";
 
       const result = getWebSocketUrl();
 

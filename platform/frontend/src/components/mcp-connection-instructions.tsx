@@ -58,8 +58,9 @@ export function McpConnectionInstructions({
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
-  const [connectionUrl, setConnectionUrl] =
-    useState<ConnectionUrl>(externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl);
+  const [connectionUrl, setConnectionUrl] = useState<ConnectionUrl>(
+    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
+  );
 
   // Fetch tokens filtered by the selected profile's teams
   const { data: tokensData } = useTokens({ profileId: selectedProfileId });

@@ -1053,7 +1053,7 @@ class InteractionModel {
         }
 
         // Early exit if we found both
-        if (lastMainInteraction && claudeCodeTitle !== undefined) {
+        if (lastMainInteraction && claudeCodeTitle !== null) {
           break;
         }
       }

@@ -1776,7 +1776,14 @@ describe("InteractionModel", () => {
           ],
         },
         response: {
+          id: "msg_title",
           content: [{ type: "text", text: "Python Data Analysis Script Help" }],
+          model: "claude-3-5-sonnet",
+          role: "assistant",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          type: "message",
+          usage: { input_tokens: 100, output_tokens: 10 },
         },
         type: "anthropic:messages",
       });

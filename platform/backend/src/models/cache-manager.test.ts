@@ -146,4 +146,170 @@ describe("CacheManager", () => {
       expect(result2).toEqual(provider2Data);
     });
   });
+
+  describe("getAndDelete", () => {
+    it("should atomically get and delete a value", async () => {
+      const testData = { token: "oauth-state-123", userId: "user-1" };
+      await cacheManager.set(CacheKey.OAuthState, testData);
+
+      // First call should return the value
+      const result = await cacheManager.getAndDelete<typeof testData>(
+        CacheKey.OAuthState,
+      );
+      expect(result).toEqual(testData);
+
+      // Second call should return undefined (value was deleted)
+      const result2 = await cacheManager.getAndDelete<typeof testData>(
+        CacheKey.OAuthState,
+      );
+      expect(result2).toBeUndefined();
+    });
+
+    it("should return undefined for non-existent key", async () => {
+      const result = await cacheManager.getAndDelete<string>(
+        CacheKey.OAuthState,
+      );
+      expect(result).toBeUndefined();
+    });
+
+    it("should not return expired values", async () => {
+      const testData = "expired-value";
+      const shortTtl = 50; // 50ms
+
+      await cacheManager.set(CacheKey.OAuthState, testData, shortTtl);
+
+      // Wait for TTL to expire
+      await new Promise((resolve) => setTimeout(resolve, shortTtl + 50));
+
+      // Should return undefined for expired value
+      const result = await cacheManager.getAndDelete<string>(
+        CacheKey.OAuthState,
+      );
+      expect(result).toBeUndefined();
+    });
+
+    it("should prevent race conditions - only one caller gets the value", async () => {
+      const testData = { state: "unique-oauth-state" };
+      await cacheManager.set(`${CacheKey.OAuthState}-race`, testData);
+
+      // Simulate concurrent access - both calls happen simultaneously
+      const results = await Promise.all([
+        cacheManager.getAndDelete<typeof testData>(
+          `${CacheKey.OAuthState}-race`,
+        ),
+        cacheManager.getAndDelete<typeof testData>(
+          `${CacheKey.OAuthState}-race`,
+        ),
+      ]);
+
+      // Only one should get the value, the other should get undefined
+      const nonNullResults = results.filter((r) => r !== undefined);
+      expect(nonNullResults).toHaveLength(1);
+      expect(nonNullResults[0]).toEqual(testData);
+    });
+  });
+
+  describe("error handling and edge cases", () => {
+    it("should handle empty object values", async () => {
+      await cacheManager.set(CacheKey.GetChatModels, {});
+      const result = await cacheManager.get<Record<string, unknown>>(
+        CacheKey.GetChatModels,
+      );
+      expect(result).toEqual({});
+    });
+
+    it("should handle empty array values", async () => {
+      await cacheManager.set(CacheKey.GetChatModels, []);
+      const result = await cacheManager.get<unknown[]>(CacheKey.GetChatModels);
+      expect(result).toEqual([]);
+    });
+
+    it("should handle deeply nested objects", async () => {
+      const deeplyNested = {
+        level1: {
+          level2: {
+            level3: {
+              level4: {
+                value: "deep",
+              },
+            },
+          },
+        },
+      };
+      await cacheManager.set(CacheKey.GetChatModels, deeplyNested);
+      const result = await cacheManager.get<typeof deeplyNested>(
+        CacheKey.GetChatModels,
+      );
+      expect(result).toEqual(deeplyNested);
+    });
+
+    it("should handle special characters in string values", async () => {
+      const specialChars = "test\"with'special\nchars\t\\and/slashes";
+      await cacheManager.set(CacheKey.GetChatModels, specialChars);
+      const result = await cacheManager.get<string>(CacheKey.GetChatModels);
+      expect(result).toBe(specialChars);
+    });
+
+    it("should handle unicode characters", async () => {
+      const unicode = "测试 тест 🎉 emoji";
+      await cacheManager.set(CacheKey.GetChatModels, unicode);
+      const result = await cacheManager.get<string>(CacheKey.GetChatModels);
+      expect(result).toBe(unicode);
+    });
+  });
+
+  describe("concurrent access patterns", () => {
+    it("should handle multiple concurrent writes to same key", async () => {
+      const writes = Array.from({ length: 10 }, (_, i) =>
+        cacheManager.set(CacheKey.GetChatModels, { version: i }),
+      );
+
+      await Promise.all(writes);
+
+      // One of the values should have won
+      const result = await cacheManager.get<{ version: number }>(
+        CacheKey.GetChatModels,
+      );
+      expect(result).toBeDefined();
+      expect(typeof result?.version).toBe("number");
+    });
+
+    it("should handle concurrent read and write", async () => {
+      await cacheManager.set(CacheKey.GetChatModels, { initial: true });
+
+      // Run reads and writes concurrently
+      const operations = [
+        cacheManager.get<{ initial?: boolean; updated?: boolean }>(
+          CacheKey.GetChatModels,
+        ),
+        cacheManager.set(CacheKey.GetChatModels, { updated: true }),
+        cacheManager.get<{ initial?: boolean; updated?: boolean }>(
+          CacheKey.GetChatModels,
+        ),
+      ];
+
+      const results = await Promise.all(operations);
+
+      // All operations should complete without error
+      expect(results).toHaveLength(3);
+    });
+
+    it("should handle many concurrent operations", async () => {
+      const key = `${CacheKey.GetChatModels}-concurrent`;
+
+      // Set initial value
+      await cacheManager.set(key, 0);
+
+      // Run many concurrent operations
+      const operations = Array.from({ length: 50 }, (_, i) =>
+        i % 2 === 0 ? cacheManager.get<number>(key) : cacheManager.set(key, i),
+      );
+
+      // All operations should complete without throwing
+      await expect(Promise.all(operations)).resolves.toBeDefined();
+
+      // Cleanup
+      await cacheManager.delete(key);
+    });
+  });
 });

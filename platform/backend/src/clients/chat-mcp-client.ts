@@ -509,9 +509,17 @@ export async function getChatMcpTools({
     toolCache.delete(toolCacheKey);
   }
 
+  // Log cache miss - in multi-pod deployments without sticky sessions,
+  // frequent cache misses indicate requests are being routed to different pods.
+  // This degrades performance as tools need to be re-fetched from MCP Gateway.
   logger.info(
-    { agentId, userId },
-    "getChatMcpTools() called - fetching client...",
+    {
+      agentId,
+      userId,
+      conversationId,
+      cacheSize: toolCache.size,
+    },
+    "Tool cache miss - fetching tools from MCP Gateway. If this happens frequently for the same conversation, check that sticky sessions are configured for your load balancer.",
   );
 
   // Get token for direct tool execution (bypasses HTTP for security)

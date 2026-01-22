@@ -265,16 +265,15 @@ async function setOAuthState(
 }
 
 /**
- * Retrieve and delete OAuth state from cache
+ * Atomically retrieve and delete OAuth state from cache.
+ * Uses cacheManager.getAndDelete() to prevent race conditions where
+ * the same state could be used twice if two requests arrive simultaneously.
  */
 async function getAndDeleteOAuthState(
   state: string,
 ): Promise<OAuthStateData | null> {
   const key = getOAuthStateCacheKey(state);
-  const data = await cacheManager.get<OAuthStateData>(key);
-  if (data) {
-    await cacheManager.delete(key);
-  }
+  const data = await cacheManager.getAndDelete<OAuthStateData>(key);
   return data ?? null;
 }
 

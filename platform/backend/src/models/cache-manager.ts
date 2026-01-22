@@ -113,6 +113,42 @@ class CacheManager {
   }
 
   /**
+   * Atomically get and delete a value from the cache.
+   * Returns the value if it existed and hadn't expired, undefined otherwise.
+   *
+   * This is useful for one-time use tokens like OAuth state where you need to
+   * ensure the same token can't be used twice (prevents replay attacks).
+   *
+   * Uses DELETE ... RETURNING for atomic operation - the value is deleted
+   * and returned in a single database operation, preventing race conditions.
+   */
+  async getAndDelete<T>(key: AllowedCacheKey): Promise<T | undefined> {
+    try {
+      const result = await db
+        .delete(schema.cacheTable)
+        .where(
+          and(
+            eq(schema.cacheTable.key, key),
+            gt(schema.cacheTable.expiresAt, new Date()),
+          ),
+        )
+        .returning({ value: schema.cacheTable.value });
+
+      if (result.length === 0) {
+        return undefined;
+      }
+
+      return result[0].value as T;
+    } catch (error) {
+      logger.error(
+        { error, key },
+        "CacheManager: Error in getAndDelete operation",
+      );
+      return undefined;
+    }
+  }
+
+  /**
    * Delete all entries with keys matching a prefix.
    * Useful for invalidating related cache entries.
    */

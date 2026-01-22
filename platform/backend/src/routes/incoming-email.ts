@@ -7,9 +7,11 @@ import {
   type OutlookEmailProvider,
   processIncomingEmail,
 } from "@/agents/incoming-email";
+import { isRateLimited } from "@/agents/utils";
 import logger from "@/logging";
-import { cacheManager, PromptModel } from "@/models";
+import { PromptModel } from "@/models";
 import {
+  type AllowedCacheKey,
   ApiError,
   CacheKey,
   constructResponseSchema,
@@ -25,45 +27,10 @@ import {
  * Rate limit configuration for webhook endpoint
  * Limits requests per IP address to prevent abuse
  */
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per IP
-
-interface RateLimitEntry {
-  count: number;
-  windowStart: number;
-}
-
-/**
- * Check if an IP is rate limited using the shared CacheManager
- * Returns true if the IP has exceeded the rate limit
- */
-async function isRateLimited(ip: string): Promise<boolean> {
-  const now = Date.now();
-  const cacheKey = `${CacheKey.WebhookRateLimit}-${ip}` as const;
-  const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
-
-  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-    // Start new window
-    await cacheManager.set(
-      cacheKey,
-      { count: 1, windowStart: now },
-      RATE_LIMIT_WINDOW_MS * 2,
-    );
-    return false;
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return true;
-  }
-
-  // Increment count
-  await cacheManager.set(
-    cacheKey,
-    { count: entry.count + 1, windowStart: entry.windowStart },
-    RATE_LIMIT_WINDOW_MS * 2,
-  );
-  return false;
-}
+const RATE_LIMIT_CONFIG = {
+  windowMs: 60 * 1000, // 1 minute
+  maxRequests: 60, // 60 requests per minute per IP
+};
 
 /**
  * Schema for setup response
@@ -152,7 +119,9 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Apply rate limiting to actual webhook notifications (not validation challenges)
       const clientIp = request.ip || "unknown";
-      if (await isRateLimited(clientIp)) {
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-${clientIp}` as AllowedCacheKey;
+      if (await isRateLimited(rateLimitKey, RATE_LIMIT_CONFIG)) {
         logger.warn(
           { ip: clientIp },
           "[IncomingEmail] Rate limit exceeded for webhook",

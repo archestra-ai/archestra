@@ -971,24 +971,66 @@ class InteractionModel {
       return new Map();
     }
 
-    // Fetch interactions for all sessions, ordered by created_at DESC
-    // Using DISTINCT ON is more efficient than ROW_NUMBER for this use case
-    // We fetch more rows than needed and filter in JS (much faster than SQL text scanning)
-    const interactions = await db
-      .select({
-        id: schema.interactionsTable.id,
-        sessionId: schema.interactionsTable.sessionId,
-        request: schema.interactionsTable.request,
-        response: schema.interactionsTable.response,
-        type: schema.interactionsTable.type,
-        createdAt: schema.interactionsTable.createdAt,
-      })
-      .from(schema.interactionsTable)
-      .where(or(...conditions))
-      .orderBy(
-        schema.interactionsTable.sessionId,
-        desc(schema.interactionsTable.createdAt),
-      );
+    // Fetch the most recent N interactions per session, ordered by created_at DESC
+    // We limit to 20 per session since we only need the title and last main interaction,
+    // which are typically among the most recent. This prevents fetching thousands of
+    // interactions for long-running sessions.
+    // We filter in JS (much faster than SQL text scanning for the title/prompt checks)
+    const INTERACTIONS_PER_SESSION = 20;
+
+    // Build the WHERE clause using Drizzle's sql template
+    const sessionCondition =
+      sessionKeys.length > 0
+        ? sql`session_id IN (${sql.join(
+            sessionKeys.map((k) => sql`${k}`),
+            sql`, `,
+          )})`
+        : null;
+
+    const uuidCondition =
+      uuidKeys.length > 0
+        ? sql`id IN (${sql.join(
+            uuidKeys.map((k) => sql`${k}::uuid`),
+            sql`, `,
+          )})`
+        : null;
+
+    const whereConditions = [sessionCondition, uuidCondition].filter(Boolean);
+    const whereClause =
+      whereConditions.length === 1
+        ? whereConditions[0]
+        : sql.join(whereConditions as SQL[], sql` OR `);
+
+    // Use ROW_NUMBER() to limit interactions per session
+    const interactionsResult = await db.execute<{
+      id: string;
+      session_id: string | null;
+      request: unknown;
+      response: unknown;
+      type: string;
+      created_at: Date;
+    }>(sql`
+      WITH ranked AS (
+        SELECT
+          id, session_id, request, response, type, created_at,
+          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC) as rn
+        FROM interactions
+        WHERE ${whereClause}
+      )
+      SELECT id, session_id, request, response, type, created_at
+      FROM ranked
+      WHERE rn <= ${INTERACTIONS_PER_SESSION}
+      ORDER BY session_id, created_at DESC
+    `);
+
+    const interactions = interactionsResult.rows.map((row) => ({
+      id: row.id,
+      sessionId: row.session_id,
+      request: row.request,
+      response: row.response,
+      type: row.type,
+      createdAt: row.created_at,
+    }));
 
     // Group by session and find the "last main interaction" and "title interaction"
     const result = new Map<

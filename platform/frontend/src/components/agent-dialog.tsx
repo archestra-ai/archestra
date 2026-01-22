@@ -39,11 +39,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateProfile,
   useInternalAgents,
-  useLabelKeys,
   useUpdateProfile,
 } from "@/lib/agent.query";
 import {
@@ -241,7 +241,6 @@ export function AgentDialog({
       return response.data || [];
     },
   });
-  const { data: availableKeys = [] } = useLabelKeys();
   const { data: isProfileAdmin } = useHasPermissions({ profile: ["admin"] });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
@@ -571,6 +570,45 @@ export function AgentDialog({
             </>
           )}
 
+          {/* Agent Trigger Rules (Internal Agents Only) */}
+          {isInternalAgent && configuredChatopsProviders.length > 0 && (
+            <div className="space-y-2">
+              <Label>Agent Trigger Rules</Label>
+              {configuredChatopsProviders.map((provider) => (
+                <div
+                  key={provider.id}
+                  className="flex items-center justify-between"
+                >
+                  <div className="space-y-0.5">
+                    <Label
+                      htmlFor={`chatops-${provider.id}`}
+                      className="text-sm font-medium cursor-pointer"
+                    >
+                      {provider.displayName}
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Allow this agent to be triggered via{" "}
+                      {provider.displayName}
+                    </p>
+                  </div>
+                  <Switch
+                    id={`chatops-${provider.id}`}
+                    checked={allowedChatops.includes(provider.id)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setAllowedChatops([...allowedChatops, provider.id]);
+                      } else {
+                        setAllowedChatops(
+                          allowedChatops.filter((id) => id !== provider.id),
+                        );
+                      }
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Team Access - Common */}
           <div className="space-y-2">
             <Label>
@@ -604,64 +642,31 @@ export function AgentDialog({
             ref={agentLabelsRef}
             labels={labels}
             onLabelsChange={setLabels}
-            availableKeys={availableKeys}
           />
 
-          {/* Consider Context Untrusted - Common */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="consider-context-untrusted"
-              checked={considerContextUntrusted}
-              onCheckedChange={(checked) =>
-                setConsiderContextUntrusted(checked === true)
-              }
-            />
-            <div className="grid gap-1">
-              <Label
-                htmlFor="consider-context-untrusted"
-                className="text-sm font-medium cursor-pointer"
-              >
-                Treat user context as untrusted
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Enable when user prompts may contain untrusted and sensitive
-                data.
-              </p>
+          {/* Security - Common */}
+          <div className="space-y-2">
+            <Label>Security</Label>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="consider-context-untrusted"
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  Treat user context as untrusted
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Enable when user prompts may contain untrusted and sensitive
+                  data.
+                </p>
+              </div>
+              <Switch
+                id="consider-context-untrusted"
+                checked={considerContextUntrusted}
+                onCheckedChange={setConsiderContextUntrusted}
+              />
             </div>
           </div>
-
-          {/* Internal Agent Only - ChatOps */}
-          {isInternalAgent && configuredChatopsProviders.length > 0 && (
-            <div className="space-y-2">
-              <Label>ChatOps Integrations</Label>
-              <p className="text-sm text-muted-foreground">
-                Select which chat platforms can trigger this agent
-              </p>
-              {configuredChatopsProviders.map((provider) => (
-                <div key={provider.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`chatops-${provider.id}`}
-                    checked={allowedChatops.includes(provider.id)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setAllowedChatops([...allowedChatops, provider.id]);
-                      } else {
-                        setAllowedChatops(
-                          allowedChatops.filter((id) => id !== provider.id),
-                        );
-                      }
-                    }}
-                  />
-                  <Label
-                    htmlFor={`chatops-${provider.id}`}
-                    className="cursor-pointer font-normal"
-                  >
-                    {provider.displayName}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         <DialogFooter className="mt-4">

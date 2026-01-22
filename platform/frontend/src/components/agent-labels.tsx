@@ -1,12 +1,11 @@
 "use client";
 
-import { Plus, X } from "lucide-react";
+import { Plus, Tags, X } from "lucide-react";
 import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useLabelValues } from "@/lib/agent.query";
 
 export interface ProfileLabel {
   key: string;
@@ -18,7 +17,6 @@ export interface ProfileLabel {
 interface ProfileLabelsProps {
   labels: ProfileLabel[];
   onLabelsChange: (labels: ProfileLabel[]) => void;
-  availableKeys?: string[];
 }
 
 export interface ProfileLabelsRef {
@@ -26,14 +24,14 @@ export interface ProfileLabelsRef {
 }
 
 export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
-  function ProfileLabels({ labels, onLabelsChange, availableKeys = [] }, ref) {
+  function ProfileLabels({ labels, onLabelsChange }, ref) {
     const [newLabelKey, setNewLabelKey] = useState("");
     const [newLabelValue, setNewLabelValue] = useState("");
 
-    // Fetch values for the current key (only if key is not empty)
-    const { data: valuesForKey = [] } = useLabelValues({
-      key: newLabelKey.trim() || undefined,
-    });
+    // Check if the current key already exists
+    const isDuplicateKey =
+      newLabelKey.trim() !== "" &&
+      labels.some((l) => l.key === newLabelKey.trim());
 
     const handleAddLabel = useCallback(() => {
       const key = newLabelKey.trim();
@@ -111,52 +109,31 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
 
     return (
       <div className="grid gap-4">
-        <div>
-          <Label>Labels</Label>
-          <p className="text-sm text-muted-foreground mb-2">
-            Add labels to organize and identify your profiles
-          </p>
-        </div>
+        <Label>Labels</Label>
 
         <div className="flex gap-2 items-end">
-          <div className="flex-1 grid gap-1.5">
-            <Label htmlFor="label-key" className="text-xs">
-              Key
-            </Label>
+          <div className="flex-1">
             <Input
               id="label-key"
-              list="label-keys-list"
               value={newLabelKey}
               onChange={(e) => setNewLabelKey(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="e.g., environment"
               className="w-full"
+              aria-label="Label key"
             />
-            <datalist id="label-keys-list">
-              {availableKeys.map((key) => (
-                <option key={key} value={key} />
-              ))}
-            </datalist>
           </div>
 
-          <div className="flex-1 grid gap-1.5">
-            <Label htmlFor="label-value" className="text-xs">
-              Value
-            </Label>
+          <div className="flex-1">
             <Input
               id="label-value"
-              list="label-values-list"
               value={newLabelValue}
               onChange={(e) => setNewLabelValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="e.g., production"
               className="w-full"
+              aria-label="Label value"
             />
-            <datalist id="label-values-list">
-              {valuesForKey.map((value) => (
-                <option key={value} value={value} />
-              ))}
-            </datalist>
           </div>
 
           <Button
@@ -166,10 +143,18 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
             onClick={handleAddLabel}
             disabled={!newLabelKey.trim() || !newLabelValue.trim()}
             className="shrink-0"
+            aria-label="Add label"
           >
             <Plus className="h-4 w-4" />
           </Button>
         </div>
+
+        {isDuplicateKey && (
+          <p className="text-xs text-amber-600 dark:text-amber-500">
+            This will update the existing &ldquo;{newLabelKey.trim()}&rdquo;
+            label
+          </p>
+        )}
 
         {labels.length > 0 ? (
           <div className="flex flex-wrap gap-2">
@@ -192,7 +177,13 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No labels added yet</p>
+          <div className="flex flex-col items-center justify-center py-6 text-center border border-dashed rounded-lg bg-muted/30">
+            <Tags className="h-8 w-8 mb-2 text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground">No labels added yet</p>
+            <p className="text-xs text-muted-foreground/70">
+              Labels help organize and filter your profiles
+            </p>
+          </div>
         )}
       </div>
     );

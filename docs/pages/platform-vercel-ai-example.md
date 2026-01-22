@@ -120,7 +120,7 @@ You can create and manage profiles in the Archestra Platform UI at [http://local
 Feel free to use our official [Node.js](https://nodejs.org/) (Express) CLI chat example:
 
 ```shell
-git clone git@github.com:archestra-ai/archestra.git
+git clone git@github.com:archestra-ai/examples.git
 cd examples/ai-sdk-express
 pnpm install
 pnpm dev

@@ -173,6 +173,14 @@ export interface ChatOpsProvider {
    * @returns Array of previous messages, oldest first
    */
   getThreadHistory(params: ThreadHistoryParams): Promise<ChatThreadMessage[]>;
+
+  /**
+   * Get user's email address from their provider-specific ID
+   * Used for security validation to verify the user exists in Archestra
+   * @param userId - The user's ID in the provider's system (e.g., AAD Object ID for MS Teams)
+   * @returns The user's email address, or null if not available
+   */
+  getUserEmail(userId: string): Promise<string | null>;
 }
 
 /**

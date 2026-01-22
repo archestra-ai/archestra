@@ -318,7 +318,7 @@ export class ChatOpsManager {
     const { message, provider, agentId, agentName, organizationId } = params;
 
     // Resolve user's email from the chat provider
-    const userEmail = await this.resolveUserEmail(message, provider);
+    const userEmail = await provider.getUserEmail(message.senderId);
 
     if (!userEmail) {
       logger.warn(
@@ -401,23 +401,6 @@ export class ChatOpsManager {
     );
 
     return { success: true, userId: user.id };
-  }
-
-  /**
-   * Resolve user's email from the chat provider.
-   */
-  private async resolveUserEmail(
-    message: IncomingChatMessage,
-    provider: ChatOpsProvider,
-  ): Promise<string | null> {
-    // For MS Teams, use Graph API to get user's email from their AAD Object ID
-    if (provider.providerId === "ms-teams") {
-      const msTeamsProvider = provider as MSTeamsProvider;
-      return msTeamsProvider.getUserEmail(message.senderId);
-    }
-
-    // Future: Add support for other providers (Slack, etc.)
-    return null;
   }
 
   /**

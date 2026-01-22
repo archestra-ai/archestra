@@ -532,27 +532,6 @@
           "method": "btree",
           "with": {}
         },
-        "agents_organization_id_name_idx": {
-          "name": "agents_organization_id_name_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "agents_agent_type_idx": {
           "name": "agents_agent_type_idx",
           "columns": [

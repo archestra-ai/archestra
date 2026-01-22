@@ -8,7 +8,6 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { ChatOpsProviderType } from "@/types/chatops";
@@ -96,11 +95,6 @@ const agentsTable = pgTable(
   (table) => [
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
-    // Unique constraint on (organization_id, name) to prevent duplicate agent names
-    uniqueIndex("agents_organization_id_name_idx").on(
-      table.organizationId,
-      table.name,
-    ),
   ],
 );
 

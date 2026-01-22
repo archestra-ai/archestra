@@ -10,19 +10,27 @@ export function Savings({
   baselineCost,
   toonCostSavings,
   toonTokensSaved,
+  toonSkipReason,
   format = "percent",
   tooltip = "never",
   className,
-  showUnifiedTooltip = false,
+  variant = "default",
+  baselineModel,
+  actualModel,
 }: {
   cost: string;
   baselineCost: string;
   toonCostSavings?: string | null;
   toonTokensSaved?: number | null;
+  toonSkipReason?: string | null;
   format?: "percent" | "number";
   tooltip?: "never" | "always" | "hover";
   className?: string;
-  showUnifiedTooltip?: boolean;
+  variant?: "default" | "session" | "interaction";
+  /** The original requested model before cost optimization */
+  baselineModel?: string | null;
+  /** The actual model used after cost optimization */
+  actualModel?: string | null;
 }) {
   const costNum = Number.parseFloat(cost);
   const baselineCostNum = Number.parseFloat(baselineCost);
@@ -61,73 +69,72 @@ export function Savings({
   }
 
   if (tooltip !== "never") {
-    // Check if this is a unified view (explicitly set or has TOON data) or simple view
-    const isUnifiedView =
-      showUnifiedTooltip ||
-      (toonCostSavings !== undefined && toonCostSavings !== null);
+    const isSession = variant === "session";
 
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className={`${colorClass} ${className || ""} cursor-default`}>
-            {content}
+          <span className={`${className || ""} cursor-default`}>
+            {formatCost(actualCost)}
+            {savingsPercentNum >= 0.05 && (
+              <span className="text-green-600 dark:text-green-400">
+                {" "}
+                (-{savingsPercent}%)
+              </span>
+            )}
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">
-          {isUnifiedView ? (
-            // UCS (Unified Cost Savings) tooltip format
-            <div className="space-y-0.5 text-sm">
-              {totalSavings === 0 ? (
-                <div className={colorClass}>No cost savings available</div>
-              ) : (
+          <div className="space-y-0.5 text-sm">
+            <div className="space-y-0.5">
+              {totalSavings > 0 ? (
                 <>
-                  <div>Baseline Cost: {formatCost(baselineCostNum)}</div>
+                  <div>Estimated Cost: {formatCost(baselineCostNum)}</div>
                   <div>Actual Cost: {formatCost(actualCost)}</div>
                   <div className="font-semibold">
-                    Savings: {formatCost(totalSavings)} (-
-                    {savingsPercent}%)
-                  </div>
-
-                  <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
-                    {costOptimizationSavings > 0 && (
-                      <div>
-                        <div>Model cost optimization:</div>
-                        <div>-{formatCost(costOptimizationSavings)}</div>
-                      </div>
-                    )}
-
-                    {toonCostSavingsNum > 0 && toonTokensSaved && (
-                      <div>
-                        <div>Tool result compression:</div>
-                        <div>
-                          -{formatCost(toonCostSavingsNum)} (
-                          {toonTokensSaved.toLocaleString()} tokens saved)
-                        </div>
-                      </div>
-                    )}
+                    Savings: {formatCost(totalSavings)} (-{savingsPercent}%)
                   </div>
                 </>
-              )}
-            </div>
-          ) : (
-            // Original simple tooltip format (for Cost Savings column)
-            <div className="space-y-2">
-              {totalSavings === 0 ? (
-                <div className={colorClass}>No cost optimization possible</div>
               ) : (
-                <>
-                  <div>Baseline: {formatCost(baselineCostNum)}</div>
-                  <div className={colorClass}>
-                    Savings: {formatCost(Math.abs(totalSavings))} (
-                    {totalSavings > 0
-                      ? `-${savingsPercent}%`
-                      : `${savingsPercent}%`}
-                    )
-                  </div>
-                </>
+                <div>Cost: {formatCost(actualCost)}</div>
               )}
             </div>
-          )}
+
+            <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
+              {costOptimizationSavings > 0 ? (
+                <div>
+                  Model optimization: -{formatCost(costOptimizationSavings)}
+                  {baselineModel && actualModel && baselineModel !== actualModel
+                    ? ` (${baselineModel} \u2192 ${actualModel})`
+                    : ""}
+                </div>
+              ) : (
+                <div>Model optimization: No matching rule</div>
+              )}
+
+              {toonCostSavingsNum > 0 ? (
+                <div>
+                  Tool result compression: -{formatCost(toonCostSavingsNum)}
+                  {toonTokensSaved
+                    ? ` (${toonTokensSaved.toLocaleString()} tokens saved)`
+                    : ""}
+                </div>
+              ) : isSession ? (
+                <div>
+                  Tool result compression: Not applied. See individual logs for
+                  details.
+                </div>
+              ) : toonSkipReason === "not_enabled" ? (
+                <div>Tool result compression: Not enabled</div>
+              ) : toonSkipReason === "not_effective" ? (
+                <div>Tool result compression: Skipped (no token savings)</div>
+              ) : toonSkipReason === "no_tool_results" ? (
+                <div>Tool result compression: No tool results</div>
+              ) : (
+                <div>Tool result compression: Not applied</div>
+              )}
+            </div>
+          </div>
         </TooltipContent>
       </Tooltip>
     );

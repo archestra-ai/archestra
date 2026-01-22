@@ -6,7 +6,10 @@ import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import { Badge } from "@/components/ui/badge";
+import {
+  type ConnectionType,
+  ConnectionTypeSelector,
+} from "@/components/connection-type-selector";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,6 +26,8 @@ import { useFeatures } from "@/lib/features.query";
 import { usePromptEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
+
+const { externalProxyUrl, internalProxyUrl } = config.api;
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
@@ -50,6 +55,8 @@ export function A2AConnectionInstructions({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
+  const [connectionType, setConnectionType] =
+    useState<ConnectionType>("internal");
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
     null,
@@ -57,13 +64,13 @@ export function A2AConnectionInstructions({
   const [isLoadingToken, setIsLoadingToken] = useState(false);
   const [isCopyingCode, setIsCopyingCode] = useState(false);
 
-  // Email invocation info
-  const emailEnabled = features?.incomingEmail?.enabled ?? false;
-  const emailProvider = features?.incomingEmail?.displayName;
+  // Email invocation - check both global feature AND prompt-level setting
+  const globalEmailEnabled = features?.incomingEmail?.enabled ?? false;
+  const promptEmailEnabled = prompt.incomingEmailEnabled ?? false;
 
-  // Fetch the email address from the backend (uses correct mailbox local part)
+  // Fetch the email address only if both global feature is enabled AND this prompt has email enabled
   const { data: emailAddressData } = usePromptEmailAddress(
-    emailEnabled ? prompt.id : null,
+    globalEmailEnabled && promptEmailEnabled ? prompt.id : null,
   );
   const agentEmailAddress = emailAddressData?.emailAddress ?? null;
 
@@ -75,8 +82,9 @@ export function A2AConnectionInstructions({
     setTimeout(() => setCopiedEmail(false), 2000);
   }, [agentEmailAddress]);
 
-  // Get base URL from config (displayProxyUrl includes /v1)
-  const baseUrl = config.api.displayProxyUrl;
+  // Get base URL from config based on connection type
+  const baseUrl =
+    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
 
   // A2A endpoint
   const a2aEndpoint = `${baseUrl}/a2a/${prompt.id}`;
@@ -395,6 +403,14 @@ curl -X GET "${agentCardUrl}" \\
         </Select>
       </div>
 
+      {/* Connection Type Selector */}
+      <ConnectionTypeSelector
+        value={connectionType}
+        onChange={setConnectionType}
+        gatewayName="A2A Gateway"
+        idPrefix="a2a"
+      />
+
       {/* cURL Examples */}
       <div className="space-y-3">
         <Label className="text-sm font-medium">cURL Examples</Label>
@@ -520,59 +536,82 @@ curl -X GET "${agentCardUrl}" \\
         </div>
       </div>
 
-      {/* Email Invocation Section */}
-      {emailEnabled && agentEmailAddress && (
+      {/* Email Invocation Section - show when global email feature is enabled */}
+      {globalEmailEnabled && (
         <>
           <Separator />
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground" />
               <Label className="text-sm font-medium">Email Invocation</Label>
-              {emailProvider && (
-                <Badge variant="secondary" className="text-xs">
-                  {emailProvider}
-                </Badge>
-              )}
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">
-                Send an email to invoke this agent. The email body will be used
-                as the first message.
-              </Label>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-                  <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                  <CodeText className="text-xs text-primary break-all flex-1">
-                    {agentEmailAddress}
-                  </CodeText>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 flex-shrink-0"
-                    onClick={handleCopyEmail}
-                  >
-                    {copiedEmail ? (
-                      <Check className="h-3 w-3 text-green-500" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
+            {promptEmailEnabled ? (
+              <>
+                {/* Security mode description */}
+                <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
+                  {prompt.incomingEmailSecurityMode === "private" && (
+                    <p>
+                      <strong>Private mode:</strong> Only emails from registered
+                      users with access to this agent will be processed.
+                    </p>
+                  )}
+                  {prompt.incomingEmailSecurityMode === "internal" && (
+                    <p>
+                      <strong>Internal mode:</strong> Only emails from{" "}
+                      <span className="font-mono text-xs">
+                        @
+                        {prompt.incomingEmailAllowedDomain || "your-domain.com"}
+                      </span>{" "}
+                      will be processed.
+                    </p>
+                  )}
+                  {prompt.incomingEmailSecurityMode === "public" && (
+                    <p>
+                      <strong>Public mode:</strong> Any email will be processed.
+                      Use with caution.
+                    </p>
+                  )}
                 </div>
-              </div>
-            </div>
 
-            <div className="bg-muted/50 rounded-md p-3 text-xs text-muted-foreground space-y-1">
-              <p>
-                <strong>How it works:</strong>
-              </p>
-              <ul className="list-disc list-inside space-y-0.5 ml-2">
-                <li>Send an email to the address above</li>
-                <li>The email body becomes the agent&apos;s input message</li>
-                <li>No authentication token required</li>
-                <li>Agent executes automatically upon receiving the email</li>
-              </ul>
-            </div>
+                {/* Email address */}
+                {agentEmailAddress && (
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">
+                      Send an email to invoke this agent. The email body will be
+                      used as the first message.
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+                        <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <CodeText className="text-xs text-primary break-all flex-1">
+                          {agentEmailAddress}
+                        </CodeText>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 flex-shrink-0"
+                          onClick={handleCopyEmail}
+                        >
+                          {copiedEmail ? (
+                            <Check className="h-3 w-3 text-green-500" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
+                <p>
+                  Email invocation is not enabled for this agent. Enable it in
+                  the agent settings to allow triggering via email.
+                </p>
+              </div>
+            )}
           </div>
         </>
       )}

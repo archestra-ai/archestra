@@ -8,6 +8,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  TeamModel,
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -98,7 +99,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ body, user }, reply) => {
+    async ({ body, user, headers }, reply) => {
       let {
         agentIds,
         secretId,
@@ -143,6 +144,46 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             400,
             "Personal MCP server installations are not allowed when Readonly Vault is enabled. Please select a team.",
           );
+        }
+
+        // Validate permissions for team installations
+        // WHY: We want to restrict who can create team-wide MCP server installations:
+        // - Members should NOT be able to create team installations (they lack mcpServer:update)
+        // - Editors can create team installations ONLY for teams they are members of
+        // - Admins (with team:admin) can create team installations for ANY team
+        // This prevents members from installing MCP servers that affect the whole team.
+        if (serverData.teamId) {
+          const { success: hasTeamAdmin } = await hasPermission(
+            { team: ["admin"] },
+            headers,
+          );
+
+          if (!hasTeamAdmin) {
+            // WHY: mcpServer:update distinguishes editors from members
+            // Editors have this permission, members don't
+            const { success: hasMcpServerUpdate } = await hasPermission(
+              { mcpServer: ["update"] },
+              headers,
+            );
+
+            if (!hasMcpServerUpdate) {
+              throw new ApiError(
+                403,
+                "You don't have permission to create team MCP server installations",
+              );
+            }
+
+            const isMember = await TeamModel.isUserInTeam(
+              serverData.teamId,
+              user.id,
+            );
+            if (!isMember) {
+              throw new ApiError(
+                403,
+                "You can only create MCP server installations for teams you are a member of",
+              );
+            }
+          }
         }
 
         // Validate no duplicate installations for this catalog item
@@ -589,6 +630,132 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `Failed to fetch tools from MCP server ${mcpServer.name}: ${toolError instanceof Error ? toolError.message : "Unknown error"}`,
         );
       }
+    },
+  );
+
+  /**
+   * Re-authenticate an MCP server by updating its secret
+   * Used when OAuth token refresh fails and user needs to re-authenticate
+   */
+  fastify.patch(
+    "/api/mcp_server/:id/reauthenticate",
+    {
+      schema: {
+        operationId: RouteId.ReauthenticateMcpServer,
+        description:
+          "Update MCP server secret after re-authentication (clears OAuth refresh errors)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          secretId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async ({ params: { id }, body: { secretId }, user, headers }, reply) => {
+      // Get the existing MCP server
+      const mcpServer = await McpServerModel.findById(id, user.id);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Check mcpServer create permission (required for re-authentication)
+      const { success: hasMcpServerCreatePermission } = await hasPermission(
+        { mcpServer: ["create"] },
+        headers,
+      );
+
+      if (!hasMcpServerCreatePermission) {
+        throw new ApiError(
+          403,
+          "You need MCP server create permission to re-authenticate",
+        );
+      }
+
+      // For personal credentials, only owner can re-authenticate
+      if (!mcpServer.teamId) {
+        if (mcpServer.ownerId !== user.id) {
+          throw new ApiError(
+            403,
+            "Only the credential owner can re-authenticate",
+          );
+        }
+      } else {
+        // For team credentials: user must have team:admin OR (mcpServer:update AND team membership)
+        // WHY: This matches the team installation permission requirements - only editors and admins
+        // can manage team credentials, members cannot.
+        // Same rules apply for re-authentication.
+        const { success: isTeamAdmin } = await hasPermission(
+          { team: ["admin"] },
+          headers,
+        );
+
+        if (!isTeamAdmin) {
+          // WHY: mcpServer:update distinguishes editors from members
+          // Editors have this permission, members don't
+          const { success: hasMcpServerUpdate } = await hasPermission(
+            { mcpServer: ["update"] },
+            headers,
+          );
+
+          if (!hasMcpServerUpdate) {
+            throw new ApiError(
+              403,
+              "You don't have permission to re-authenticate team credentials",
+            );
+          }
+
+          // WHY: Even editors can only re-authenticate for their own teams
+          const isMember = await TeamModel.isUserInTeam(
+            mcpServer.teamId,
+            user.id,
+          );
+          if (!isMember) {
+            throw new ApiError(
+              403,
+              "You can only re-authenticate credentials for teams you are a member of",
+            );
+          }
+        }
+      }
+
+      // Delete the old secret if it exists
+      if (mcpServer.secretId) {
+        try {
+          await secretManager().deleteSecret(mcpServer.secretId);
+          logger.info(
+            { mcpServerId: id, oldSecretId: mcpServer.secretId },
+            "Deleted old secret during re-authentication",
+          );
+        } catch (error) {
+          logger.error(
+            { err: error, mcpServerId: id },
+            "Failed to delete old secret during re-authentication",
+          );
+          // Continue with update even if old secret deletion fails
+        }
+      }
+
+      // Update the server with new secret and clear OAuth error fields
+      const updatedServer = await McpServerModel.update(id, {
+        secretId,
+        oauthRefreshError: null,
+        oauthRefreshFailedAt: null,
+      });
+
+      if (!updatedServer) {
+        throw new ApiError(500, "Failed to update MCP server");
+      }
+
+      logger.info(
+        { mcpServerId: id, newSecretId: secretId },
+        "MCP server re-authenticated successfully",
+      );
+
+      return reply.send(updatedServer);
     },
   );
 

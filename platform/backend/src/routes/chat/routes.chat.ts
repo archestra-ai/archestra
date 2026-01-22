@@ -436,16 +436,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversations,
         description:
-          "List all conversations for current user with agent details",
+          "List all conversations for current user with agent details. Optionally filter by search query.",
         tags: ["Chat"],
+        querystring: z.object({
+          search: z.string().optional(),
+        }),
         response: constructResponseSchema(z.array(SelectConversationSchema)),
       },
     },
     async (request, reply) => {
+      const { search } = request.query;
       return reply.send(
         await ConversationModel.findAll(
           request.user.id,
           request.organizationId,
+          search,
         ),
       );
     },

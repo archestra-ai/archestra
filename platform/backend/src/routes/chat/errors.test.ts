@@ -6,7 +6,7 @@ import {
   GeminiErrorReasons,
   OpenAIErrorTypes,
 } from "@shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@/test";
 import { mapProviderError } from "./errors";
 
 // =============================================================================

@@ -1,4 +1,6 @@
+import type { IncomingEmailSecurityMode } from "@shared";
 import {
+  boolean,
   integer,
   jsonb,
   pgTable,
@@ -6,17 +8,8 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { ChatOpsProviderType, PromptHistoryEntry } from "@/types";
 import agentsTable from "./agent";
-
-/**
- * Represents a historical version of a prompt stored in the history JSONB array
- */
-export interface PromptHistoryEntry {
-  version: number;
-  userPrompt: string | null;
-  systemPrompt: string | null;
-  createdAt: string; // ISO timestamp
-}
 
 const promptsTable = pgTable("prompts", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -29,6 +22,22 @@ const promptsTable = pgTable("prompts", {
   systemPrompt: text("system_prompt"),
   version: integer("version").notNull().default(1),
   history: jsonb("history").$type<PromptHistoryEntry[]>().notNull().default([]),
+  /** Which chatops providers can trigger this prompt/agent (empty = none) */
+  allowedChatops: jsonb("allowed_chatops")
+    .$type<ChatOpsProviderType[]>()
+    .notNull()
+    .default([]),
+  // Incoming email settings
+  incomingEmailEnabled: boolean("incoming_email_enabled")
+    .notNull()
+    .default(false),
+  // Security mode: 'private' (user auth), 'internal' (domain), 'public' (no restriction)
+  incomingEmailSecurityMode: text("incoming_email_security_mode")
+    .$type<IncomingEmailSecurityMode>()
+    .notNull()
+    .default("private"),
+  // Allowed email domain for 'internal' mode (e.g., 'company.com')
+  incomingEmailAllowedDomain: text("incoming_email_allowed_domain"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

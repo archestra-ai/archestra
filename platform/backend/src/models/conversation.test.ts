@@ -883,4 +883,552 @@ describe("ConversationModel", () => {
     expect(anthropicConv?.selectedProvider).toBe("anthropic");
     expect(openaiConv?.selectedProvider).toBe("openai");
   });
+
+  test("findAll with search query filters by conversation title", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Search Title Agent", teams: [] });
+
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Python Tutorial",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "JavaScript Guide",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const results = await ConversationModel.findAll(user.id, org.id, "Python");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe("Python Tutorial");
+  });
+
+  test("findAll with search query filters by message content", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Search Content Agent", teams: [] });
+
+    const conv1 = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Conversation 1",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const conv2 = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Conversation 2",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const MessageModel = (await import("./message")).default;
+    await MessageModel.create({
+      conversationId: conv1.id,
+      role: "user",
+      content: {
+        id: "temp-1",
+        role: "user",
+        parts: [{ type: "text", text: "Hello world" }],
+      },
+    });
+
+    await MessageModel.create({
+      conversationId: conv2.id,
+      role: "user",
+      content: {
+        id: "temp-2",
+        role: "user",
+        parts: [{ type: "text", text: "Python programming" }],
+      },
+    });
+
+    const results = await ConversationModel.findAll(user.id, org.id, "Python");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe(conv2.id);
+    expect(results[0].title).toBe("Conversation 2");
+  });
+
+  test("findAll with search query includes messages for preview snippets", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Search Messages Agent",
+      teams: [],
+    });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Test Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const MessageModel = (await import("./message")).default;
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        id: "temp-1",
+        role: "user",
+        parts: [{ type: "text", text: "Python tutorial" }],
+      },
+    });
+
+    const results = await ConversationModel.findAll(user.id, org.id, "Python");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].messages).toBeDefined();
+    expect(Array.isArray(results[0].messages)).toBe(true);
+    expect(results[0].messages.length).toBeGreaterThan(0);
+    expect(results[0].messages[0].parts[0].text).toBe("Python tutorial");
+  });
+
+  test("findAll without search query returns empty messages arrays", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "No Search Messages Agent",
+      teams: [],
+    });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Test Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const MessageModel = (await import("./message")).default;
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        id: "temp-1",
+        role: "user",
+        parts: [{ type: "text", text: "Hello" }],
+      },
+    });
+
+    const results = await ConversationModel.findAll(user.id, org.id);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].messages).toBeDefined();
+    expect(Array.isArray(results[0].messages)).toBe(true);
+    expect(results[0].messages).toHaveLength(0);
+  });
+
+  test("findAll search is case-insensitive", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Case Insensitive Agent",
+      teams: [],
+    });
+
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Python Tutorial",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const resultsLower = await ConversationModel.findAll(
+      user.id,
+      org.id,
+      "python",
+    );
+    const resultsUpper = await ConversationModel.findAll(
+      user.id,
+      org.id,
+      "PYTHON",
+    );
+    const resultsMixed = await ConversationModel.findAll(
+      user.id,
+      org.id,
+      "PyThOn",
+    );
+
+    expect(resultsLower).toHaveLength(1);
+    expect(resultsUpper).toHaveLength(1);
+    expect(resultsMixed).toHaveLength(1);
+  });
+
+  test("findAll search filters by user and organization", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user1 = await makeUser();
+    const user2 = await makeUser();
+    const org1 = await makeOrganization();
+    const org2 = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Isolation Search Agent",
+      teams: [],
+    });
+
+    const conv1 = await ConversationModel.create({
+      userId: user1.id,
+      organizationId: org1.id,
+      agentId: agent.id,
+      title: "Python Tutorial",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await ConversationModel.create({
+      userId: user2.id,
+      organizationId: org2.id,
+      agentId: agent.id,
+      title: "Python Guide",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const user1Results = await ConversationModel.findAll(
+      user1.id,
+      org1.id,
+      "Python",
+    );
+    const user2Results = await ConversationModel.findAll(
+      user2.id,
+      org2.id,
+      "Python",
+    );
+
+    expect(user1Results).toHaveLength(1);
+    expect(user1Results[0].id).toBe(conv1.id);
+    expect(user2Results).toHaveLength(1);
+    expect(user2Results[0].title).toBe("Python Guide");
+  });
+
+  test("findAll with empty or whitespace search query behaves like no search", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Whitespace Search Agent",
+      teams: [],
+    });
+
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Conversation 1",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Conversation 2",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const emptyResults = await ConversationModel.findAll(user.id, org.id, "");
+    const whitespaceResults = await ConversationModel.findAll(
+      user.id,
+      org.id,
+      "   ",
+    );
+    const noSearchResults = await ConversationModel.findAll(user.id, org.id);
+
+    expect(emptyResults).toHaveLength(2);
+    expect(whitespaceResults).toHaveLength(2);
+    expect(noSearchResults).toHaveLength(2);
+    expect(emptyResults.every((c) => c.messages.length === 0)).toBe(true);
+    expect(whitespaceResults.every((c) => c.messages.length === 0)).toBe(true);
+  });
+
+  test("findAll search matches partial words in title", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Partial Match Agent", teams: [] });
+
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "JavaScript Tutorial",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const results = await ConversationModel.findAll(user.id, org.id, "Script");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe("JavaScript Tutorial");
+  });
+
+  test("findAll search matches partial words in message content", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Partial Content Agent",
+      teams: [],
+    });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Test",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const MessageModel = (await import("./message")).default;
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        id: "temp-1",
+        role: "user",
+        parts: [{ type: "text", text: "JavaScript is great" }],
+      },
+    });
+
+    const results = await ConversationModel.findAll(user.id, org.id, "Script");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe(conversation.id);
+  });
+
+  test("findAll search escapes percent sign in search query", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Escape Percent Agent",
+      teams: [],
+    });
+
+    // Create conversation with % in title
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "100% Complete",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    // Create conversation without % in title
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Other Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    // Search for % should only match the conversation with % in title
+    // If % is not escaped, it would act as a wildcard and match everything
+    const results = await ConversationModel.findAll(user.id, org.id, "%");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe("100% Complete");
+  });
+
+  test("findAll search escapes underscore in search query", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Escape Underscore Agent",
+      teams: [],
+    });
+
+    // Create conversation with _ in title
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "file_name",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    // Create conversation with similar pattern but no underscore
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "filename",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    // Search for _ should only match the conversation with _ in title
+    // If _ is not escaped, it would act as single-character wildcard
+    const results = await ConversationModel.findAll(user.id, org.id, "_");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe("file_name");
+  });
+
+  test("findAll search escapes backslash in search query", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Escape Backslash Agent",
+      teams: [],
+    });
+
+    // Create conversation with backslash in title
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "C:\\Users\\test",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    // Create conversation without backslash
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "C Users test",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    // Search for backslash should only match the conversation with backslash
+    const results = await ConversationModel.findAll(user.id, org.id, "\\");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe("C:\\Users\\test");
+  });
+
+  test("findAll search limits messages per conversation for preview", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Message Limit Agent",
+      teams: [],
+    });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Many Messages",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const MessageModel = (await import("./message")).default;
+
+    // Create more messages than the limit (MESSAGES_PER_CONVERSATION_LIMIT = 10)
+    for (let i = 0; i < 15; i++) {
+      await MessageModel.create({
+        conversationId: conversation.id,
+        role: i % 2 === 0 ? "user" : "assistant",
+        content: {
+          id: `temp-${i}`,
+          role: i % 2 === 0 ? "user" : "assistant",
+          parts: [{ type: "text", text: `Message ${i} with searchterm` }],
+        },
+      });
+    }
+
+    const results = await ConversationModel.findAll(
+      user.id,
+      org.id,
+      "searchterm",
+    );
+
+    expect(results).toHaveLength(1);
+    // Should have at most MESSAGES_PER_CONVERSATION_LIMIT (10) messages
+    expect(results[0].messages.length).toBeLessThanOrEqual(10);
+  });
+
+  test("findAll search returns results ordered by updatedAt descending", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Search Order Agent", teams: [] });
+
+    const conv1 = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Python First",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const conv2 = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Python Second",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const results = await ConversationModel.findAll(user.id, org.id, "Python");
+
+    expect(results).toHaveLength(2);
+    // Most recently updated first
+    expect(results[0].id).toBe(conv2.id);
+    expect(results[1].id).toBe(conv1.id);
+  });
 });

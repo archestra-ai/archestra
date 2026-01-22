@@ -1,12 +1,17 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { Loader2 } from "lucide-react";
+import {
+  type archestraApiTypes,
+  DOMAIN_VALIDATION_REGEX,
+  type IncomingEmailSecurityMode,
+} from "@shared";
+import { Loader2, Mail } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ProfileSelector } from "@/components/chat/profile-selector";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -17,8 +22,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
+import { useChatOpsStatus } from "@/lib/chatops.query";
 import {
   usePromptAgents,
   useSyncPromptAgents,
@@ -58,6 +72,14 @@ export function PromptDialog({
   const [selectedAgentPromptIds, setSelectedAgentPromptIds] = useState<
     string[]
   >([]);
+  const [allowedChatops, setAllowedChatops] = useState<string[]>([]);
+  const [incomingEmailEnabled, setIncomingEmailEnabled] = useState(false);
+  const [incomingEmailSecurityMode, setIncomingEmailSecurityMode] =
+    useState<IncomingEmailSecurityMode>("private");
+  const [incomingEmailAllowedDomain, setIncomingEmailAllowedDomain] =
+    useState("");
+
+  const { data: chatopsProviders = [] } = useChatOpsStatus();
 
   // Available prompts that can be used as agents (excluding self)
   const availableAgentPrompts = useMemo(() => {
@@ -82,12 +104,30 @@ export function PromptDialog({
         setUserPrompt(prompt.userPrompt || "");
         setSystemPrompt(prompt.systemPrompt || "");
         // Note: agents are loaded separately via currentAgents query
+        // Parse allowedChatops from prompt (may be in different formats from API)
+        const chatopsValue = prompt.allowedChatops;
+        if (Array.isArray(chatopsValue)) {
+          setAllowedChatops(chatopsValue as string[]);
+        } else {
+          setAllowedChatops([]);
+        }
+        // Set incoming email settings
+        setIncomingEmailEnabled(prompt.incomingEmailEnabled ?? false);
+        setIncomingEmailSecurityMode(
+          (prompt.incomingEmailSecurityMode as IncomingEmailSecurityMode) ??
+            "private",
+        );
+        setIncomingEmailAllowedDomain(prompt.incomingEmailAllowedDomain ?? "");
       } else {
         // create
         setName("");
         setUserPrompt("");
         setSystemPrompt("");
         setSelectedAgentPromptIds([]);
+        setAllowedChatops([]);
+        setIncomingEmailEnabled(false);
+        setIncomingEmailSecurityMode("private");
+        setIncomingEmailAllowedDomain("");
       }
     } else {
       // reset form
@@ -96,6 +136,10 @@ export function PromptDialog({
       setUserPrompt("");
       setSystemPrompt("");
       setSelectedAgentPromptIds([]);
+      setAllowedChatops([]);
+      setIncomingEmailEnabled(false);
+      setIncomingEmailSecurityMode("private");
+      setIncomingEmailAllowedDomain("");
     }
   }, [open, prompt]);
 
@@ -130,6 +174,21 @@ export function PromptDialog({
       return;
     }
 
+    // Validate domain format when internal security mode is selected
+    if (incomingEmailEnabled && incomingEmailSecurityMode === "internal") {
+      const trimmedDomain = incomingEmailAllowedDomain.trim();
+      if (!trimmedDomain) {
+        toast.error("Allowed domain is required for internal security mode");
+        return;
+      }
+      if (!DOMAIN_VALIDATION_REGEX.test(trimmedDomain)) {
+        toast.error(
+          "Invalid domain format. Please enter a valid domain (e.g., company.com)",
+        );
+        return;
+      }
+    }
+
     try {
       let promptId: string;
 
@@ -142,6 +201,13 @@ export function PromptDialog({
             agentId,
             userPrompt: trimmedUserPrompt || undefined,
             systemPrompt: trimmedSystemPrompt || undefined,
+            allowedChatops,
+            incomingEmailEnabled,
+            incomingEmailSecurityMode,
+            incomingEmailAllowedDomain:
+              incomingEmailSecurityMode === "internal"
+                ? incomingEmailAllowedDomain.trim()
+                : null,
           },
         });
         promptId = updated?.id ?? prompt.id;
@@ -152,6 +218,13 @@ export function PromptDialog({
           agentId,
           userPrompt: trimmedUserPrompt || undefined,
           systemPrompt: trimmedSystemPrompt || undefined,
+          allowedChatops,
+          incomingEmailEnabled,
+          incomingEmailSecurityMode,
+          incomingEmailAllowedDomain:
+            incomingEmailSecurityMode === "internal"
+              ? incomingEmailAllowedDomain.trim()
+              : null,
         });
         promptId = created?.id ?? "";
         toast.success("Agent created successfully");
@@ -180,6 +253,10 @@ export function PromptDialog({
     agentId,
     userPrompt,
     systemPrompt,
+    allowedChatops,
+    incomingEmailEnabled,
+    incomingEmailSecurityMode,
+    incomingEmailAllowedDomain,
     prompt,
     selectedAgentPromptIds,
     currentAgents.length,
@@ -270,6 +347,128 @@ export function PromptDialog({
               placeholder="Enter user prompt (shown to user, sent to LLM)"
               className="min-h-[150px] font-mono"
             />
+          </div>
+          {chatopsProviders.filter((provider) => provider.configured).length >
+            0 && (
+            <div className="space-y-2">
+              <Label>ChatOps Integrations</Label>
+              <p className="text-sm text-muted-foreground">
+                Select which chat platforms can trigger this agent
+              </p>
+            </div>
+          )}
+          {chatopsProviders
+            .filter((provider) => provider.configured)
+            .map((provider) => (
+              <div key={provider.id} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`chatops-${provider.id}`}
+                  checked={allowedChatops.includes(provider.id)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAllowedChatops([...allowedChatops, provider.id]);
+                    } else {
+                      setAllowedChatops(
+                        allowedChatops.filter((id) => id !== provider.id),
+                      );
+                    }
+                  }}
+                />
+                <Label
+                  htmlFor={`chatops-${provider.id}`}
+                  className={
+                    !provider.configured
+                      ? "text-muted-foreground cursor-not-allowed font-normal"
+                      : "cursor-pointer font-normal"
+                  }
+                >
+                  {provider.displayName}
+                  {!provider.configured && " (not configured)"}
+                </Label>
+              </div>
+            ))}
+          {/* Incoming Email Settings */}
+          <div className="space-y-4 border-t pt-4">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-base font-medium">
+                Incoming Email Settings
+              </Label>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="incomingEmailEnabled">
+                  Enable Email Trigger
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Allow this agent to be triggered via email
+                </p>
+              </div>
+              <Switch
+                id="incomingEmailEnabled"
+                checked={incomingEmailEnabled}
+                onCheckedChange={setIncomingEmailEnabled}
+              />
+            </div>
+            {incomingEmailEnabled && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="incomingEmailSecurityMode">
+                    Security Mode
+                  </Label>
+                  <Select
+                    value={incomingEmailSecurityMode}
+                    onValueChange={(value) =>
+                      setIncomingEmailSecurityMode(
+                        value as IncomingEmailSecurityMode,
+                      )
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select security mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="private">
+                        Private - Only registered users
+                      </SelectItem>
+                      <SelectItem value="internal">
+                        Internal - Only from specific domain
+                      </SelectItem>
+                      <SelectItem value="public">
+                        Public - Anyone can email
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground">
+                    {incomingEmailSecurityMode === "private" &&
+                      "Only emails from registered Archestra users with access to this agent will be processed."}
+                    {incomingEmailSecurityMode === "internal" &&
+                      "Only emails from the specified domain will be processed."}
+                    {incomingEmailSecurityMode === "public" &&
+                      "Any email will be processed. Use with caution."}
+                  </p>
+                </div>
+                {incomingEmailSecurityMode === "internal" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="incomingEmailAllowedDomain">
+                      Allowed Domain
+                    </Label>
+                    <Input
+                      id="incomingEmailAllowedDomain"
+                      value={incomingEmailAllowedDomain}
+                      onChange={(e) =>
+                        setIncomingEmailAllowedDomain(e.target.value)
+                      }
+                      placeholder="company.com"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Only emails from this domain will be processed (e.g.,
+                      company.com)
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
         <DialogFooter>

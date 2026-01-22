@@ -347,6 +347,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
+  [RouteId.ReauthenticateMcpServer]: {
+    mcpServer: ["update"],
+  },
   [RouteId.RestartMcpServer]: {
     mcpServer: ["update"],
   },
@@ -490,6 +493,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetChatModels]: {
     conversation: ["read"],
+  },
+  [RouteId.InvalidateChatModelsCache]: {
+    chatSettings: ["update"],
   },
   [RouteId.UpdateChatMessage]: {
     conversation: ["update"],
@@ -701,6 +707,17 @@ export const requiredEndpointPermissionsMap: Partial<
     organization: ["update"],
   },
   [RouteId.GetPromptEmailAddress]: {}, // Any authenticated user can view prompt email addresses
+
+  // ChatOps Routes (admin-only for management)
+  [RouteId.GetChatOpsStatus]: {
+    organization: ["read"],
+  },
+  [RouteId.ListChatOpsBindings]: {
+    organization: ["read"],
+  },
+  [RouteId.DeleteChatOpsBinding]: {
+    organization: ["update"],
+  },
 };
 
 /**

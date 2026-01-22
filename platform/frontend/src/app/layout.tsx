@@ -25,6 +25,7 @@ import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
+import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { Toaster } from "@/components/ui/sonner";
@@ -171,6 +172,7 @@ export default function RootLayout({
                         </main>
                         <Toaster />
                         <OnboardingDialogWrapper />
+                        <ConversationSearchProvider />
                       </SidebarProvider>
                     </WithAuthCheck>
                   </Suspense>

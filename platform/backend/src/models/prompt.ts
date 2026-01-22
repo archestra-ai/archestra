@@ -1,12 +1,13 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { PromptHistoryEntry } from "@/database/schemas/prompt";
 import type {
   InsertPrompt,
   Prompt,
+  PromptHistoryEntry,
   PromptVersionsResponse,
   UpdatePrompt,
 } from "@/types";
+import type { ChatOpsProviderType } from "@/types/chatops";
 import ToolModel from "./tool";
 
 /**
@@ -32,12 +33,7 @@ class PromptModel {
       .insert(schema.promptsTable)
       .values({
         organizationId,
-        name: input.name,
-        agentId: input.agentId,
-        userPrompt: input.userPrompt || null,
-        systemPrompt: input.systemPrompt || null,
-        version: 1,
-        history: [],
+        ...input,
       })
       .returning();
 
@@ -92,6 +88,29 @@ class PromptModel {
       .from(schema.promptsTable)
       .where(eq(schema.promptsTable.agentId, agentId))
       .orderBy(desc(schema.promptsTable.createdAt));
+
+    return prompts;
+  }
+
+  /**
+   * Find all prompts (agents in UI) that allow a specific chatops provider.
+   * Used to populate the agent selection dropdown in Teams/Slack/etc.
+   * Returns only prompts where the provider is in the allowedChatops array.
+   */
+  static async findByAllowedChatopsProvider(
+    provider: ChatOpsProviderType,
+  ): Promise<Pick<Prompt, "id" | "name">[]> {
+    // Use JSONB containment operator to check if provider is in the array
+    const prompts = await db
+      .select({
+        id: schema.promptsTable.id,
+        name: schema.promptsTable.name,
+      })
+      .from(schema.promptsTable)
+      .where(
+        sql`${schema.promptsTable.allowedChatops} @> ${JSON.stringify([provider])}::jsonb`,
+      )
+      .orderBy(asc(schema.promptsTable.name));
 
     return prompts;
   }
@@ -182,6 +201,13 @@ class PromptModel {
         agentId: input.agentId ?? prompt.agentId,
         userPrompt: input.userPrompt ?? prompt.userPrompt,
         systemPrompt: input.systemPrompt ?? prompt.systemPrompt,
+        allowedChatops: input.allowedChatops ?? prompt.allowedChatops,
+        incomingEmailEnabled:
+          input.incomingEmailEnabled ?? prompt.incomingEmailEnabled,
+        incomingEmailSecurityMode:
+          input.incomingEmailSecurityMode ?? prompt.incomingEmailSecurityMode,
+        incomingEmailAllowedDomain:
+          input.incomingEmailAllowedDomain ?? prompt.incomingEmailAllowedDomain,
         version: prompt.version + 1,
         history: sql`${schema.promptsTable.history} || ${JSON.stringify([historyEntry])}::jsonb`,
       })

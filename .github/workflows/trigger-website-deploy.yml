@@ -1,0 +1,22 @@
+name: Trigger Website Deploy
+
+on:
+  workflow_call:
+    secrets:
+      WEBSITE_VERCEL_DEPLOY_HOOK_URL:
+        required: true
+        description: Vercel deploy hook URL for the website
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  trigger-website-deploy:
+    name: Trigger Website Vercel Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel Deploy Hook
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          curl -X POST "$VERCEL_DEPLOY_HOOK_URL"

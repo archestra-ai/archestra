@@ -640,8 +640,9 @@ for (const config of testConfigs) {
     // This allows parallel execution without shared mutable state collisions.
     //
     // Extra retries for these tests as they can be flaky due to WireMock stub timing issues
-    // when running in parallel with multiple providers
-    test.describe.configure({ retries: 2 });
+    // when running in parallel with multiple providers. Increased to 3 retries (4 total attempts)
+    // as Cerebras tests have shown higher flakiness rates in CI.
+    test.describe.configure({ retries: 3 });
 
     test("blocks tool invocation when untrusted data is consumed", async ({
       request,

@@ -11,12 +11,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useInstallMcpServer } from "@/lib/mcp-server.query";
+import {
+  useInstallMcpServer,
+  useReauthenticateMcpServer,
+} from "@/lib/mcp-server.query";
 
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const installMutation = useInstallMcpServer();
+  const reauthMutation = useReauthenticateMcpServer();
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
@@ -80,20 +84,37 @@ function OAuthCallbackContent() {
 
         const { catalogId, name, secretId } = await response.json();
 
-        // Get teamId from session storage (stored before OAuth redirect)
-        const teamId = sessionStorage.getItem("oauth_team_id");
+        // Check if this is a re-authentication flow
+        const mcpServerId = sessionStorage.getItem("oauth_mcp_server_id");
 
-        // Install the MCP server with the secret reference
-        await installMutation.mutateAsync({
-          name,
-          catalogId,
-          secretId,
-          teamId: teamId || undefined,
-        });
+        if (mcpServerId) {
+          // Re-authentication: update existing server with new secret
+          await reauthMutation.mutateAsync({
+            id: mcpServerId,
+            secretId,
+            name,
+          });
 
-        // Clean up the processing flag and teamId after successful installation
-        sessionStorage.removeItem(processKey);
-        sessionStorage.removeItem("oauth_team_id");
+          // Clean up session storage
+          sessionStorage.removeItem(processKey);
+          sessionStorage.removeItem("oauth_mcp_server_id");
+        } else {
+          // New installation flow
+          // Get teamId from session storage (stored before OAuth redirect)
+          const teamId = sessionStorage.getItem("oauth_team_id");
+
+          // Install the MCP server with the secret reference
+          await installMutation.mutateAsync({
+            name,
+            catalogId,
+            secretId,
+            teamId: teamId || undefined,
+          });
+
+          // Clean up the processing flag and teamId after successful installation
+          sessionStorage.removeItem(processKey);
+          sessionStorage.removeItem("oauth_team_id");
+        }
 
         // Redirect back to MCP catalog immediately
         // The mutation's onSuccess handler will show the success toast
@@ -109,7 +130,12 @@ function OAuthCallbackContent() {
     handleOAuthCallback();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- router.push is stable but not memoized,
     // and we intentionally run this effect only once per callback (guarded by sessionStorage)
-  }, [searchParams, installMutation.mutateAsync, router.push]);
+  }, [
+    searchParams,
+    installMutation.mutateAsync,
+    reauthMutation.mutateAsync,
+    router.push,
+  ]);
 
   // This component always redirects on success or error, so just show loading state
   return (

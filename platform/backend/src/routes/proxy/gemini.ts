@@ -403,9 +403,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             optimizedModelName,
           );
         filteredContents = convertedContents;
-        toonTokensBefore = stats.toonTokensBefore;
-        toonTokensAfter = stats.toonTokensAfter;
-        toonCostSavings = stats.toonCostSavings;
+        toonTokensBefore = stats.tokensBefore;
+        toonTokensAfter = stats.tokensAfter;
+        toonCostSavings = stats.costSavings;
       }
 
       fastify.log.info(

@@ -260,6 +260,12 @@ export default function ChatPage() {
         // Reset initialAgentId to trigger re-selection from useEffect
         setInitialAgentId(null);
       }
+
+      // Focus textarea after navigation (e.g., from search dialog)
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
     }
   }, [searchParams, conversationId]);
 

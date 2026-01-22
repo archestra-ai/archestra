@@ -18,6 +18,7 @@ const {
   getMcpServerLogs,
   restartMcpServer,
   restartAllMcpServerInstallations,
+  reauthenticateMcpServer,
 } = archestraApiSdk;
 
 export function useMcpServers(params?: {
@@ -277,5 +278,29 @@ export function useMcpServerLogs(mcpServerId: string | null) {
     enabled: !!mcpServerId,
     refetchOnWindowFocus: false,
     retry: false,
+  });
+}
+
+export function useReauthenticateMcpServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: string;
+      secretId: string;
+      name: string;
+    }) => {
+      const response = await reauthenticateMcpServer({
+        path: { id: data.id },
+        body: { secretId: data.secretId },
+      });
+      return response.data;
+    },
+    onSuccess: async (_, variables) => {
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      toast.success(`Successfully re-authenticated ${variables.name}`);
+    },
+    onError: (_error, variables) => {
+      toast.error(`Failed to re-authenticate ${variables.name}`);
+    },
   });
 }

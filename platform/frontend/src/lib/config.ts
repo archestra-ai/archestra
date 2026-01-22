@@ -30,14 +30,13 @@ export const getBackendBaseUrl = (): string => {
 };
 
 /**
- * Get the external base URL for displaying connection instructions to users.
- * This is the URL that external agents should use to connect to Archestra from outside the cluster.
- *
  * Priority:
  * 1. NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL (explicit external URL)
  * 2. Falls back to getBackendBaseUrl() for backwards compatibility
+ *
+ * Exported for testing purposes.
  */
-export const getExternalBaseUrl = (): string => {
+export const _getExternalBaseUrl = (): string => {
   const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL");
   if (externalUrl) {
     return externalUrl;
@@ -46,13 +45,13 @@ export const getExternalBaseUrl = (): string => {
 };
 
 /**
- * Get the display proxy URL for showing to users.
- * This is the URL that external agents should use to connect to Archestra.
- * Uses getExternalBaseUrl() to support separate internal/external URLs in K8s deployments.
+ * Get the internal proxy URL for in-cluster communication.
+ * This is the URL that agents inside the cluster should use to connect to Archestra.
+ * Uses getBackendBaseUrl() which reads from ARCHESTRA_API_BASE_URL.
  */
-export const getDisplayProxyUrl = (): string => {
+export const getInternalProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
-  const baseUrl = getExternalBaseUrl();
+  const baseUrl = getBackendBaseUrl();
 
   if (baseUrl.endsWith(proxyUrlSuffix)) {
     return baseUrl;
@@ -63,25 +62,41 @@ export const getDisplayProxyUrl = (): string => {
 };
 
 /**
- * Get the WebSocket base URL (without path)
+ * Get the display proxy URL for showing to users.
  */
-const getWebSocketBaseUrl = (): string => {
-  const backendBaseUrl = getBackendBaseUrl();
+export const getExternalProxyUrl = (): string => {
+  const proxyUrlSuffix = "/v1";
+  const baseUrl = _getExternalBaseUrl();
 
-  // In development, use localhost
-  if (!backendBaseUrl || typeof window === "undefined") {
-    return "ws://localhost:9000";
+  if (baseUrl.endsWith(proxyUrlSuffix)) {
+    return baseUrl;
+  } else if (baseUrl.endsWith("/")) {
+    return `${baseUrl.slice(0, -1)}${proxyUrlSuffix}`;
   }
-
-  // Convert http(s) to ws(s)
-  return backendBaseUrl.replace(/^http/, "ws");
+  return `${baseUrl}${proxyUrlSuffix}`;
 };
 
 /**
- * Get the WebSocket URL for general communication
+ * Get the WebSocket URL for general communication.
+ *
+ * Client-side: Uses relative URL that goes through Next.js rewrite (see next.config.ts).
+ * This ensures WebSocket works in all deployment scenarios without extra env vars.
+ *
+ * Server-side: Uses absolute URL derived from ARCHESTRA_API_BASE_URL.
  */
 export const getWebSocketUrl = (): string => {
-  return `${getWebSocketBaseUrl()}/ws`;
+  // Client-side: use relative URL (goes through Next.js rewrite)
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/ws`;
+  }
+
+  // Server-side: use absolute URL
+  const backendBaseUrl = getBackendBaseUrl();
+  const wsBaseUrl = backendBaseUrl
+    ? backendBaseUrl.replace(/^http/, "ws")
+    : "ws://localhost:9000";
+  return `${wsBaseUrl}/ws`;
 };
 
 /**
@@ -97,8 +112,14 @@ export default {
     /**
      * Display URL for showing to users (absolute URL for external agents).
      */
-    get displayProxyUrl() {
-      return getDisplayProxyUrl();
+    get externalProxyUrl() {
+      return getExternalProxyUrl();
+    },
+    /**
+     * Internal URL for in-cluster communication.
+     */
+    get internalProxyUrl() {
+      return getInternalProxyUrl();
     },
     /**
      * Base URL for frontend requests (empty to use relative URLs with Next.js rewrites).

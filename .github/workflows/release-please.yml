@@ -106,14 +106,10 @@ jobs:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   trigger-website-deploy:
-    name: Trigger Website Vercel Deploy
-    runs-on: ubuntu-latest
+    name: Trigger Website Deploy
+    if: needs.release-please.outputs.platform_release_created
+    uses: ./.github/workflows/trigger-website-deploy.yml
     needs:
       - release-please
-    if: needs.release-please.outputs.platform_release_created
-    steps:
-      - name: Trigger Vercel Deploy Hook
-        env:
-          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
-        run: |
-          curl -X POST "$VERCEL_DEPLOY_HOOK_URL"
+    secrets:
+      WEBSITE_VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}

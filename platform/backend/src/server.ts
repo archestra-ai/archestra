@@ -31,6 +31,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   cleanupEmailProvider,
   cleanupOldProcessedEmails,
@@ -40,6 +41,7 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
+import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -65,6 +67,9 @@ import {
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
+
+/** Max time to wait for cleanup operations during graceful shutdown before exiting */
+const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 
 // Load enterprise routes if license is activated OR if running in codegen mode
 // (codegen mode ensures OpenAPI spec always includes all enterprise routes)
@@ -511,6 +516,9 @@ const start = async () => {
   try {
     await seedRequiredStartingData();
 
+    // Start cache manager's background cleanup interval
+    cacheManager.start();
+
     // Initialize metrics with keys of custom agent labels
     const labelKeys = await AgentLabelModel.getAllKeys();
     initializeMetrics(labelKeys);
@@ -527,6 +535,9 @@ const start = async () => {
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
     await initializeEmailProvider();
+
+    // Initialize chatops providers (MS Teams, Slack, etc.)
+    await chatOpsManager.initialize();
 
     // Initialize knowledge graph provider (if configured)
     // This enables automatic document ingestion from chat uploads
@@ -606,31 +617,74 @@ const start = async () => {
       fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
       try {
-        // Clear email subscription renewal interval
-        clearInterval(emailRenewalIntervalId);
-        clearInterval(processedEmailCleanupIntervalId);
-        fastify.log.info("Email background job intervals cleared");
+        // PRIORITY: Close servers FIRST to release ports immediately
+        // This prevents EADDRINUSE errors during hot-reload when the new server starts
+        // before cleanup operations complete
 
-        // Cleanup email provider (unsubscribe from Graph API if needed)
-        await cleanupEmailProvider();
-        fastify.log.info("Email provider cleanup completed");
-
-        // Cleanup knowledge graph provider
-        await cleanupKnowledgeGraphProvider();
-        fastify.log.info("Knowledge graph provider cleanup completed");
-
-        // Close WebSocket server
-        websocketService.stop();
-
-        // Close metrics server
+        // Close metrics server (releases port 9050)
         if (metricsServerInstance) {
           await metricsServerInstance.close();
           fastify.log.info("Metrics server closed");
         }
 
-        // Close main server
+        // Close main server (releases port 9000)
         await fastify.close();
         fastify.log.info("Main server closed");
+
+        // Close WebSocket server
+        websocketService.stop();
+
+        // Clear email subscription renewal interval
+        clearInterval(emailRenewalIntervalId);
+        clearInterval(processedEmailCleanupIntervalId);
+        fastify.log.info("Email background job intervals cleared");
+
+        // Stop cache manager's background cleanup
+        cacheManager.shutdown();
+
+        // Track which cleanup operations have completed
+        const completedCleanups = new Set<
+          "emailProvider" | "knowledgeGraph" | "chatOps"
+        >();
+
+        // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
+        const cleanupPromise = Promise.allSettled([
+          cleanupEmailProvider().then(() => {
+            completedCleanups.add("emailProvider");
+            fastify.log.info("Email provider cleanup completed");
+          }),
+          cleanupKnowledgeGraphProvider().then(() => {
+            completedCleanups.add("knowledgeGraph");
+            fastify.log.info("Knowledge graph provider cleanup completed");
+          }),
+          chatOpsManager.cleanup().then(() => {
+            completedCleanups.add("chatOps");
+            fastify.log.info("ChatOps provider cleanup completed");
+          }),
+        ]).then(() => "completed" as const);
+
+        // Wait for cleanup with timeout, then exit anyway
+        const allCleanupNames = [
+          "emailProvider",
+          "knowledgeGraph",
+          "chatOps",
+        ] as const;
+        const result = await Promise.race([
+          cleanupPromise,
+          new Promise<"timeout">((resolve) =>
+            setTimeout(() => resolve("timeout"), SHUTDOWN_CLEANUP_TIMEOUT_MS),
+          ),
+        ]);
+
+        if (result === "timeout") {
+          const pendingCleanups = allCleanupNames.filter(
+            (name) => !completedCleanups.has(name),
+          );
+          fastify.log.warn(
+            { pendingCleanups },
+            "Cleanup timed out, proceeding with shutdown",
+          );
+        }
 
         process.exit(0);
       } catch (error) {

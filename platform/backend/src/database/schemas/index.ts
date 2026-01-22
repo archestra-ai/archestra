@@ -8,6 +8,8 @@ export {
   type ChatApiKeyScope,
   default as chatApiKeysTable,
 } from "./chat-api-key";
+export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
+export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";

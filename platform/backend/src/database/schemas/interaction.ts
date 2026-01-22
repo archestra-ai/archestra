@@ -10,7 +10,11 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { InteractionRequest, InteractionResponse } from "@/types";
+import type {
+  InteractionRequest,
+  InteractionResponse,
+  ToonSkipReason,
+} from "@/types";
 import agentsTable from "./agent";
 import usersTable from "./user";
 
@@ -52,6 +56,12 @@ const interactionsTable = pgTable(
     response: jsonb("response").$type<InteractionResponse>().notNull(),
     type: varchar("type").$type<SupportedProviderDiscriminator>().notNull(),
     model: varchar("model"),
+    /**
+     * The original requested model before cost optimization.
+     * When model optimization applies: baselineModel ≠ model
+     * When no optimization: baselineModel = model (or null for backward compatibility)
+     */
+    baselineModel: varchar("baseline_model"),
     inputTokens: integer("input_tokens"),
     outputTokens: integer("output_tokens"),
     baselineCost: numeric("baseline_cost", { precision: 13, scale: 10 }),
@@ -59,6 +69,7 @@ const interactionsTable = pgTable(
     toonTokensBefore: integer("toon_tokens_before"),
     toonTokensAfter: integer("toon_tokens_after"),
     toonCostSavings: numeric("toon_cost_savings", { precision: 13, scale: 10 }),
+    toonSkipReason: varchar("toon_skip_reason").$type<ToonSkipReason>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.26"
+    "version": "1.0.31"
   },
   "components": {
     "schemas": {
@@ -32551,6 +32551,246 @@
         }
       }
     },
+    "/api/chat/models/invalidate-cache": {
+      "post": {
+        "operationId": "invalidateChatModelsCache",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Invalidate the chat models cache to force a refresh of available models from providers",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/chat": {
       "post": {
         "operationId": "streamChat",
@@ -32810,7 +33050,17 @@
         "tags": [
           "Chat"
         ],
-        "description": "List all conversations for current user with agent details",
+        "description": "List all conversations for current user with agent details. Optionally filter by search query.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -36209,6 +36459,912 @@
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/webhooks/chatops/ms-teams": {
+      "post": {
+        "tags": [
+          "ChatOps Webhooks"
+        ],
+        "description": "MS Teams Bot Framework webhook endpoint",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "success"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chatops/status": {
+      "get": {
+        "operationId": "getChatOpsStatus",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Get chatops provider configuration status",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "configured": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "displayName",
+                          "configured"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "providers"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chatops/bindings": {
+      "get": {
+        "operationId": "listChatOpsBindings",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "List all chatops channel bindings",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "organizationId": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string",
+                        "enum": [
+                          "ms-teams"
+                        ]
+                      },
+                      "channelId": {
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "workspaceId": {
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "promptId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "organizationId",
+                      "provider",
+                      "channelId",
+                      "workspaceId",
+                      "promptId",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chatops/bindings/{id}": {
+      "delete": {
+        "operationId": "deleteChatOpsBinding",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Delete a chatops channel binding",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
             "in": "path",
             "name": "id",
@@ -40090,17 +41246,35 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "enabled": {
+                    "providerEnabled": {
                       "type": "boolean"
                     },
                     "emailAddress": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "agentIncomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "agentSecurityMode": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
+                    },
+                    "agentAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "enabled",
-                    "emailAddress"
+                    "providerEnabled",
+                    "emailAddress",
+                    "agentIncomingEmailEnabled",
+                    "agentSecurityMode",
+                    "agentAllowedDomain"
                   ],
                   "additionalProperties": false
                 }
@@ -41537,6 +42711,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -41573,6 +42751,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -41600,6 +42782,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -41607,6 +42790,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -41664,6 +42848,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -41700,6 +42888,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -41727,6 +42919,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -41734,6 +42927,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -41791,6 +42985,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -41827,6 +43025,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -41854,6 +43056,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -41861,6 +43064,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -41918,6 +43122,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -41954,6 +43162,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -41981,6 +43193,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -41988,6 +43201,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -42045,6 +43259,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -42081,6 +43299,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -42097,6 +43319,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -42104,6 +43327,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -42161,6 +43385,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -42197,6 +43425,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -42213,6 +43445,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -42220,6 +43453,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -42277,6 +43511,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -42313,6 +43551,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -42329,6 +43571,7 @@
                               "response",
                               "type",
                               "model",
+                              "baselineModel",
                               "inputTokens",
                               "outputTokens",
                               "baselineCost",
@@ -42336,6 +43579,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "toonSkipReason",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -42739,6 +43983,34 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "totalToonCostSavings": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "toonSkipReasonCounts": {
+                            "type": "object",
+                            "properties": {
+                              "applied": {
+                                "type": "number"
+                              },
+                              "notEnabled": {
+                                "type": "number"
+                              },
+                              "notEffective": {
+                                "type": "number"
+                              },
+                              "noToolResults": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "applied",
+                              "notEnabled",
+                              "notEffective",
+                              "noToolResults"
+                            ],
+                            "additionalProperties": false
+                          },
                           "firstRequestTime": {
                             "type": "string",
                             "format": "date-time"
@@ -42804,6 +44076,8 @@
                           "totalOutputTokens",
                           "totalCost",
                           "totalBaselineCost",
+                          "totalToonCostSavings",
+                          "toonSkipReasonCounts",
                           "firstRequestTime",
                           "lastRequestTime",
                           "models",
@@ -43643,6 +44917,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -43679,6 +44957,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -43706,6 +44988,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -43713,6 +44996,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -43770,6 +45054,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -43806,6 +45094,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -43833,6 +45125,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -43840,6 +45133,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -43897,6 +45191,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -43933,6 +45231,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -43960,6 +45262,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -43967,6 +45270,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -44024,6 +45328,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -44060,6 +45368,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -44087,6 +45399,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -44094,6 +45407,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -44151,6 +45465,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -44187,6 +45505,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -44203,6 +45525,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -44210,6 +45533,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -44267,6 +45591,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -44303,6 +45631,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -44319,6 +45651,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -44326,6 +45659,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -44383,6 +45717,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -44419,6 +45757,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -44435,6 +45777,7 @@
                         "response",
                         "type",
                         "model",
+                        "baselineModel",
                         "inputTokens",
                         "outputTokens",
                         "baselineCost",
@@ -44442,6 +45785,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "toonSkipReason",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -48580,157 +49924,6 @@
         }
       }
     },
-    "/v1/mcp": {
-      "get": {
-        "tags": [
-          "mcp-gateway"
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string"
-                    },
-                    "agentId": {
-                      "type": "string"
-                    },
-                    "transport": {
-                      "type": "string"
-                    },
-                    "capabilities": {
-                      "type": "object",
-                      "properties": {
-                        "tools": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "tools"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "name",
-                    "version",
-                    "agentId",
-                    "transport",
-                    "capabilities"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "message"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "mcp-gateway"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": {}
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        }
-      }
-    },
-    "/v1/mcp/sessions": {
-      "delete": {
-        "tags": [
-          "mcp-gateway"
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "clearedCount": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "message",
-                    "clearedCount"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "message"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/limits": {
       "get": {
         "operationId": "getLimits",
@@ -50395,6 +51588,216 @@
                   },
                   "required": [
                     "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/mcp/{profileId}": {
+      "get": {
+        "tags": [
+          "mcp-gateway"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "profileId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "type": "string"
+                    },
+                    "transport": {
+                      "type": "string"
+                    },
+                    "capabilities": {
+                      "type": "object",
+                      "properties": {
+                        "tools": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "tools"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "tokenAuth": {
+                      "type": "object",
+                      "properties": {
+                        "tokenId": {
+                          "type": "string"
+                        },
+                        "teamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "isOrganizationToken": {
+                          "type": "boolean"
+                        },
+                        "isUserToken": {
+                          "type": "boolean"
+                        },
+                        "userId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tokenId",
+                        "teamId",
+                        "isOrganizationToken"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "version",
+                    "agentId",
+                    "transport",
+                    "capabilities"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mcp-gateway"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "profileId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/mcp/cache/{profileId}": {
+      "delete": {
+        "tags": [
+          "mcp-gateway"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "profileId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
                   ],
                   "additionalProperties": false
                 }
@@ -55441,6 +56844,19 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "oauthRefreshError": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "refresh_failed",
+                          "no_refresh_token"
+                        ]
+                      },
+                      "oauthRefreshFailedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -55530,6 +56946,8 @@
                       "reinstallRequired",
                       "localInstallationStatus",
                       "localInstallationError",
+                      "oauthRefreshError",
+                      "oauthRefreshFailedAt",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -55801,6 +57219,17 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "oauthRefreshError": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "refresh_failed",
+                      "no_refresh_token"
+                    ]
+                  },
+                  "oauthRefreshFailedAt": {
+                    "nullable": true
+                  },
                   "userId": {
                     "type": "string"
                   },
@@ -55903,6 +57332,19 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "oauthRefreshError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "refresh_failed",
+                        "no_refresh_token"
+                      ]
+                    },
+                    "oauthRefreshFailedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -55992,6 +57434,8 @@
                     "reinstallRequired",
                     "localInstallationStatus",
                     "localInstallationError",
+                    "oauthRefreshError",
+                    "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -56292,6 +57736,19 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "oauthRefreshError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "refresh_failed",
+                        "no_refresh_token"
+                      ]
+                    },
+                    "oauthRefreshFailedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -56381,6 +57838,8 @@
                     "reinstallRequired",
                     "localInstallationStatus",
                     "localInstallationError",
+                    "oauthRefreshError",
+                    "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -56633,6 +58092,430 @@
                   },
                   "required": [
                     "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp_server/{id}/reauthenticate": {
+      "patch": {
+        "operationId": "reauthenticateMcpServer",
+        "tags": [
+          "MCP Server"
+        ],
+        "description": "Update MCP server secret after re-authentication (clears OAuth refresh errors)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "secretId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  }
+                },
+                "required": [
+                  "secretId"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "catalogId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "serverType": {
+                      "type": "string",
+                      "enum": [
+                        "local",
+                        "remote",
+                        "builtin"
+                      ]
+                    },
+                    "secretId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ownerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teamId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "reinstallRequired": {
+                      "type": "boolean"
+                    },
+                    "localInstallationStatus": {
+                      "type": "string",
+                      "enum": [
+                        "idle",
+                        "pending",
+                        "discovering-tools",
+                        "success",
+                        "error"
+                      ]
+                    },
+                    "localInstallationError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "oauthRefreshError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "refresh_failed",
+                        "no_refresh_token"
+                      ]
+                    },
+                    "oauthRefreshFailedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ownerEmail": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "catalogName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "userDetails": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "email",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "teamDetails": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "teamId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "teamId",
+                        "name",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "secretStorageType": {
+                      "type": "string",
+                      "enum": [
+                        "vault",
+                        "external_vault",
+                        "database",
+                        "none"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "catalogId",
+                    "serverType",
+                    "secretId",
+                    "ownerId",
+                    "teamId",
+                    "reinstallRequired",
+                    "localInstallationStatus",
+                    "localInstallationError",
+                    "oauthRefreshError",
+                    "oauthRefreshFailedAt",
+                    "createdAt",
+                    "updatedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -58987,218 +60870,6 @@
                   },
                   "required": [
                     "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/mcp/{profileId}": {
-      "get": {
-        "tags": [
-          "mcp-gateway"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "profileId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string"
-                    },
-                    "agentId": {
-                      "type": "string"
-                    },
-                    "transport": {
-                      "type": "string"
-                    },
-                    "capabilities": {
-                      "type": "object",
-                      "properties": {
-                        "tools": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "tools"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "tokenAuth": {
-                      "type": "object",
-                      "properties": {
-                        "tokenId": {
-                          "type": "string"
-                        },
-                        "teamId": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "isOrganizationToken": {
-                          "type": "boolean"
-                        },
-                        "isUserToken": {
-                          "type": "boolean"
-                        },
-                        "userId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "tokenId",
-                        "teamId",
-                        "isOrganizationToken"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "name",
-                    "version",
-                    "agentId",
-                    "transport",
-                    "capabilities"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "message"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "mcp-gateway"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": {}
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "profileId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        }
-      }
-    },
-    "/v1/mcp/sessions/{profileId}": {
-      "delete": {
-        "tags": [
-          "mcp-gateway"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "profileId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "clearedCount": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "message",
-                    "clearedCount"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "message"
                   ],
                   "additionalProperties": false
                 }
@@ -66422,6 +68093,53 @@
                           }
                         ]
                       },
+                      "allowedChatops": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
+                      "incomingEmailEnabled": {
+                        "type": "boolean"
+                      },
+                      "incomingEmailSecurityMode": {
+                        "type": "string",
+                        "enum": [
+                          "private",
+                          "internal",
+                          "public"
+                        ]
+                      },
+                      "incomingEmailAllowedDomain": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -66440,6 +68158,10 @@
                       "systemPrompt",
                       "version",
                       "history",
+                      "allowedChatops",
+                      "incomingEmailEnabled",
+                      "incomingEmailSecurityMode",
+                      "incomingEmailAllowedDomain",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -66693,6 +68415,53 @@
                     "type": "integer",
                     "minimum": -2147483648,
                     "maximum": 2147483647
+                  },
+                  "allowedChatops": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "array",
+                        "items": {}
+                      }
+                    ]
+                  },
+                  "incomingEmailEnabled": {
+                    "type": "boolean"
+                  },
+                  "incomingEmailSecurityMode": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "internal",
+                      "public"
+                    ]
+                  },
+                  "incomingEmailAllowedDomain": {
+                    "nullable": true,
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -66773,6 +68542,53 @@
                         }
                       ]
                     },
+                    "allowedChatops": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
+                    "incomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "incomingEmailSecurityMode": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
+                    },
+                    "incomingEmailAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -66791,6 +68607,10 @@
                     "systemPrompt",
                     "version",
                     "history",
+                    "allowedChatops",
+                    "incomingEmailEnabled",
+                    "incomingEmailSecurityMode",
+                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -67100,6 +68920,53 @@
                         }
                       ]
                     },
+                    "allowedChatops": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
+                    "incomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "incomingEmailSecurityMode": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
+                    },
+                    "incomingEmailAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -67118,6 +68985,10 @@
                     "systemPrompt",
                     "version",
                     "history",
+                    "allowedChatops",
+                    "incomingEmailEnabled",
+                    "incomingEmailSecurityMode",
+                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -67365,6 +69236,53 @@
                   "systemPrompt": {
                     "nullable": true,
                     "type": "string"
+                  },
+                  "allowedChatops": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "array",
+                        "items": {}
+                      }
+                    ]
+                  },
+                  "incomingEmailEnabled": {
+                    "type": "boolean"
+                  },
+                  "incomingEmailSecurityMode": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "internal",
+                      "public"
+                    ]
+                  },
+                  "incomingEmailAllowedDomain": {
+                    "nullable": true,
+                    "type": "string"
                   }
                 }
               }
@@ -67452,6 +69370,53 @@
                         }
                       ]
                     },
+                    "allowedChatops": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
+                    "incomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "incomingEmailSecurityMode": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
+                    },
+                    "incomingEmailAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -67470,6 +69435,10 @@
                     "systemPrompt",
                     "version",
                     "history",
+                    "allowedChatops",
+                    "incomingEmailEnabled",
+                    "incomingEmailSecurityMode",
+                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -68032,6 +70001,53 @@
                             }
                           ]
                         },
+                        "allowedChatops": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            {
+                              "type": "array",
+                              "items": {}
+                            }
+                          ]
+                        },
+                        "incomingEmailEnabled": {
+                          "type": "boolean"
+                        },
+                        "incomingEmailSecurityMode": {
+                          "type": "string",
+                          "enum": [
+                            "private",
+                            "internal",
+                            "public"
+                          ]
+                        },
+                        "incomingEmailAllowedDomain": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -68050,6 +70066,10 @@
                         "systemPrompt",
                         "version",
                         "history",
+                        "allowedChatops",
+                        "incomingEmailEnabled",
+                        "incomingEmailSecurityMode",
+                        "incomingEmailAllowedDomain",
                         "createdAt",
                         "updatedAt"
                       ],
@@ -68751,6 +70771,53 @@
                         }
                       ]
                     },
+                    "allowedChatops": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
+                    "incomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "incomingEmailSecurityMode": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
+                    },
+                    "incomingEmailAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -68769,6 +70836,10 @@
                     "systemPrompt",
                     "version",
                     "history",
+                    "allowedChatops",
+                    "incomingEmailEnabled",
+                    "incomingEmailSecurityMode",
+                    "incomingEmailAllowedDomain",
                     "createdAt",
                     "updatedAt"
                   ],

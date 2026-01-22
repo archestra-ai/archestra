@@ -686,6 +686,13 @@ class InteractionModel {
       totalOutputTokens: number;
       totalCost: string | null;
       totalBaselineCost: string | null;
+      totalToonCostSavings: string | null;
+      toonSkipReasonCounts: {
+        applied: number;
+        notEnabled: number;
+        notEffective: number;
+        noToolResults: number;
+      };
       firstRequestTime: Date;
       lastRequestTime: Date;
       models: string[];
@@ -794,6 +801,13 @@ class InteractionModel {
           totalOutputTokens: sum(schema.interactionsTable.outputTokens),
           totalCost: sum(schema.interactionsTable.cost),
           totalBaselineCost: sum(schema.interactionsTable.baselineCost),
+          totalToonCostSavings: sum(schema.interactionsTable.toonCostSavings),
+          // Count interactions where TOON was applied (has savings)
+          toonAppliedCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonCostSavings} IS NOT NULL AND CAST(${schema.interactionsTable.toonCostSavings} AS NUMERIC) > 0)`,
+          // Count interactions by skip reason
+          toonNotEnabledCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'not_enabled')`,
+          toonNotEffectiveCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'not_effective')`,
+          toonNoToolResultsCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'no_tool_results')`,
           firstRequestTime: min(schema.interactionsTable.createdAt),
           lastRequestTime: max(schema.interactionsTable.createdAt),
           models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
@@ -887,6 +901,13 @@ class InteractionModel {
         totalOutputTokens: Number(s.totalOutputTokens) || 0,
         totalCost: s.totalCost,
         totalBaselineCost: s.totalBaselineCost,
+        totalToonCostSavings: s.totalToonCostSavings,
+        toonSkipReasonCounts: {
+          applied: Number(s.toonAppliedCount) || 0,
+          notEnabled: Number(s.toonNotEnabledCount) || 0,
+          notEffective: Number(s.toonNotEffectiveCount) || 0,
+          noToolResults: Number(s.toonNoToolResultsCount) || 0,
+        },
         firstRequestTime: s.firstRequestTime ?? new Date(),
         lastRequestTime: s.lastRequestTime ?? new Date(),
         models: s.models ? s.models.split(",").filter(Boolean) : [],

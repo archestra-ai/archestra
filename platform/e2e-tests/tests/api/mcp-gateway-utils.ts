@@ -34,18 +34,16 @@ export async function parseResponse(response: APIResponse): Promise<unknown> {
 }
 
 /**
- * Create MCP gateway request headers
+ * Create MCP gateway request headers (stateless mode - no session ID)
  */
 export function makeMcpGatewayRequestHeaders(
   token: string,
-  sessionId?: string,
 ): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
     Origin: UI_BASE_URL,
-    ...(sessionId && { "mcp-session-id": sessionId }),
   };
 }
 
@@ -119,27 +117,24 @@ export async function getOrgTokenForProfile(
 }
 
 /**
- * Initialize MCP session and return session ID
+ * Initialize MCP session
  *
- * @param profileId - If provided, uses new auth pattern: /v1/mcp/{profileId}
- *                    If not provided, uses legacy auth: /v1/mcp with token as profile ID
- * @param token - Either the profile ID (legacy) or archestra token (new auth)
+ * @param profileId - The profile ID to connect to
+ * @param token - The archestra token for authentication
  */
 export async function initializeMcpSession(
   request: APIRequestContext,
   options: {
-    profileId?: string;
+    profileId: string;
     token: string;
   },
-): Promise<string> {
+): Promise<void> {
   const { profileId, token } = options;
 
-  // Build URL based on auth pattern
-  const urlSuffix = profileId
-    ? `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`
-    : MCP_GATEWAY_URL_SUFFIX;
+  // Build URL with profile ID in path
+  const urlSuffix = `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`;
 
-  const initResponse = await makeApiRequest({
+  await makeApiRequest({
     request,
     method: "post",
     urlSuffix,
@@ -155,46 +150,30 @@ export async function initializeMcpSession(
       },
     },
   });
-
-  const sessionId = initResponse.headers()["mcp-session-id"];
-  if (!sessionId) {
-    throw new Error("No mcp-session-id header in initialize response");
-  }
-
-  return sessionId;
+  // Stateless mode - no session ID returned or needed
 }
 
 /**
- * Call a tool via MCP gateway
+ * Call a tool via MCP gateway (stateless mode)
  */
 export async function callMcpTool(
   request: APIRequestContext,
   options: {
-    profileId?: string;
+    profileId: string;
     token: string;
-    sessionId: string;
     toolName: string;
     arguments?: Record<string, unknown>;
   },
 ): Promise<{ content: Array<{ type: string; text?: string }> }> {
-  const {
-    profileId,
-    token,
-    sessionId,
-    toolName,
-    arguments: args = {},
-  } = options;
+  const { profileId, token, toolName, arguments: args = {} } = options;
 
-  // Build URL based on auth pattern
-  const urlSuffix = profileId
-    ? `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`
-    : MCP_GATEWAY_URL_SUFFIX;
+  const urlSuffix = `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`;
 
   const callToolResponse = await makeApiRequest({
     request,
     method: "post",
     urlSuffix,
-    headers: makeMcpGatewayRequestHeaders(token, sessionId),
+    headers: makeMcpGatewayRequestHeaders(token),
     data: {
       jsonrpc: "2.0",
       id: 2,
@@ -260,25 +239,21 @@ export async function getTeamTokenForProfile(
 export async function listMcpTools(
   request: APIRequestContext,
   options: {
-    profileId?: string;
+    profileId: string;
     token: string;
-    sessionId: string;
   },
 ): Promise<
   Array<{ name: string; description?: string; inputSchema?: unknown }>
 > {
-  const { profileId, token, sessionId } = options;
+  const { profileId, token } = options;
 
-  // Build URL based on auth pattern
-  const urlSuffix = profileId
-    ? `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`
-    : MCP_GATEWAY_URL_SUFFIX;
+  const urlSuffix = `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`;
 
   const listToolsResponse = await makeApiRequest({
     request,
     method: "post",
     urlSuffix,
-    headers: makeMcpGatewayRequestHeaders(token, sessionId),
+    headers: makeMcpGatewayRequestHeaders(token),
     data: {
       jsonrpc: "2.0",
       id: 2,

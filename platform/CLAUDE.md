@@ -43,7 +43,7 @@ Check ./docs/docs_writer_prompt.md before changing docs files.
 - **Optimization Rules**: <http://localhost:3000/cost/optimization-rules> (Cost optimization policies)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
-- **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
+- **MCP Gateway**: <http://localhost:9000/v1/mcp/:profileId> (GET for discovery, POST for JSON-RPC stateless mode, requires Bearer archestra_token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
 - **MCP Logs**: <http://localhost:9000/api/mcp_server/:id/logs> (GET container logs, ?lines=N to limit, ?follow=true for streaming)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
@@ -218,7 +218,7 @@ ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN
 **LLM Proxy** returns tool calls to clients for execution (standard OpenAI/Anthropic behavior). Clients implement the agentic loop:
 
 1. Call LLM proxy → receive tool_use/tool_calls
-2. Execute tools via MCP Gateway (`POST /v1/mcp` with `Bearer ${agentId}`)
+2. Execute tools via MCP Gateway (`POST /v1/mcp/${profileId}` with `Bearer ${archestraToken}`)
 3. Send tool results back to LLM proxy
 4. Receive final answer
 
@@ -493,7 +493,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - All profiles enabled for chat: All profiles are available in chat by default (the `use_in_chat` field is deprecated)
 - MCP tool integration: Chat automatically uses the profile's assigned MCP tools via MCP Gateway
 - LLM Proxy integration: Chat routes through LLM Proxy (`/v1/anthropic/${agentId}`) for security policies, dual LLM, and observability
-- Profile authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${agentId}`
+- Profile authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${archestraToken}` with profile ID in URL path
 - Database schema: Conversations table includes `agentId` foreign key to agents table
 - UI components: `AgentSelector` dropdown, `ChatSidebarSection` for conversation navigation in main sidebar
 - Conversation navigation: Recent chats shown as sub-items under "Chat" menu in main sidebar (ChatSidebarSection component)

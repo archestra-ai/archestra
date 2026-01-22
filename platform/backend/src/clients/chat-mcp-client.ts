@@ -260,8 +260,9 @@ export function clearChatMcpClient(agentId: string): void {
   }
 
   // Clear tool cache entries for this agentId
+  // Use startsWith with exact prefix pattern to avoid matching partial agentId strings
   for (const key of toolCache.keys()) {
-    if (key.includes(agentId)) {
+    if (key.startsWith(`${CacheKey.ChatMcpTools}-${agentId}:`)) {
       toolCache.delete(key);
       toolClearedCount++;
     }

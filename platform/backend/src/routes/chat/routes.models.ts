@@ -7,7 +7,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
-import { cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
@@ -18,7 +18,6 @@ import {
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   type Anthropic,
-  CacheKey,
   constructResponseSchema,
   type Gemini,
   type OpenAi,

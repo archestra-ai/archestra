@@ -8,12 +8,11 @@ import {
   processIncomingEmail,
 } from "@/agents/incoming-email";
 import { isRateLimited } from "@/agents/utils";
+import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import { PromptModel } from "@/models";
 import {
-  type AllowedCacheKey,
   ApiError,
-  CacheKey,
   constructResponseSchema,
   DeleteObjectResponseSchema,
 } from "@/types";

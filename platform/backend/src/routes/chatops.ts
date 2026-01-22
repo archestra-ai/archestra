@@ -8,18 +8,14 @@ import {
   CHATOPS_RATE_LIMIT,
 } from "@/agents/chatops/constants";
 import { isRateLimited } from "@/agents/utils";
+import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import {
   ChatOpsChannelBindingModel,
   OrganizationModel,
   PromptModel,
 } from "@/models";
-import {
-  type AllowedCacheKey,
-  ApiError,
-  CacheKey,
-  constructResponseSchema,
-} from "@/types";
+import { ApiError, constructResponseSchema } from "@/types";
 import {
   type ChatOpsProviderType,
   ChatOpsProviderTypeSchema,

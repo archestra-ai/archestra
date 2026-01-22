@@ -3,16 +3,11 @@ import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js"
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import {
-  ApiError,
-  CacheKey,
-  constructResponseSchema,
-  UuidIdSchema,
-} from "@/types";
+import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
  * Generate PKCE code verifier

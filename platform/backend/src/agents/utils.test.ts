@@ -1,6 +1,6 @@
 import { vi } from "vitest";
+import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import { beforeEach, describe, expect, test } from "@/test";
-import { type AllowedCacheKey, CacheKey } from "@/types";
 import { isRateLimited, type RateLimitEntry } from "./utils";
 
 // Mock cacheManager

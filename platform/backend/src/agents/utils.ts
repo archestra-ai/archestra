@@ -1,5 +1,4 @@
-import { cacheManager } from "@/cache-manager";
-import type { AllowedCacheKey } from "@/types";
+import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 
 /**
  * Rate limit entry stored in cache

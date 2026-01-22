@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 // Mock functions that will be used to track calls
 const mockGet = vi.fn();
@@ -24,9 +25,8 @@ vi.mock("@keyv/postgres", () => ({
   default: vi.fn(),
 }));
 
-import type { AllowedCacheKey } from "@/types";
 // Import after mocks are set up
-import { cacheManager } from "./cache-manager";
+import { type AllowedCacheKey, cacheManager } from "./cache-manager";
 
 // Alias for convenience in tests
 const mockKeyv = {

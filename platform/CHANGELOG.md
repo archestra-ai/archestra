@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.33](https://github.com/archestra-ai/archestra/compare/platform-v1.0.32...platform-v1.0.33) (2026-01-22)
+
+
+### Dependencies
+
+* bump streamdown from 1.6.11 to 2.0.1 in /platform ([#2292](https://github.com/archestra-ai/archestra/issues/2292)) ([b8c1e69](https://github.com/archestra-ai/archestra/commit/b8c1e69aa24bdb6ec86074c39500c0e037783942))
+
+
+### Miscellaneous Chores
+
+* **perf:** improve LLM proxy logs query performance ([#2296](https://github.com/archestra-ai/archestra/issues/2296)) ([bd5c2e9](https://github.com/archestra-ai/archestra/commit/bd5c2e90cc4868d1c419f5072fd7f455402c22c9))
+
 ## [1.0.32](https://github.com/archestra-ai/archestra/compare/platform-v1.0.31...platform-v1.0.32) (2026-01-22)
 
 

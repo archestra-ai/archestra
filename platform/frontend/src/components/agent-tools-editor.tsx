@@ -299,8 +299,9 @@ function McpServerPill({
           size="sm"
           className={cn(
             "h-8 px-3 gap-1.5 text-xs",
-            (hasPendingChanges ? selectedToolIds.size === 0 : !hasAssignedTools) &&
-              "border-dashed",
+            (hasPendingChanges
+              ? selectedToolIds.size === 0
+              : !hasAssignedTools) && "border-dashed",
             hasPendingChanges && "border-primary",
           )}
         >

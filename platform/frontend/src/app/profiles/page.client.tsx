@@ -375,12 +375,25 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
           className="h-auto !p-0 font-medium hover:bg-transparent"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Connected Tools
+          Tools
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
       cell: ({ row }) => {
-        return <div>{row.original.tools.length}</div>;
+        const toolsCount = row.original.tools.filter(
+          (t) => !t.delegateToAgentId,
+        ).length;
+        return <div>{toolsCount}</div>;
+      },
+    },
+    {
+      id: "subagentsCount",
+      header: "Subagents",
+      cell: ({ row }) => {
+        const subagentsCount = row.original.tools.filter(
+          (t) => t.delegateToAgentId,
+        ).length;
+        return <div>{subagentsCount}</div>;
       },
     },
     {

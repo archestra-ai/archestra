@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.32](https://github.com/archestra-ai/archestra/compare/platform-v1.0.31...platform-v1.0.32) (2026-01-22)
+
+
+### Bug Fixes
+
+* address Gemini Vertex AI model fetching issue ([#2295](https://github.com/archestra-ai/archestra/issues/2295)) ([306ffd9](https://github.com/archestra-ai/archestra/commit/306ffd9e84e97802b995460eb09f1600d07902f8))
+
 ## [1.0.31](https://github.com/archestra-ai/archestra/compare/platform-v1.0.30...platform-v1.0.31) (2026-01-22)
 
 

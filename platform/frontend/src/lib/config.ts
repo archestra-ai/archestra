@@ -10,20 +10,20 @@ const DEFAULT_BACKEND_URL = "http://localhost:9000";
  * Returns the configured URL or defaults to localhost:9000 for development.
  *
  * Priority:
- * 1. NEXT_PUBLIC_ARCHESTRA_API_BASE_URL (runtime env var for client/server)
- * 2. ARCHESTRA_API_BASE_URL (server-side only, for SSR/API routes)
+ * 1. NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL (runtime env var for client/server)
+ * 2. ARCHESTRA_INTERNAL_API_BASE_URL (server-side only, for SSR/API routes)
  * 3. Default: http://localhost:9000
  */
 export const getBackendBaseUrl = (): string => {
   // Try runtime env var first (works in both client and server)
-  const publicUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
+  const publicUrl = env("NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL");
   if (publicUrl) {
     return publicUrl;
   }
 
   // Server-side only: try non-public env var (for API routes and SSR)
-  if (typeof window === "undefined" && process.env.ARCHESTRA_API_BASE_URL) {
-    return process.env.ARCHESTRA_API_BASE_URL;
+  if (typeof window === "undefined" && process.env.ARCHESTRA_INTERNAL_API_BASE_URL) {
+    return process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
   }
 
   return DEFAULT_BACKEND_URL;
@@ -32,7 +32,7 @@ export const getBackendBaseUrl = (): string => {
 /**
  * Get the internal proxy URL for in-cluster communication.
  * This is the URL that agents inside the cluster should use to connect to Archestra.
- * Uses getBackendBaseUrl() which reads from ARCHESTRA_API_BASE_URL.
+ * Uses getBackendBaseUrl() which reads from ARCHESTRA_INTERNAL_API_BASE_URL.
  */
 export const getInternalProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
@@ -82,7 +82,7 @@ export const getExternalProxyUrls = (): string[] => {
  * Client-side: Uses relative URL that goes through Next.js rewrite (see next.config.ts).
  * This ensures WebSocket works in all deployment scenarios without extra env vars.
  *
- * Server-side: Uses absolute URL derived from ARCHESTRA_API_BASE_URL.
+ * Server-side: Uses absolute URL derived from ARCHESTRA_INTERNAL_API_BASE_URL.
  */
 export const getWebSocketUrl = (): string => {
   // Client-side: use relative URL (goes through Next.js rewrite)

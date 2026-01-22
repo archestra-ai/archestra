@@ -24,39 +24,39 @@ describe("getBackendBaseUrl", () => {
   });
 
   it("should return default localhost URL when no env vars are set", () => {
-    delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
-    delete process.env.ARCHESTRA_API_BASE_URL;
+    delete process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL;
+    delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
 
     const result = getBackendBaseUrl();
 
     expect(result).toBe("http://localhost:9000");
   });
 
-  it("should return NEXT_PUBLIC_ARCHESTRA_API_BASE_URL when set", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "https://api.example.com";
+  it("should return NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL when set", () => {
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "https://api.example.com";
 
     const result = getBackendBaseUrl();
 
     expect(result).toBe("https://api.example.com");
   });
 
-  it("should prioritize NEXT_PUBLIC over ARCHESTRA_API_BASE_URL", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
+  it("should prioritize NEXT_PUBLIC over ARCHESTRA_INTERNAL_API_BASE_URL", () => {
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
       "https://public.example.com";
-    process.env.ARCHESTRA_API_BASE_URL = "https://private.example.com";
+    process.env.ARCHESTRA_INTERNAL_API_BASE_URL = "https://private.example.com";
 
     const result = getBackendBaseUrl();
 
     expect(result).toBe("https://public.example.com");
   });
 
-  // Note: ARCHESTRA_API_BASE_URL fallback (server-side only) is tested in
+  // Note: ARCHESTRA_INTERNAL_API_BASE_URL fallback (server-side only) is tested in
   // src/app/api/auth/[...path]/route.test.ts which runs in Node environment.
   // That test verifies the API route correctly uses getBackendBaseUrl().
 
   it("should return default when NEXT_PUBLIC is empty string", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "";
-    delete process.env.ARCHESTRA_API_BASE_URL;
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "";
+    delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
 
     const result = getBackendBaseUrl();
 
@@ -64,7 +64,7 @@ describe("getBackendBaseUrl", () => {
   });
 
   it("should handle URLs with ports", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://localhost:8080";
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "http://localhost:8080";
 
     const result = getBackendBaseUrl();
 
@@ -72,7 +72,7 @@ describe("getBackendBaseUrl", () => {
   });
 
   it("should handle URLs with paths", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
       "https://api.example.com/archestra";
 
     const result = getBackendBaseUrl();
@@ -252,8 +252,8 @@ describe("getWebSocketUrl", () => {
     });
 
     it("should return default WebSocket URL when env var is not set", () => {
-      delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
-      delete process.env.ARCHESTRA_API_BASE_URL;
+      delete process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL;
+      delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
 
       const result = getWebSocketUrl();
 
@@ -261,7 +261,7 @@ describe("getWebSocketUrl", () => {
     });
 
     it("should convert http to ws", () => {
-      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://api.example.com";
+      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "http://api.example.com";
 
       const result = getWebSocketUrl();
 
@@ -269,7 +269,7 @@ describe("getWebSocketUrl", () => {
     });
 
     it("should convert https to wss", () => {
-      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
+      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
         "https://api.example.com";
 
       const result = getWebSocketUrl();
@@ -278,7 +278,7 @@ describe("getWebSocketUrl", () => {
     });
 
     it("should handle URLs with ports", () => {
-      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://localhost:8080";
+      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "http://localhost:8080";
 
       const result = getWebSocketUrl();
 
@@ -286,7 +286,7 @@ describe("getWebSocketUrl", () => {
     });
 
     it("should handle URLs with paths", () => {
-      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
+      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
         "https://api.example.com/archestra";
 
       const result = getWebSocketUrl();
@@ -295,7 +295,7 @@ describe("getWebSocketUrl", () => {
     });
 
     it("should handle URLs with trailing slash", () => {
-      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
+      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
         "https://api.example.com/";
 
       const result = getWebSocketUrl();
@@ -304,7 +304,7 @@ describe("getWebSocketUrl", () => {
     });
 
     it("should handle empty string env var as if not set", () => {
-      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "";
+      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL = "";
 
       const result = getWebSocketUrl();
 

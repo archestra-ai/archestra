@@ -322,13 +322,13 @@ tests:
     documentIndex: 1
     set:
       archestra.env:
-        ARCHESTRA_API_BASE_URL: "https://api.example.com"
+        ARCHESTRA_INTERNAL_API_BASE_URL: "https://api.example.com"
         CUSTOM_VAR: "custom-value"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ARCHESTRA_API_BASE_URL
+            name: ARCHESTRA_INTERNAL_API_BASE_URL
             value: "https://api.example.com"
       - contains:
           path: spec.template.spec.containers[0].env
@@ -340,7 +340,7 @@ tests:
     documentIndex: 1
     set:
       archestra.env:
-        ARCHESTRA_API_BASE_URL: "https://api.example.com"
+        ARCHESTRA_INTERNAL_API_BASE_URL: "https://api.example.com"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -358,7 +358,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ARCHESTRA_API_BASE_URL
+            name: ARCHESTRA_INTERNAL_API_BASE_URL
             value: "https://api.example.com"
 
   - it: should set ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE env var when namespace is configured
@@ -712,7 +712,7 @@ tests:
     documentIndex: 1
     set:
       archestra.env:
-        ARCHESTRA_API_BASE_URL: "https://api.example.com"
+        ARCHESTRA_INTERNAL_API_BASE_URL: "https://api.example.com"
         CUSTOM_VAR: "custom-value"
       archestra.envFromSecrets:
         - name: API_KEY
@@ -726,7 +726,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ARCHESTRA_API_BASE_URL
+            name: ARCHESTRA_INTERNAL_API_BASE_URL
             value: "https://api.example.com"
       - contains:
           path: spec.template.spec.containers[0].env
@@ -1371,7 +1371,7 @@ tests:
       archestra.env:
         ARCHESTRA_AUTH_ADMIN_PASSWORD: "admin-password"
         ARCHESTRA_METRICS_SECRET: "metrics-secret"
-        ARCHESTRA_API_BASE_URL: "https://api.example.com"
+        ARCHESTRA_INTERNAL_API_BASE_URL: "https://api.example.com"
     asserts:
       # Sensitive vars should use secretKeyRef
       - contains:
@@ -1394,7 +1394,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ARCHESTRA_API_BASE_URL
+            name: ARCHESTRA_INTERNAL_API_BASE_URL
             value: "https://api.example.com"
 
   - it: should not expose sensitive env var values as plaintext

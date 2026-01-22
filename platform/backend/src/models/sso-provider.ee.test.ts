@@ -18,7 +18,7 @@ vi.mock("@/logging", () => ({
   },
 }));
 
-// Mock cacheManager for SSO groups caching tests (preserves LRUCacheManager export)
+// Mock cacheManager for SSO groups caching tests (preserves LRUCacheManager, CacheKey exports)
 const mockCacheStore = new Map<string, unknown>();
 vi.mock("@/cache-manager", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/cache-manager")>();

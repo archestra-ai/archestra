@@ -12,7 +12,7 @@ import {
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-// Mock cacheManager while preserving other exports (like LRUCacheManager)
+// Mock cacheManager while preserving other exports (like LRUCacheManager, CacheKey)
 const mockCacheStore = new Map<string, unknown>();
 vi.mock("@/cache-manager", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/cache-manager")>();

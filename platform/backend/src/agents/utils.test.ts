@@ -3,7 +3,7 @@ import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import { isRateLimited, type RateLimitEntry } from "./utils";
 
-// Mock cacheManager while preserving other exports (like LRUCacheManager)
+// Mock cacheManager while preserving other exports (like LRUCacheManager, CacheKey)
 const mockCache = new Map<string, RateLimitEntry>();
 vi.mock("@/cache-manager", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/cache-manager")>();

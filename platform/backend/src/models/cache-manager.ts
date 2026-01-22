@@ -22,13 +22,13 @@ class CacheManager {
   private defaultTtl = TimeInMs.Hour;
   private isShuttingDown = false;
 
-  constructor() {
-    // Don't start cleanup interval in test environment to avoid
-    // database access after PGlite connection is closed
-    if (process.env.NODE_ENV !== "test") {
-      this.startCleanupInterval();
-    }
-    logger.info("CacheManager: Initialized with PostgreSQL storage");
+  /**
+   * Start the cache manager's background cleanup interval.
+   * Should be called once during server startup.
+   */
+  start(): void {
+    this.startCleanupInterval();
+    logger.info("CacheManager: Started with PostgreSQL storage");
   }
 
   /**

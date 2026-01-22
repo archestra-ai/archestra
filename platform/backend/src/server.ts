@@ -53,6 +53,7 @@ import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
+import { cacheManager } from "@/models/cache-manager";
 import {
   Anthropic,
   ApiError,
@@ -515,6 +516,9 @@ const start = async () => {
   try {
     await seedRequiredStartingData();
 
+    // Start cache manager's background cleanup interval
+    cacheManager.start();
+
     // Initialize metrics with keys of custom agent labels
     const labelKeys = await AgentLabelModel.getAllKeys();
     initializeMetrics(labelKeys);
@@ -634,6 +638,9 @@ const start = async () => {
         clearInterval(emailRenewalIntervalId);
         clearInterval(processedEmailCleanupIntervalId);
         fastify.log.info("Email background job intervals cleared");
+
+        // Stop cache manager's background cleanup
+        cacheManager.shutdown();
 
         // Track which cleanup operations have completed
         const completedCleanups = new Set<

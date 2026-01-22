@@ -1,8 +1,19 @@
 import type { SsoTeamSyncConfig } from "@shared";
 import logger from "@/logging";
-import { cacheManager } from "@/models";
 import { extractGroupsWithTemplate } from "@/templating";
 import { CacheKey } from "@/types";
+
+// Lazy import to avoid triggering database connection during module loading
+// (e.g., during codegen when sso.ee is conditionally imported by better-auth)
+let _cacheManager: typeof import("@/models/cache-manager").cacheManager | null =
+  null;
+async function getCacheManager() {
+  if (!_cacheManager) {
+    const mod = await import("@/models/cache-manager");
+    _cacheManager = mod.cacheManager;
+  }
+  return _cacheManager;
+}
 
 /**
  * Cache for SSO groups during login flow.
@@ -45,6 +56,7 @@ export async function cacheSsoGroups(
     { providerId, email, organizationId, groupCount: groups.length },
     "[ssoTeamSyncCache] Caching SSO groups",
   );
+  const cacheManager = await getCacheManager();
   await cacheManager.set<SsoGroupsCacheEntry>(
     key,
     { groups, organizationId },
@@ -61,6 +73,7 @@ export async function retrieveSsoGroups(
   email: string,
 ): Promise<{ groups: string[]; organizationId: string } | null> {
   const key = getCacheKey(providerId, email);
+  const cacheManager = await getCacheManager();
   const entry = await cacheManager.get<SsoGroupsCacheEntry>(key);
 
   logger.debug(

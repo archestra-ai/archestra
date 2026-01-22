@@ -15,8 +15,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import {
-  type ConnectionType,
   ConnectionTypeSelector,
+  type ConnectionUrl,
 } from "@/components/connection-type-selector";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -35,7 +35,7 @@ import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
-const { externalProxyUrl, internalProxyUrl } = config.api;
+const { internalProxyUrl } = config.api;
 
 interface McpConnectionInstructionsProps {
   agentId: string;
@@ -58,8 +58,8 @@ export function McpConnectionInstructions({
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
-  const [connectionType, setConnectionType] =
-    useState<ConnectionType>("internal");
+  const [connectionUrl, setConnectionUrl] =
+    useState<ConnectionUrl>(internalProxyUrl);
 
   // Fetch tokens filtered by the selected profile's teams
   const { data: tokensData } = useTokens({ profileId: selectedProfileId });
@@ -120,8 +120,7 @@ export function McpConnectionInstructions({
   );
 
   // Use the new URL format with selected profile ID
-  const baseUrl =
-    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
+  const baseUrl = connectionUrl;
   const mcpUrl = `${baseUrl}/mcp/${selectedProfileId}`;
 
   // Default to personal token if available, otherwise org token, then first token
@@ -478,8 +477,8 @@ export function McpConnectionInstructions({
       </div>
 
       <ConnectionTypeSelector
-        value={connectionType}
-        onChange={setConnectionType}
+        value={connectionUrl}
+        onChange={setConnectionUrl}
         gatewayName="MCP Gateway"
         idPrefix="mcp"
       />

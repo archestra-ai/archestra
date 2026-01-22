@@ -7,8 +7,8 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import {
-  type ConnectionType,
   ConnectionTypeSelector,
+  type ConnectionUrl,
 } from "@/components/connection-type-selector";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -27,7 +27,7 @@ import { usePromptEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
-const { externalProxyUrl, internalProxyUrl } = config.api;
+const { internalProxyUrl } = config.api;
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
@@ -55,8 +55,8 @@ export function A2AConnectionInstructions({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
-  const [connectionType, setConnectionType] =
-    useState<ConnectionType>("internal");
+  const [connectionUrl, setConnectionUrl] =
+    useState<ConnectionUrl>(internalProxyUrl);
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
     null,
@@ -82,9 +82,8 @@ export function A2AConnectionInstructions({
     setTimeout(() => setCopiedEmail(false), 2000);
   }, [agentEmailAddress]);
 
-  // Get base URL from config based on connection type
-  const baseUrl =
-    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
+  // Get base URL from selected connection URL
+  const baseUrl = connectionUrl;
 
   // A2A endpoint
   const a2aEndpoint = `${baseUrl}/a2a/${prompt.id}`;
@@ -405,8 +404,8 @@ curl -X GET "${agentCardUrl}" \\
 
       {/* Connection Type Selector */}
       <ConnectionTypeSelector
-        value={connectionType}
-        onChange={setConnectionType}
+        value={connectionUrl}
+        onChange={setConnectionUrl}
         gatewayName="A2A Gateway"
         idPrefix="a2a"
       />

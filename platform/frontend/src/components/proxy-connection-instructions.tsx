@@ -6,8 +6,8 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import {
-  type ConnectionType,
   ConnectionTypeSelector,
+  type ConnectionUrl,
 } from "@/components/connection-type-selector";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/popover";
 import config from "@/lib/config";
 
-const { externalProxyUrl, internalProxyUrl } = config.api;
+const { internalProxyUrl } = config.api;
 
 type ProviderOption = SupportedProvider | "claude-code";
 
@@ -31,14 +31,13 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
-  const [connectionType, setConnectionType] =
-    useState<ConnectionType>("internal");
+  const [connectionUrl, setConnectionUrl] =
+    useState<ConnectionUrl>(internalProxyUrl);
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
 
-  const baseUrl =
-    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
+  const baseUrl = connectionUrl;
 
   const proxyUrl = agentId
     ? `${baseUrl}/${getProviderPath(selectedProvider)}/${agentId}`
@@ -105,8 +104,8 @@ export function ProxyConnectionInstructions({
       </ButtonGroup>
 
       <ConnectionTypeSelector
-        value={connectionType}
-        onChange={setConnectionType}
+        value={connectionUrl}
+        onChange={setConnectionUrl}
         gatewayName="LLM Gateway"
         idPrefix="llm"
       />

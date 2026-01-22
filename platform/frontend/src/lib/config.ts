@@ -30,21 +30,6 @@ export const getBackendBaseUrl = (): string => {
 };
 
 /**
- * Priority:
- * 1. NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL (explicit external URL)
- * 2. Falls back to getBackendBaseUrl() for backwards compatibility
- *
- * Exported for testing purposes.
- */
-export const _getExternalBaseUrl = (): string => {
-  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL");
-  if (externalUrl) {
-    return externalUrl;
-  }
-  return getBackendBaseUrl();
-};
-
-/**
  * Get the internal proxy URL for in-cluster communication.
  * This is the URL that agents inside the cluster should use to connect to Archestra.
  * Uses getBackendBaseUrl() which reads from ARCHESTRA_API_BASE_URL.
@@ -62,18 +47,33 @@ export const getInternalProxyUrl = (): string => {
 };
 
 /**
- * Get the display proxy URL for showing to users.
+ * Helper to append /v1 suffix to a base URL.
  */
-export const getExternalProxyUrl = (): string => {
+const appendProxySuffix = (baseUrl: string): string => {
   const proxyUrlSuffix = "/v1";
-  const baseUrl = _getExternalBaseUrl();
-
   if (baseUrl.endsWith(proxyUrlSuffix)) {
     return baseUrl;
   } else if (baseUrl.endsWith("/")) {
     return `${baseUrl.slice(0, -1)}${proxyUrlSuffix}`;
   }
   return `${baseUrl}${proxyUrlSuffix}`;
+};
+
+/**
+ * Get all configured external proxy URLs (with /v1 suffix).
+ * Supports comma-separated list in NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL.
+ * Returns array of URLs for UI display when multiple URLs are configured.
+ */
+export const getExternalProxyUrls = (): string[] => {
+  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL");
+  if (!externalUrl) {
+    return [];
+  }
+  return externalUrl
+    .split(",")
+    .map((url) => url.trim())
+    .filter((url) => url.length > 0)
+    .map(appendProxySuffix);
 };
 
 /**
@@ -110,10 +110,11 @@ export const getWebSocketUrl = (): string => {
 export default {
   api: {
     /**
-     * Display URL for showing to users (absolute URL for external agents).
+     * All configured external proxy URLs for displaying connection options.
+     * Returns array of URLs when multiple URLs are configured via comma-separated list.
      */
-    get externalProxyUrl() {
-      return getExternalProxyUrl();
+    get externalProxyUrls() {
+      return getExternalProxyUrls();
     },
     /**
      * Internal URL for in-cluster communication.

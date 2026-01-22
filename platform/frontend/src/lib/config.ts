@@ -77,25 +77,26 @@ export const getExternalProxyUrl = (): string => {
 };
 
 /**
- * Get the WebSocket base URL (without path)
- */
-const getWebSocketBaseUrl = (): string => {
-  const backendBaseUrl = getBackendBaseUrl();
-
-  // In development, use localhost
-  if (!backendBaseUrl || typeof window === "undefined") {
-    return "ws://localhost:9000";
-  }
-
-  // Convert http(s) to ws(s)
-  return backendBaseUrl.replace(/^http/, "ws");
-};
-
-/**
- * Get the WebSocket URL for general communication
+ * Get the WebSocket URL for general communication.
+ *
+ * Client-side: Uses relative URL that goes through Next.js rewrite (see next.config.ts).
+ * This ensures WebSocket works in all deployment scenarios without extra env vars.
+ *
+ * Server-side: Uses absolute URL derived from ARCHESTRA_API_BASE_URL.
  */
 export const getWebSocketUrl = (): string => {
-  return `${getWebSocketBaseUrl()}/ws`;
+  // Client-side: use relative URL (goes through Next.js rewrite)
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/ws`;
+  }
+
+  // Server-side: use absolute URL
+  const backendBaseUrl = getBackendBaseUrl();
+  const wsBaseUrl = backendBaseUrl
+    ? backendBaseUrl.replace(/^http/, "ws")
+    : "ws://localhost:9000";
+  return `${wsBaseUrl}/ws`;
 };
 
 /**

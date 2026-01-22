@@ -236,6 +236,7 @@ describe("getExternalProxyUrl", () => {
 
 describe("getWebSocketUrl", () => {
   const originalEnv = process.env;
+  const originalWindow = global.window;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -244,63 +245,109 @@ describe("getWebSocketUrl", () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    global.window = originalWindow;
   });
 
-  it("should return default WebSocket URL when env var is not set", () => {
-    delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
-    delete process.env.ARCHESTRA_API_BASE_URL;
+  describe("client-side (window defined)", () => {
+    it("should use window.location for WebSocket URL with http protocol", () => {
+      // jsdom provides window with location
+      Object.defineProperty(window, "location", {
+        value: { protocol: "http:", host: "example.com:3000" },
+        writable: true,
+      });
 
-    const result = getWebSocketUrl();
+      const result = getWebSocketUrl();
 
-    expect(result).toBe("ws://localhost:9000/ws");
+      expect(result).toBe("ws://example.com:3000/ws");
+    });
+
+    it("should use wss protocol when page is served over https", () => {
+      Object.defineProperty(window, "location", {
+        value: { protocol: "https:", host: "secure.example.com" },
+        writable: true,
+      });
+
+      const result = getWebSocketUrl();
+
+      expect(result).toBe("wss://secure.example.com/ws");
+    });
+
+    it("should use current host for localhost development", () => {
+      Object.defineProperty(window, "location", {
+        value: { protocol: "http:", host: "localhost:3000" },
+        writable: true,
+      });
+
+      const result = getWebSocketUrl();
+
+      expect(result).toBe("ws://localhost:3000/ws");
+    });
   });
 
-  it("should convert http to ws", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://api.example.com";
+  describe("server-side (window undefined)", () => {
+    beforeEach(() => {
+      // @ts-expect-error - intentionally setting window to undefined for server-side test
+      global.window = undefined;
+    });
 
-    const result = getWebSocketUrl();
+    it("should return default WebSocket URL when env var is not set", () => {
+      delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+      delete process.env.ARCHESTRA_API_BASE_URL;
 
-    expect(result).toBe("ws://api.example.com/ws");
-  });
+      const result = getWebSocketUrl();
 
-  it("should convert https to wss", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "https://api.example.com";
+      expect(result).toBe("ws://localhost:9000/ws");
+    });
 
-    const result = getWebSocketUrl();
+    it("should convert http to ws", () => {
+      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://api.example.com";
 
-    expect(result).toBe("wss://api.example.com/ws");
-  });
+      const result = getWebSocketUrl();
 
-  it("should handle URLs with ports", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://localhost:8080";
+      expect(result).toBe("ws://api.example.com/ws");
+    });
 
-    const result = getWebSocketUrl();
+    it("should convert https to wss", () => {
+      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
+        "https://api.example.com";
 
-    expect(result).toBe("ws://localhost:8080/ws");
-  });
+      const result = getWebSocketUrl();
 
-  it("should handle URLs with paths", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
-      "https://api.example.com/archestra";
+      expect(result).toBe("wss://api.example.com/ws");
+    });
 
-    const result = getWebSocketUrl();
+    it("should handle URLs with ports", () => {
+      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "http://localhost:8080";
 
-    expect(result).toBe("wss://api.example.com/archestra/ws");
-  });
+      const result = getWebSocketUrl();
 
-  it("should handle URLs with trailing slash", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "https://api.example.com/";
+      expect(result).toBe("ws://localhost:8080/ws");
+    });
 
-    const result = getWebSocketUrl();
+    it("should handle URLs with paths", () => {
+      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
+        "https://api.example.com/archestra";
 
-    expect(result).toBe("wss://api.example.com//ws");
-  });
+      const result = getWebSocketUrl();
 
-  it("should handle empty string env var as if not set", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "";
+      expect(result).toBe("wss://api.example.com/archestra/ws");
+    });
 
-    const result = getWebSocketUrl();
+    it("should handle URLs with trailing slash", () => {
+      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
+        "https://api.example.com/";
 
-    expect(result).toBe("ws://localhost:9000/ws");
+      const result = getWebSocketUrl();
+
+      expect(result).toBe("wss://api.example.com//ws");
+    });
+
+    it("should handle empty string env var as if not set", () => {
+      process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "";
+
+      const result = getWebSocketUrl();
+
+      expect(result).toBe("ws://localhost:9000/ws");
+    });
   });
 });

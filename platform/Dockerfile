@@ -134,6 +134,8 @@ RUN apk add --no-cache docker-cli && \
 RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main && \
     # CVE-2026-24049: Path Traversal vulnerability in wheel <= 0.46.1
     # Supervisor brings in Python/wheel as dependencies, upgrade wheel to fix CVE
+    # Install py3-pip (required for pip command) and upgrade wheel
+    apk add --no-cache py3-pip && \
     pip install --upgrade "wheel>=0.46.2" --break-system-packages
 
 # Create postgres directories (user already exists from postgresql package)

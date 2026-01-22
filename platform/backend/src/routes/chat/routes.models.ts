@@ -8,13 +8,13 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
-import config from "@/config";
-import logger from "@/logging";
-import { ChatApiKeyModel, TeamModel } from "@/models";
 import {
   createGoogleGenAIClient,
   isVertexAiEnabled,
-} from "@/routes/proxy/utils/gemini-client";
+} from "@/clients/gemini-client";
+import config from "@/config";
+import logger from "@/logging";
+import { ChatApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   type Anthropic,

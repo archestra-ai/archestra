@@ -49,7 +49,7 @@ vi.mock("@/cache-manager", async (importOriginal) => {
 });
 
 // Mock the Google GenAI client for Vertex AI tests
-vi.mock("@/routes/proxy/utils/gemini-client", () => ({
+vi.mock("@/clients/gemini-client", () => ({
   createGoogleGenAIClient: vi.fn(),
   isVertexAiEnabled: vi.fn(),
 }));
@@ -57,7 +57,7 @@ vi.mock("@/routes/proxy/utils/gemini-client", () => ({
 import {
   createGoogleGenAIClient,
   isVertexAiEnabled,
-} from "@/routes/proxy/utils/gemini-client";
+} from "@/clients/gemini-client";
 
 const mockCreateGoogleGenAIClient = vi.mocked(createGoogleGenAIClient);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);

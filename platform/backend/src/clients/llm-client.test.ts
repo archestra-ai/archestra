@@ -1,5 +1,9 @@
 import { describe, expect, it } from "@/test";
-import { detectProviderFromModel } from "./llm-client";
+import {
+  createDirectLLMModel,
+  detectProviderFromModel,
+  FAST_MODELS,
+} from "./llm-client";
 
 describe("detectProviderFromModel", () => {
   describe("anthropic models", () => {
@@ -51,5 +55,104 @@ describe("detectProviderFromModel", () => {
       expect(detectProviderFromModel("some-unknown-model")).toBe("anthropic");
       expect(detectProviderFromModel("custom-model")).toBe("anthropic");
     });
+  });
+});
+
+describe("FAST_MODELS", () => {
+  it("contains fast models for all supported providers", () => {
+    expect(FAST_MODELS.anthropic).toBe("claude-3-5-haiku-20241022");
+    expect(FAST_MODELS.openai).toBe("gpt-4o-mini");
+    expect(FAST_MODELS.gemini).toBe("gemini-1.5-flash");
+    expect(FAST_MODELS.cerebras).toBe("llama-3.3-70b");
+    expect(FAST_MODELS.vllm).toBe("default");
+    expect(FAST_MODELS.ollama).toBe("llama3.2");
+    expect(FAST_MODELS.zhipuai).toBe("glm-4-flash");
+  });
+
+  it("has entries for all 7 supported providers", () => {
+    const providers = Object.keys(FAST_MODELS);
+    expect(providers).toHaveLength(7);
+    expect(providers).toContain("anthropic");
+    expect(providers).toContain("openai");
+    expect(providers).toContain("gemini");
+    expect(providers).toContain("cerebras");
+    expect(providers).toContain("vllm");
+    expect(providers).toContain("ollama");
+    expect(providers).toContain("zhipuai");
+  });
+});
+
+describe("createDirectLLMModel", () => {
+  it("creates a model for anthropic provider", () => {
+    const model = createDirectLLMModel({
+      provider: "anthropic",
+      apiKey: "test-key",
+      modelName: "claude-3-5-haiku-20241022",
+    });
+    expect(model).toBeDefined();
+  });
+
+  it("creates a model for openai provider", () => {
+    const model = createDirectLLMModel({
+      provider: "openai",
+      apiKey: "test-key",
+      modelName: "gpt-4o-mini",
+    });
+    expect(model).toBeDefined();
+  });
+
+  it("creates a model for gemini provider", () => {
+    const model = createDirectLLMModel({
+      provider: "gemini",
+      apiKey: "test-key",
+      modelName: "gemini-1.5-flash",
+    });
+    expect(model).toBeDefined();
+  });
+
+  it("creates a model for cerebras provider", () => {
+    const model = createDirectLLMModel({
+      provider: "cerebras",
+      apiKey: "test-key",
+      modelName: "llama-3.3-70b",
+    });
+    expect(model).toBeDefined();
+  });
+
+  it("creates a model for vllm provider without API key", () => {
+    const model = createDirectLLMModel({
+      provider: "vllm",
+      apiKey: undefined,
+      modelName: "default",
+    });
+    expect(model).toBeDefined();
+  });
+
+  it("creates a model for ollama provider without API key", () => {
+    const model = createDirectLLMModel({
+      provider: "ollama",
+      apiKey: undefined,
+      modelName: "llama3.2",
+    });
+    expect(model).toBeDefined();
+  });
+
+  it("creates a model for zhipuai provider", () => {
+    const model = createDirectLLMModel({
+      provider: "zhipuai",
+      apiKey: "test-key",
+      modelName: "glm-4-flash",
+    });
+    expect(model).toBeDefined();
+  });
+
+  it("throws error for unsupported provider", () => {
+    expect(() =>
+      createDirectLLMModel({
+        provider: "unsupported" as never,
+        apiKey: "test-key",
+        modelName: "some-model",
+      }),
+    ).toThrow("Unsupported provider: unsupported");
   });
 });

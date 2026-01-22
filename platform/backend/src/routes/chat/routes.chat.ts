@@ -1,4 +1,3 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { type ChatErrorResponse, RouteId, SupportedProviders } from "@shared";
 import {
   convertToModelMessages,
@@ -11,9 +10,14 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import {
+  createDirectLLMModel,
   createLLMModelForAgent,
   detectProviderFromModel,
+  FAST_MODELS,
+  isApiKeyRequired,
+  resolveProviderApiKey,
 } from "@/clients/llm-client";
 import config from "@/config";
 import { extractAndIngestDocuments } from "@/knowledge-graph/chat-document-extractor";
@@ -27,11 +31,7 @@ import {
   TeamModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
-import {
-  getSecretValueForLlmProviderApiKey,
-  secretManager,
-} from "@/secrets-manager";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { browserStreamFeature } from "@/services/browser-stream-feature";
 import {
   ApiError,
@@ -815,46 +815,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Resolve API key using scope-based priority: personal -> team -> org_wide -> env var
-      let anthropicApiKey: string | undefined;
+      // Use the configured default provider for title generation
+      const provider = config.chat.defaultProvider;
 
-      // Get user's team IDs for resolution
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-
-      // Use resolveApiKey which handles priority: conversation key -> personal -> team -> org_wide
-      const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
-        organizationId: organizationId,
+      // Resolve API key using the centralized function (handles all providers)
+      const { apiKey } = await resolveProviderApiKey({
+        organizationId,
         userId: user.id,
-        userTeamIds: userTeamIds,
-        provider: "anthropic",
+        provider,
         conversationId: id,
       });
 
-      if (resolvedKey?.secretId) {
-        const secret = await secretManager().getSecret(resolvedKey.secretId);
-        // Support both old format (anthropicApiKey) and new format (apiKey)
-        const secretValue =
-          secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
-        if (secretValue) {
-          anthropicApiKey = secretValue as string;
-        }
-      }
-
-      // Fall back to environment variable
-      if (!anthropicApiKey) {
-        anthropicApiKey = config.chat.anthropic.apiKey;
-      }
-
-      if (!anthropicApiKey) {
+      if (isApiKeyRequired(provider, apiKey)) {
         throw new ApiError(
           400,
           "LLM Provider API key not configured. Please configure it in Chat Settings.",
         );
       }
 
-      // Create Anthropic client (direct, not through LLM proxy - this is a meta operation)
-      const anthropic = createAnthropic({
-        apiKey: anthropicApiKey,
+      // Create model for title generation (direct call, not through LLM Proxy)
+      const model = createDirectLLMModel({
+        provider,
+        apiKey,
+        modelName: FAST_MODELS[provider],
       });
 
       // Build prompt for title generation
@@ -869,9 +852,9 @@ ${contextMessages}
 The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
 
       try {
-        // Generate title using a fast model
+        // Generate title using a fast model for the configured provider
         const result = await generateText({
-          model: anthropic("claude-3-5-haiku-20241022"),
+          model,
           prompt: titlePrompt,
         });
 

@@ -9,10 +9,10 @@ import {
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { secretManager } from "@/secrets-manager";
 import { ApiError, type SupportedChatProvider } from "@/types";
 
@@ -153,6 +153,94 @@ export function isApiKeyRequired(
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
   return !apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama;
+}
+
+/**
+ * Fast models for each provider, used for title generation and other quick operations.
+ * These are optimized for speed and cost rather than capability.
+ */
+export const FAST_MODELS: Record<SupportedChatProvider, string> = {
+  anthropic: "claude-3-5-haiku-20241022",
+  openai: "gpt-4o-mini",
+  gemini: "gemini-1.5-flash",
+  cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
+  vllm: "default", // vLLM uses whatever model is deployed
+  ollama: "llama3.2", // Common fast model for Ollama
+  zhipuai: "glm-4-flash", // Zhipu's fast model
+};
+
+/**
+ * Create an LLM model that calls the provider API directly (not through LLM Proxy).
+ * Use this for meta operations like title generation that don't need proxy features.
+ */
+export function createDirectLLMModel(params: {
+  provider: SupportedChatProvider;
+  apiKey: string | undefined;
+  modelName: string;
+}): LLMModel {
+  const { provider, apiKey, modelName } = params;
+
+  if (provider === "anthropic") {
+    const client = createAnthropic({
+      apiKey,
+      // Use standard Anthropic base URL (config.llm.anthropic.baseUrl has the proxy URL)
+    });
+    return client(modelName);
+  }
+
+  if (provider === "openai") {
+    const client = createOpenAI({
+      apiKey,
+      // Use standard OpenAI base URL (config.llm.openai.baseUrl has the proxy URL)
+    });
+    return client(modelName);
+  }
+
+  if (provider === "gemini") {
+    // For Vertex AI mode, pass a placeholder - uses ADC for auth
+    const client = createGoogleGenerativeAI({
+      apiKey: apiKey || "vertex-ai-mode",
+      // Use standard Gemini base URL (config.llm.gemini.baseUrl has the proxy URL)
+    });
+    return client(modelName);
+  }
+
+  if (provider === "cerebras") {
+    const client = createCerebras({
+      apiKey,
+      baseURL: config.chat.cerebras.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  if (provider === "vllm") {
+    // vLLM uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey: apiKey || "EMPTY",
+      baseURL: config.llm.vllm.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  if (provider === "ollama") {
+    // Ollama uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey: apiKey || "EMPTY",
+      baseURL: config.llm.ollama.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  if (provider === "zhipuai") {
+    // Zhipu AI uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.chat.zhipuai.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  throw new Error(`Unsupported provider: ${provider}`);
 }
 
 /**

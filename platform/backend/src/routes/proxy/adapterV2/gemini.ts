@@ -5,6 +5,7 @@ import type {
 } from "@google/genai";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
+import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import config from "@/config";
 import { getObservableGenAI } from "@/llm-metrics";
 import logger from "@/logging";
@@ -28,7 +29,6 @@ import type {
 } from "@/types";
 import { MockGeminiClient } from "../mock-gemini-client";
 import * as geminiUtils from "../utils/adapters/gemini";
-import { createGoogleGenAIClient } from "../utils/gemini-client";
 import {
   hasImageContent,
   isImageTooLarge,

@@ -954,11 +954,6 @@ class InteractionModel {
     // Session IDs can be any string, but interaction IDs must be valid UUIDs
     const uuidKeys = sessionKeys.filter((k) => isUuid(k));
 
-    // Early return if no keys to query
-    if (sessionKeys.length === 0 && uuidKeys.length === 0) {
-      return new Map();
-    }
-
     // Fetch the most recent N interactions per session, ordered by created_at DESC
     // We limit to 20 per session since we only need the title and last main interaction,
     // which are typically among the most recent. This prevents fetching thousands of

@@ -234,6 +234,11 @@ export function AgentDialog({
   const syncDelegations = useSyncAgentDelegations();
   const { data: currentDelegations = [] } = useAgentDelegations(agent?.id);
   const { data: chatopsProviders = [] } = useChatOpsStatus();
+  // TODO: Remove this mock data - temporary for UI preview
+  const mockChatopsProviders = [
+    { id: "msteams", displayName: "Microsoft Teams", configured: true },
+    { id: "email", displayName: "Email", configured: true },
+  ];
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -448,14 +453,15 @@ export function AgentDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  const configuredChatopsProviders = chatopsProviders.filter(
+  // TODO: Remove mockChatopsProviders and use chatopsProviders instead
+  const configuredChatopsProviders = mockChatopsProviders.filter(
     (provider) => provider.configured,
   );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-5xl h-[90vh] flex flex-col"
+        className="max-w-5xl h-[90vh] flex flex-col overflow-hidden"
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -483,70 +489,78 @@ export function AgentDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 py-4 px-1">
-          {/* Name - Common */}
-          <div className="space-y-2">
-            <Label htmlFor="agentName">Name *</Label>
-            <Input
-              id="agentName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={
-                isInternalAgent ? "Enter agent name" : "My AI Profile"
-              }
-              autoFocus
-            />
-          </div>
-
-          {/* Tools Section */}
-          <div className="space-y-2">
-            <Label>Tools</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <AgentToolsEditor ref={agentToolsEditorRef} agentId={agent?.id} />
-            </div>
-          </div>
-
-          {/* Subagents Section */}
-          <div className="space-y-2">
-            <Label>Subagents</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <SubagentsEditor
-                availableAgents={allInternalAgents}
-                selectedAgentIds={selectedDelegationTargetIds}
-                onSelectionChange={setSelectedDelegationTargetIds}
-                currentAgentId={agent?.id}
+        <div className="-mr-6 pr-6 flex-1 overflow-y-auto space-y-6 py-4">
+          {/* Main Section */}
+          <div className="rounded-lg border bg-card p-4 space-y-4">
+            {/* Name */}
+            <div className="space-y-2">
+              <Label htmlFor="agentName">Name *</Label>
+              <Input
+                id="agentName"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={
+                  isInternalAgent ? "Enter agent name" : "My AI Profile"
+                }
+                autoFocus
               />
             </div>
-          </div>
 
-          {/* Mode Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="agentType">Mode</Label>
-            <Select
-              value={selectedAgentType}
-              onValueChange={(value: "mcp_gateway" | "agent") =>
-                setSelectedAgentType(value)
-              }
-            >
-              <SelectTrigger id="agentType" className="w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="mcp_gateway">MCP Gateway</SelectItem>
-                <SelectItem value="agent">Agent</SelectItem>
-              </SelectContent>
-            </Select>
-            {isInternalAgent && (
+            {/* Tools */}
+            <div className="space-y-2">
+              <Label>Tools</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentToolsEditor
+                  ref={agentToolsEditorRef}
+                  agentId={agent?.id}
+                />
+              </div>
+            </div>
+
+            {/* Subagents */}
+            <div className="space-y-2">
+              <Label>Subagents</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <SubagentsEditor
+                  availableAgents={allInternalAgents}
+                  selectedAgentIds={selectedDelegationTargetIds}
+                  onSelectionChange={setSelectedDelegationTargetIds}
+                  currentAgentId={agent?.id}
+                />
+              </div>
+            </div>
+
+            {/* Mode */}
+            <div className="space-y-2">
+              <Label htmlFor="agentType">Mode</Label>
+              <Select
+                value={selectedAgentType}
+                onValueChange={(value: "mcp_gateway" | "agent") =>
+                  setSelectedAgentType(value)
+                }
+              >
+                <SelectTrigger id="agentType" className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mcp_gateway">MCP Gateway</SelectItem>
+                  <SelectItem value="agent">Agent</SelectItem>
+                </SelectContent>
+              </Select>
               <p className="text-sm text-muted-foreground">
-                Agents can be used in chat with prompts and ChatOps
-                integrations.
+                {isInternalAgent
+                  ? "Agents can be used internally in Chat or externally via A2A webhook, email, or MS Teams."
+                  : "MCP Gateway allows external agents to connect to MCP server tools using the MCP protocol."}
               </p>
-            )}
+            </div>
           </div>
 
-          {/* Agent Prompts (Internal Agents Only) */}
+          {/* Agent Settings Section (Internal Agents Only) */}
           {isInternalAgent && (
-            <>
+            <div className="rounded-lg border bg-card p-4 space-y-4">
+              <h3 className="font-semibold">Agent Settings</h3>
+
+              {/* System Prompt */}
               <div className="space-y-2">
                 <Label htmlFor="systemPrompt">System Prompt</Label>
                 <Textarea
@@ -557,6 +571,8 @@ export function AgentDialog({
                   className="min-h-[150px] font-mono"
                 />
               </div>
+
+              {/* User Prompt */}
               <div className="space-y-2">
                 <Label htmlFor="userPrompt">User Prompt</Label>
                 <Textarea
@@ -567,104 +583,116 @@ export function AgentDialog({
                   className="min-h-[150px] font-mono"
                 />
               </div>
-            </>
-          )}
 
-          {/* Agent Trigger Rules (Internal Agents Only) */}
-          {isInternalAgent && configuredChatopsProviders.length > 0 && (
-            <div className="space-y-2">
-              <Label>Agent Trigger Rules</Label>
-              {configuredChatopsProviders.map((provider) => (
-                <div
-                  key={provider.id}
-                  className="flex items-center justify-between"
-                >
-                  <div className="space-y-0.5">
-                    <Label
-                      htmlFor={`chatops-${provider.id}`}
-                      className="text-sm font-medium cursor-pointer"
-                    >
-                      {provider.displayName}
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Allow this agent to be triggered via{" "}
-                      {provider.displayName}
-                    </p>
+              {/* Agent Trigger Rules */}
+              {configuredChatopsProviders.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Agent Trigger Rules</Label>
+                  <div className="space-y-3 pt-1">
+                    {configuredChatopsProviders.map((provider) => (
+                      <div
+                        key={provider.id}
+                        className="flex items-center justify-between"
+                      >
+                        <div className="space-y-0.5">
+                          <label
+                            htmlFor={`chatops-${provider.id}`}
+                            className="text-sm cursor-pointer"
+                          >
+                            {provider.displayName}
+                          </label>
+                          <p className="text-xs text-muted-foreground">
+                            Allow this agent to be triggered via{" "}
+                            {provider.displayName}
+                          </p>
+                        </div>
+                        <Switch
+                          id={`chatops-${provider.id}`}
+                          checked={allowedChatops.includes(provider.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setAllowedChatops([
+                                ...allowedChatops,
+                                provider.id,
+                              ]);
+                            } else {
+                              setAllowedChatops(
+                                allowedChatops.filter(
+                                  (id) => id !== provider.id,
+                                ),
+                              );
+                            }
+                          }}
+                        />
+                      </div>
+                    ))}
                   </div>
-                  <Switch
-                    id={`chatops-${provider.id}`}
-                    checked={allowedChatops.includes(provider.id)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setAllowedChatops([...allowedChatops, provider.id]);
-                      } else {
-                        setAllowedChatops(
-                          allowedChatops.filter((id) => id !== provider.id),
-                        );
-                      }
-                    }}
-                  />
                 </div>
-              ))}
+              )}
             </div>
           )}
 
-          {/* Team Access - Common */}
-          <div className="space-y-2">
-            <Label>
-              Team
-              {!isProfileAdmin && !isInternalAgent && (
-                <span className="text-destructive ml-1">(required)</span>
-              )}
-            </Label>
-            <MultiSelectCombobox
-              options={
-                teams?.map((team) => ({
-                  value: team.id,
-                  label: team.name,
-                })) || []
-              }
-              value={assignedTeamIds}
-              onChange={setAssignedTeamIds}
-              placeholder={
-                hasNoAvailableTeams
-                  ? "No teams available"
-                  : assignedTeamIds.length === 0
-                    ? "Add teams... Only Admins can access agents without teams"
-                    : "Search teams..."
-              }
-              emptyMessage="No teams found."
-            />
-          </div>
+          {/* Additional Settings Section */}
+          <div className="rounded-lg border bg-card p-4 space-y-4">
+            <h3 className="font-semibold">Additional Settings</h3>
 
-          {/* Labels - Common */}
-          <ProfileLabels
-            ref={agentLabelsRef}
-            labels={labels}
-            onLabelsChange={setLabels}
-          />
-
-          {/* Security - Common */}
-          <div className="space-y-2">
-            <Label>Security</Label>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label
-                  htmlFor="consider-context-untrusted"
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  Treat user context as untrusted
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Enable when user prompts may contain untrusted and sensitive
-                  data.
-                </p>
-              </div>
-              <Switch
-                id="consider-context-untrusted"
-                checked={considerContextUntrusted}
-                onCheckedChange={setConsiderContextUntrusted}
+            {/* Team */}
+            <div className="space-y-2">
+              <Label>
+                Team
+                {!isProfileAdmin && !isInternalAgent && (
+                  <span className="text-destructive ml-1">(required)</span>
+                )}
+              </Label>
+              <MultiSelectCombobox
+                options={
+                  teams?.map((team) => ({
+                    value: team.id,
+                    label: team.name,
+                  })) || []
+                }
+                value={assignedTeamIds}
+                onChange={setAssignedTeamIds}
+                placeholder={
+                  hasNoAvailableTeams
+                    ? "No teams available"
+                    : assignedTeamIds.length === 0
+                      ? "Add teams... Only Admins can access agents without teams"
+                      : "Search teams..."
+                }
+                emptyMessage="No teams found."
               />
+            </div>
+
+            {/* Labels */}
+            <ProfileLabels
+              ref={agentLabelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+            />
+
+            {/* Security */}
+            <div className="space-y-2">
+              <Label>Security</Label>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="consider-context-untrusted"
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    Treat user context as untrusted
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Enable when user prompts may contain untrusted and sensitive
+                    data.
+                  </p>
+                </div>
+                <Switch
+                  id="consider-context-untrusted"
+                  checked={considerContextUntrusted}
+                  onCheckedChange={setConsiderContextUntrusted}
+                />
+              </div>
             </div>
           </div>
         </div>

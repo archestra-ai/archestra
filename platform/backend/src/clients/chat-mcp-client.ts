@@ -8,7 +8,7 @@ import {
   executeArchestraTool,
   getAgentTools,
 } from "@/archestra-mcp-server";
-import { CacheKey } from "@/cache-manager";
+import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
@@ -26,12 +26,33 @@ import {
 const MCP_GATEWAY_BASE_URL = "http://localhost:9000/v1/mcp";
 
 /**
- * Client cache per agent + user combination
- * Key: `${agentId}:${userId}`, Value: MCP Client
- * Note: This cannot use cacheManager because Client instances need lifecycle
- * management (close() on cleanup) which cacheManager doesn't support.
+ * Maximum client cache size to prevent unbounded memory growth.
+ * Each entry is an MCP Client connection, which consumes resources.
  */
-const clientCache = new Map<string, Client>();
+const MAX_CLIENT_CACHE_SIZE = 500;
+
+/**
+ * Client cache per agent + user combination using LRU eviction.
+ * Key: `${agentId}:${userId}`, Value: MCP Client
+ *
+ * Uses onEviction callback to properly close() clients when evicted,
+ * preventing connection leaks.
+ */
+const clientCache = new LRUCacheManager<Client>({
+  maxSize: MAX_CLIENT_CACHE_SIZE,
+  defaultTtl: 0, // No TTL - clients remain until evicted or manually removed
+  onEviction: (key: string, client: unknown) => {
+    try {
+      (client as Client).close();
+      logger.info({ cacheKey: key }, "Closed evicted MCP client connection");
+    } catch (error) {
+      logger.warn(
+        { cacheKey: key, error },
+        "Error closing evicted MCP client (non-fatal)",
+      );
+    }
+  },
+});
 
 /**
  * Tool cache TTL - 30 seconds to avoid hammering MCP Gateway
@@ -46,48 +67,21 @@ const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
 const MAX_TOOL_CACHE_SIZE = 1000;
 
 /**
- * In-memory tool cache per agent + user + prompt + conversation
- * Note: This cannot use cacheManager because Tool objects contain execute functions
- * which cannot be serialized to PostgreSQL JSONB. Functions are lost during
- * serialization/deserialization.
+ * In-memory tool cache per agent + user + prompt + conversation using LRU eviction.
+ *
+ * Note: This cannot use the distributed cacheManager because Tool objects contain
+ * execute functions which cannot be serialized to PostgreSQL JSONB.
  *
  * For multi-pod deployments, sticky sessions should be used to ensure all
  * requests for a conversation hit the same pod. Without sticky sessions,
  * requests may be routed to different pods, causing frequent cache misses.
  * This degrades performance (repeated tool fetches from MCP Gateway) but
  * does not affect correctness - tools will still work, just slower.
- *
- * Uses LRU eviction when cache exceeds MAX_TOOL_CACHE_SIZE to prevent
- * unbounded memory growth during traffic spikes.
  */
-interface ToolCacheEntry {
-  tools: Record<string, Tool>;
-  expiresAt: number;
-}
-const toolCache = new Map<string, ToolCacheEntry>();
-
-/**
- * Evict oldest entries from toolCache using LRU strategy.
- * Map maintains insertion order, so we evict from the beginning.
- */
-function evictOldestToolCacheEntries(): void {
-  // Evict 10% of entries when cache is full to avoid frequent evictions
-  const entriesToEvict = Math.max(1, Math.floor(MAX_TOOL_CACHE_SIZE * 0.1));
-  let evicted = 0;
-
-  for (const key of toolCache.keys()) {
-    if (evicted >= entriesToEvict) break;
-    toolCache.delete(key);
-    evicted++;
-  }
-
-  if (evicted > 0) {
-    logger.info(
-      { evictedCount: evicted, remainingSize: toolCache.size },
-      "Evicted oldest tool cache entries (LRU)",
-    );
-  }
-}
+const toolCache = new LRUCacheManager<Record<string, Tool>>({
+  maxSize: MAX_TOOL_CACHE_SIZE,
+  defaultTtl: TOOL_CACHE_TTL_MS,
+});
 
 /**
  * Generate cache key from agentId and userId
@@ -116,7 +110,7 @@ function getToolCacheKey(
 
 export const __test = {
   setCachedClient(cacheKey: string, client: Client) {
-    clientCache.set(cacheKey, client);
+    clientCache.set(cacheKey, client, 0); // No TTL for clients
   },
   async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
@@ -273,35 +267,43 @@ export function clearChatMcpClient(agentId: string): void {
   let toolClearedCount = 0;
 
   // Find and remove all client cache entries for this agentId (any user)
+  // Collect keys first to avoid iterator invalidation during deletion
+  const clientKeysToDelete: string[] = [];
   for (const key of clientCache.keys()) {
     if (key.startsWith(`${agentId}:`)) {
-      const client = clientCache.get(key);
-      if (client) {
-        try {
-          client.close();
-          logger.info(
-            { agentId, cacheKey: key },
-            "Closed MCP client connection",
-          );
-        } catch (error) {
-          logger.warn(
-            { agentId, cacheKey: key, error },
-            "Error closing MCP client connection (non-fatal)",
-          );
-        }
-        clientCache.delete(key);
-        clientClearedCount++;
+      clientKeysToDelete.push(key);
+    }
+  }
+
+  for (const key of clientKeysToDelete) {
+    const client = clientCache.get(key);
+    if (client) {
+      try {
+        client.close();
+        logger.info({ agentId, cacheKey: key }, "Closed MCP client connection");
+      } catch (error) {
+        logger.warn(
+          { agentId, cacheKey: key, error },
+          "Error closing MCP client connection (non-fatal)",
+        );
       }
+      clientCache.delete(key);
+      clientClearedCount++;
     }
   }
 
   // Clear tool cache entries for this agentId
-  // Use startsWith with exact prefix pattern to avoid matching partial agentId strings
+  // Collect keys first to avoid iterator invalidation during deletion
+  const toolKeysToDelete: string[] = [];
   for (const key of toolCache.keys()) {
     if (key.startsWith(`${CacheKey.ChatMcpTools}-${agentId}:`)) {
-      toolCache.delete(key);
-      toolClearedCount++;
+      toolKeysToDelete.push(key);
     }
+  }
+
+  for (const key of toolKeysToDelete) {
+    toolCache.delete(key);
+    toolClearedCount++;
   }
 
   logger.info(
@@ -431,8 +433,8 @@ export async function getChatMcpClient(
       "Successfully connected to MCP Gateway (new session initialized)",
     );
 
-    // Cache the client
-    clientCache.set(cacheKey, client);
+    // Cache the client (no TTL - clients remain until evicted or manually removed)
+    clientCache.set(cacheKey, client, 0);
 
     logger.info(
       {
@@ -526,27 +528,20 @@ export async function getChatMcpTools({
     conversationId,
   );
 
-  // Check in-memory tool cache first (cannot use cacheManager - Tool objects have execute functions)
-  const cachedEntry = toolCache.get(toolCacheKey);
-  if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
-    // LRU: Move to end of Map by deleting and re-inserting
-    toolCache.delete(toolCacheKey);
-    toolCache.set(toolCacheKey, cachedEntry);
-
+  // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
+  // LRU eviction and TTL are handled automatically by LRUCacheManager
+  const cachedTools = toolCache.get(toolCacheKey);
+  if (cachedTools) {
     logger.info(
       {
         agentId,
         userId,
-        toolCount: Object.keys(cachedEntry.tools).length,
+        toolCount: Object.keys(cachedTools).length,
       },
       "Returning cached MCP tools for chat",
     );
     // Apply filtering if enabledToolIds provided and non-empty
-    return await filterToolsByEnabledIds(cachedEntry.tools, enabledToolIds);
-  }
-  // Remove expired entry if any
-  if (cachedEntry) {
-    toolCache.delete(toolCacheKey);
+    return await filterToolsByEnabledIds(cachedTools, enabledToolIds);
   }
 
   // Log cache miss - in multi-pod deployments without sticky sessions,
@@ -909,15 +904,8 @@ export async function getChatMcpTools({
       }
     }
 
-    // Cache tools in-memory with TTL (cannot use cacheManager - Tool objects have execute functions)
-    // Check if we need to evict old entries before adding new one
-    if (toolCache.size >= MAX_TOOL_CACHE_SIZE) {
-      evictOldestToolCacheEntries();
-    }
-    toolCache.set(toolCacheKey, {
-      tools: aiTools,
-      expiresAt: Date.now() + TOOL_CACHE_TTL_MS,
-    });
+    // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
+    toolCache.set(toolCacheKey, aiTools);
 
     // Apply filtering if enabledToolIds provided and non-empty
     return await filterToolsByEnabledIds(aiTools, enabledToolIds);

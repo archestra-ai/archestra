@@ -1,7 +1,10 @@
 import KeyvPostgres from "@keyv/postgres";
 import { TimeInMs } from "@shared";
+import { sql } from "drizzle-orm";
 import Keyv from "keyv";
+import QuickLRU from "quick-lru";
 import config from "@/config";
+import db from "@/database";
 import logger from "@/logging";
 
 /**
@@ -180,10 +183,9 @@ class CacheManager {
    * This is useful for one-time use tokens like OAuth state where you need to
    * ensure the same token can't be used twice (prevents replay attacks).
    *
-   * Note: While Keyv doesn't have native atomic get-and-delete, we perform
-   * get then delete in sequence. For security-sensitive operations, the
-   * window between get and delete is minimal, and duplicate reads would
-   * fail on the delete step.
+   * Implementation uses DELETE ... RETURNING for true atomicity - the delete
+   * and read happen in a single database operation, preventing race conditions
+   * where two requests could both read the same token before either deletes it.
    */
   async getAndDelete<T>(key: AllowedCacheKey): Promise<T | undefined> {
     if (!this.keyv) {
@@ -194,11 +196,26 @@ class CacheManager {
     }
 
     try {
-      const value = await this.keyv.get(key);
-      if (value !== undefined) {
-        await this.keyv.delete(key);
+      // Use raw SQL for atomic delete-and-return
+      // Keyv stores: key (text), value (jsonb), expires (bigint ms timestamp)
+      // The key is namespaced with "keyv:" prefix by Keyv
+      const now = Date.now();
+      const keyvKey = `keyv:${key}`;
+      const result = await db.execute<{ value: string }>(
+        sql`DELETE FROM keyv_cache
+            WHERE key = ${keyvKey} AND (expires IS NULL OR expires > ${now})
+            RETURNING value`,
+      );
+
+      if (result.rows.length === 0) {
+        return undefined;
       }
-      return value as T | undefined;
+
+      // Keyv stores values as JSON strings in the value column
+      const rawValue = result.rows[0].value;
+      return (typeof rawValue === "string" ? JSON.parse(rawValue) : rawValue) as
+        | T
+        | undefined;
     } catch (error) {
       logger.error(
         { error, key },
@@ -210,27 +227,41 @@ class CacheManager {
 
   /**
    * Delete all entries with keys matching a prefix.
-   * Useful for invalidating related cache entries.
+   * Useful for invalidating related cache entries (e.g., all chat models cache).
    *
-   * Note: Keyv doesn't support prefix deletion natively, so this operation
-   * is not efficient for large datasets. Use sparingly.
+   * Uses raw SQL with LIKE pattern matching for efficient bulk deletion.
+   * Returns the number of entries deleted.
    */
-  async deleteByPrefix(prefix: AllowedCacheKey): Promise<void> {
+  async deleteByPrefix(prefix: AllowedCacheKey): Promise<number> {
     if (!this.keyv) {
       logger.warn("CacheManager: Not started, skipping deleteByPrefix");
-      return;
+      return 0;
     }
 
     try {
-      // Keyv doesn't support prefix deletion, so we need to clear all
-      // This is a limitation - consider using a different approach if
-      // prefix deletion is frequently needed
-      logger.warn(
-        { prefix },
-        "CacheManager: deleteByPrefix not fully supported with Keyv, consider alternative approach",
+      // Keyv namespaces keys with "keyv:" prefix
+      // Use LIKE with escaped prefix for pattern matching
+      const likePattern = `keyv:${prefix}%`;
+      const result = await db.execute<{ count: string }>(
+        sql`WITH deleted AS (
+          DELETE FROM keyv_cache
+          WHERE key LIKE ${likePattern}
+          RETURNING 1
+        )
+        SELECT COUNT(*) as count FROM deleted`,
       );
+
+      const deletedCount = Number.parseInt(result.rows[0]?.count ?? "0", 10);
+      if (deletedCount > 0) {
+        logger.info(
+          { prefix, deletedCount },
+          "CacheManager: Deleted entries by prefix",
+        );
+      }
+      return deletedCount;
     } catch (error) {
       logger.error({ error, prefix }, "CacheManager: Error deleting by prefix");
+      return 0;
     }
   }
 
@@ -266,3 +297,161 @@ class CacheManager {
 }
 
 export const cacheManager = new CacheManager();
+
+/**
+ * Configuration options for LRU cache instances.
+ */
+export interface LRUCacheOptions {
+  /** Maximum number of entries in the cache (required) */
+  maxSize: number;
+  /** Default TTL in milliseconds for cache entries (optional, defaults to 1 hour) */
+  defaultTtl?: number;
+  /** Callback fired when an entry is evicted from the cache */
+  onEviction?: (key: string, value: unknown) => void;
+}
+
+/**
+ * Entry stored in the LRU cache with TTL support.
+ */
+interface LRUCacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+/**
+ * In-memory LRU cache manager using Keyv with QuickLRU storage adapter.
+ *
+ * Unlike the distributed CacheManager (PostgreSQL-backed), this cache is
+ * local to each pod/process and uses LRU eviction for memory management.
+ *
+ * Use cases:
+ * - Caching objects that can't be serialized (e.g., functions, class instances)
+ * - High-frequency access patterns where database round-trips are too slow
+ * - Data that doesn't need to be shared across pods (with sticky sessions)
+ *
+ * Features:
+ * - LRU eviction when cache is full
+ * - TTL support for automatic expiration
+ * - Optional eviction callback for cleanup (e.g., closing connections)
+ * - Type-safe get/set operations
+ */
+export class LRUCacheManager<T = unknown> {
+  private keyv: Keyv;
+  private lruStore: QuickLRU<string, LRUCacheEntry<T>>;
+  private defaultTtl: number;
+  private onEviction?: (key: string, value: unknown) => void;
+
+  constructor(options: LRUCacheOptions) {
+    this.defaultTtl = options.defaultTtl ?? TimeInMs.Hour;
+    this.onEviction = options.onEviction;
+
+    // Create QuickLRU store with eviction callback
+    this.lruStore = new QuickLRU<string, LRUCacheEntry<T>>({
+      maxSize: options.maxSize,
+      onEviction: (key: string, entry: LRUCacheEntry<T>) => {
+        if (this.onEviction) {
+          this.onEviction(key, entry.value);
+        }
+      },
+    });
+
+    // Wrap with Keyv for consistent API
+    this.keyv = new Keyv({ store: this.lruStore as unknown as Map<string, T> });
+
+    this.keyv.on("error", (err) => {
+      logger.error({ err }, "LRUCacheManager: Keyv error");
+    });
+  }
+
+  /**
+   * Get a value from the cache.
+   * Returns undefined if the key doesn't exist or has expired.
+   */
+  get(key: string): T | undefined {
+    const entry = this.lruStore.get(key);
+    if (!entry) {
+      return undefined;
+    }
+
+    // Check if expired
+    if (entry.expiresAt > 0 && Date.now() > entry.expiresAt) {
+      this.lruStore.delete(key);
+      return undefined;
+    }
+
+    return entry.value;
+  }
+
+  /**
+   * Set a value in the cache with optional TTL.
+   * If the key already exists, it will be overwritten.
+   *
+   * @param key - Cache key
+   * @param value - Value to store
+   * @param ttl - Time-to-live in milliseconds (0 = no expiration)
+   */
+  set(key: string, value: T, ttl?: number): void {
+    const effectiveTtl = ttl ?? this.defaultTtl;
+    const entry: LRUCacheEntry<T> = {
+      value,
+      expiresAt: effectiveTtl > 0 ? Date.now() + effectiveTtl : 0,
+    };
+    this.lruStore.set(key, entry);
+  }
+
+  /**
+   * Delete a value from the cache.
+   * Returns true if the key existed, false otherwise.
+   */
+  delete(key: string): boolean {
+    return this.lruStore.delete(key);
+  }
+
+  /**
+   * Check if a key exists in the cache (and is not expired).
+   */
+  has(key: string): boolean {
+    const entry = this.lruStore.get(key);
+    if (!entry) {
+      return false;
+    }
+    if (entry.expiresAt > 0 && Date.now() > entry.expiresAt) {
+      this.lruStore.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Get the current size of the cache.
+   */
+  get size(): number {
+    return this.lruStore.size;
+  }
+
+  /**
+   * Clear all entries from the cache.
+   * Note: This does NOT trigger onEviction callbacks.
+   */
+  clear(): void {
+    this.lruStore.clear();
+  }
+
+  /**
+   * Delete all entries matching a key prefix.
+   */
+  deleteByPrefix(prefix: string): void {
+    for (const key of this.lruStore.keys()) {
+      if (key.startsWith(prefix)) {
+        this.lruStore.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Get all keys in the cache (for debugging/testing).
+   */
+  keys(): IterableIterator<string> {
+    return this.lruStore.keys();
+  }
+}

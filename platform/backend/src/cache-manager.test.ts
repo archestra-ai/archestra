@@ -1,25 +1,29 @@
+import { sql } from "drizzle-orm";
 import { vi } from "vitest";
+import db from "@/database";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-// Mock functions that will be used to track calls
-const mockGet = vi.fn();
-const mockSet = vi.fn();
-const mockDelete = vi.fn();
-const mockDisconnect = vi.fn();
-const mockOn = vi.fn();
+// Use vi.hoisted() to create mock functions that can be accessed in vi.mock
+const { mockGet, mockSet, mockDelete, mockDisconnect, mockOn } = vi.hoisted(
+  () => ({
+    mockGet: vi.fn(),
+    mockSet: vi.fn(),
+    mockDelete: vi.fn(),
+    mockDisconnect: vi.fn(),
+    mockOn: vi.fn(),
+  }),
+);
 
-// Mock Keyv - define the class inside the factory to avoid hoisting issues
-vi.mock("keyv", () => {
-  return {
-    default: class MockKeyv {
-      get = mockGet;
-      set = mockSet;
-      delete = mockDelete;
-      disconnect = mockDisconnect;
-      on = mockOn;
-    },
-  };
-});
+// Mock Keyv using the hoisted mock functions
+vi.mock("keyv", () => ({
+  default: class MockKeyv {
+    get = mockGet;
+    set = mockSet;
+    delete = mockDelete;
+    disconnect = mockDisconnect;
+    on = mockOn;
+  },
+}));
 
 vi.mock("@keyv/postgres", () => ({
   default: vi.fn(),
@@ -36,6 +40,55 @@ const mockKeyv = {
   disconnect: mockDisconnect,
   on: mockOn,
 };
+
+/**
+ * Helper to ensure keyv_cache table exists for SQL-based tests.
+ * This table is normally created by @keyv/postgres but we mock that.
+ */
+async function ensureKeyvCacheTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS keyv_cache (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      expires BIGINT
+    )
+  `);
+}
+
+/**
+ * Helper to insert a value directly into keyv_cache for testing.
+ * Mimics how Keyv stores data with the "keyv:" prefix.
+ */
+async function insertKeyvEntry(
+  key: string,
+  value: unknown,
+  expiresAt?: number,
+) {
+  const keyvKey = `keyv:${key}`;
+  const jsonValue = JSON.stringify(value);
+  await db.execute(
+    sql`INSERT INTO keyv_cache (key, value, expires) VALUES (${keyvKey}, ${jsonValue}, ${expiresAt ?? null})
+        ON CONFLICT (key) DO UPDATE SET value = ${jsonValue}, expires = ${expiresAt ?? null}`,
+  );
+}
+
+/**
+ * Helper to check if a key exists in keyv_cache.
+ */
+async function keyvEntryExists(key: string): Promise<boolean> {
+  const keyvKey = `keyv:${key}`;
+  const result = await db.execute<{ count: string }>(
+    sql`SELECT COUNT(*) as count FROM keyv_cache WHERE key = ${keyvKey}`,
+  );
+  return Number.parseInt(result.rows[0]?.count ?? "0", 10) > 0;
+}
+
+/**
+ * Helper to clear all entries from keyv_cache.
+ */
+async function clearKeyvCache() {
+  await db.execute(sql`DELETE FROM keyv_cache`);
+}
 
 describe("CacheManager", () => {
   beforeEach(() => {
@@ -191,31 +244,65 @@ describe("CacheManager", () => {
   });
 
   describe("getAndDelete", () => {
+    // These tests use real database calls since getAndDelete uses raw SQL
+    // for atomic delete-and-return semantics
+
+    beforeEach(async () => {
+      await ensureKeyvCacheTable();
+      await clearKeyvCache();
+    });
+
     test("gets and deletes value atomically", async () => {
       cacheManager.start();
-      mockKeyv.get.mockResolvedValue({ foo: "bar" });
-      mockKeyv.delete.mockResolvedValue(true);
+
+      // Insert test data directly into keyv_cache
+      await insertKeyvEntry("test-key", { foo: "bar" });
 
       const result = await cacheManager.getAndDelete<{ foo: string }>(
         "test-key" as AllowedCacheKey,
       );
 
       expect(result).toEqual({ foo: "bar" });
-      expect(mockKeyv.get).toHaveBeenCalledWith("test-key");
-      expect(mockKeyv.delete).toHaveBeenCalledWith("test-key");
+
+      // Verify the entry was deleted
+      const exists = await keyvEntryExists("test-key");
+      expect(exists).toBe(false);
     });
 
-    test("does not call delete if key does not exist", async () => {
+    test("returns undefined if key does not exist", async () => {
       cacheManager.start();
-      mockKeyv.get.mockResolvedValue(undefined);
 
       const result = await cacheManager.getAndDelete(
         "missing-key" as AllowedCacheKey,
       );
 
       expect(result).toBeUndefined();
-      expect(mockKeyv.get).toHaveBeenCalled();
-      expect(mockKeyv.delete).not.toHaveBeenCalled();
+    });
+
+    test("returns undefined for expired entries", async () => {
+      cacheManager.start();
+
+      // Insert an expired entry (expires in the past)
+      await insertKeyvEntry("expired-key", { foo: "bar" }, Date.now() - 1000);
+
+      const result = await cacheManager.getAndDelete(
+        "expired-key" as AllowedCacheKey,
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    test("returns value for non-expired entries", async () => {
+      cacheManager.start();
+
+      // Insert an entry that expires in the future
+      await insertKeyvEntry("valid-key", { foo: "bar" }, Date.now() + 60000);
+
+      const result = await cacheManager.getAndDelete<{ foo: string }>(
+        "valid-key" as AllowedCacheKey,
+      );
+
+      expect(result).toEqual({ foo: "bar" });
     });
 
     test("returns undefined when not started", async () => {
@@ -224,18 +311,60 @@ describe("CacheManager", () => {
       );
 
       expect(result).toBeUndefined();
-      expect(mockKeyv.get).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("deleteByPrefix", () => {
+    // These tests use real database calls since deleteByPrefix uses raw SQL
+
+    beforeEach(async () => {
+      await ensureKeyvCacheTable();
+      await clearKeyvCache();
     });
 
-    test("returns undefined on error", async () => {
+    test("deletes all entries matching prefix", async () => {
       cacheManager.start();
-      mockKeyv.get.mockRejectedValue(new Error("Connection failed"));
 
-      const result = await cacheManager.getAndDelete(
-        "test-key" as AllowedCacheKey,
+      // Insert multiple entries with same prefix
+      await insertKeyvEntry("chat-mcp-tools-agent1", { tools: ["a"] });
+      await insertKeyvEntry("chat-mcp-tools-agent2", { tools: ["b"] });
+      await insertKeyvEntry("chat-mcp-tools-agent3", { tools: ["c"] });
+      // Insert entry with different prefix
+      await insertKeyvEntry("other-key", { data: "keep" });
+
+      const deletedCount = await cacheManager.deleteByPrefix(
+        "chat-mcp-tools" as AllowedCacheKey,
       );
 
-      expect(result).toBeUndefined();
+      expect(deletedCount).toBe(3);
+
+      // Verify the matching entries were deleted
+      expect(await keyvEntryExists("chat-mcp-tools-agent1")).toBe(false);
+      expect(await keyvEntryExists("chat-mcp-tools-agent2")).toBe(false);
+      expect(await keyvEntryExists("chat-mcp-tools-agent3")).toBe(false);
+
+      // Verify the non-matching entry still exists
+      expect(await keyvEntryExists("other-key")).toBe(true);
+    });
+
+    test("returns 0 when no entries match prefix", async () => {
+      cacheManager.start();
+
+      await insertKeyvEntry("other-key", { data: "value" });
+
+      const deletedCount = await cacheManager.deleteByPrefix(
+        "non-existent-prefix" as AllowedCacheKey,
+      );
+
+      expect(deletedCount).toBe(0);
+    });
+
+    test("returns 0 when not started", async () => {
+      const deletedCount = await cacheManager.deleteByPrefix(
+        "test-prefix" as AllowedCacheKey,
+      );
+
+      expect(deletedCount).toBe(0);
     });
   });
 

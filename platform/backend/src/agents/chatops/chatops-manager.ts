@@ -1,9 +1,12 @@
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
+  AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsProcessedMessageModel,
   PromptModel,
+  UserModel,
 } from "@/models";
 import {
   type ChatOpsProcessingResult,
@@ -151,6 +154,19 @@ export class ChatOpsManager {
         provider,
       });
 
+    // Security: Validate user has access to the agent
+    const authResult = await this.validateUserAccess({
+      message,
+      provider,
+      agentId: agentToUse.id,
+      agentName: agentToUse.name,
+      organizationId: prompt.organizationId,
+    });
+
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
+    }
+
     // Build context from thread history
     const contextMessages = await this.fetchThreadHistory(message, provider);
     const fullMessage =
@@ -166,6 +182,7 @@ export class ChatOpsManager {
       fullMessage,
       sendReply,
       fallbackMessage,
+      userId: authResult.userId,
     });
   }
 
@@ -283,6 +300,148 @@ export class ChatOpsManager {
     }
   }
 
+  /**
+   * Validate that the MS Teams user has access to the agent.
+   * 1. Resolve user email from MS Teams (requires User.Read.All Graph permission)
+   * 2. Look up Archestra user by email
+   * 3. Check user has team-based access to the agent
+   */
+  private async validateUserAccess(params: {
+    message: IncomingChatMessage;
+    provider: ChatOpsProvider;
+    agentId: string;
+    agentName: string;
+    organizationId: string;
+  }): Promise<
+    { success: true; userId: string } | { success: false; error: string }
+  > {
+    const { message, provider, agentId, agentName, organizationId } = params;
+
+    // Resolve user's email from the chat provider
+    const userEmail = await this.resolveUserEmail(message, provider);
+
+    if (!userEmail) {
+      logger.warn(
+        { senderId: message.senderId },
+        "[ChatOps] Could not resolve user email - Graph API User.Read.All permission may be missing",
+      );
+      await this.sendSecurityErrorReply(
+        provider,
+        message,
+        "Could not verify your identity. The bot requires the `User.Read.All` Microsoft Graph API permission to be configured. Please contact your administrator.",
+      );
+      return {
+        success: false,
+        error:
+          "Could not resolve user email for security validation - User.Read.All permission may be missing",
+      };
+    }
+
+    // Look up Archestra user by email
+    const user = await UserModel.findByEmail(userEmail.toLowerCase());
+
+    if (!user) {
+      logger.warn(
+        { senderEmail: userEmail },
+        "[ChatOps] User not registered in Archestra",
+      );
+      await this.sendSecurityErrorReply(
+        provider,
+        message,
+        `You (${userEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+      );
+      return {
+        success: false,
+        error: `Unauthorized: ${userEmail} is not a registered Archestra user`,
+      };
+    }
+
+    // Check if user has access to this specific agent (via team membership or admin)
+    const isProfileAdmin = await userHasPermission(
+      user.id,
+      organizationId,
+      "profile",
+      "admin",
+    );
+    const hasAccess = await AgentTeamModel.userHasAgentAccess(
+      user.id,
+      agentId,
+      isProfileAdmin,
+    );
+
+    if (!hasAccess) {
+      logger.warn(
+        {
+          userId: user.id,
+          userEmail,
+          agentId,
+          agentName,
+        },
+        "[ChatOps] User does not have access to agent",
+      );
+      await this.sendSecurityErrorReply(
+        provider,
+        message,
+        `You don't have access to the agent "${agentName}". Contact your administrator for access.`,
+      );
+      return {
+        success: false,
+        error: "Unauthorized: user does not have access to this agent",
+      };
+    }
+
+    logger.info(
+      {
+        userId: user.id,
+        userEmail,
+        agentId,
+        agentName,
+      },
+      "[ChatOps] User authorized to invoke agent",
+    );
+
+    return { success: true, userId: user.id };
+  }
+
+  /**
+   * Resolve user's email from the chat provider.
+   */
+  private async resolveUserEmail(
+    message: IncomingChatMessage,
+    provider: ChatOpsProvider,
+  ): Promise<string | null> {
+    // For MS Teams, use Graph API to get user's email from their AAD Object ID
+    if (provider.providerId === "ms-teams") {
+      const msTeamsProvider = provider as MSTeamsProvider;
+      return msTeamsProvider.getUserEmail(message.senderId);
+    }
+
+    // Future: Add support for other providers (Slack, etc.)
+    return null;
+  }
+
+  /**
+   * Send a security error reply back to the user via the chat provider.
+   */
+  private async sendSecurityErrorReply(
+    provider: ChatOpsProvider,
+    message: IncomingChatMessage,
+    errorText: string,
+  ): Promise<void> {
+    try {
+      await provider.sendReply({
+        originalMessage: message,
+        text: `⚠️ **Access Denied**\n\n${errorText}`,
+        footer: "Security check failed",
+      });
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to send security error reply",
+      );
+    }
+  }
+
   private async executeAndReply(params: {
     prompt: { id: string; name: string };
     binding: { organizationId: string };
@@ -291,6 +450,7 @@ export class ChatOpsManager {
     fullMessage: string;
     sendReply: boolean;
     fallbackMessage?: string;
+    userId: string;
   }): Promise<ChatOpsProcessingResult> {
     const {
       prompt,
@@ -300,6 +460,7 @@ export class ChatOpsManager {
       fullMessage,
       sendReply,
       fallbackMessage,
+      userId,
     } = params;
 
     try {
@@ -307,7 +468,7 @@ export class ChatOpsManager {
         promptId: prompt.id,
         organizationId: binding.organizationId,
         message: fullMessage,
-        userId: `chatops-${provider.providerId}-${message.senderId}`,
+        userId,
       });
 
       const agentResponse = result.text || "";

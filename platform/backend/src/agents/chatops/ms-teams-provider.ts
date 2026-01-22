@@ -9,9 +9,10 @@ import type {
   ChatMessage,
   ChatMessageAttachment,
 } from "@microsoft/msgraph-sdk/models";
-// Register the chats and teams fluent API extensions
+// Register the chats, teams, and users fluent API extensions
 import "@microsoft/msgraph-sdk-chats";
 import "@microsoft/msgraph-sdk-teams";
+import "@microsoft/msgraph-sdk-users";
 import {
   ActivityTypes,
   CloudAdapter,
@@ -278,6 +279,30 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   getAdapter(): CloudAdapter | null {
     return this.adapter;
+  }
+
+  /**
+   * Get user's email from their AAD Object ID using Microsoft Graph API.
+   * Requires User.Read.All application permission.
+   */
+  async getUserEmail(aadObjectId: string): Promise<string | null> {
+    if (!this.graphClient) {
+      logger.warn(
+        "[MSTeamsProvider] Graph client not configured, cannot resolve user email",
+      );
+      return null;
+    }
+
+    try {
+      const user = await this.graphClient.users.byUserId(aadObjectId).get();
+      return user?.mail || user?.userPrincipalName || null;
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error), aadObjectId },
+        "[MSTeamsProvider] Failed to fetch user email. User.Read.All permission may be missing.",
+      );
+      return null;
+    }
   }
 
   async processActivity(

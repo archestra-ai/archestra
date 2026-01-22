@@ -195,16 +195,19 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 9. Set **Messaging endpoint** to `https://your-archestra-domain/api/webhooks/chatops/ms-teams`
 10. Go to **Channels** → add **Microsoft Teams**
 
-#### Graph API Permissions (Optional - for thread history)
+#### Graph API Permissions (Required)
 
-To include thread history in agent context, you need different permissions depending on where the bot is used:
+The MS Teams integration requires Graph API permissions to verify user identity and enable thread history:
 
 1. In Azure Portal, go to **App registrations** → find your bot's app
 2. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions**
 3. Add the following permissions:
-   - `ChannelMessage.Read.All` — for team channel messages
-   - `Chat.Read.All` — for group chat messages
-4. Click **Grant admin consent** for both permissions
+   - `User.Read.All` — **Required** for user identity verification (security)
+   - `ChannelMessage.Read.All` — Required for team channel message history
+   - `Chat.Read.All` — Required for group chat message history
+4. Click **Grant admin consent** for all permissions
+
+> **Important:** Without `User.Read.All` permission, the bot cannot verify user identity and will reject all messages. This permission is required for security—it ensures only registered Archestra users with proper team access can invoke agents.
 
 #### Configure Archestra
 

@@ -7,9 +7,9 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import {
-  ConnectionTypeSelector,
+  ConnectionBaseUrl,
   type ConnectionUrl,
-} from "@/components/connection-type-selector";
+} from "@/components/connection-base-url";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -268,7 +268,7 @@ curl -X GET "${agentCardUrl}" \\
   return (
     <div className="space-y-6">
       {/* Connection Type Selector */}
-      <ConnectionTypeSelector
+      <ConnectionBaseUrl
         value={connectionUrl}
         onChange={setConnectionUrl}
         idPrefix="a2a"

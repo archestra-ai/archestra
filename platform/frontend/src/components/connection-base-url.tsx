@@ -16,17 +16,17 @@ const { externalProxyUrls, internalProxyUrl } = config.api;
 // The selected URL value - either the internal URL or one of the external URLs
 export type ConnectionUrl = string;
 
-interface ConnectionTypeSelectorProps {
+interface ConnectionBaseUrlProps {
   value: ConnectionUrl;
   onChange: (value: ConnectionUrl) => void;
   idPrefix: string;
 }
 
-export function ConnectionTypeSelector({
+export function ConnectionBaseUrl({
   value,
   onChange,
   idPrefix,
-}: ConnectionTypeSelectorProps) {
+}: ConnectionBaseUrlProps) {
   // Build options: internal URL first, then external URLs
   const options = externalProxyUrls.map((url) => ({
     url,

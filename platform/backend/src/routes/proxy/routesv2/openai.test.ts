@@ -31,7 +31,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { AgentModel, TokenPriceModel } from "@/models";
+import { TokenPriceModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { OpenAi } from "@/types";
 import { MockOpenAIClient } from "../mock-openai-client";

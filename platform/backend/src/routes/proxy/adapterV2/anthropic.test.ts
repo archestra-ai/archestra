@@ -155,7 +155,8 @@ describe("AnthropicRequestAdapter", () => {
             {
               type: "tool_result",
               tool_use_id: "tool_123",
-              content: '{"issues":[{"number":1,"title":"First issue"},{"number":2,"title":"Second issue"}]}',
+              content:
+                '{"issues":[{"number":1,"title":"First issue"},{"number":2,"title":"Second issue"}]}',
               is_error: false,
             },
           ],
@@ -171,7 +172,12 @@ describe("AnthropicRequestAdapter", () => {
       expect(toolResultMessage.role).toBe("user");
       expect(Array.isArray(toolResultMessage.content)).toBe(true);
 
-      const content = toolResultMessage.content as Array<{ type: string; tool_use_id?: string; content?: string; is_error?: boolean }>;
+      const content = toolResultMessage.content as Array<{
+        type: string;
+        tool_use_id?: string;
+        content?: string;
+        is_error?: boolean;
+      }>;
       expect(content[0].type).toBe("tool_result");
       expect(content[0].tool_use_id).toBe("tool_123");
       expect(content[0].is_error).toBe(false);
@@ -209,7 +215,12 @@ describe("AnthropicRequestAdapter", () => {
       const result = adapter.toProviderRequest();
 
       const toolResultMessage = result.messages[2];
-      const content = toolResultMessage.content as Array<{ type: string; tool_use_id?: string; content?: string; is_error?: boolean }>;
+      const content = toolResultMessage.content as Array<{
+        type: string;
+        tool_use_id?: string;
+        content?: string;
+        is_error?: boolean;
+      }>;
       expect(content[0].type).toBe("tool_result");
       expect(content[0].tool_use_id).toBe("tool_456");
       expect(content[0].content).toBe("Error: GitHub API rate limit exceeded");
@@ -260,7 +271,12 @@ describe("AnthropicRequestAdapter", () => {
       const result = adapter.toProviderRequest();
 
       const toolResultMessage = result.messages[2];
-      const content = toolResultMessage.content as Array<{ type: string; tool_use_id?: string; content?: string; is_error?: boolean }>;
+      const content = toolResultMessage.content as Array<{
+        type: string;
+        tool_use_id?: string;
+        content?: string;
+        is_error?: boolean;
+      }>;
 
       expect(content).toHaveLength(2);
       expect(content[0].tool_use_id).toBe("tool_1");
@@ -298,11 +314,17 @@ describe("AnthropicRequestAdapter", () => {
 
       const request = createMockRequest(messages);
       const adapter = anthropicAdapterFactory.createRequestAdapter(request);
-      adapter.updateToolResult("tool_123", '{"modified": "data", "extra": "field"}');
+      adapter.updateToolResult(
+        "tool_123",
+        '{"modified": "data", "extra": "field"}',
+      );
       const result = adapter.toProviderRequest();
 
       const toolResultMessage = result.messages[2];
-      const content = toolResultMessage.content as Array<{ type: string; content?: string }>;
+      const content = toolResultMessage.content as Array<{
+        type: string;
+        content?: string;
+      }>;
       expect(content[0].content).toBe('{"modified": "data", "extra": "field"}');
     });
   });

@@ -655,6 +655,7 @@ for (const config of testConfigs) {
       waitForAgentTool,
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-blocks-tool-untrusted-data`;
+      const uniqueSuffix = crypto.randomUUID().slice(0, 8);
 
       // 1. Create a test agent with considerContextUntrusted=true
       // This marks the entire context as untrusted, which is required for tool invocation
@@ -665,7 +666,7 @@ for (const config of testConfigs) {
         method: "post",
         urlSuffix: "/api/agents",
         data: {
-          name: `${config.providerName} Test Agent`,
+          name: `${config.providerName} Test Agent ${uniqueSuffix}`,
           teams: [],
           considerContextUntrusted: true,
         },
@@ -786,10 +787,11 @@ for (const config of testConfigs) {
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-allows-archestra-untrusted-context`;
 
-      // 1. Create a test agent
+      // 1. Create a test agent with unique name to avoid conflicts in parallel runs
+      const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const createResponse = await createAgent(
         request,
-        `${config.providerName} Archestra Test Agent`,
+        `${config.providerName} Archestra Test Agent ${uniqueSuffix}`,
       );
       const agent = await createResponse.json();
       const agentId = agent.id;
@@ -851,10 +853,11 @@ for (const config of testConfigs) {
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-allows-regular-after-archestra`;
 
-      // 1. Create a test agent
+      // 1. Create a test agent with unique name to avoid conflicts in parallel runs
+      const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const createResponse = await createAgent(
         request,
-        `${config.providerName} Archestra Sequence Test Agent`,
+        `${config.providerName} Archestra Sequence Test Agent ${uniqueSuffix}`,
       );
       const agent = await createResponse.json();
       const agentId = agent.id;

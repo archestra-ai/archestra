@@ -20,26 +20,26 @@ import { Separator } from "@/components/ui/separator";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
-import { usePromptEmailAddress } from "@/lib/incoming-email.query";
+import { useAgentEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
 
-type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
+type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
 // Special ID for personal token in the dropdown
 const PERSONAL_TOKEN_ID = "__personal_token__";
 
 interface A2AConnectionInstructionsProps {
-  prompt: Prompt;
+  agent: InternalAgent;
 }
 
 export function A2AConnectionInstructions({
-  prompt,
+  agent,
 }: A2AConnectionInstructionsProps) {
-  // Filter tokens by the profile's teams (prompt.agentId is the profile ID)
-  const { data: tokensData } = useTokens({ profileId: prompt.agentId });
+  // Filter tokens by the agent's teams (internal agents are profiles)
+  const { data: tokensData } = useTokens({ profileId: agent.id });
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
     profile: ["admin"],
@@ -62,13 +62,14 @@ export function A2AConnectionInstructions({
   const [isLoadingToken, setIsLoadingToken] = useState(false);
   const [isCopyingCode, setIsCopyingCode] = useState(false);
 
-  // Email invocation - check both global feature AND prompt-level setting
+  // Email invocation - check both global feature AND agent-level setting
   const globalEmailEnabled = features?.incomingEmail?.enabled ?? false;
-  const promptEmailEnabled = prompt.incomingEmailEnabled ?? false;
+  const agentEmailEnabled = agent.incomingEmailEnabled ?? false;
+  const emailEnabled = globalEmailEnabled && agentEmailEnabled;
 
-  // Fetch the email address only if both global feature is enabled AND this prompt has email enabled
-  const { data: emailAddressData } = usePromptEmailAddress(
-    globalEmailEnabled && promptEmailEnabled ? prompt.id : null,
+  // Fetch the email address from the backend (uses correct mailbox local part)
+  const { data: emailAddressData } = useAgentEmailAddress(
+    emailEnabled ? agent.id : null,
   );
   const agentEmailAddress = emailAddressData?.emailAddress ?? null;
 
@@ -81,7 +82,7 @@ export function A2AConnectionInstructions({
   }, [agentEmailAddress]);
 
   // A2A endpoint
-  const a2aEndpoint = `${connectionUrl}/a2a/${prompt.id}`;
+  const a2aEndpoint = `${connectionUrl}/a2a/${agent.id}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -181,15 +182,15 @@ export function A2AConnectionInstructions({
   const handleCopyChatLink = useCallback(async () => {
     const exampleMessage =
       "Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements";
-    const chatLink = `${window.location.origin}/chat/new?agent_id=${prompt.id}&user_prompt=${encodeURIComponent(exampleMessage)}`;
+    const chatLink = `${window.location.origin}/chat/new?agent_id=${agent.id}&user_prompt=${encodeURIComponent(exampleMessage)}`;
     await navigator.clipboard.writeText(chatLink);
     setCopiedChatLink(true);
     toast.success("Chat deep link copied");
     setTimeout(() => setCopiedChatLink(false), 2000);
-  }, [prompt.id]);
+  }, [agent.id]);
 
   // Agent Card URL for discovery
-  const agentCardUrl = `${connectionUrl}/a2a/${prompt.id}/.well-known/agent.json`;
+  const agentCardUrl = `${connectionUrl}/a2a/${agent.id}/.well-known/agent.json`;
 
   // cURL example code for sending messages
   const curlCode = useMemo(
@@ -303,7 +304,7 @@ curl -X GET "${agentCardUrl}" \\
         <div className="bg-muted rounded-md p-3 pt-10 relative">
           <pre className="text-xs whitespace-pre-wrap break-all overflow-x-auto">
             <code>
-              {`${window.location.origin}/chat/new?agent_id=${prompt.id}&user_prompt=${encodeURIComponent("Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements")}`}
+              {`${window.location.origin}/chat/new?agent_id=${agent.id}&user_prompt=${encodeURIComponent("Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements")}`}
             </code>
           </pre>
           <div className="absolute top-2 right-2">
@@ -537,27 +538,26 @@ curl -X GET "${agentCardUrl}" \\
               <Label className="text-sm font-medium">Email Invocation</Label>
             </div>
 
-            {promptEmailEnabled ? (
+            {agentEmailEnabled ? (
               <>
                 {/* Security mode description */}
                 <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
-                  {prompt.incomingEmailSecurityMode === "private" && (
+                  {agent.incomingEmailSecurityMode === "private" && (
                     <p>
                       <strong>Private mode:</strong> Only emails from registered
                       users with access to this agent will be processed.
                     </p>
                   )}
-                  {prompt.incomingEmailSecurityMode === "internal" && (
+                  {agent.incomingEmailSecurityMode === "internal" && (
                     <p>
                       <strong>Internal mode:</strong> Only emails from{" "}
                       <span className="font-mono text-xs">
-                        @
-                        {prompt.incomingEmailAllowedDomain || "your-domain.com"}
+                        @{agent.incomingEmailAllowedDomain || "your-domain.com"}
                       </span>{" "}
                       will be processed.
                     </p>
                   )}
-                  {prompt.incomingEmailSecurityMode === "public" && (
+                  {agent.incomingEmailSecurityMode === "public" && (
                     <p>
                       <strong>Public mode:</strong> Any email will be processed.
                       Use with caution.

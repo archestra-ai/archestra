@@ -2,10 +2,10 @@ import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
+import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import ProcessedEmailModel from "@/models/processed-email";
-import PromptModel from "@/models/prompt";
 import TeamModel from "@/models/team";
 import UserModel from "@/models/user";
 import type {
@@ -495,48 +495,54 @@ export async function processIncomingEmail(
     "[IncomingEmail] Processing incoming email",
   );
 
-  // Extract promptId from the email address
-  let promptId: string | null = null;
+  // Extract agentId from the email address (this is an internal agent ID)
+  let agentId: string | null = null;
 
   if (provider.providerId === "outlook") {
     const outlookProvider = provider as OutlookEmailProvider;
-    promptId = outlookProvider.extractPromptIdFromEmail(email.toAddress);
+    // Note: method still named extractPromptIdFromEmail for backwards compat, but returns agentId
+    agentId = outlookProvider.extractPromptIdFromEmail(email.toAddress);
   }
 
-  if (!promptId) {
+  if (!agentId) {
     throw new Error(
-      `Could not extract promptId from email address: ${email.toAddress}`,
+      `Could not extract agentId from email address: ${email.toAddress}`,
     );
   }
 
-  // Get prompt
-  const prompt = await PromptModel.findById(promptId);
-  if (!prompt) {
-    throw new Error(`Prompt ${promptId} not found`);
+  // Verify agent exists and is internal (only internal agents can handle emails)
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) {
+    throw new Error(`Agent ${agentId} not found`);
   }
 
-  // Check if incoming email is enabled for this prompt
-  if (!prompt.incomingEmailEnabled) {
+  if (agent.agentType !== "agent") {
+    throw new Error(
+      `Agent ${agentId} is not an internal agent (email requires agents with agentType='agent')`,
+    );
+  }
+
+  // Check if incoming email is enabled for this agent
+  if (!agent.incomingEmailEnabled) {
     logger.warn(
       {
         messageId: email.messageId,
-        promptId,
-        agentId: prompt.agentId,
+        agentId,
         fromAddress: email.fromAddress,
       },
       "[IncomingEmail] Incoming email is not enabled for this agent",
     );
-    throw new Error(`Incoming email is not enabled for agent ${prompt.name}`);
+    throw new Error(`Incoming email is not enabled for agent ${agent.name}`);
   }
 
   // Apply security mode validation
-  const securityMode = prompt.incomingEmailSecurityMode;
+  const securityMode = agent.incomingEmailSecurityMode;
   const senderEmail = email.fromAddress.toLowerCase();
 
   logger.debug(
     {
       messageId: email.messageId,
-      agentId: prompt.agentId,
+      agentId,
       securityMode,
       senderEmail,
     },
@@ -554,7 +560,7 @@ export async function processIncomingEmail(
         logger.warn(
           {
             messageId: email.messageId,
-            agentId: prompt.agentId,
+            agentId,
             senderEmail,
           },
           "[IncomingEmail] Private mode: sender email not found in Archestra users",
@@ -567,7 +573,7 @@ export async function processIncomingEmail(
       // Check if user is a profile admin (can access all agents)
       const isProfileAdmin = await userHasPermission(
         user.id,
-        prompt.organizationId,
+        agent.organizationId,
         "profile",
         "admin",
       );
@@ -575,7 +581,7 @@ export async function processIncomingEmail(
       // Check if user has access to the agent via team membership or admin permission
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         user.id,
-        prompt.agentId,
+        agentId,
         isProfileAdmin,
       );
 
@@ -583,7 +589,7 @@ export async function processIncomingEmail(
         logger.warn(
           {
             messageId: email.messageId,
-            agentId: prompt.agentId,
+            agentId,
             userId: user.id,
             senderEmail,
             isProfileAdmin,
@@ -601,7 +607,7 @@ export async function processIncomingEmail(
       logger.info(
         {
           messageId: email.messageId,
-          agentId: prompt.agentId,
+          agentId,
           userId: user.id,
           senderEmail,
           isProfileAdmin,
@@ -613,10 +619,10 @@ export async function processIncomingEmail(
 
     case "internal": {
       // Internal mode: Sender email domain must match the allowed domain
-      const allowedDomain = prompt.incomingEmailAllowedDomain?.toLowerCase();
+      const allowedDomain = agent.incomingEmailAllowedDomain?.toLowerCase();
       if (!allowedDomain) {
         throw new Error(
-          `Internal mode is configured but no allowed domain is set for agent ${prompt.name}`,
+          `Internal mode is configured but no allowed domain is set for agent ${agent.name}`,
         );
       }
 
@@ -625,7 +631,7 @@ export async function processIncomingEmail(
         logger.warn(
           {
             messageId: email.messageId,
-            agentId: prompt.agentId,
+            agentId,
             senderEmail,
             senderDomain,
             allowedDomain,
@@ -640,7 +646,7 @@ export async function processIncomingEmail(
       logger.info(
         {
           messageId: email.messageId,
-          agentId: prompt.agentId,
+          agentId,
           senderEmail,
           allowedDomain,
         },
@@ -654,7 +660,7 @@ export async function processIncomingEmail(
       logger.info(
         {
           messageId: email.messageId,
-          agentId: prompt.agentId,
+          agentId,
           senderEmail,
         },
         "[IncomingEmail] Public mode: allowing email from any sender",
@@ -667,7 +673,7 @@ export async function processIncomingEmail(
       logger.warn(
         {
           messageId: email.messageId,
-          agentId: prompt.agentId,
+          agentId,
           securityMode,
         },
         "[IncomingEmail] Unknown security mode, treating as private",
@@ -679,14 +685,14 @@ export async function processIncomingEmail(
   }
 
   // Get organization from agent's team
-  const agentTeamIds = await AgentTeamModel.getTeamsForAgent(prompt.agentId);
+  const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agent.id);
   if (agentTeamIds.length === 0) {
-    throw new Error(`No teams found for agent ${prompt.agentId}`);
+    throw new Error(`No teams found for agent ${agent.id}`);
   }
 
   const teams = await TeamModel.findByIds(agentTeamIds);
   if (teams.length === 0 || !teams[0].organizationId) {
-    throw new Error(`No organization found for agent ${prompt.agentId}`);
+    throw new Error(`No organization found for agent ${agent.id}`);
   }
   const organization = teams[0].organizationId;
 
@@ -770,8 +776,8 @@ ${formattedHistory}
 
   logger.info(
     {
-      promptId,
-      agentId: prompt.agentId,
+      agentId,
+      agentName: agent.name,
       organizationId: organization,
       messageLength: message.length,
       hasConversationHistory: conversationContext.length > 0,
@@ -784,7 +790,7 @@ ${formattedHistory}
   // - private: actual user ID from email lookup
   // - internal/public: "system" (anonymous)
   const result = await executeA2AMessage({
-    promptId,
+    agentId,
     message,
     organizationId: organization,
     userId,
@@ -792,7 +798,7 @@ ${formattedHistory}
 
   logger.info(
     {
-      promptId,
+      agentId,
       messageId: result.messageId,
       responseLength: result.text.length,
       finishReason: result.finishReason,
@@ -803,18 +809,18 @@ ${formattedHistory}
   // Optionally send the agent's response back via email reply
   if (shouldSendReply && result.text) {
     try {
-      // Use the prompt (agent) name for the email reply
-      const agentName = prompt.name || DEFAULT_AGENT_EMAIL_NAME;
+      // Use the agent name for the email reply
+      const replyAgentName = agent.name || DEFAULT_AGENT_EMAIL_NAME;
 
       const replyId = await provider.sendReply({
         originalEmail: email,
         body: result.text,
-        agentName,
+        agentName: replyAgentName,
       });
 
       logger.info(
         {
-          promptId,
+          agentId,
           originalMessageId: email.messageId,
           replyId,
         },
@@ -824,7 +830,7 @@ ${formattedHistory}
       // Log but don't fail the entire operation if reply fails
       logger.error(
         {
-          promptId,
+          agentId,
           originalMessageId: email.messageId,
           error: error instanceof Error ? error.message : String(error),
         },

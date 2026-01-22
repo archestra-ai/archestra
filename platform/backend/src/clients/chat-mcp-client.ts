@@ -92,18 +92,15 @@ function getCacheKey(agentId: string, userId: string): string {
 
 /**
  * Generate the full cache key for tool cache
- * Includes promptId because agent tools depend on the prompt context
  * Includes conversationId because browser tools need correct tab selection
  */
 function getToolCacheKey(
   agentId: string,
   userId: string,
-  promptId?: string,
   conversationId?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
-  if (promptId) parts.push(promptId);
   if (conversationId) parts.push(conversationId);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
@@ -491,7 +488,6 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
  * @param userId - The user ID for authentication
  * @param userIsProfileAdmin - Whether the user is a profile admin
  * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
- * @param promptId - Optional prompt ID for agent tools lookup
  * @param organizationId - Optional organization ID for agent tools lookup
  * @param conversationId - Optional conversation ID for browser tab selection
  * @returns Record of tool name to AI SDK Tool object
@@ -503,7 +499,6 @@ export async function getChatMcpTools({
   userIsProfileAdmin,
   enabledToolIds,
   conversationId,
-  promptId,
   organizationId,
   sessionId,
   delegationChain,
@@ -514,19 +509,13 @@ export async function getChatMcpTools({
   userIsProfileAdmin: boolean;
   enabledToolIds?: string[];
   conversationId?: string;
-  promptId?: string;
   organizationId?: string;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
-  /** Delegation chain of prompt IDs for tracking delegated agent calls */
+  /** Delegation chain of agent IDs for tracking delegated agent calls */
   delegationChain?: string;
 }): Promise<Record<string, Tool>> {
-  const toolCacheKey = getToolCacheKey(
-    agentId,
-    userId,
-    promptId,
-    conversationId,
-  );
+  const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -671,7 +660,7 @@ export async function getChatMcpTools({
                     profile: { id: agentId, name: agentName },
                     conversationId,
                     userId,
-                    promptId,
+                    agentId,
                     organizationId,
                     sessionId,
                   },
@@ -787,11 +776,11 @@ export async function getChatMcpTools({
       "Successfully converted MCP tools to AI SDK Tool format",
     );
 
-    // Fetch and add agent tools if promptId and organizationId are available
-    if (promptId && organizationId) {
+    // Fetch and add agent delegation tools if organizationId is available
+    if (organizationId) {
       try {
         const agentToolsList = await getAgentTools({
-          promptId,
+          agentId,
           organizationId,
           userId,
           skipAccessCheck: userIsProfileAdmin,
@@ -800,7 +789,7 @@ export async function getChatMcpTools({
         // Build the context for agent tool execution
         const archestraContext: ArchestraContext = {
           profile: { id: agentId, name: agentName },
-          promptId,
+          agentId,
           organizationId,
           conversationId,
           sessionId,
@@ -832,7 +821,6 @@ export async function getChatMcpTools({
                   agentId,
                   userId,
                   toolName: agentTool.name,
-                  promptId,
                   arguments: args,
                 },
                 "Executing agent tool from chat",
@@ -873,7 +861,6 @@ export async function getChatMcpTools({
                     agentId,
                     userId,
                     toolName: agentTool.name,
-                    promptId,
                     err: error,
                     errorMessage:
                       error instanceof Error ? error.message : String(error),
@@ -890,16 +877,15 @@ export async function getChatMcpTools({
           {
             agentId,
             userId,
-            promptId,
             agentToolCount: agentToolsList.length,
             totalToolCount: Object.keys(aiTools).length,
           },
-          "Added agent tools to chat tools",
+          "Added agent delegation tools to chat tools",
         );
       } catch (error) {
         logger.error(
-          { agentId, userId, promptId, error },
-          "Failed to fetch agent tools, continuing without them",
+          { agentId, userId, error },
+          "Failed to fetch agent delegation tools, continuing without them",
         );
       }
     }

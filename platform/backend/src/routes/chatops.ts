@@ -11,9 +11,9 @@ import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import {
+  AgentModel,
   ChatOpsChannelBindingModel,
   OrganizationModel,
-  PromptModel,
 } from "@/models";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
@@ -206,8 +206,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 workspaceId: message.workspaceId,
               });
 
-              if (binding) {
-                const prompt = await PromptModel.findById(binding.promptId);
+              if (binding?.agentId) {
+                const agent = await AgentModel.findById(binding.agentId);
                 await context.sendActivity({
                   attachments: [
                     {
@@ -220,7 +220,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         body: [
                           {
                             type: "TextBlock",
-                            text: `This channel is bound to agent: **${prompt?.name || binding.promptId}** which means it will handle all requests in the channel by default.`,
+                            text: `This channel is bound to agent: **${agent?.name || binding.agentId}** which means it will handle all requests in the channel by default.`,
                             wrap: true,
                           },
                           {
@@ -457,12 +457,12 @@ async function sendAgentSelectionCard(
   context: TurnContext,
   message: IncomingChatMessage,
 ): Promise<void> {
-  // Get available prompts (agents in UI) for MS Teams
-  const prompts = await PromptModel.findByAllowedChatopsProvider(
+  // Get available agents for MS Teams
+  const agents = await AgentModel.findByAllowedChatopsProvider(
     "ms-teams" as ChatOpsProviderType,
   );
 
-  if (prompts.length === 0) {
+  if (agents.length === 0) {
     await context.sendActivity(
       "No agents are configured for Microsoft Teams.\n" +
         "Please ask your administrator to enable Teams in the agent settings.",
@@ -471,9 +471,9 @@ async function sendAgentSelectionCard(
   }
 
   // Build choices for the dropdown
-  const choices = prompts.map((prompt) => ({
-    title: prompt.name,
-    value: prompt.id,
+  const choices = agents.map((agent) => ({
+    title: agent.name,
+    value: agent.id,
   }));
 
   // Check for existing binding to pre-select
@@ -499,9 +499,9 @@ async function sendAgentSelectionCard(
         },
         {
           type: "Input.ChoiceSet",
-          id: "promptId",
+          id: "agentId",
           style: "compact",
-          value: existingBinding.promptId,
+          value: existingBinding.agentId,
           choices,
         },
       ]
@@ -553,7 +553,7 @@ async function sendAgentSelectionCard(
         },
         {
           type: "Input.ChoiceSet",
-          id: "promptId",
+          id: "agentId",
           style: "compact",
           value: choices[0]?.value || "",
           choices,
@@ -600,31 +600,31 @@ async function handleAgentSelection(
 ): Promise<void> {
   const value = context.activity.value as
     | {
-        promptId?: string;
+        agentId?: string;
         channelId?: string;
         workspaceId?: string;
         originalMessageText?: string;
       }
     | undefined;
-  const { promptId, channelId, workspaceId, originalMessageText } = value || {};
+  const { agentId, channelId, workspaceId, originalMessageText } = value || {};
 
-  if (!promptId) {
+  if (!agentId) {
     await context.sendActivity("Please select an agent from the dropdown.");
     return;
   }
 
-  // Verify the prompt exists and allows MS Teams
-  const prompt = await PromptModel.findById(promptId);
-  if (!prompt) {
+  // Verify the agent exists and allows MS Teams
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) {
     await context.sendActivity(
       "The selected agent no longer exists. Please try again.",
     );
     return;
   }
 
-  if (!prompt.allowedChatops?.includes("ms-teams")) {
+  if (!agent.allowedChatops?.includes("ms-teams")) {
     await context.sendActivity(
-      `The agent "${prompt.name}" is no longer available for Microsoft Teams. Please select a different agent.`,
+      `The agent "${agent.name}" is no longer available for Microsoft Teams. Please select a different agent.`,
     );
     return;
   }
@@ -638,13 +638,13 @@ async function handleAgentSelection(
     provider: "ms-teams",
     channelId: channelId || message.channelId,
     workspaceId: workspaceId || message.workspaceId,
-    promptId,
+    agentId,
   });
 
   // If there was an original message (not a command), process it now
   if (originalMessageText && !isCommand(originalMessageText)) {
     await context.sendActivity(
-      `Agent **${prompt.name}** is now bound to this channel. Processing your message...`,
+      `Agent **${agent.name}** is now bound to this channel. Processing your message...`,
     );
 
     // Get the provider and process the original message
@@ -677,7 +677,7 @@ async function handleAgentSelection(
     }
   } else {
     await context.sendActivity(
-      `Agent **${prompt.name}** is now bound to this channel.\n` +
+      `Agent **${agent.name}** is now bound to this channel.\n` +
         "Send a message (with @mention) to start interacting!",
     );
   }

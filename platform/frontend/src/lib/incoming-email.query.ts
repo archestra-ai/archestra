@@ -7,7 +7,7 @@ const {
   setupIncomingEmailWebhook,
   renewIncomingEmailSubscription,
   deleteIncomingEmailSubscription,
-  getPromptEmailAddress,
+  getAgentEmailAddress,
 } = archestraApiSdk;
 
 export const incomingEmailKeys = {
@@ -104,24 +104,24 @@ export function useDeleteIncomingEmailSubscription() {
 }
 
 /**
- * Hook to fetch the email address for a specific prompt
+ * Hook to fetch the email address for a specific agent (internal agent)
  * Pass null to disable the query
  */
-export function usePromptEmailAddress(promptId: string | null) {
+export function useAgentEmailAddress(agentId: string | null) {
   return useQuery({
-    queryKey: incomingEmailKeys.promptEmailAddress(promptId ?? ""),
+    queryKey: incomingEmailKeys.promptEmailAddress(agentId ?? ""),
     queryFn: async () => {
-      if (!promptId) return null;
-      const { data, error } = await getPromptEmailAddress({
-        path: { promptId },
+      if (!agentId) return null;
+      const { data, error } = await getAgentEmailAddress({
+        path: { agentId },
       });
       if (error) {
         throw new Error(
-          error?.error?.message || "Failed to fetch prompt email address",
+          error?.error?.message || "Failed to fetch agent email address",
         );
       }
-      return data as archestraApiTypes.GetPromptEmailAddressResponses["200"];
+      return data as archestraApiTypes.GetAgentEmailAddressResponses["200"];
     },
-    enabled: !!promptId,
+    enabled: !!agentId,
   });
 }

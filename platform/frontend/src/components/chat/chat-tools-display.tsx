@@ -330,11 +330,12 @@ export function ChatToolsDisplay({
     });
 
     // Split into enabled and disabled using the consistent enabledToolIdsSet
+    // In readOnly mode, treat all tools as "enabled" for display purposes
     const enabledTools: ToolItem[] = [];
     const disabledTools: ToolItem[] = [];
 
     for (const tool of allServerTools) {
-      if (enabledToolIdsSet.has(tool.id)) {
+      if (readOnly || enabledToolIdsSet.has(tool.id)) {
         enabledTools.push(tool);
       } else {
         disabledTools.push(tool);
@@ -360,7 +361,9 @@ export function ChatToolsDisplay({
               {serverName}
             </span>
             <span className="text-muted-foreground text-xs">
-              ({enabledTools.length}/{totalToolsCount})
+              {readOnly
+                ? `(${totalToolsCount})`
+                : `(${enabledTools.length}/${totalToolsCount})`}
             </span>
           </PromptInputButton>
         </TooltipTrigger>

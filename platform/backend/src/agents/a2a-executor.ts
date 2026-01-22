@@ -3,18 +3,21 @@ import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, PromptModel } from "@/models";
+import { AgentModel } from "@/models";
 
 export interface A2AExecuteParams {
-  promptId: string;
+  /**
+   * Agent ID to execute. Must be an internal agent (agentType='agent').
+   */
+  agentId: string;
   message: string;
   organizationId: string;
   userId: string;
   /** Session ID to group related LLM requests together in logs */
   sessionId?: string;
   /**
-   * Parent delegation chain (colon-separated prompt IDs).
-   * The current promptId will be appended to form the new chain.
+   * Parent delegation chain (colon-separated agent IDs).
+   * The current agentId will be appended to form the new chain.
    */
   parentDelegationChain?: string;
 }
@@ -31,14 +34,14 @@ export interface A2AExecuteResult {
 }
 
 /**
- * Execute a message against an A2A agent (prompt)
+ * Execute a message against an A2A agent (internal agent with prompts)
  * This is the shared execution logic used by both A2A routes and dynamic agent tools
  */
 export async function executeA2AMessage(
   params: A2AExecuteParams,
 ): Promise<A2AExecuteResult> {
   const {
-    promptId,
+    agentId,
     message,
     organizationId,
     userId,
@@ -46,37 +49,38 @@ export async function executeA2AMessage(
     parentDelegationChain,
   } = params;
 
-  // Build delegation chain: append current promptId to parent chain
+  // Build delegation chain: append current agentId to parent chain
   const delegationChain = parentDelegationChain
-    ? `${parentDelegationChain}:${promptId}`
-    : promptId;
+    ? `${parentDelegationChain}:${agentId}`
+    : agentId;
 
-  // Fetch prompt
-  const prompt = await PromptModel.findById(promptId);
-  if (!prompt) {
-    throw new Error(`Prompt ${promptId} not found`);
+  // Fetch the internal agent
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) {
+    throw new Error(`Agent ${agentId} not found`);
   }
 
-  // Fetch the agent (profile) associated with this prompt
-  const agent = await AgentModel.findById(prompt.agentId);
-  if (!agent) {
-    throw new Error(`Agent not found for prompt ${promptId}`);
+  // Verify agent is internal (has prompts)
+  if (agent.agentType !== "agent") {
+    throw new Error(
+      `Agent ${agentId} is not an internal agent (A2A requires agents with agentType='agent')`,
+    );
   }
 
   // Use default model and provider from config
   const selectedModel = config.chat.defaultModel;
   const provider = config.chat.defaultProvider;
 
-  // Build system prompt from prompt's systemPrompt and userPrompt fields
+  // Build system prompt from agent's systemPrompt and userPrompt fields
   let systemPrompt: string | undefined;
   const systemPromptParts: string[] = [];
   const userPromptParts: string[] = [];
 
-  if (prompt.systemPrompt) {
-    systemPromptParts.push(prompt.systemPrompt);
+  if (agent.systemPrompt) {
+    systemPromptParts.push(agent.systemPrompt);
   }
-  if (prompt.userPrompt) {
-    userPromptParts.push(prompt.userPrompt);
+  if (agent.userPrompt) {
+    userPromptParts.push(agent.userPrompt);
   }
 
   if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
@@ -84,14 +88,13 @@ export async function executeA2AMessage(
     systemPrompt = allParts.join("\n\n");
   }
 
-  // Fetch MCP tools for the agent (including agent tools for the prompt)
+  // Fetch MCP tools for the agent (including delegation tools)
   // Pass sessionId and delegationChain so nested agent calls are grouped together
   const mcpTools = await getChatMcpTools({
     agentName: agent.name,
     agentId: agent.id,
     userId,
     userIsProfileAdmin: true, // A2A agents have full access
-    promptId,
     organizationId,
     sessionId,
     delegationChain,
@@ -99,7 +102,6 @@ export async function executeA2AMessage(
 
   logger.info(
     {
-      promptId,
       agentId: agent.id,
       userId,
       orgId: organizationId,
@@ -112,7 +114,7 @@ export async function executeA2AMessage(
 
   // Create LLM model using shared service
   // Pass sessionId to group A2A requests with the calling session
-  // Pass delegationChain as externalAgentId so prompt names appear in logs
+  // Pass delegationChain as externalAgentId so agent names appear in logs
   const { model } = await createLLMModelForAgent({
     organizationId,
     userId,
@@ -143,7 +145,6 @@ export async function executeA2AMessage(
 
   logger.info(
     {
-      promptId,
       agentId: agent.id,
       provider,
       finishReason,

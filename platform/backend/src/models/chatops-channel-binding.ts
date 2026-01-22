@@ -9,7 +9,7 @@ import type {
 
 /**
  * Model for managing chatops channel bindings.
- * Maps chat channels (Teams, Slack, etc.) to Archestra prompts (agents in UI).
+ * Maps chat channels (Teams, Slack, etc.) to Archestra internal agents.
  */
 class ChatOpsChannelBindingModel {
   /**
@@ -25,7 +25,7 @@ class ChatOpsChannelBindingModel {
         provider: input.provider,
         channelId: input.channelId,
         workspaceId: input.workspaceId ?? null,
-        promptId: input.promptId,
+        agentId: input.agentId,
       })
       .returning();
 
@@ -132,15 +132,15 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
-   * Find all bindings for a specific prompt (agent in UI)
+   * Find all bindings for a specific agent
    */
-  static async findByPromptId(
-    promptId: string,
+  static async findByAgentId(
+    agentId: string,
   ): Promise<ChatOpsChannelBinding[]> {
     const bindings = await db
       .select()
       .from(schema.chatopsChannelBindingsTable)
-      .where(eq(schema.chatopsChannelBindingsTable.promptId, promptId))
+      .where(eq(schema.chatopsChannelBindingsTable.agentId, agentId))
       .orderBy(desc(schema.chatopsChannelBindingsTable.createdAt));
 
     return bindings as ChatOpsChannelBinding[];
@@ -156,7 +156,7 @@ class ChatOpsChannelBindingModel {
     const [binding] = await db
       .update(schema.chatopsChannelBindingsTable)
       .set({
-        ...(input.promptId !== undefined && { promptId: input.promptId }),
+        ...(input.agentId !== undefined && { agentId: input.agentId }),
       })
       .where(eq(schema.chatopsChannelBindingsTable.id, id))
       .returning();
@@ -179,7 +179,7 @@ class ChatOpsChannelBindingModel {
 
     if (existing) {
       const updated = await ChatOpsChannelBindingModel.update(existing.id, {
-        promptId: input.promptId,
+        agentId: input.agentId,
       });
       if (!updated) {
         throw new Error("Failed to update binding");

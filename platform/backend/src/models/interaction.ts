@@ -118,13 +118,13 @@ function isUuid(str: string): boolean {
 }
 
 /**
- * Extract all prompt IDs from external agent IDs.
+ * Extract all agent IDs from external agent IDs.
  * External agent IDs can be:
- * - A single prompt ID (UUID)
- * - A delegation chain (colon-separated UUIDs like "promptA:promptB:promptC")
+ * - A single agent ID (UUID)
+ * - A delegation chain (colon-separated UUIDs like "agentA:agentB:agentC")
  * - A non-UUID string like "Archestra Chat" (ignored)
  */
-function extractAllPromptIdsFromExternalAgentIds(
+function extractAllAgentIdsFromExternalAgentIds(
   externalAgentIds: (string | null)[],
 ): string[] {
   const allIds = new Set<string>();
@@ -148,47 +148,47 @@ function extractAllPromptIdsFromExternalAgentIds(
 }
 
 /**
- * Fetch prompt names for a list of prompt IDs.
+ * Fetch agent names for a list of agent IDs.
  */
-async function getPromptNamesById(
-  promptIds: string[],
+async function getAgentNamesById(
+  agentIds: string[],
 ): Promise<Map<string, string>> {
-  if (promptIds.length === 0) return new Map();
+  if (agentIds.length === 0) return new Map();
 
-  const prompts = await db
-    .select({ id: schema.promptsTable.id, name: schema.promptsTable.name })
-    .from(schema.promptsTable)
-    .where(inArray(schema.promptsTable.id, promptIds));
+  const agents = await db
+    .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+    .from(schema.agentsTable)
+    .where(inArray(schema.agentsTable.id, agentIds));
 
-  return new Map(prompts.map((p) => [p.id, p.name]));
+  return new Map(agents.map((a) => [a.id, a.name]));
 }
 
 /**
  * Resolve an external agent ID to a human-readable label.
- * - Single prompt ID: Returns the prompt name
- * - Delegation chain: Returns only the last (most specific) prompt name
+ * - Single agent ID: Returns the agent name
+ * - Delegation chain: Returns only the last (most specific) agent name
  * - Non-UUID: Returns null (will fall back to Main/Subagent)
  */
 function resolveExternalAgentIdLabel(
   externalAgentId: string | null,
-  promptNamesMap: Map<string, string>,
+  agentNamesMap: Map<string, string>,
 ): string | null {
   if (!externalAgentId) return null;
 
   // Check if it's a delegation chain (contains colons)
   if (externalAgentId.includes(":")) {
     const parts = externalAgentId.split(":");
-    // Get the last prompt ID in the chain (the actual executing agent)
-    const lastPromptId = parts[parts.length - 1];
-    if (isUuid(lastPromptId)) {
-      return promptNamesMap.get(lastPromptId) ?? null;
+    // Get the last agent ID in the chain (the actual executing agent)
+    const lastAgentId = parts[parts.length - 1];
+    if (isUuid(lastAgentId)) {
+      return agentNamesMap.get(lastAgentId) ?? null;
     }
     return null;
   }
 
-  // Single ID - return the prompt name if it exists
+  // Single ID - return the agent name if it exists
   if (isUuid(externalAgentId)) {
-    return promptNamesMap.get(externalAgentId) ?? null;
+    return agentNamesMap.get(externalAgentId) ?? null;
   }
 
   // Non-UUID (like "Archestra Chat") - no label
@@ -307,11 +307,11 @@ class InteractionModel {
         .where(whereClause),
     ]);
 
-    // Resolve external agent IDs (including delegation chains) to prompt names
-    const allPromptIds = extractAllPromptIdsFromExternalAgentIds(
+    // Resolve external agent IDs (including delegation chains) to agent names
+    const allAgentIds = extractAllAgentIdsFromExternalAgentIds(
       data.map((i) => i.externalAgentId),
     );
-    const promptNamesMap = await getPromptNamesById(allPromptIds);
+    const agentNamesMap = await getAgentNamesById(allAgentIds);
 
     // Add computed requestType and externalAgentIdLabel fields to each interaction
     const dataWithComputedFields = data.map((interaction) => ({
@@ -323,7 +323,7 @@ class InteractionModel {
       // Resolve externalAgentId to human-readable label (supports delegation chains)
       externalAgentIdLabel: resolveExternalAgentIdLabel(
         interaction.externalAgentId,
-        promptNamesMap,
+        agentNamesMap,
       ),
     }));
 
@@ -706,7 +706,7 @@ class InteractionModel {
       profileId: string;
       profileName: string | null;
       externalAgentIds: string[];
-      externalAgentIdLabels: (string | null)[]; // Resolved prompt names for external agent IDs
+      externalAgentIdLabels: (string | null)[]; // Resolved agent names for external agent IDs
       userNames: string[];
       lastInteractionRequest: unknown | null;
       lastInteractionType: string | null;
@@ -874,8 +874,8 @@ class InteractionModel {
     const allExternalAgentIds = sessionsData.flatMap((s) =>
       s.externalAgentIds ? s.externalAgentIds.split(",").filter(Boolean) : [],
     );
-    const promptNamesMap = await getPromptNamesById(
-      extractAllPromptIdsFromExternalAgentIds(allExternalAgentIds),
+    const agentNamesMap = await getAgentNamesById(
+      extractAllAgentIdsFromExternalAgentIds(allExternalAgentIds),
     );
 
     // Transform the data to the expected format
@@ -912,7 +912,7 @@ class InteractionModel {
         profileName: s.profileName,
         externalAgentIds,
         externalAgentIdLabels: externalAgentIds.map((id) =>
-          resolveExternalAgentIdLabel(id, promptNamesMap),
+          resolveExternalAgentIdLabel(id, agentNamesMap),
         ),
         userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
         lastInteractionRequest: lastInteraction?.request ?? null,

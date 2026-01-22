@@ -28,7 +28,7 @@ export const InsertChatOpsChannelBindingSchema = createInsertSchema(
 export const UpdateChatOpsChannelBindingSchema = createUpdateSchema(
   schema.chatopsChannelBindingsTable,
 ).pick({
-  promptId: true,
+  agentId: true,
 });
 
 /**

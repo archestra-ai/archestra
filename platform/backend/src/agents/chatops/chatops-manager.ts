@@ -1,9 +1,9 @@
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import logger from "@/logging";
 import {
+  AgentModel,
   ChatOpsChannelBindingModel,
   ChatOpsProcessedMessageModel,
-  PromptModel,
 } from "@/models";
 import {
   type ChatOpsProcessingResult,
@@ -125,41 +125,64 @@ export class ChatOpsManager {
       return { success: true, error: "NO_BINDING" };
     }
 
-    // Validate prompt
-    const prompt = await PromptModel.findById(binding.promptId);
-    if (!prompt) {
+    // Check if the binding has an agent assigned
+    if (!binding.agentId) {
       logger.warn(
-        { promptId: binding.promptId, bindingId: binding.id },
-        "[ChatOps] Prompt not found for binding",
+        { bindingId: binding.id },
+        "[ChatOps] Binding has no agent assigned",
       );
-      return { success: false, error: "PROMPT_NOT_FOUND" };
+      return { success: false, error: "NO_AGENT_ASSIGNED" };
     }
 
-    if (!prompt.allowedChatops?.includes(provider.providerId)) {
+    // Verify the agent exists and is an internal agent
+    const agent = await AgentModel.findById(binding.agentId);
+    if (!agent || agent.agentType !== "agent") {
       logger.warn(
-        { promptId: binding.promptId, provider: provider.providerId },
-        "[ChatOps] Prompt does not allow this chatops provider",
+        { agentId: binding.agentId, bindingId: binding.id },
+        "[ChatOps] Agent is not an internal agent",
+      );
+      return {
+        success: false,
+        error: "AGENT_NOT_FOUND",
+      };
+    }
+
+    // Check if the agent allows this chatops provider
+    if (!agent.allowedChatops?.includes(provider.providerId)) {
+      logger.warn(
+        {
+          agentId: binding.agentId,
+          provider: provider.providerId,
+          allowedChatops: agent.allowedChatops,
+        },
+        "[ChatOps] Agent does not allow this chatops provider",
       );
       return { success: false, error: "PROVIDER_NOT_ALLOWED" };
     }
 
     // Resolve inline agent mention
-    const { agentToUse, cleanedMessageText, fallbackMessage } =
-      await this.resolveInlineAgentMention({
-        messageText: message.text,
-        defaultPrompt: prompt,
-        provider,
-      });
+    const {
+      agentToUse,
+      cleanedMessageText: _cleanedMessageText,
+      fallbackMessage,
+    } = await this.resolveInlineAgentMention({
+      messageText: message.text,
+      defaultAgent: agent,
+      provider,
+    });
 
     // Build context from thread history
     const contextMessages = await this.fetchThreadHistory(message, provider);
-    const fullMessage =
-      contextMessages.length > 0
-        ? `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`
-        : cleanedMessageText;
 
+    // Build the full message with context
+    let fullMessage = message.text;
+    if (contextMessages.length > 0) {
+      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${message.text}`;
+    }
+
+    // Execute the A2A message using the agent
     return this.executeAndReply({
-      prompt: agentToUse,
+      agent: agentToUse,
       binding,
       message,
       provider,
@@ -206,21 +229,21 @@ export class ChatOpsManager {
    */
   private async resolveInlineAgentMention(params: {
     messageText: string;
-    defaultPrompt: { id: string; name: string };
+    defaultAgent: { id: string; name: string };
     provider: ChatOpsProvider;
   }): Promise<{
     agentToUse: { id: string; name: string };
     cleanedMessageText: string;
     fallbackMessage?: string;
   }> {
-    const { messageText, defaultPrompt, provider } = params;
+    const { messageText, defaultAgent, provider } = params;
 
     if (!messageText.startsWith(">")) {
-      return { agentToUse: defaultPrompt, cleanedMessageText: messageText };
+      return { agentToUse: defaultAgent, cleanedMessageText: messageText };
     }
 
     const textAfterPrefix = messageText.slice(1).trimStart();
-    const availableAgents = await PromptModel.findByAllowedChatopsProvider(
+    const availableAgents = await AgentModel.findByAllowedChatopsProvider(
       provider.providerId,
     );
 
@@ -243,14 +266,14 @@ export class ChatOpsManager {
     const potentialName = textAfterPrefix.split(/\s{2,}|\n/)[0].trim();
     if (potentialName) {
       return {
-        agentToUse: defaultPrompt,
+        agentToUse: defaultAgent,
         cleanedMessageText:
           textAfterPrefix.slice(potentialName.length).trim() || textAfterPrefix,
-        fallbackMessage: `${potentialName} not found, using ${defaultPrompt.name}`,
+        fallbackMessage: `${potentialName} not found, using ${defaultAgent.name}`,
       };
     }
 
-    return { agentToUse: defaultPrompt, cleanedMessageText: messageText };
+    return { agentToUse: defaultAgent, cleanedMessageText: messageText };
   }
 
   private async fetchThreadHistory(
@@ -284,7 +307,7 @@ export class ChatOpsManager {
   }
 
   private async executeAndReply(params: {
-    prompt: { id: string; name: string };
+    agent: { id: string; name: string };
     binding: { organizationId: string };
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
@@ -292,19 +315,12 @@ export class ChatOpsManager {
     sendReply: boolean;
     fallbackMessage?: string;
   }): Promise<ChatOpsProcessingResult> {
-    const {
-      prompt,
-      binding,
-      message,
-      provider,
-      fullMessage,
-      sendReply,
-      fallbackMessage,
-    } = params;
+    const { agent, binding, message, provider, fullMessage, sendReply } =
+      params;
 
     try {
       const result = await executeA2AMessage({
-        promptId: prompt.id,
+        agentId: agent.id,
         organizationId: binding.organizationId,
         message: fullMessage,
         userId: `chatops-${provider.providerId}-${message.senderId}`,
@@ -316,7 +332,7 @@ export class ChatOpsManager {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: fallbackMessage || `Via ${prompt.name}`,
+          footer: `Routed to ${agent.name}. Use @Archestra /select-agent to change.`,
           conversationReference: message.metadata?.conversationReference,
         });
       }

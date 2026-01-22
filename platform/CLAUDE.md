@@ -17,6 +17,7 @@
 7. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
 8. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseLicenseActivated` checks instead to avoid bundling enterprise code into free builds
 9. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
+10. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 
 ## Docs
 
@@ -76,6 +77,16 @@ pnpm db:migrate      # Run database migrations
 pnpm db:studio       # Open Drizzle Studio
 pnpm db:generate     # Generate new migrations (CI checks for uncommitted migrations)
 drizzle-kit check    # Check consistency of generated SQL migrations history
+
+# Manual Migrations with Data Migration Logic
+# When creating migrations that include data migration (INSERT/UPDATE statements),
+# you must use the Drizzle-generated migration file name to ensure proper tracking:
+# 1. First, update the Drizzle schema files with your schema changes
+# 2. Run `pnpm db:generate` - this creates a migration with a random name (e.g., 0119_military_alice.sql)
+# 3. Add your data migration SQL to the generated file (INSERT, UPDATE statements, etc.)
+# 4. Run `drizzle-kit check` to verify consistency
+# IMPORTANT: Never create manually-named migration files - Drizzle tracks migrations
+# via the meta/_journal.json file which references the generated file names.
 
 # Database Connection
 # PostgreSQL is running in Kubernetes (managed by Tilt)

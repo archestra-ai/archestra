@@ -4,7 +4,7 @@ category: Examples
 order: 4
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -41,7 +41,7 @@ For OpenAI, you can get an API key from:
 2. Download the docker compose file to install Archestra platform and sample OpenWebUI locally:
 
    ```bash
-   curl -O https://raw.githubusercontent.com/archestra-ai/archestra/main/platform/docker-compose-openwebui.yaml
+   curl -O https://raw.githubusercontent.com/archestra-ai/examples/main/docker-compose-openwebui.yaml
    ```
 
 3. Start docker compose if you want to deploy both OpenWebUI and Archestra

@@ -202,12 +202,12 @@ The MS Teams integration requires Graph API permissions to verify user identity 
 1. In Azure Portal, go to **App registrations** → find your bot's app
 2. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions**
 3. Add the following permissions:
-   - `User.Read.All` — **Required** for user identity verification (security)
+   - `User.ReadBasic.All` — **Required** for user identity verification (security). This permission allows reading basic profile info (name, email) which is sufficient for verifying user identity.
    - `ChannelMessage.Read.All` — Required for team channel message history
    - `Chat.Read.All` — Required for group chat message history
 4. Click **Grant admin consent** for all permissions
 
-> **Important:** Without `User.Read.All` permission, the bot cannot verify user identity and will reject all messages. This permission is required for security—it ensures only registered Archestra users with proper team access can invoke agents.
+> **Important:** Without `User.ReadBasic.All` permission, the bot cannot verify user identity and will reject all messages. This permission is required for security—it ensures only registered Archestra users with proper team access can invoke agents.
 
 #### Configure Archestra
 
@@ -319,17 +319,17 @@ Once set, the default agent processes all subsequent messages in that channel un
 
 #### Switching Agents Inline
 
-You can temporarily use a different agent for a single message by using the `>AgentName` syntax:
+You can temporarily use a different agent for a single message by using the `AgentName >` syntax:
 
 ```
-@Archestra >Sales what's our Q4 pipeline?
+@Archestra Sales > what's our Q4 pipeline?
 ```
 
 This routes the message to the "Sales" agent instead of the channel's default agent. The default binding remains unchanged—only this specific message uses the alternate agent.
 
 **Matching rules:**
 - Agent names are matched case-insensitively
-- Spaces in agent names are optional: `>AgentPeter` matches "Agent Peter"
+- Spaces in agent names are optional: `AgentPeter >` matches "Agent Peter"
 - If the agent name isn't found, the message falls back to the default agent with a notice
 
 **Examples:**
@@ -337,9 +337,9 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 | Message | Routed To |
 |---------|-----------|
 | `@Archestra hello` | Default agent |
-| `@Archestra >Sales check revenue` | Sales agent |
-| `@Archestra >support help me` | Support agent |
-| `@Archestra >Unknown test` | Default agent (with fallback notice) |
+| `@Archestra Sales > check revenue` | Sales agent |
+| `@Archestra support > help me` | Support agent |
+| `@Archestra Unknown > test` | Default agent (with fallback notice) |
 
 ### Troubleshooting
 

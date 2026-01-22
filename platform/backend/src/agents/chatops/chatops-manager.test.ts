@@ -6,7 +6,11 @@ import type {
   ChatReplyOptions,
   IncomingChatMessage,
 } from "@/types/chatops";
-import { ChatOpsManager, findTolerantMatchLength } from "./chatops-manager";
+import {
+  ChatOpsManager,
+  findTolerantMatchLength,
+  matchesAgentName,
+} from "./chatops-manager";
 
 describe("findTolerantMatchLength", () => {
   describe("exact matches", () => {
@@ -105,6 +109,42 @@ describe("findTolerantMatchLength", () => {
     test("handles text that is exactly the agent name", () => {
       expect(findTolerantMatchLength("Sales", "Sales")).toBe(5);
     });
+  });
+});
+
+describe("matchesAgentName", () => {
+  test("matches exact name", () => {
+    expect(matchesAgentName("Sales", "Sales")).toBe(true);
+  });
+
+  test("matches case-insensitively", () => {
+    expect(matchesAgentName("sales", "Sales")).toBe(true);
+    expect(matchesAgentName("SALES", "Sales")).toBe(true);
+  });
+
+  test("matches ignoring spaces in input", () => {
+    expect(matchesAgentName("AgentPeter", "Agent Peter")).toBe(true);
+    expect(matchesAgentName("agentpeter", "Agent Peter")).toBe(true);
+  });
+
+  test("matches with extra spaces in input", () => {
+    expect(matchesAgentName("Agent  Peter", "Agent Peter")).toBe(true);
+  });
+
+  test("matches with spaces in both", () => {
+    expect(matchesAgentName("Agent Peter", "Agent Peter")).toBe(true);
+  });
+
+  test("returns false for partial match", () => {
+    expect(matchesAgentName("Agent", "Agent Peter")).toBe(false);
+  });
+
+  test("returns false for different name", () => {
+    expect(matchesAgentName("Support", "Sales")).toBe(false);
+  });
+
+  test("returns false when input has extra characters", () => {
+    expect(matchesAgentName("SalesTeam", "Sales")).toBe(false);
   });
 });
 
@@ -275,11 +315,11 @@ describe("ChatOpsManager security validation", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("User.Read.All permission");
+    expect(result.error).toContain("User.ReadBasic.All permission");
     // Should send error reply to user
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: expect.stringContaining("User.Read.All"),
+        text: expect.stringContaining("User.ReadBasic.All"),
       }),
     );
   });

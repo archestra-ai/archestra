@@ -155,6 +155,16 @@ export class ChatOpsManager {
       });
 
     // Security: Validate user has access to the agent
+    logger.debug(
+      {
+        agentId: agentToUse.agentId,
+        agentName: agentToUse.name,
+        organizationId: prompt.organizationId,
+        senderId: message.senderId,
+      },
+      "[ChatOps] About to validate user access",
+    );
+
     const authResult = await this.validateUserAccess({
       message,
       provider,
@@ -218,8 +228,8 @@ export class ChatOpsManager {
 
   /**
    * Resolve inline agent mention from message text.
-   * Pattern: ">AgentName message" switches to a different agent.
-   * Tolerant matching handles variations like ">AgentPeter", "> Agent Peter".
+   * Pattern: "AgentName > message" switches to a different agent.
+   * Tolerant matching handles variations like "Agent Peter > hello", "kid>how are you".
    */
   private async resolveInlineAgentMention(params: {
     messageText: string;
@@ -232,42 +242,40 @@ export class ChatOpsManager {
   }> {
     const { messageText, defaultPrompt, provider } = params;
 
-    if (!messageText.startsWith(">")) {
+    // Look for ">" delimiter - pattern is "AgentName > message"
+    const delimiterIndex = messageText.indexOf(">");
+    if (delimiterIndex === -1) {
       return { agentToUse: defaultPrompt, cleanedMessageText: messageText };
     }
 
-    const textAfterPrefix = messageText.slice(1).trimStart();
+    const potentialAgentName = messageText.slice(0, delimiterIndex).trim();
+    const messageAfterDelimiter = messageText.slice(delimiterIndex + 1).trim();
+
+    // If nothing before the delimiter, not a valid agent switch
+    if (!potentialAgentName) {
+      return { agentToUse: defaultPrompt, cleanedMessageText: messageText };
+    }
+
     const availableAgents = await PromptModel.findByAllowedChatopsProvider(
       provider.providerId,
     );
 
-    // Sort by name length (longest first) to match "Agent Peter" before "Agent"
-    const sortedAgents = [...availableAgents].sort(
-      (a, b) => b.name.length - a.name.length,
-    );
-
-    for (const agent of sortedAgents) {
-      const matchLength = findTolerantMatchLength(textAfterPrefix, agent.name);
-      if (matchLength !== null) {
+    // Try to find a matching agent using tolerant matching
+    for (const agent of availableAgents) {
+      if (matchesAgentName(potentialAgentName, agent.name)) {
         return {
           agentToUse: agent,
-          cleanedMessageText: textAfterPrefix.slice(matchLength).trim(),
+          cleanedMessageText: messageAfterDelimiter,
         };
       }
     }
 
-    // No known agent matched - extract potential name for fallback message
-    const potentialName = textAfterPrefix.split(/\s{2,}|\n/)[0].trim();
-    if (potentialName) {
-      return {
-        agentToUse: defaultPrompt,
-        cleanedMessageText:
-          textAfterPrefix.slice(potentialName.length).trim() || textAfterPrefix,
-        fallbackMessage: `${potentialName} not found, using ${defaultPrompt.name}`,
-      };
-    }
-
-    return { agentToUse: defaultPrompt, cleanedMessageText: messageText };
+    // No known agent matched - return fallback with the message after delimiter
+    return {
+      agentToUse: defaultPrompt,
+      cleanedMessageText: messageAfterDelimiter || messageText,
+      fallbackMessage: `"${potentialAgentName}" not found, using ${defaultPrompt.name}`,
+    };
   }
 
   private async fetchThreadHistory(
@@ -302,7 +310,7 @@ export class ChatOpsManager {
 
   /**
    * Validate that the MS Teams user has access to the agent.
-   * 1. Resolve user email from MS Teams (requires User.Read.All Graph permission)
+   * 1. Resolve user email from MS Teams (requires User.ReadBasic.All Graph permission)
    * 2. Look up Archestra user by email
    * 3. Check user has team-based access to the agent
    */
@@ -318,22 +326,30 @@ export class ChatOpsManager {
     const { message, provider, agentId, agentName, organizationId } = params;
 
     // Resolve user's email from the chat provider
+    logger.debug(
+      { senderId: message.senderId },
+      "[ChatOps] Resolving user email from provider",
+    );
     const userEmail = await provider.getUserEmail(message.senderId);
+    logger.debug(
+      { senderId: message.senderId, userEmail },
+      "[ChatOps] User email resolved",
+    );
 
     if (!userEmail) {
       logger.warn(
         { senderId: message.senderId },
-        "[ChatOps] Could not resolve user email - Graph API User.Read.All permission may be missing",
+        "[ChatOps] Could not resolve user email - Graph API User.ReadBasic.All permission may be missing",
       );
       await this.sendSecurityErrorReply(
         provider,
         message,
-        "Could not verify your identity. The bot requires the `User.Read.All` Microsoft Graph API permission to be configured. Please contact your administrator.",
+        "Could not verify your identity. The bot requires the `User.ReadBasic.All` Microsoft Graph API permission to be configured. Please contact your administrator.",
       );
       return {
         success: false,
         error:
-          "Could not resolve user email for security validation - User.Read.All permission may be missing",
+          "Could not resolve user email for security validation - User.ReadBasic.All permission may be missing",
       };
     }
 
@@ -411,12 +427,20 @@ export class ChatOpsManager {
     message: IncomingChatMessage,
     errorText: string,
   ): Promise<void> {
+    logger.debug(
+      {
+        messageId: message.messageId,
+        hasConversationRef: Boolean(message.metadata?.conversationReference),
+      },
+      "[ChatOps] Sending security error reply",
+    );
     try {
       await provider.sendReply({
         originalMessage: message,
         text: `⚠️ **Access Denied**\n\n${errorText}`,
         footer: "Security check failed",
       });
+      logger.debug("[ChatOps] Security error reply sent successfully");
     } catch (error) {
       logger.error(
         { error: errorMessage(error) },
@@ -496,7 +520,19 @@ export const chatOpsManager = new ChatOpsManager();
 // =============================================================================
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    return error.message;
+  }
+  // Handle objects that may not convert to string properly
+  try {
+    return String(error);
+  } catch {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown error (could not serialize)";
+    }
+  }
 }
 
 /**
@@ -515,7 +551,20 @@ function stripBotFooter(text: string): string {
 }
 
 /**
- * Find tolerant match length for an agent name at the start of text.
+ * Check if a given input string matches an agent name.
+ * Tolerant matching: case-insensitive, ignores spaces.
+ * E.g., "AgentPeter", "agent peter", "agentpeter" all match "Agent Peter".
+ *
+ * @internal Exported for testing
+ */
+export function matchesAgentName(input: string, agentName: string): boolean {
+  const normalizedInput = input.toLowerCase().replace(/\s+/g, "");
+  const normalizedName = agentName.toLowerCase().replace(/\s+/g, "");
+  return normalizedInput === normalizedName;
+}
+
+/**
+ * Find length of agent name match at start of text.
  * Handles "AgentPeter", "Agent Peter", "agent peter" for "Agent Peter".
  * Returns matched length or null if no match.
  *

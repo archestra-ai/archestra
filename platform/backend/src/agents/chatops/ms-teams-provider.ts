@@ -227,20 +227,43 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("No conversation reference available for reply");
     }
 
+    logger.debug(
+      {
+        hasRef: Boolean(ref),
+        refType: ref?.activityId ? "activity" : "conversation",
+        textLength: options.text?.length,
+        hasFooter: Boolean(options.footer),
+      },
+      "[MSTeamsProvider] sendReply called",
+    );
+
     let replyText = options.text;
     if (options.footer) {
       replyText += `\n\n---\n_${options.footer}_`;
     }
 
     let messageId = "";
-    await this.adapter.continueConversationAsync(
-      config.chatops.msTeams.appId,
-      ref,
-      async (context) => {
-        const response = await context.sendActivity(replyText);
-        messageId = response?.id || "";
-      },
-    );
+    try {
+      await this.adapter.continueConversationAsync(
+        config.chatops.msTeams.appId,
+        ref,
+        async (context) => {
+          logger.debug("[MSTeamsProvider] Inside continueConversationAsync");
+          const response = await context.sendActivity(replyText);
+          messageId = response?.id || "";
+          logger.debug(
+            { messageId },
+            "[MSTeamsProvider] sendActivity completed",
+          );
+        },
+      );
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] continueConversationAsync failed",
+      );
+      throw error;
+    }
 
     return messageId;
   }
@@ -283,7 +306,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   /**
    * Get user's email from their AAD Object ID using Microsoft Graph API.
-   * Requires User.Read.All application permission.
+   * Requires User.ReadBasic.All application permission.
    */
   async getUserEmail(aadObjectId: string): Promise<string | null> {
     if (!this.graphClient) {
@@ -299,7 +322,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     } catch (error) {
       logger.error(
         { error: errorMessage(error), aadObjectId },
-        "[MSTeamsProvider] Failed to fetch user email. User.Read.All permission may be missing.",
+        "[MSTeamsProvider] Failed to fetch user email. User.ReadBasic.All permission may be missing.",
       );
       return null;
     }
@@ -466,7 +489,20 @@ export default MSTeamsProvider;
 // =============================================================================
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    return error.message;
+  }
+  // Handle objects that may not convert to string properly (e.g., MS Graph SDK errors)
+  try {
+    return String(error);
+  } catch {
+    // If String() fails, try JSON.stringify or return a generic message
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown error (could not serialize)";
+    }
+  }
 }
 
 function cleanBotMention(text: string, botName?: string): string {

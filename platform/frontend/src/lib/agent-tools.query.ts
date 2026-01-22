@@ -24,6 +24,7 @@ export function useAllProfileTools({
   sorting,
   filters,
   skipPagination,
+  enabled = true,
 }: {
   initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
   pagination?: {
@@ -42,6 +43,7 @@ export function useAllProfileTools({
     mcpServerOwnerId?: string;
   };
   skipPagination?: boolean;
+  enabled?: boolean;
 }) {
   return useQuery({
     queryKey: [
@@ -88,6 +90,7 @@ export function useAllProfileTools({
       );
     },
     initialData,
+    enabled,
   });
 }
 

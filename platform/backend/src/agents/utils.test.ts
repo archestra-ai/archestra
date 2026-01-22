@@ -6,6 +6,15 @@ import { isRateLimited, type RateLimitEntry } from "./utils";
 // Mock cacheManager
 const mockCache = new Map<string, RateLimitEntry>();
 vi.mock("@/cache-manager", () => ({
+  CacheKey: {
+    GetChatModels: "get-chat-models",
+    ChatMcpTools: "chat-mcp-tools",
+    ProcessedEmail: "processed-email",
+    WebhookRateLimit: "webhook-rate-limit",
+    OAuthState: "oauth-state",
+    McpSession: "mcp-session",
+    SsoGroups: "sso-groups",
+  },
   cacheManager: {
     get: vi.fn(async (key: string) => mockCache.get(key)),
     set: vi.fn(async (key: string, value: RateLimitEntry) => {

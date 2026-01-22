@@ -21,6 +21,15 @@ vi.mock("@/logging", () => ({
 // Mock cacheManager for SSO groups caching tests
 const mockCacheStore = new Map<string, unknown>();
 vi.mock("@/cache-manager", () => ({
+  CacheKey: {
+    GetChatModels: "get-chat-models",
+    ChatMcpTools: "chat-mcp-tools",
+    ProcessedEmail: "processed-email",
+    WebhookRateLimit: "webhook-rate-limit",
+    OAuthState: "oauth-state",
+    McpSession: "mcp-session",
+    SsoGroups: "sso-groups",
+  },
   cacheManager: {
     get: vi.fn(async (key: string) => mockCacheStore.get(key)),
     set: vi.fn(async (key: string, value: unknown, _ttl?: number) => {

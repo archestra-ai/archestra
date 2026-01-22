@@ -954,20 +954,8 @@ class InteractionModel {
     // Session IDs can be any string, but interaction IDs must be valid UUIDs
     const uuidKeys = sessionKeys.filter((k) => isUuid(k));
 
-    // Build the where condition based on what we have
-    const conditions: SQL[] = [];
-
-    // Session IDs - can be any string including UUIDs
-    if (sessionKeys.length > 0) {
-      conditions.push(inArray(schema.interactionsTable.sessionId, sessionKeys));
-    }
-
-    // Interaction IDs - only valid UUIDs (for single interactions without session)
-    if (uuidKeys.length > 0) {
-      conditions.push(inArray(schema.interactionsTable.id, uuidKeys));
-    }
-
-    if (conditions.length === 0) {
+    // Early return if no keys to query
+    if (sessionKeys.length === 0 && uuidKeys.length === 0) {
       return new Map();
     }
 

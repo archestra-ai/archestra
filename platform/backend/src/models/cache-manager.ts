@@ -20,9 +20,14 @@ class CacheManager {
   private cleanupIntervalId: NodeJS.Timeout | null = null;
   private static readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private defaultTtl = TimeInMs.Hour;
+  private isShuttingDown = false;
 
   constructor() {
-    this.startCleanupInterval();
+    // Don't start cleanup interval in test environment to avoid
+    // database access after PGlite connection is closed
+    if (process.env.NODE_ENV !== "test") {
+      this.startCleanupInterval();
+    }
     logger.info("CacheManager: Initialized with PostgreSQL storage");
   }
 
@@ -144,6 +149,11 @@ class CacheManager {
    * Called periodically by the cleanup interval.
    */
   private async cleanupExpired(): Promise<number> {
+    // Skip cleanup if shutting down
+    if (this.isShuttingDown) {
+      return 0;
+    }
+
     try {
       const result = await db
         .delete(schema.cacheTable)
@@ -159,10 +169,14 @@ class CacheManager {
 
       return result.length;
     } catch (error) {
-      logger.error(
-        { error },
-        "CacheManager: Error cleaning up expired entries",
-      );
+      // Silently ignore errors during cleanup - this can happen during
+      // shutdown when the database connection is closed
+      if (!this.isShuttingDown) {
+        logger.error(
+          { error },
+          "CacheManager: Error cleaning up expired entries",
+        );
+      }
       return 0;
     }
   }
@@ -177,12 +191,27 @@ class CacheManager {
 
     this.cleanupIntervalId = setInterval(() => {
       this.cleanupExpired().catch((error) => {
-        logger.error({ error }, "CacheManager: Cleanup interval error");
+        // Only log if not shutting down
+        if (!this.isShuttingDown) {
+          logger.error({ error }, "CacheManager: Cleanup interval error");
+        }
       });
     }, CacheManager.CLEANUP_INTERVAL_MS);
 
     // Don't prevent process exit
     this.cleanupIntervalId.unref();
+  }
+
+  /**
+   * Stop the background cleanup interval and mark as shutting down.
+   * Should be called during graceful shutdown.
+   */
+  shutdown(): void {
+    this.isShuttingDown = true;
+    if (this.cleanupIntervalId) {
+      clearInterval(this.cleanupIntervalId);
+      this.cleanupIntervalId = null;
+    }
   }
 }
 

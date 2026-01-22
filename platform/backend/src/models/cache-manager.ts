@@ -34,6 +34,10 @@ class CacheManager {
   /**
    * Get a value from the cache.
    * Returns undefined if the key doesn't exist or has expired.
+   *
+   * Note: Returns undefined on error rather than throwing. This is intentional:
+   * cache reads are non-critical and callers should handle cache misses gracefully.
+   * A failed cache read should fall through to the underlying data source.
    */
   async get<T>(key: AllowedCacheKey): Promise<T | undefined> {
     try {
@@ -62,6 +66,12 @@ class CacheManager {
   /**
    * Set a value in the cache with optional TTL.
    * If the key already exists, it will be overwritten.
+   *
+   * Note: Unlike get() and delete(), this method throws on error rather than
+   * returning a fallback value. This is intentional: a failed cache write for
+   * critical data (like OAuth state or SSO groups) could cause security issues
+   * if the caller assumes the data was cached. Callers should handle the error
+   * or let it propagate to fail the operation.
    *
    * @param key - Cache key
    * @param value - Value to store (will be serialized as JSONB)
@@ -101,6 +111,10 @@ class CacheManager {
   /**
    * Delete a value from the cache.
    * Returns true if the operation succeeded.
+   *
+   * Note: Returns false on error rather than throwing. Cache deletes are
+   * typically cleanup operations where failure is non-critical - the entry
+   * will expire naturally via TTL.
    */
   async delete(key: AllowedCacheKey): Promise<boolean> {
     try {

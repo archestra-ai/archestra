@@ -6,10 +6,7 @@ import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import {
-  ConnectionBaseUrl,
-  type ConnectionUrl,
-} from "@/components/connection-base-url";
+import { ConnectionBaseUrl } from "@/components/connection-base-url";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -55,7 +52,7 @@ export function A2AConnectionInstructions({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
-  const [connectionUrl, setConnectionUrl] = useState<ConnectionUrl>(
+  const [connectionUrl, setConnectionUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
   );
   const [showExposedToken, setShowExposedToken] = useState(false);
@@ -267,7 +264,6 @@ curl -X GET "${agentCardUrl}" \\
 
   return (
     <div className="space-y-6">
-      {/* Connection Type Selector */}
       <ConnectionBaseUrl
         value={connectionUrl}
         onChange={setConnectionUrl}

@@ -13,12 +13,9 @@ import config from "@/lib/config";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
 
-// The selected URL value - either the internal URL or one of the external URLs
-export type ConnectionUrl = string;
-
 interface ConnectionBaseUrlProps {
-  value: ConnectionUrl;
-  onChange: (value: ConnectionUrl) => void;
+  value: string;
+  onChange: (value: string) => void;
   idPrefix: string;
 }
 

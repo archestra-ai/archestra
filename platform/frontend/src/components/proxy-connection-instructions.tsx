@@ -5,10 +5,7 @@ import { Check, ChevronDown, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import {
-  ConnectionBaseUrl,
-  type ConnectionUrl,
-} from "@/components/connection-base-url";
+import { ConnectionBaseUrl } from "@/components/connection-base-url";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -31,7 +28,7 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
-  const [connectionUrl, setConnectionUrl] = useState<ConnectionUrl>(
+  const [connectionUrl, setConnectionUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
   );
 

@@ -14,10 +14,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import {
-  ConnectionBaseUrl,
-  type ConnectionUrl,
-} from "@/components/connection-base-url";
+import { ConnectionBaseUrl } from "@/components/connection-base-url";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -58,7 +55,7 @@ export function McpConnectionInstructions({
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
-  const [connectionUrl, setConnectionUrl] = useState<ConnectionUrl>(
+  const [connectionUrl, setConnectionUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
   );
 

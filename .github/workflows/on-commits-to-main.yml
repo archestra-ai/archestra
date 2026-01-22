@@ -88,7 +88,7 @@ jobs:
             --set archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }} \
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
             --set archestra.env.ARCHESTRA_FRONTEND_URL="https://frontend.archestra.dev" \
-            --set archestra.env.ARCHESTRA_API_BASE_URL="https://backend.archestra.dev" \
+            --set archestra.env.ARCHESTRA_API_EXTERNAL_BASE_URL="https://backend.archestra.dev" \
             --set archestra.env.ARCHESTRA_AUTH_COOKIE_DOMAIN=".archestra.dev" \
             --set archestra.env.ARCHESTRA_METRICS_SECRET="${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}" \
             --set archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}" \

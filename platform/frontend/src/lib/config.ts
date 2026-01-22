@@ -61,11 +61,11 @@ const appendProxySuffix = (baseUrl: string): string => {
 
 /**
  * Get all configured external proxy URLs (with /v1 suffix).
- * Supports comma-separated list in NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL.
+ * Supports comma-separated list in NEXT_PUBLIC_ARCHESTRA_API_BASE_URL.
  * Returns array of URLs for UI display when multiple URLs are configured.
  */
 export const getExternalProxyUrls = (): string[] => {
-  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL");
+  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
   if (!externalUrl) {
     return [];
   }

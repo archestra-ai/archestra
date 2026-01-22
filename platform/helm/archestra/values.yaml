@@ -65,7 +65,7 @@ archestra:
   # Example:
   #   env:
   #     # External URL(s) for connection instructions (supports comma-separated list for multiple URLs)
-  #     ARCHESTRA_API_EXTERNAL_BASE_URL: "http://archestra.default.svc:9000,https://api.archestra.example.com"
+  #     ARCHESTRA_API_BASE_URL: "http://archestra.default.svc:9000,https://api.archestra.example.com"
   #     CUSTOM_VAR: "custom-value"
   #     # Reference another env var (defined via envWithValueFrom below)
   #     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"

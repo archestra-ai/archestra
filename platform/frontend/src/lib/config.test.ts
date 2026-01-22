@@ -94,7 +94,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should return empty array when env var is not set", () => {
-    delete process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL;
+    delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
 
     const result = getExternalProxyUrls();
 
@@ -102,7 +102,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should return empty array when env var is empty string", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL = "";
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "";
 
     const result = getExternalProxyUrls();
 
@@ -110,7 +110,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should return single URL with /v1 suffix when one URL is set", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL =
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://api.archestra.com";
 
     const result = getExternalProxyUrls();
@@ -119,7 +119,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should return multiple URLs with /v1 suffix when comma-separated list is set", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL =
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "http://internal.svc:9000,https://api.archestra.com";
 
     const result = getExternalProxyUrls();
@@ -131,7 +131,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should trim whitespace from URLs", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL =
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "  http://internal.svc:9000  ,  https://api.archestra.com  ";
 
     const result = getExternalProxyUrls();
@@ -143,7 +143,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should filter out empty strings from comma-separated list", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL =
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "http://internal.svc:9000,,https://api.archestra.com,";
 
     const result = getExternalProxyUrls();
@@ -155,7 +155,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should return URL as-is when it already ends with /v1", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL =
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://api.example.com/v1";
 
     const result = getExternalProxyUrls();
@@ -164,7 +164,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should remove trailing slash and append /v1 when URL ends with /", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL =
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://api.example.com/";
 
     const result = getExternalProxyUrls();
@@ -173,7 +173,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should handle URLs with paths correctly", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL =
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://api.example.com/proxy";
 
     const result = getExternalProxyUrls();
@@ -182,7 +182,7 @@ describe("getExternalProxyUrls", () => {
   });
 
   it("should handle mixed URL formats in comma-separated list", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL =
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "http://localhost:8080,https://api.example.com/,https://proxy.example.com/v1";
 
     const result = getExternalProxyUrls();

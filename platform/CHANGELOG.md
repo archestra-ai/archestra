@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.31](https://github.com/archestra-ai/archestra/compare/platform-v1.0.30...platform-v1.0.31) (2026-01-22)
+
+
+### Miscellaneous Chores
+
+* replace in-memory cache usage with Postgres "cache" ([#2282](https://github.com/archestra-ai/archestra/issues/2282)) ([8f6588c](https://github.com/archestra-ai/archestra/commit/8f6588ca73a16f848b8a216ef364ce74b7eaec7d))
+
 ## [1.0.30](https://github.com/archestra-ai/archestra/compare/platform-v1.0.29...platform-v1.0.30) (2026-01-22)
 
 

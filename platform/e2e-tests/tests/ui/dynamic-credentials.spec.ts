@@ -101,7 +101,12 @@ test("Verify tool calling using dynamic credentials", async ({
   // Additional wait to ensure option is stable (not animating)
   await adminPage.waitForTimeout(200);
   await resolveAtCallTimeOption.click();
-  await adminPage.getByText("Assign to 1 profile").click();
+  // Make sure at least one tool is selected (click "Select All" if needed)
+  await adminPage.getByRole("button", { name: "Select All" }).click();
+  // Close the popover by pressing Escape
+  await adminPage.keyboard.press("Escape");
+  // Click Save button in the main dialog
+  await adminPage.getByRole("button", { name: "Save" }).click();
   await adminPage.waitForLoadState("networkidle");
 
   /**

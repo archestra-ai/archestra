@@ -362,7 +362,12 @@ test("Verify tool calling using different static credentials", async ({
   });
   // Select admin static credential
   await adminPage.getByRole("option", { name: "admin@example.com" }).click();
-  await adminPage.getByText("Assign to 1 profile").click();
+  // Make sure at least one tool is selected (click "Select All" if needed)
+  await adminPage.getByRole("button", { name: "Select All" }).click();
+  // Close the popover by pressing Escape
+  await adminPage.keyboard.press("Escape");
+  // Click Save button in the main dialog
+  await adminPage.getByRole("button", { name: "Save" }).click();
   await adminPage.waitForLoadState("networkidle");
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
@@ -380,7 +385,12 @@ test("Verify tool calling using different static credentials", async ({
   });
   // Select editor static credential
   await editorPage.getByRole("option", { name: "editor@example.com" }).click();
-  await editorPage.getByText("Assign to 1 profile").click();
+  // Make sure at least one tool is selected (click "Select All" if needed)
+  await editorPage.getByRole("button", { name: "Select All" }).click();
+  // Close the popover by pressing Escape
+  await editorPage.keyboard.press("Escape");
+  // Click Save button in the main dialog
+  await editorPage.getByRole("button", { name: "Save" }).click();
   await editorPage.waitForLoadState("networkidle");
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({

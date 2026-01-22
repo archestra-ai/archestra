@@ -155,13 +155,19 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 
   await manageToolsButton.click();
-  // Wait for the dialog to open and the button to be visible before clicking
-  const assignToolButton = page
-    .getByRole("button", { name: "Assign Tool to Profiles" })
+
+  // Wait for the dialog to open - the new McpAssignmentsDialog shows profile pills
+  // Click the first profile pill to open the popover with tool assignments
+  // Profile pills are buttons with the profile name and tool count like "Default (0/1)"
+  const profilePillButton = page
+    .getByRole("dialog")
+    .getByRole("button")
+    .filter({ hasText: /\(\d+\/\d+\)/ })
     .first();
-  await assignToolButton.waitFor({ state: "visible", timeout: 15000 });
-  await assignToolButton.click();
-  await page.getByRole("checkbox").first().click();
+  await profilePillButton.waitFor({ state: "visible", timeout: 15000 });
+  await profilePillButton.click();
+
+  // Wait for the popover to open - it contains the TokenSelect (combobox) for credentials
   await page.waitForLoadState("networkidle");
   const combobox = page.getByRole("combobox");
   await combobox.waitFor({ state: "visible" });

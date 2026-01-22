@@ -230,7 +230,12 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
 
     // Select default team credential
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-    await adminPage.getByText("Assign to 1 profile").click();
+    // Make sure at least one tool is selected (click "Select All" if needed)
+    await adminPage.getByRole("button", { name: "Select All" }).click();
+    // Close the popover by pressing Escape
+    await adminPage.keyboard.press("Escape");
+    // Click Save button in the main dialog
+    await adminPage.getByRole("button", { name: "Save" }).click();
     await adminPage.waitForLoadState("networkidle");
 
     // Verify tool call result using admin static credential
@@ -305,7 +310,12 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
 
     // Select default team credential
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-    await adminPage.getByText("Assign to 1 profile").click();
+    // Make sure at least one tool is selected (click "Select All" if needed)
+    await adminPage.getByRole("button", { name: "Select All" }).click();
+    // Close the popover by pressing Escape
+    await adminPage.keyboard.press("Escape");
+    // Click Save button in the main dialog
+    await adminPage.getByRole("button", { name: "Save" }).click();
     await adminPage.waitForLoadState("networkidle");
 
     // Verify tool call result using admin static credential

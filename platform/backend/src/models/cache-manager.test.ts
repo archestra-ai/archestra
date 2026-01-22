@@ -295,7 +295,7 @@ describe("CacheManager", () => {
     });
 
     it("should handle many concurrent operations", async () => {
-      const key = `${CacheKey.GetChatModels}-concurrent`;
+      const key = `${CacheKey.GetChatModels}-concurrent` as const;
 
       // Set initial value
       await cacheManager.set(key, 0);

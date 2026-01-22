@@ -1,6 +1,12 @@
 archestra:
   replicaCount: 4
 
+  # Pod Disruption Budget: ensure at least 3 of 4 pods stay running during
+  # voluntary disruptions (node upgrades, autoscaling, maintenance)
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
   # Faster rolling updates: allow 2 pods to be created at once
   deploymentStrategy:
     type: RollingUpdate

@@ -99,12 +99,13 @@ class PromptModel {
    */
   static async findByAllowedChatopsProvider(
     provider: ChatOpsProviderType,
-  ): Promise<Pick<Prompt, "id" | "name">[]> {
+  ): Promise<Pick<Prompt, "id" | "name" | "agentId">[]> {
     // Use JSONB containment operator to check if provider is in the array
     const prompts = await db
       .select({
         id: schema.promptsTable.id,
         name: schema.promptsTable.name,
+        agentId: schema.promptsTable.agentId,
       })
       .from(schema.promptsTable)
       .where(

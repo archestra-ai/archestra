@@ -6,26 +6,28 @@ import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArrowRight,
-  Bot,
   ChevronDown,
   ChevronUp,
+  DollarSign,
   ExternalLink,
-  Grip,
+  Eye,
   Plus,
   Search,
+  Server,
+  Shield,
   Tag,
 } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import { AgentDialog } from "@/components/agent-dialog";
-import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
+import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
+import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
+import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -44,34 +46,31 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  useDeleteProfile,
-  useProfilesPaginated,
-  useProfilesQuery,
-} from "@/lib/agent.query";
+import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
 import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   formatDate,
 } from "@/lib/utils";
-import { AgentActions } from "./agent-actions";
+import { McpGatewayActions } from "./mcp-gateway-actions";
 
-type AgentsInitialData = {
+type McpGatewaysInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
   teams: archestraApiTypes.GetTeamsResponses["200"];
 };
 
-export default function AgentsPage({
+export default function McpGatewaysPage({
   initialData,
 }: {
-  initialData?: AgentsInitialData;
+  initialData?: McpGatewaysInitialData;
 }) {
   return (
     <div className="w-full h-full">
+      <PermissivePolicyBar />
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <Agents initialData={initialData} />
+          <McpGateways initialData={initialData} />
         </Suspense>
       </ErrorBoundary>
     </div>
@@ -139,7 +138,11 @@ function TeamsBadges({
   );
 }
 
-function Agents({ initialData }: { initialData?: AgentsInitialData }) {
+function McpGateways({
+  initialData,
+}: {
+  initialData?: McpGatewaysInitialData;
+}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -174,7 +177,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
-    agentTypes: ["agent"],
+    agentTypes: ["mcp_gateway", "profile"],
   });
 
   const agents = agentsResponse?.data || [];
@@ -200,17 +203,20 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   }, [sortBy, sortDirection]);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [connectingAgent, setConnectingAgent] = useState<{
+  const [connectingGateway, setConnectingGateway] = useState<{
     id: string;
     name: string;
     agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
   } | null>(null);
-  const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
-  const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
-  const [versionHistoryAgent, setVersionHistoryAgent] =
-    useState<AgentData | null>(null);
+  const [editingGateway, setEditingGateway] = useState<GatewayData | null>(
+    null,
+  );
+  const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
+    null,
+  );
 
-  type AgentData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
+  type GatewayData =
+    archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -260,11 +266,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     [searchParams, router, pathname],
   );
 
-  const columns: ColumnDef<AgentData>[] = [
+  const columns: ColumnDef<GatewayData>[] = [
     {
       id: "name",
       accessorKey: "name",
-      size: 200,
+      size: 300,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -281,6 +287,24 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <div className="font-medium">
             <div className="flex items-center gap-2">
               {agent.name}
+              {agent.agentType === "profile" && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="outline"
+                        className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs cursor-help"
+                      >
+                        Profile
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      This is a legacy entity that works both as MCP Gateway and
+                      LLM Proxy
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {agent.labels && agent.labels.length > 0 && (
                 <TooltipProvider>
                   <Tooltip>
@@ -386,18 +410,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "actions",
       header: "Actions",
-      size: 200,
+      size: 176,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
         return (
-          <AgentActions
+          <McpGatewayActions
             agent={agent}
-            onConnect={setConnectingAgent}
+            onConnect={setConnectingGateway}
             onEdit={(agentData) => {
-              setEditingAgent(agentData);
+              setEditingGateway(agentData);
             }}
-            onDelete={setDeletingAgentId}
+            onDelete={setDeletingGatewayId}
           />
         );
       },
@@ -406,11 +430,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
   return (
     <PageLayout
-      title="Agents"
+      title="MCP Gateways"
       description={
         <p className="text-sm text-muted-foreground">
-          Agents are internal AI assistants with system prompts, tools, and
-          integrations like ChatOps, email, and A2A.{" "}
+          MCP Gateways provide a unified MCP endpoint for your AI agents to
+          access tools and subagents.{" "}
           <a
             href="https://archestra.ai/docs/platform-agents"
             target="_blank"
@@ -428,23 +452,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           data-testid={E2eTestId.CreateAgentButton}
         >
           <Plus className="mr-2 h-4 w-4" />
-          Create Agent
+          Create MCP Gateway
         </PermissionButton>
       }
     >
       <div>
         <div>
-          <div className="mb-6 flex items-center gap-4">
-            <Button variant="outline" asChild>
-              <Link href="/agents/builder">
-                <Grip className="mr-2 h-4 w-4" />
-                Agent Builder
-              </Link>
-            </Button>
-            <div className="relative max-w-md flex-1">
+          <div className="mb-6">
+            <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <DebouncedInput
-                placeholder="Search agents by name..."
+                placeholder="Search gateways by name..."
                 initialValue={searchQuery}
                 onChange={handleSearchChange}
                 className="pl-9"
@@ -455,8 +473,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           {!agents || agents.length === 0 ? (
             <div className="text-muted-foreground">
               {nameFilter
-                ? "No agents found matching your search"
-                : "No agents found"}
+                ? "No MCP gateways found matching your search"
+                : "No MCP gateways found"}
             </div>
           ) : (
             <div data-testid={E2eTestId.AgentsTable}>
@@ -480,45 +498,33 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <AgentDialog
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
-            agentType="agent"
-            onCreated={(agent) => {
+            agentType="mcp_gateway"
+            onCreated={(gateway) => {
               setIsCreateDialogOpen(false);
-              setConnectingAgent({ ...agent, agentType: "agent" });
+              setConnectingGateway({ ...gateway, agentType: "mcp_gateway" });
             }}
-            onViewVersionHistory={setVersionHistoryAgent}
           />
 
-          {connectingAgent && (
-            <ConnectAgentDialog
-              agent={connectingAgent}
-              open={!!connectingAgent}
-              onOpenChange={(open) => !open && setConnectingAgent(null)}
+          {connectingGateway && (
+            <ConnectGatewayDialog
+              agent={connectingGateway}
+              open={!!connectingGateway}
+              onOpenChange={(open) => !open && setConnectingGateway(null)}
             />
           )}
 
           <AgentDialog
-            open={!!editingAgent}
-            onOpenChange={(open) => !open && setEditingAgent(null)}
-            agent={editingAgent}
-            agentType="agent"
-            onViewVersionHistory={setVersionHistoryAgent}
+            open={!!editingGateway}
+            onOpenChange={(open) => !open && setEditingGateway(null)}
+            agent={editingGateway}
+            agentType={editingGateway?.agentType || "mcp_gateway"}
           />
 
-          <PromptVersionHistoryDialog
-            open={!!versionHistoryAgent}
-            onOpenChange={(open) => {
-              if (!open) {
-                setVersionHistoryAgent(null);
-              }
-            }}
-            agent={versionHistoryAgent}
-          />
-
-          {deletingAgentId && (
-            <DeleteAgentDialog
-              agentId={deletingAgentId}
-              open={!!deletingAgentId}
-              onOpenChange={(open) => !open && setDeletingAgentId(null)}
+          {deletingGatewayId && (
+            <DeleteGatewayDialog
+              agentId={deletingGatewayId}
+              open={!!deletingGatewayId}
+              onOpenChange={(open) => !open && setDeletingGatewayId(null)}
             />
           )}
         </div>
@@ -527,35 +533,108 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   );
 }
 
-function AgentConnectionColumns({ agentId }: { agentId: string }) {
-  // Fetch agent data for A2A connection instructions (non-suspense to avoid loading flicker)
-  const { data: profiles } = useProfilesQuery();
-  const agent = profiles?.find((p) => p.id === agentId);
-
-  if (!agent) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <LoadingSpinner />
-      </div>
-    );
-  }
+function GatewayConnectionColumns({
+  agentId,
+  agentType,
+}: {
+  agentId: string;
+  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+}) {
+  const [activeTab, setActiveTab] = useState<"proxy" | "mcp">("mcp");
 
   return (
-    <div className="p-4 rounded-lg border bg-card">
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center py-8">
-            <LoadingSpinner />
+    <div className="space-y-6">
+      {/* Tab Selection with inline features */}
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => setActiveTab("mcp")}
+          className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
+            activeTab === "mcp"
+              ? "bg-green-500/5 border-2 border-green-500/30"
+              : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Shield
+              className={`h-4 w-4 ${activeTab === "mcp" ? "text-green-500" : ""}`}
+            />
+            <span className="font-medium">MCP Gateway</span>
           </div>
-        }
-      >
-        <A2AConnectionInstructions agent={agent} />
-      </Suspense>
+          <div className="flex flex-wrap gap-1.5">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <Server className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+              <span className="text-[10px]">Unified MCP</span>
+            </div>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
+              <span className="text-[10px]">Observability</span>
+            </div>
+          </div>
+        </button>
+
+        {/* Show LLM Proxy tab for profile type (backwards compatibility) */}
+        {agentType === "profile" && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("proxy")}
+            className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
+              activeTab === "proxy"
+                ? "bg-blue-500/5 border-2 border-blue-500/30"
+                : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Server
+                className={`h-4 w-4 ${activeTab === "proxy" ? "text-blue-500" : ""}`}
+              />
+              <span className="font-medium">LLM Proxy</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
+                <span className="text-[10px]">Observability</span>
+              </div>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <DollarSign className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+                <span className="text-[10px]">Cost</span>
+              </div>
+            </div>
+          </button>
+        )}
+      </div>
+
+      {/* Content - render all tabs, hide inactive ones to preload */}
+      <div className="relative">
+        <div className={activeTab === "mcp" ? "block" : "hidden"}>
+          <div className="p-4 rounded-lg border bg-card">
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner />
+                </div>
+              }
+            >
+              <McpConnectionInstructions
+                agentId={agentId}
+                hideProfileSelector
+              />
+            </Suspense>
+          </div>
+        </div>
+        {agentType === "profile" && (
+          <div className={activeTab === "proxy" ? "block" : "hidden"}>
+            <div className="p-4 rounded-lg border bg-card">
+              <ProxyConnectionInstructions agentId={agentId} />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function ConnectAgentDialog({
+function ConnectGatewayDialog({
   agent,
   open,
   onOpenChange,
@@ -578,10 +657,10 @@ function ConnectAgentDialog({
             <DialogHeader>
               <div className="flex items-center gap-2 mb-1">
                 <div className="p-1.5 rounded-full bg-primary/10">
-                  <Bot className="h-4 w-4 text-primary" />
+                  <Shield className="h-4 w-4 text-primary" />
                 </div>
                 <DialogTitle className="text-xl font-semibold">
-                  Connect to "{agent.name}"
+                  Connect via "{agent.name}"
                 </DialogTitle>
               </div>
             </DialogHeader>
@@ -590,7 +669,10 @@ function ConnectAgentDialog({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <AgentConnectionColumns agentId={agent.id} />
+          <GatewayConnectionColumns
+            agentId={agent.id}
+            agentType={agent.agentType}
+          />
         </div>
 
         {/* Footer */}
@@ -599,7 +681,7 @@ function ConnectAgentDialog({
             <ExternalLink className="h-3.5 w-3.5" />
             <span>Need help? Check our</span>
             <a
-              href="https://archestra.ai/docs/platform-agents"
+              href="https://archestra.ai/docs/platform-profiles"
               target="_blank"
               className="text-primary hover:underline font-medium"
               rel="noopener"
@@ -622,7 +704,7 @@ function ConnectAgentDialog({
   );
 }
 
-function DeleteAgentDialog({
+function DeleteGatewayDialog({
   agentId,
   open,
   onOpenChange,
@@ -631,26 +713,26 @@ function DeleteAgentDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const deleteAgent = useDeleteProfile();
+  const deleteGateway = useDeleteProfile();
 
   const handleDelete = useCallback(async () => {
     try {
-      await deleteAgent.mutateAsync(agentId);
-      toast.success("Agent deleted successfully");
+      await deleteGateway.mutateAsync(agentId);
+      toast.success("MCP Gateway deleted successfully");
       onOpenChange(false);
     } catch (_error) {
-      toast.error("Failed to delete agent");
+      toast.error("Failed to delete MCP Gateway");
     }
-  }, [agentId, deleteAgent, onOpenChange]);
+  }, [agentId, deleteGateway, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Delete Agent</DialogTitle>
+          <DialogTitle>Delete MCP Gateway</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this agent? This action cannot be
-            undone.
+            Are you sure you want to delete this MCP Gateway? This action cannot
+            be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -664,9 +746,9 @@ function DeleteAgentDialog({
           <Button
             variant="destructive"
             onClick={handleDelete}
-            disabled={deleteAgent.isPending}
+            disabled={deleteGateway.isPending}
           >
-            {deleteAgent.isPending ? "Deleting..." : "Delete Agent"}
+            {deleteGateway.isPending ? "Deleting..." : "Delete MCP Gateway"}
           </Button>
         </DialogFooter>
       </DialogContent>

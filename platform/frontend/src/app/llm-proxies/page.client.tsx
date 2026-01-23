@@ -6,26 +6,27 @@ import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArrowRight,
-  Bot,
   ChevronDown,
   ChevronUp,
+  DollarSign,
   ExternalLink,
-  Grip,
+  Eye,
+  Lock,
+  Network,
   Plus,
   Search,
   Tag,
 } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import { AgentDialog } from "@/components/agent-dialog";
-import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
+import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -44,34 +45,31 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  useDeleteProfile,
-  useProfilesPaginated,
-  useProfilesQuery,
-} from "@/lib/agent.query";
+import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
 import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   formatDate,
 } from "@/lib/utils";
-import { AgentActions } from "./agent-actions";
+import { LlmProxyActions } from "./llm-proxy-actions";
 
-type AgentsInitialData = {
+type LlmProxiesInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
   teams: archestraApiTypes.GetTeamsResponses["200"];
 };
 
-export default function AgentsPage({
+export default function LlmProxiesPage({
   initialData,
 }: {
-  initialData?: AgentsInitialData;
+  initialData?: LlmProxiesInitialData;
 }) {
   return (
     <div className="w-full h-full">
+      <PermissivePolicyBar />
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <Agents initialData={initialData} />
+          <LlmProxies initialData={initialData} />
         </Suspense>
       </ErrorBoundary>
     </div>
@@ -139,7 +137,7 @@ function TeamsBadges({
   );
 }
 
-function Agents({ initialData }: { initialData?: AgentsInitialData }) {
+function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -174,7 +172,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
-    agentTypes: ["agent"],
+    agentTypes: ["llm_proxy", "profile"],
   });
 
   const agents = agentsResponse?.data || [];
@@ -200,17 +198,15 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   }, [sortBy, sortDirection]);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [connectingAgent, setConnectingAgent] = useState<{
+  const [connectingProxy, setConnectingProxy] = useState<{
     id: string;
     name: string;
     agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
   } | null>(null);
-  const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
-  const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
-  const [versionHistoryAgent, setVersionHistoryAgent] =
-    useState<AgentData | null>(null);
+  const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
+  const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
 
-  type AgentData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
+  type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -260,11 +256,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     [searchParams, router, pathname],
   );
 
-  const columns: ColumnDef<AgentData>[] = [
+  // LLM Proxies table columns - no Tools or Subagents
+  const columns: ColumnDef<ProxyData>[] = [
     {
       id: "name",
       accessorKey: "name",
-      size: 200,
+      size: 300,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -281,6 +278,24 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <div className="font-medium">
             <div className="flex items-center gap-2">
               {agent.name}
+              {agent.agentType === "profile" && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="outline"
+                        className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs cursor-help"
+                      >
+                        Profile
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      This is a legacy entity that works both as MCP Gateway and
+                      LLM Proxy
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {agent.labels && agent.labels.length > 0 && (
                 <TooltipProvider>
                   <Tooltip>
@@ -331,36 +346,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       ),
     },
     {
-      id: "toolsCount",
-      accessorKey: "toolsCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Tools
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => {
-        const toolsCount = row.original.tools.filter(
-          (t) => !t.delegateToAgentId,
-        ).length;
-        return <div>{toolsCount}</div>;
-      },
-    },
-    {
-      id: "subagentsCount",
-      header: "Subagents",
-      cell: ({ row }) => {
-        const subagentsCount = row.original.tools.filter(
-          (t) => t.delegateToAgentId,
-        ).length;
-        return <div>{subagentsCount}</div>;
-      },
-    },
-    {
       id: "team",
       header: ({ column }) => (
         <Button
@@ -386,18 +371,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "actions",
       header: "Actions",
-      size: 200,
+      size: 176,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
         return (
-          <AgentActions
+          <LlmProxyActions
             agent={agent}
-            onConnect={setConnectingAgent}
+            onConnect={setConnectingProxy}
             onEdit={(agentData) => {
-              setEditingAgent(agentData);
+              setEditingProxy(agentData);
             }}
-            onDelete={setDeletingAgentId}
+            onDelete={setDeletingProxyId}
           />
         );
       },
@@ -406,11 +391,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
   return (
     <PageLayout
-      title="Agents"
+      title="LLM Proxies"
       description={
         <p className="text-sm text-muted-foreground">
-          Agents are internal AI assistants with system prompts, tools, and
-          integrations like ChatOps, email, and A2A.{" "}
+          LLM Proxies provide security, observability, and cost management for
+          your LLM API calls.{" "}
           <a
             href="https://archestra.ai/docs/platform-agents"
             target="_blank"
@@ -428,23 +413,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           data-testid={E2eTestId.CreateAgentButton}
         >
           <Plus className="mr-2 h-4 w-4" />
-          Create Agent
+          Create LLM Proxy
         </PermissionButton>
       }
     >
       <div>
         <div>
-          <div className="mb-6 flex items-center gap-4">
-            <Button variant="outline" asChild>
-              <Link href="/agents/builder">
-                <Grip className="mr-2 h-4 w-4" />
-                Agent Builder
-              </Link>
-            </Button>
-            <div className="relative max-w-md flex-1">
+          <div className="mb-6">
+            <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <DebouncedInput
-                placeholder="Search agents by name..."
+                placeholder="Search proxies by name..."
                 initialValue={searchQuery}
                 onChange={handleSearchChange}
                 className="pl-9"
@@ -455,8 +434,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           {!agents || agents.length === 0 ? (
             <div className="text-muted-foreground">
               {nameFilter
-                ? "No agents found matching your search"
-                : "No agents found"}
+                ? "No LLM proxies found matching your search"
+                : "No LLM proxies found"}
             </div>
           ) : (
             <div data-testid={E2eTestId.AgentsTable}>
@@ -480,45 +459,33 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <AgentDialog
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
-            agentType="agent"
-            onCreated={(agent) => {
+            agentType="llm_proxy"
+            onCreated={(proxy) => {
               setIsCreateDialogOpen(false);
-              setConnectingAgent({ ...agent, agentType: "agent" });
+              setConnectingProxy({ ...proxy, agentType: "llm_proxy" });
             }}
-            onViewVersionHistory={setVersionHistoryAgent}
           />
 
-          {connectingAgent && (
-            <ConnectAgentDialog
-              agent={connectingAgent}
-              open={!!connectingAgent}
-              onOpenChange={(open) => !open && setConnectingAgent(null)}
+          {connectingProxy && (
+            <ConnectProxyDialog
+              agent={connectingProxy}
+              open={!!connectingProxy}
+              onOpenChange={(open) => !open && setConnectingProxy(null)}
             />
           )}
 
           <AgentDialog
-            open={!!editingAgent}
-            onOpenChange={(open) => !open && setEditingAgent(null)}
-            agent={editingAgent}
-            agentType="agent"
-            onViewVersionHistory={setVersionHistoryAgent}
+            open={!!editingProxy}
+            onOpenChange={(open) => !open && setEditingProxy(null)}
+            agent={editingProxy}
+            agentType={editingProxy?.agentType || "llm_proxy"}
           />
 
-          <PromptVersionHistoryDialog
-            open={!!versionHistoryAgent}
-            onOpenChange={(open) => {
-              if (!open) {
-                setVersionHistoryAgent(null);
-              }
-            }}
-            agent={versionHistoryAgent}
-          />
-
-          {deletingAgentId && (
-            <DeleteAgentDialog
-              agentId={deletingAgentId}
-              open={!!deletingAgentId}
-              onOpenChange={(open) => !open && setDeletingAgentId(null)}
+          {deletingProxyId && (
+            <DeleteProxyDialog
+              agentId={deletingProxyId}
+              open={!!deletingProxyId}
+              onOpenChange={(open) => !open && setDeletingProxyId(null)}
             />
           )}
         </div>
@@ -527,35 +494,42 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   );
 }
 
-function AgentConnectionColumns({ agentId }: { agentId: string }) {
-  // Fetch agent data for A2A connection instructions (non-suspense to avoid loading flicker)
-  const { data: profiles } = useProfilesQuery();
-  const agent = profiles?.find((p) => p.id === agentId);
-
-  if (!agent) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
+function ProxyConnectionColumns({ agentId }: { agentId: string }) {
   return (
-    <div className="p-4 rounded-lg border bg-card">
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center py-8">
-            <LoadingSpinner />
+    <div className="space-y-6">
+      {/* Single tab for LLM Proxy */}
+      <div className="flex gap-3">
+        <div className="flex-1 flex flex-col gap-2 p-3 rounded-lg bg-blue-500/5 border-2 border-blue-500/30">
+          <div className="flex items-center gap-2">
+            <Network className="h-4 w-4 text-blue-500" />
+            <span className="font-medium">LLM Proxy</span>
           </div>
-        }
-      >
-        <A2AConnectionInstructions agent={agent} />
-      </Suspense>
+          <div className="flex flex-wrap gap-1.5">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <Lock className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
+              <span className="text-[10px]">Security</span>
+            </div>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
+              <span className="text-[10px]">Observability</span>
+            </div>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <DollarSign className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+              <span className="text-[10px]">Cost</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-4 rounded-lg border bg-card">
+        <ProxyConnectionInstructions agentId={agentId} />
+      </div>
     </div>
   );
 }
 
-function ConnectAgentDialog({
+function ConnectProxyDialog({
   agent,
   open,
   onOpenChange,
@@ -578,10 +552,10 @@ function ConnectAgentDialog({
             <DialogHeader>
               <div className="flex items-center gap-2 mb-1">
                 <div className="p-1.5 rounded-full bg-primary/10">
-                  <Bot className="h-4 w-4 text-primary" />
+                  <Network className="h-4 w-4 text-primary" />
                 </div>
                 <DialogTitle className="text-xl font-semibold">
-                  Connect to "{agent.name}"
+                  Connect via "{agent.name}"
                 </DialogTitle>
               </div>
             </DialogHeader>
@@ -590,7 +564,7 @@ function ConnectAgentDialog({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <AgentConnectionColumns agentId={agent.id} />
+          <ProxyConnectionColumns agentId={agent.id} />
         </div>
 
         {/* Footer */}
@@ -599,7 +573,7 @@ function ConnectAgentDialog({
             <ExternalLink className="h-3.5 w-3.5" />
             <span>Need help? Check our</span>
             <a
-              href="https://archestra.ai/docs/platform-agents"
+              href="https://archestra.ai/docs/platform-profiles"
               target="_blank"
               className="text-primary hover:underline font-medium"
               rel="noopener"
@@ -622,7 +596,7 @@ function ConnectAgentDialog({
   );
 }
 
-function DeleteAgentDialog({
+function DeleteProxyDialog({
   agentId,
   open,
   onOpenChange,
@@ -631,26 +605,26 @@ function DeleteAgentDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const deleteAgent = useDeleteProfile();
+  const deleteProxy = useDeleteProfile();
 
   const handleDelete = useCallback(async () => {
     try {
-      await deleteAgent.mutateAsync(agentId);
-      toast.success("Agent deleted successfully");
+      await deleteProxy.mutateAsync(agentId);
+      toast.success("LLM Proxy deleted successfully");
       onOpenChange(false);
     } catch (_error) {
-      toast.error("Failed to delete agent");
+      toast.error("Failed to delete LLM Proxy");
     }
-  }, [agentId, deleteAgent, onOpenChange]);
+  }, [agentId, deleteProxy, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Delete Agent</DialogTitle>
+          <DialogTitle>Delete LLM Proxy</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this agent? This action cannot be
-            undone.
+            Are you sure you want to delete this LLM Proxy? This action cannot
+            be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -664,9 +638,9 @@ function DeleteAgentDialog({
           <Button
             variant="destructive"
             onClick={handleDelete}
-            disabled={deleteAgent.isPending}
+            disabled={deleteProxy.isPending}
           >
-            {deleteAgent.isPending ? "Deleting..." : "Delete Agent"}
+            {deleteProxy.isPending ? "Deleting..." : "Delete LLM Proxy"}
           </Button>
         </DialogFooter>
       </DialogContent>

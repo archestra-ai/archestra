@@ -194,8 +194,10 @@ export async function selectCredentialAndAssignAllTools({
   // Close the popover by pressing Escape
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);
-  // Click Save to apply all changes
-  await page.getByRole("button", { name: "Save" }).click();
+  // Click Save to apply all changes (wait for button to become enabled)
+  const saveButton = page.getByRole("button", { name: "Save" });
+  await expect(saveButton).toBeEnabled({ timeout: 3_000 });
+  await saveButton.click();
   await page.waitForLoadState("networkidle");
 }
 

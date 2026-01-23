@@ -4,7 +4,9 @@ import { clickButton } from "../../utils";
 
 test(
   "can create and delete a profile",
-  { tag: ["@firefox", "@webkit"] },
+  // Extended timeout for Firefox/WebKit CI environments where React hydration
+  // and permission checks may take longer than the default 60s
+  { tag: ["@firefox", "@webkit"], timeout: 120_000 },
   async ({ page, makeRandomString, goToPage }) => {
     // Skip onboarding if dialog is present
     const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);

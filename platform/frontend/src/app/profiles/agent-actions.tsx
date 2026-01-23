@@ -1,7 +1,15 @@
 import { E2eTestId } from "@shared";
-import { Pencil, Plug, Trash2 } from "lucide-react";
+import { MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { useProfilesPaginated } from "@/lib/agent.query";
 
 // Infer Profile type from the API response
@@ -38,6 +46,26 @@ export function ProfileActions({
       >
         <Plug className="h-4 w-4" />
       </PermissionButton>
+      {agent.agentType === "agent" && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label="Chat"
+                asChild
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Link href={`/chat/new?agent_id=${agent.id}`}>
+                  <MessageSquare className="h-4 w-4" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Chat</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
       <PermissionButton
         permissions={{ profile: ["update"] }}
         tooltip="Edit"

@@ -3,7 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import { archestraApiSdk } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, Loader2, X } from "lucide-react";
+import { Bot, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -53,6 +53,7 @@ import {
 import { useHasPermissions } from "@/lib/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { useChatOpsStatus } from "@/lib/chatops.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
@@ -166,6 +167,9 @@ interface SubagentsEditorProps {
   selectedAgentIds: string[];
   onSelectionChange: (ids: string[]) => void;
   currentAgentId?: string;
+  searchQuery: string;
+  showAll: boolean;
+  onShowMore: () => void;
 }
 
 function SubagentsEditor({
@@ -173,9 +177,27 @@ function SubagentsEditor({
   selectedAgentIds,
   onSelectionChange,
   currentAgentId,
+  searchQuery,
+  showAll,
+  onShowMore,
 }: SubagentsEditorProps) {
   // Filter out current agent from available agents
   const filteredAgents = availableAgents.filter((a) => a.id !== currentAgentId);
+
+  // Filter by search query
+  const searchFilteredAgents = searchQuery.trim()
+    ? filteredAgents.filter((a) =>
+        a.name.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : filteredAgents;
+
+  // Apply show more limit (show all when searching)
+  const shouldShowAll = showAll || !!searchQuery.trim();
+  const visibleAgents =
+    shouldShowAll || searchFilteredAgents.length <= 10
+      ? searchFilteredAgents
+      : searchFilteredAgents.slice(0, 10);
+  const hiddenCount = searchFilteredAgents.length - 10;
 
   const handleToggle = (agentId: string) => {
     if (selectedAgentIds.includes(agentId)) {
@@ -193,9 +215,15 @@ function SubagentsEditor({
     );
   }
 
+  if (searchFilteredAgents.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">No matching agents.</p>
+    );
+  }
+
   return (
     <>
-      {filteredAgents.map((agent) => (
+      {visibleAgents.map((agent) => (
         <SubagentPill
           key={agent.id}
           agent={agent}
@@ -203,6 +231,16 @@ function SubagentsEditor({
           onToggle={handleToggle}
         />
       ))}
+      {!shouldShowAll && hiddenCount > 0 && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 text-xs border-dashed"
+          onClick={onShowMore}
+        >
+          +{hiddenCount} more
+        </Button>
+      )}
     </>
   );
 }
@@ -229,6 +267,7 @@ export function AgentDialog({
   onCreated,
 }: AgentDialogProps) {
   const { data: allInternalAgents = [] } = useInternalAgents();
+  const { data: catalogItems = [] } = useInternalMcpCatalog();
   const createAgent = useCreateProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
@@ -259,6 +298,12 @@ export function AgentDialog({
   const [selectedAgentType, setSelectedAgentType] = useState<
     "mcp_gateway" | "agent"
   >(agentType);
+  const [subagentsSearch, setSubagentsSearch] = useState("");
+  const [subagentsSearchOpen, setSubagentsSearchOpen] = useState(false);
+  const [subagentsShowAll, setSubagentsShowAll] = useState(false);
+  const [toolsSearch, setToolsSearch] = useState("");
+  const [toolsSearchOpen, setToolsSearchOpen] = useState(false);
+  const [toolsShowAll, setToolsShowAll] = useState(false);
 
   // Determine if this is an internal agent based on the selected type
   const isInternalAgent = selectedAgentType === "agent";
@@ -300,6 +345,13 @@ export function AgentDialog({
         setConsiderContextUntrusted(false);
         setSelectedAgentType(agentType);
       }
+      // Reset search when dialog opens
+      setSubagentsSearch("");
+      setSubagentsSearchOpen(false);
+      setSubagentsShowAll(false);
+      setToolsSearch("");
+      setToolsSearchOpen(false);
+      setToolsShowAll(false);
     }
   }, [open, agent, agentType]);
 
@@ -502,24 +554,89 @@ export function AgentDialog({
 
             {/* Tools */}
             <div className="space-y-2">
-              <Label>Tools</Label>
+              <div className="flex items-center gap-2">
+                <Label>Tools</Label>
+                {catalogItems.length > 10 &&
+                  (toolsSearchOpen ? (
+                    <div className="relative flex-1 max-w-[200px]">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                      <Input
+                        placeholder="Search..."
+                        value={toolsSearch}
+                        onChange={(e) => setToolsSearch(e.target.value)}
+                        className="h-7 pl-7 text-xs"
+                        autoFocus
+                        onBlur={() => {
+                          if (!toolsSearch) {
+                            setToolsSearchOpen(false);
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => setToolsSearchOpen(true)}
+                    >
+                      <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  ))}
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <AgentToolsEditor
                   ref={agentToolsEditorRef}
                   agentId={agent?.id}
+                  searchQuery={toolsSearch}
+                  showAll={toolsShowAll}
+                  onShowMore={() => setToolsShowAll(true)}
                 />
               </div>
             </div>
 
             {/* Subagents */}
             <div className="space-y-2">
-              <Label>Subagents</Label>
+              <div className="flex items-center gap-2">
+                <Label>Subagents</Label>
+                {allInternalAgents.filter((a) => a.id !== agent?.id).length >
+                  10 &&
+                  (subagentsSearchOpen ? (
+                    <div className="relative flex-1 max-w-[200px]">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                      <Input
+                        placeholder="Search..."
+                        value={subagentsSearch}
+                        onChange={(e) => setSubagentsSearch(e.target.value)}
+                        className="h-7 pl-7 text-xs"
+                        autoFocus
+                        onBlur={() => {
+                          if (!subagentsSearch) {
+                            setSubagentsSearchOpen(false);
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => setSubagentsSearchOpen(true)}
+                    >
+                      <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  ))}
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <SubagentsEditor
                   availableAgents={allInternalAgents}
                   selectedAgentIds={selectedDelegationTargetIds}
                   onSelectionChange={setSelectedDelegationTargetIds}
                   currentAgentId={agent?.id}
+                  searchQuery={subagentsSearch}
+                  showAll={subagentsShowAll}
+                  onShowMore={() => setSubagentsShowAll(true)}
                 />
               </div>
             </div>

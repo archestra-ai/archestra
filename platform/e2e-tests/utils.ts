@@ -183,14 +183,15 @@ export async function selectCredentialAndAssignAllTools({
 }) {
   // Select the credential option (closes the Select dropdown)
   await page.getByRole("option", { name: credentialName }).click();
-  // Click "Select All" to assign all tools (if not already all selected)
+  // Wait for tools to load in the popover and click "Select All"
+  // Tools are fetched async via useCatalogTools - the button is disabled while tools are loading
+  // (empty array makes [].every(...) return true, which disables the button)
   const selectAllButton = page.getByRole("button", {
     name: "Select All",
     exact: true,
   });
-  if (await selectAllButton.isEnabled()) {
-    await selectAllButton.click();
-  }
+  await expect(selectAllButton).toBeEnabled({ timeout: 5_000 });
+  await selectAllButton.click();
   // Close the popover by pressing Escape
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);

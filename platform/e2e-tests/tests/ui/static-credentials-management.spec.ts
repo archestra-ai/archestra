@@ -374,13 +374,13 @@ test("Verify tool calling using different static credentials", async ({
     cookieHeaders,
   });
 
-  // Reassign tool to profiles using editor static credential (admin can see all credentials)
+  // Assign tool to profiles using editor static credential
   await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
-    page: adminPage,
+    page: editorPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
   await selectCredentialAndAssignAllTools({
-    page: adminPage,
+    page: editorPage,
     credentialName: "editor@example.com",
   });
   // Verify tool call result using editor static credential

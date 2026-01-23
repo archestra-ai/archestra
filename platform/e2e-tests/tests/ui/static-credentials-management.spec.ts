@@ -362,8 +362,11 @@ test("Verify tool calling using different static credentials", async ({
   });
   // Select admin static credential
   await adminPage.getByRole("option", { name: "admin@example.com" }).click();
-  // Make sure at least one tool is selected (click "Select All" if needed)
-  await adminPage.getByRole("button", { name: "Select All" }).click();
+  // Wait for the dropdown to close after selecting an option
+  await adminPage.waitForTimeout(500);
+  // Make sure at least one tool is selected - scope to the popover content
+  const adminPopoverContent = adminPage.locator('[data-radix-popper-content-wrapper]');
+  await adminPopoverContent.getByRole("button", { name: "Select All" }).click();
   // Close the popover by pressing Escape
   await adminPage.keyboard.press("Escape");
   // Click Save button in the main dialog
@@ -385,8 +388,11 @@ test("Verify tool calling using different static credentials", async ({
   });
   // Select editor static credential
   await editorPage.getByRole("option", { name: "editor@example.com" }).click();
-  // Make sure at least one tool is selected (click "Select All" if needed)
-  await editorPage.getByRole("button", { name: "Select All" }).click();
+  // Wait for the dropdown to close after selecting an option
+  await editorPage.waitForTimeout(500);
+  // Make sure at least one tool is selected - scope to the popover content
+  const editorPopoverContent = editorPage.locator('[data-radix-popper-content-wrapper]');
+  await editorPopoverContent.getByRole("button", { name: "Select All" }).click();
   // Close the popover by pressing Escape
   await editorPage.keyboard.press("Escape");
   // Click Save button in the main dialog

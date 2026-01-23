@@ -230,8 +230,11 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
 
     // Select default team credential
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-    // Make sure at least one tool is selected (click "Select All" if needed)
-    await adminPage.getByRole("button", { name: "Select All" }).click();
+    // Wait for the dropdown to close after selecting an option
+    await adminPage.waitForTimeout(500);
+    // Make sure at least one tool is selected - scope to the popover content
+    const popoverContent1 = adminPage.locator('[data-radix-popper-content-wrapper]');
+    await popoverContent1.getByRole("button", { name: "Select All" }).click();
     // Close the popover by pressing Escape
     await adminPage.keyboard.press("Escape");
     // Click Save button in the main dialog
@@ -310,8 +313,11 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
 
     // Select default team credential
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-    // Make sure at least one tool is selected (click "Select All" if needed)
-    await adminPage.getByRole("button", { name: "Select All" }).click();
+    // Wait for the dropdown to close after selecting an option
+    await adminPage.waitForTimeout(500);
+    // Make sure at least one tool is selected - scope to the popover content
+    const popoverContent2 = adminPage.locator('[data-radix-popper-content-wrapper]');
+    await popoverContent2.getByRole("button", { name: "Select All" }).click();
     // Close the popover by pressing Escape
     await adminPage.keyboard.press("Escape");
     // Click Save button in the main dialog

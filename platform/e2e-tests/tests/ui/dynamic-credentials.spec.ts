@@ -101,8 +101,11 @@ test("Verify tool calling using dynamic credentials", async ({
   // Additional wait to ensure option is stable (not animating)
   await adminPage.waitForTimeout(200);
   await resolveAtCallTimeOption.click();
-  // Make sure at least one tool is selected (click "Select All" if needed)
-  await adminPage.getByRole("button", { name: "Select All" }).click();
+  // Wait for the dropdown to close after selecting an option
+  await adminPage.waitForTimeout(500);
+  // Make sure at least one tool is selected - scope to the popover content to avoid matching buttons elsewhere
+  const popoverContent = adminPage.locator('[data-radix-popper-content-wrapper]');
+  await popoverContent.getByRole("button", { name: "Select All" }).click();
   // Close the popover by pressing Escape
   await adminPage.keyboard.press("Escape");
   // Click Save button in the main dialog

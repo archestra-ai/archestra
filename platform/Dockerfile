@@ -135,7 +135,9 @@ RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinu
     # Supervisor brings in Python/wheel as dependencies, upgrade wheel to fix CVE
     # Install py3-pip (required for pip command) and upgrade wheel
     apk add --no-cache py3-pip && \
-    pip install --upgrade "wheel>=0.46.2" --break-system-packages
+    pip install --upgrade "wheel>=0.46.2" --break-system-packages && \
+    # Also remove vendored vulnerable wheel from setuptools (py3-setuptools bundles wheel 0.45.1)
+    rm -rf /usr/lib/python3.12/site-packages/setuptools/_vendor/wheel /usr/lib/python3.12/site-packages/setuptools/_vendor/wheel-*.dist-info
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \

@@ -12,8 +12,6 @@ const config: KnipConfig = {
     // Used as binaries in scripts
     "@sentry/cli",
     "tsx",
-    // Types for cache-manager, it's needed for the cache-manager package
-    "@types/cache-manager",
   ],
   ignoreBinaries: [
     // biome is in root package.json

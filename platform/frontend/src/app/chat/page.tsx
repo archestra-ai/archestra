@@ -1,7 +1,15 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, FileText, Globe, PanelRightClose } from "lucide-react";
+import {
+  Bot,
+  Eye,
+  EyeOff,
+  FileText,
+  Globe,
+  PanelRightClose,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -35,6 +43,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents, useProfile } from "@/lib/agent.query";
@@ -141,7 +157,7 @@ export default function ChatPage() {
   >(null);
   const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
 
-  // Set initial agent from URL param or default when data loads
+  // Set initial agent from URL param, localStorage, or default when data loads
   useEffect(() => {
     // Wait for internal agents to load - these are the chat-compatible agents
     if (internalAgents.length === 0) return;
@@ -159,9 +175,14 @@ export default function ChatPage() {
       }
     }
 
-    // Default to first internal agent if no initialAgentId set
+    // Try to restore from localStorage, then default to first internal agent
     // Internal agents are the chat-compatible agents shown in the InitialAgentSelector
     if (!initialAgentId) {
+      const savedAgentId = localStorage.getItem("selected-chat-agent");
+      if (savedAgentId && internalAgents.some((a) => a.id === savedAgentId)) {
+        setInitialAgentId(savedAgentId);
+        return;
+      }
       setInitialAgentId(internalAgents[0].id);
     }
   }, [initialAgentId, searchParams, internalAgents]);
@@ -649,6 +670,7 @@ export default function ChatPage() {
   // Handle initial agent change (when no conversation exists)
   const handleInitialAgentChange = useCallback((agentId: string) => {
     setInitialAgentId(agentId);
+    localStorage.setItem("selected-chat-agent", agentId);
   }, []);
 
   // Handle initial submit (when no conversation exists)
@@ -820,6 +842,31 @@ export default function ChatPage() {
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  // If no agents exist, show empty state
+  if (!isLoadingApiKeyCheck && internalAgents.length === 0) {
+    return (
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Bot />
+          </EmptyMedia>
+          <EmptyTitle>No agents yet</EmptyTitle>
+          <EmptyDescription>
+            Create an agent to start chatting.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button asChild>
+            <Link href="/agents?create=true">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Agent
+            </Link>
+          </Button>
+        </EmptyContent>
+      </Empty>
     );
   }
 

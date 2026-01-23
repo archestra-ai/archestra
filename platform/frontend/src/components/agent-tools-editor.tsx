@@ -501,6 +501,59 @@ interface ToolChecklistProps {
   setSelectedToolIds: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
+function ExpandableDescription({ description }: { description: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const descriptionRef = useRef<HTMLDivElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-check truncation when description changes
+  useEffect(() => {
+    const el = descriptionRef.current;
+    if (el) {
+      // Check if text is truncated (scrollHeight > clientHeight means overflow)
+      setIsTruncated(el.scrollHeight > el.clientHeight);
+    }
+  }, [description]);
+
+  return (
+    <div className="text-xs text-muted-foreground mt-0.5">
+      <div
+        ref={descriptionRef}
+        className={cn(!expanded && "line-clamp-2")}
+        style={{ wordBreak: "break-word" }}
+      >
+        {description}
+      </div>
+      {isTruncated && !expanded && (
+        <button
+          type="button"
+          className="text-primary hover:underline mt-0.5"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setExpanded(true);
+          }}
+        >
+          Show more...
+        </button>
+      )}
+      {expanded && (
+        <button
+          type="button"
+          className="text-primary hover:underline mt-0.5"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setExpanded(false);
+          }}
+        >
+          Show less
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ToolChecklist({
   tools,
   selectedToolIds,
@@ -582,9 +635,7 @@ function ToolChecklist({
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium">{toolName}</div>
                   {tool.description && (
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {tool.description}
-                    </div>
+                    <ExpandableDescription description={tool.description} />
                   )}
                 </div>
               </label>

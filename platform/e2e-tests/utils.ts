@@ -155,14 +155,28 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 
   await manageToolsButton.click();
-  // Click the Default Profile pill to open its assignment popover
-  await page
-    .getByRole("button", { name: new RegExp(DEFAULT_PROFILE_NAME) })
-    .first()
-    .click();
-  // Wait for popover to appear
-  await page.waitForTimeout(200);
-  // Click the credential combobox to open the dropdown
+
+  // Wait for dialog to open
+  await page.waitForLoadState("networkidle");
+
+  // The new McpAssignmentsDialog shows profile pills - click on "Default Profile" to open popover
+  const profilePill = page.getByRole("button", {
+    name: new RegExp(`${DEFAULT_PROFILE_NAME}.*\\(\\d+/\\d+\\)`),
+  });
+  await profilePill.waitFor({ state: "visible", timeout: 10_000 });
+  await profilePill.click();
+
+  // Wait for the popover to open - it contains the credential selector and tool checkboxes
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(500);
+
+  // Click the first tool checkbox to select a tool
+  // The checkbox is inside the popover, wait for it to be visible
+  const checkbox = page.getByRole("checkbox").first();
+  await checkbox.waitFor({ state: "visible", timeout: 5_000 });
+  await checkbox.click();
+
+  // The combobox (credential selector) is now in the popover
   const combobox = page.getByRole("combobox");
   await combobox.waitFor({ state: "visible" });
   await combobox.click();
@@ -170,37 +184,6 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await page.waitForTimeout(100);
 }
 
-/**
- * After opening the TokenSelect dropdown via goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
- * select a credential, ensure all tools are selected, close the popover, and save.
- */
-export async function selectCredentialAndAssignAllTools({
-  page,
-  credentialName,
-}: {
-  page: Page;
-  credentialName: string;
-}) {
-  // Select the credential option (closes the Select dropdown)
-  await page.getByRole("option", { name: credentialName }).click();
-  // Wait for tools to load in the popover and click "Select All"
-  // Tools are fetched async via useCatalogTools - the button is disabled while tools are loading
-  // (empty array makes [].every(...) return true, which disables the button)
-  const selectAllButton = page.getByRole("button", {
-    name: "Select All",
-    exact: true,
-  });
-  await expect(selectAllButton).toBeEnabled({ timeout: 5_000 });
-  await selectAllButton.click();
-  // Close the popover by pressing Escape
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(200);
-  // Click Save to apply all changes (wait for button to become enabled)
-  const saveButton = page.getByRole("button", { name: "Save" });
-  await expect(saveButton).toBeEnabled({ timeout: 3_000 });
-  await saveButton.click();
-  await page.waitForLoadState("networkidle");
-}
 
 export async function verifyToolCallResultViaApi({
   request,

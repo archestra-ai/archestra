@@ -8,7 +8,7 @@ import {
   executeArchestraTool,
   getAgentTools,
 } from "@/archestra-mcp-server";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
@@ -26,17 +26,62 @@ import {
 const MCP_GATEWAY_BASE_URL = "http://localhost:9000/v1/mcp";
 
 /**
- * Client cache per agent + user combination
- * Key: `${agentId}:${userId}`, Value: MCP Client
- * Note: This cannot use cacheManager because Client instances need lifecycle
- * management (close() on cleanup) which cacheManager doesn't support.
+ * Maximum client cache size to prevent unbounded memory growth.
+ * Each entry is an MCP Client connection, which consumes resources.
  */
-const clientCache = new Map<string, Client>();
+const MAX_CLIENT_CACHE_SIZE = 500;
+
+/**
+ * Client cache per agent + user combination using LRU eviction.
+ * Key: `${agentId}:${userId}`, Value: MCP Client
+ *
+ * Uses onEviction callback to properly close() clients when evicted,
+ * preventing connection leaks.
+ */
+const clientCache = new LRUCacheManager<Client>({
+  maxSize: MAX_CLIENT_CACHE_SIZE,
+  defaultTtl: 0, // No TTL - clients remain until evicted or manually removed
+  onEviction: (key: string, client: unknown) => {
+    try {
+      (client as Client).close();
+      logger.info({ cacheKey: key }, "Closed evicted MCP client connection");
+    } catch (error) {
+      logger.warn(
+        { cacheKey: key, error },
+        "Error closing evicted MCP client (non-fatal)",
+      );
+    }
+  },
+});
 
 /**
  * Tool cache TTL - 30 seconds to avoid hammering MCP Gateway
  */
 const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
+
+/**
+ * Maximum tool cache size to prevent unbounded memory growth.
+ * With 30s TTL and typical conversation patterns, 1000 entries should handle
+ * ~1000 concurrent conversations with comfortable headroom.
+ */
+const MAX_TOOL_CACHE_SIZE = 1000;
+
+/**
+ * In-memory tool cache per agent + user + prompt + conversation using LRU eviction.
+ *
+ * Note: This cannot use the distributed cacheManager because Tool objects contain
+ * execute functions which cannot be serialized to PostgreSQL JSONB.
+ *
+ * For multi-pod deployments, sticky sessions should be used to ensure all
+ * requests for a conversation hit the same pod. Without sticky sessions,
+ * requests may be routed to different pods, causing frequent cache misses.
+ * This degrades performance (repeated tool fetches from MCP Gateway) but
+ * does not affect correctness - tools will still work, just slower.
+ */
+const toolCache = new LRUCacheManager<Record<string, Tool>>({
+  maxSize: MAX_TOOL_CACHE_SIZE,
+  defaultTtl: TOOL_CACHE_TTL_MS,
+});
 
 /**
  * Generate cache key from agentId and userId
@@ -47,32 +92,29 @@ function getCacheKey(agentId: string, userId: string): string {
 
 /**
  * Generate the full cache key for tool cache
- * Includes promptId because agent tools depend on the prompt context
  * Includes conversationId because browser tools need correct tab selection
  */
 function getToolCacheKey(
   agentId: string,
   userId: string,
-  promptId?: string,
   conversationId?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
-  if (promptId) parts.push(promptId);
   if (conversationId) parts.push(conversationId);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
 export const __test = {
   setCachedClient(cacheKey: string, client: Client) {
-    clientCache.set(cacheKey, client);
+    clientCache.set(cacheKey, client, 0); // No TTL for clients
   },
   async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
-      await cacheManager.delete(`${CacheKey.ChatMcpTools}-${cacheKey}`);
+      toolCache.delete(`${CacheKey.ChatMcpTools}-${cacheKey}`);
+    } else {
+      toolCache.clear();
     }
-    // Note: cacheManager doesn't support clearing all keys with a prefix
-    // For tests, individual keys should be cleared explicitly
   },
   getCacheKey,
   isBrowserMcpTool,
@@ -207,57 +249,69 @@ async function selectMCPGatewayToken(
 }
 
 /**
- * Clear cached client for a specific agent (all users)
+ * Clear cached client and tools for a specific agent (all users)
  * Should be called when MCP Gateway sessions are cleared
  *
- * Note: Tool cache entries are stored in cacheManager with keys like
- * "chat-mcp-tools-{agentId}:{userId}". Since we don't track all userIds,
- * tool cache entries will expire naturally via TTL (30 seconds).
- *
- * @param agentId - The agent ID whose clients should be cleared
+ * @param agentId - The agent ID whose clients/tools should be cleared
  */
 export function clearChatMcpClient(agentId: string): void {
   logger.info(
     { agentId },
-    "clearChatMcpClient() called - checking for cached clients",
+    "clearChatMcpClient() called - checking for cached clients and tools",
   );
 
-  let clearedCount = 0;
+  let clientClearedCount = 0;
+  let toolClearedCount = 0;
 
-  // Find and remove all cache entries for this agentId (any user)
+  // Find and remove all client cache entries for this agentId (any user)
+  // Collect keys first to avoid iterator invalidation during deletion
+  const clientKeysToDelete: string[] = [];
   for (const key of clientCache.keys()) {
     if (key.startsWith(`${agentId}:`)) {
-      const client = clientCache.get(key);
-      if (client) {
-        try {
-          client.close();
-          logger.info(
-            { agentId, cacheKey: key },
-            "Closed MCP client connection",
-          );
-        } catch (error) {
-          logger.warn(
-            { agentId, cacheKey: key, error },
-            "Error closing MCP client connection (non-fatal)",
-          );
-        }
-        clientCache.delete(key);
-        clearedCount++;
-      }
+      clientKeysToDelete.push(key);
     }
   }
 
-  // Note: Tool cache entries in cacheManager will expire naturally via TTL.
-  // cacheManager doesn't support prefix-based deletion, but with a 30s TTL,
-  // stale entries will be refreshed quickly.
+  for (const key of clientKeysToDelete) {
+    const client = clientCache.get(key);
+    if (client) {
+      try {
+        client.close();
+        logger.info({ agentId, cacheKey: key }, "Closed MCP client connection");
+      } catch (error) {
+        logger.warn(
+          { agentId, cacheKey: key, error },
+          "Error closing MCP client connection (non-fatal)",
+        );
+      }
+      clientCache.delete(key);
+      clientClearedCount++;
+    }
+  }
+
+  // Clear tool cache entries for this agentId
+  // Collect keys first to avoid iterator invalidation during deletion
+  const toolKeysToDelete: string[] = [];
+  for (const key of toolCache.keys()) {
+    if (key.startsWith(`${CacheKey.ChatMcpTools}-${agentId}:`)) {
+      toolKeysToDelete.push(key);
+    }
+  }
+
+  for (const key of toolKeysToDelete) {
+    toolCache.delete(key);
+    toolClearedCount++;
+  }
 
   logger.info(
     {
       agentId,
-      clearedCount,
+      clientClearedCount,
+      toolClearedCount,
       remainingCachedClients: clientCache.size,
+      remainingCachedTools: toolCache.size,
     },
-    "Cleared MCP client cache entries for agent",
+    "Cleared MCP client and tool cache entries for agent",
   );
 }
 
@@ -376,8 +430,8 @@ export async function getChatMcpClient(
       "Successfully connected to MCP Gateway (new session initialized)",
     );
 
-    // Cache the client
-    clientCache.set(cacheKey, client);
+    // Cache the client (no TTL - clients remain until evicted or manually removed)
+    clientCache.set(cacheKey, client, 0);
 
     logger.info(
       {
@@ -434,7 +488,6 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
  * @param userId - The user ID for authentication
  * @param userIsProfileAdmin - Whether the user is a profile admin
  * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
- * @param promptId - Optional prompt ID for agent tools lookup
  * @param organizationId - Optional organization ID for agent tools lookup
  * @param conversationId - Optional conversation ID for browser tab selection
  * @returns Record of tool name to AI SDK Tool object
@@ -446,7 +499,6 @@ export async function getChatMcpTools({
   userIsProfileAdmin,
   enabledToolIds,
   conversationId,
-  promptId,
   organizationId,
   sessionId,
   delegationChain,
@@ -457,23 +509,17 @@ export async function getChatMcpTools({
   userIsProfileAdmin: boolean;
   enabledToolIds?: string[];
   conversationId?: string;
-  promptId?: string;
   organizationId?: string;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
-  /** Delegation chain of prompt IDs for tracking delegated agent calls */
+  /** Delegation chain of agent IDs for tracking delegated agent calls */
   delegationChain?: string;
 }): Promise<Record<string, Tool>> {
-  const toolCacheKey = getToolCacheKey(
-    agentId,
-    userId,
-    promptId,
-    conversationId,
-  );
+  const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
 
-  // Check cache first using cacheManager
-  const cachedTools =
-    await cacheManager.get<Record<string, Tool>>(toolCacheKey);
+  // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
+  // LRU eviction and TTL are handled automatically by LRUCacheManager
+  const cachedTools = toolCache.get(toolCacheKey);
   if (cachedTools) {
     logger.info(
       {
@@ -487,9 +533,17 @@ export async function getChatMcpTools({
     return await filterToolsByEnabledIds(cachedTools, enabledToolIds);
   }
 
+  // Log cache miss - in multi-pod deployments without sticky sessions,
+  // frequent cache misses indicate requests are being routed to different pods.
+  // This degrades performance as tools need to be re-fetched from MCP Gateway.
   logger.info(
-    { agentId, userId },
-    "getChatMcpTools() called - fetching client...",
+    {
+      agentId,
+      userId,
+      conversationId,
+      cacheSize: toolCache.size,
+    },
+    "Tool cache miss - fetching tools from MCP Gateway. If this happens frequently for the same conversation, check that sticky sessions are configured for your load balancer.",
   );
 
   // Get token for direct tool execution (bypasses HTTP for security)
@@ -606,7 +660,7 @@ export async function getChatMcpTools({
                     profile: { id: agentId, name: agentName },
                     conversationId,
                     userId,
-                    promptId,
+                    agentId,
                     organizationId,
                     sessionId,
                   },
@@ -722,11 +776,11 @@ export async function getChatMcpTools({
       "Successfully converted MCP tools to AI SDK Tool format",
     );
 
-    // Fetch and add agent tools if promptId and organizationId are available
-    if (promptId && organizationId) {
+    // Fetch and add agent delegation tools if organizationId is available
+    if (organizationId) {
       try {
         const agentToolsList = await getAgentTools({
-          promptId,
+          agentId,
           organizationId,
           userId,
           skipAccessCheck: userIsProfileAdmin,
@@ -735,7 +789,7 @@ export async function getChatMcpTools({
         // Build the context for agent tool execution
         const archestraContext: ArchestraContext = {
           profile: { id: agentId, name: agentName },
-          promptId,
+          agentId,
           organizationId,
           conversationId,
           sessionId,
@@ -767,7 +821,6 @@ export async function getChatMcpTools({
                   agentId,
                   userId,
                   toolName: agentTool.name,
-                  promptId,
                   arguments: args,
                 },
                 "Executing agent tool from chat",
@@ -808,7 +861,6 @@ export async function getChatMcpTools({
                     agentId,
                     userId,
                     toolName: agentTool.name,
-                    promptId,
                     err: error,
                     errorMessage:
                       error instanceof Error ? error.message : String(error),
@@ -825,22 +877,21 @@ export async function getChatMcpTools({
           {
             agentId,
             userId,
-            promptId,
             agentToolCount: agentToolsList.length,
             totalToolCount: Object.keys(aiTools).length,
           },
-          "Added agent tools to chat tools",
+          "Added agent delegation tools to chat tools",
         );
       } catch (error) {
         logger.error(
-          { agentId, userId, promptId, error },
-          "Failed to fetch agent tools, continuing without them",
+          { agentId, userId, error },
+          "Failed to fetch agent delegation tools, continuing without them",
         );
       }
     }
 
-    // Cache the tools using cacheManager with TTL
-    await cacheManager.set(toolCacheKey, aiTools, TOOL_CACHE_TTL_MS);
+    // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
+    toolCache.set(toolCacheKey, aiTools);
 
     // Apply filtering if enabledToolIds provided and non-empty
     return await filterToolsByEnabledIds(aiTools, enabledToolIds);

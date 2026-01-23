@@ -13,8 +13,9 @@ test.describe("Agents API CRUD", () => {
   });
 
   test("should create a new agent", async ({ request, createAgent }) => {
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
     const newAgent = {
-      name: "Test Agent for Integration",
+      name: `Test Agent for Integration ${uniqueSuffix}`,
       isDemo: false,
       teams: [],
     };
@@ -35,10 +36,9 @@ test.describe("Agents API CRUD", () => {
     makeApiRequest,
   }) => {
     // Create an agent first
-    const createResponse = await createAgent(
-      request,
-      "Agent for Get By ID Test",
-    );
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const agentName = `Agent for Get By ID Test ${uniqueSuffix}`;
+    const createResponse = await createAgent(request, agentName);
     const createdAgent = await createResponse.json();
 
     const response = await makeApiRequest({
@@ -49,7 +49,7 @@ test.describe("Agents API CRUD", () => {
     const agent = await response.json();
 
     expect(agent.id).toBe(createdAgent.id);
-    expect(agent.name).toBe("Agent for Get By ID Test");
+    expect(agent.name).toBe(agentName);
     expect(agent).toHaveProperty("tools");
     expect(agent).toHaveProperty("teams");
   });
@@ -60,11 +60,15 @@ test.describe("Agents API CRUD", () => {
     makeApiRequest,
   }) => {
     // Create an agent first
-    const createResponse = await createAgent(request, "Agent for Update Test");
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const createResponse = await createAgent(
+      request,
+      `Agent for Update Test ${uniqueSuffix}`,
+    );
     const createdAgent = await createResponse.json();
 
     const updateData = {
-      name: "Updated Test Agent",
+      name: `Updated Test Agent ${uniqueSuffix}`,
       isDemo: true,
     };
 
@@ -87,7 +91,11 @@ test.describe("Agents API CRUD", () => {
     makeApiRequest,
   }) => {
     // Create an agent first
-    const createResponse = await createAgent(request, "Agent for Delete Test");
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const createResponse = await createAgent(
+      request,
+      `Agent for Delete Test ${uniqueSuffix}`,
+    );
     const createdAgent = await createResponse.json();
 
     const deleteResponse = await makeApiRequest({

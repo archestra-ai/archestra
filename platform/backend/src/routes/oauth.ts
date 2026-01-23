@@ -3,6 +3,7 @@ import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js"
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -224,35 +225,53 @@ async function registerOAuthClient(
 }
 
 /**
- * In-memory storage for OAuth state (serverId, catalogId, codeVerifier, clientId, clientSecret)
- * In production, this should be stored in Redis or database with expiration
+ * OAuth state data stored in cache during the OAuth flow.
  */
-const oauthStateStore = new Map<
-  string,
-  {
-    catalogId: string;
-    codeVerifier: string;
-    timestamp: number;
-    clientId?: string;
-    clientSecret?: string;
-    registrationResult?: Record<string, unknown>;
-  }
->();
+interface OAuthStateData {
+  catalogId: string;
+  codeVerifier: string;
+  clientId?: string;
+  clientSecret?: string;
+  registrationResult?: Record<string, unknown>;
+}
 
-// Clean up expired states every 10 minutes
-setInterval(
-  () => {
-    const now = Date.now();
-    const tenMinutes = 10 * 60 * 1000;
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-    for (const [state, data] of oauthStateStore.entries()) {
-      if (now - data.timestamp > tenMinutes) {
-        oauthStateStore.delete(state);
-      }
-    }
-  },
-  10 * 60 * 1000,
-);
+/**
+ * Generate cache key for OAuth state
+ */
+function getOAuthStateCacheKey(
+  state: string,
+): `${typeof CacheKey.OAuthState}-${string}` {
+  return `${CacheKey.OAuthState}-${state}`;
+}
+
+/**
+ * Store OAuth state in cache
+ */
+async function setOAuthState(
+  state: string,
+  data: OAuthStateData,
+): Promise<void> {
+  await cacheManager.set(
+    getOAuthStateCacheKey(state),
+    data,
+    OAUTH_STATE_TTL_MS,
+  );
+}
+
+/**
+ * Atomically retrieve and delete OAuth state from cache.
+ * Uses cacheManager.getAndDelete() to prevent race conditions where
+ * the same state could be used twice if two requests arrive simultaneously.
+ */
+async function getAndDeleteOAuthState(
+  state: string,
+): Promise<OAuthStateData | null> {
+  const key = getOAuthStateCacheKey(state);
+  const data = await cacheManager.getAndDelete<OAuthStateData>(key);
+  return data ?? null;
+}
 
 /**
  * Refresh an OAuth access token using the stored refresh token.
@@ -653,10 +672,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const state = randomBytes(16).toString("base64url");
 
       // Store state temporarily (will be used in callback)
-      oauthStateStore.set(state, {
+      await setOAuthState(state, {
         catalogId,
         codeVerifier,
-        timestamp: Date.now(),
         clientId,
         clientSecret,
         registrationResult,
@@ -708,8 +726,8 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body: { code, state } }, reply) => {
-      // Retrieve OAuth state
-      const oauthState = oauthStateStore.get(state);
+      // Retrieve OAuth state (also deletes it to prevent replay attacks)
+      const oauthState = await getAndDeleteOAuthState(state);
       if (!oauthState) {
         throw new ApiError(400, "Invalid or expired OAuth state");
       }
@@ -919,9 +937,6 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         `${catalogItem.name}-oauth`,
         isByosEnabled(), // forceDB: store in DB when BYOS is enabled
       );
-
-      // Clean up used state
-      oauthStateStore.delete(state);
 
       return reply.send({
         success: true,

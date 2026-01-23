@@ -117,20 +117,20 @@ export function AssignProfileDialog({
     if (succeeded > 0) {
       if (duplicates > 0 && actualFailures === 0) {
         toast.success(
-          `Successfully assigned ${tool.tool.name} to ${succeeded} profile${succeeded !== 1 ? "s" : ""}. ${duplicates} ${duplicates === 1 ? "was" : "were"} already assigned.`,
+          `Successfully assigned ${tool.tool.name} to ${succeeded} agent${succeeded !== 1 ? "s" : ""}. ${duplicates} ${duplicates === 1 ? "was" : "were"} already assigned.`,
         );
       } else if (actualFailures > 0) {
         toast.warning(
-          `Assigned ${tool.tool.name} to ${succeeded} of ${totalAttempted} profile${totalAttempted !== 1 ? "s" : ""}. ${actualFailures} failed.`,
+          `Assigned ${tool.tool.name} to ${succeeded} of ${totalAttempted} agent${totalAttempted !== 1 ? "s" : ""}. ${actualFailures} failed.`,
         );
       } else {
         toast.success(
-          `Successfully assigned ${tool.tool.name} to ${succeeded} profile${succeeded !== 1 ? "s" : ""}`,
+          `Successfully assigned ${tool.tool.name} to ${succeeded} agent${succeeded !== 1 ? "s" : ""}`,
         );
       }
     } else if (duplicates === failed) {
       toast.info(
-        `${tool.tool.name} is already assigned to all selected profiles`,
+        `${tool.tool.name} is already assigned to all selected agents`,
       );
     } else {
       toast.error(`Failed to assign ${tool.tool.name}`);
@@ -175,9 +175,9 @@ export function AssignProfileDialog({
     >
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Assign Tool to Profiles</DialogTitle>
+          <DialogTitle>Assign Tool</DialogTitle>
           <DialogDescription>
-            Select one or more profiles to assign "{tool?.tool.name}" to.
+            Select one or more agents to assign "{tool?.tool.name}" to.
           </DialogDescription>
         </DialogHeader>
 
@@ -186,7 +186,7 @@ export function AssignProfileDialog({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search profiles..."
+                placeholder="Search agents..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -198,8 +198,8 @@ export function AssignProfileDialog({
             {!filteredProfiles || filteredProfiles.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 {searchQuery
-                  ? "No profiles match your search"
-                  : "No profiles available"}
+                  ? "No agents match your search"
+                  : "No agents available"}
               </div>
             ) : (
               <div className="divide-y">
@@ -226,7 +226,7 @@ export function AssignProfileDialog({
               Credential to use *
             </Label>
             <p className="text-xs text-muted-foreground mb-2">
-              Select which credential will be used when these profiles execute
+              Select which credential will be used when these agents execute
               this tool
             </p>
             <TokenSelect

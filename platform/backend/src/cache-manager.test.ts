@@ -1,195 +1,439 @@
+import { sql } from "drizzle-orm";
 import { vi } from "vitest";
-import { afterEach, beforeEach, describe, expect, it } from "@/test";
-import { CacheKey, cacheManager } from "./cache-manager";
+import db from "@/database";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+
+// Use vi.hoisted() to create mock functions that can be accessed in vi.mock
+const { mockGet, mockSet, mockDelete, mockDisconnect, mockOn } = vi.hoisted(
+  () => ({
+    mockGet: vi.fn(),
+    mockSet: vi.fn(),
+    mockDelete: vi.fn(),
+    mockDisconnect: vi.fn(),
+    mockOn: vi.fn(),
+  }),
+);
+
+// Mock Keyv using the hoisted mock functions
+vi.mock("keyv", () => ({
+  default: class MockKeyv {
+    get = mockGet;
+    set = mockSet;
+    delete = mockDelete;
+    disconnect = mockDisconnect;
+    on = mockOn;
+  },
+}));
+
+vi.mock("@keyv/postgres", () => ({
+  default: vi.fn(),
+}));
+
+// Import after mocks are set up
+import { type AllowedCacheKey, cacheManager } from "./cache-manager";
+
+// Alias for convenience in tests
+const mockKeyv = {
+  get: mockGet,
+  set: mockSet,
+  delete: mockDelete,
+  disconnect: mockDisconnect,
+  on: mockOn,
+};
+
+/**
+ * Helper to ensure keyv_cache table exists for SQL-based tests.
+ * This table is normally created by @keyv/postgres but we mock that.
+ */
+async function ensureKeyvCacheTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS keyv_cache (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      expires BIGINT
+    )
+  `);
+}
+
+/**
+ * Helper to insert a value directly into keyv_cache for testing.
+ * Mimics how Keyv stores data with the "keyv:" prefix.
+ */
+async function insertKeyvEntry(
+  key: string,
+  value: unknown,
+  expiresAt?: number,
+) {
+  const keyvKey = `keyv:${key}`;
+  const jsonValue = JSON.stringify(value);
+  await db.execute(
+    sql`INSERT INTO keyv_cache (key, value, expires) VALUES (${keyvKey}, ${jsonValue}, ${expiresAt ?? null})
+        ON CONFLICT (key) DO UPDATE SET value = ${jsonValue}, expires = ${expiresAt ?? null}`,
+  );
+}
+
+/**
+ * Helper to check if a key exists in keyv_cache.
+ */
+async function keyvEntryExists(key: string): Promise<boolean> {
+  const keyvKey = `keyv:${key}`;
+  const result = await db.execute<{ count: string }>(
+    sql`SELECT COUNT(*) as count FROM keyv_cache WHERE key = ${keyvKey}`,
+  );
+  return Number.parseInt(result.rows[0]?.count ?? "0", 10) > 0;
+}
+
+/**
+ * Helper to clear all entries from keyv_cache.
+ */
+async function clearKeyvCache() {
+  await db.execute(sql`DELETE FROM keyv_cache`);
+}
 
 describe("CacheManager", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.clearAllMocks();
+    // Reset the cacheManager state for each test by calling shutdown
+    cacheManager.shutdown();
   });
 
-  afterEach(async () => {
-    vi.useRealTimers();
-    // Clean up cache between tests
-    await cacheManager.delete(CacheKey.GetChatModels);
-    await cacheManager.delete(`${CacheKey.GetChatModels}-test-suffix`);
+  afterEach(() => {
+    cacheManager.shutdown();
   });
 
-  describe("get and set", () => {
-    it("should return undefined for non-existent key", async () => {
-      const result = await cacheManager.get<string>(CacheKey.GetChatModels);
-      expect(result).toBeUndefined();
+  describe("start", () => {
+    test("initializes Keyv connection", () => {
+      cacheManager.start();
+
+      // Should register error handler
+      expect(mockKeyv.on).toHaveBeenCalledWith("error", expect.any(Function));
     });
 
-    it("should store and retrieve a value", async () => {
-      const testData = { name: "test", value: 123 };
-      await cacheManager.set(CacheKey.GetChatModels, testData);
+    test("does not reinitialize if already started", () => {
+      cacheManager.start();
+      const firstCallCount = mockKeyv.on.mock.calls.length;
 
-      const result = await cacheManager.get<typeof testData>(
-        CacheKey.GetChatModels,
+      cacheManager.start();
+      // Should not add another error handler
+      expect(mockKeyv.on.mock.calls.length).toBe(firstCallCount);
+    });
+  });
+
+  describe("get", () => {
+    test("returns value from cache", async () => {
+      cacheManager.start();
+      mockKeyv.get.mockResolvedValue({ foo: "bar" });
+
+      const result = await cacheManager.get<{ foo: string }>(
+        "test-key" as AllowedCacheKey,
       );
-      expect(result).toEqual(testData);
+
+      expect(result).toEqual({ foo: "bar" });
+      expect(mockKeyv.get).toHaveBeenCalledWith("test-key");
     });
 
-    it("should store and retrieve with suffixed key", async () => {
-      const testData = ["model1", "model2"];
-      await cacheManager.set(`${CacheKey.GetChatModels}-test-suffix`, testData);
+    test("returns undefined when key does not exist", async () => {
+      cacheManager.start();
+      mockKeyv.get.mockResolvedValue(undefined);
 
-      const result = await cacheManager.get<string[]>(
-        `${CacheKey.GetChatModels}-test-suffix`,
+      const result = await cacheManager.get("missing-key" as AllowedCacheKey);
+
+      expect(result).toBeUndefined();
+    });
+
+    test("returns undefined when not started", async () => {
+      const result = await cacheManager.get("test-key" as AllowedCacheKey);
+
+      expect(result).toBeUndefined();
+      expect(mockKeyv.get).not.toHaveBeenCalled();
+    });
+
+    test("returns undefined on error", async () => {
+      cacheManager.start();
+      mockKeyv.get.mockRejectedValue(new Error("Connection failed"));
+
+      const result = await cacheManager.get("test-key" as AllowedCacheKey);
+
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe("set", () => {
+    test("sets value with default TTL", async () => {
+      cacheManager.start();
+      mockKeyv.set.mockResolvedValue(true);
+
+      const value = { foo: "bar" };
+      const result = await cacheManager.set(
+        "test-key" as AllowedCacheKey,
+        value,
       );
-      expect(result).toEqual(["model1", "model2"]);
+
+      expect(result).toEqual(value);
+      expect(mockKeyv.set).toHaveBeenCalledWith(
+        "test-key",
+        value,
+        3600000, // 1 hour default TTL
+      );
     });
 
-    it("should respect custom TTL", async () => {
-      const testData = "short-lived";
-      const shortTtl = 1000; // 1 second
+    test("sets value with custom TTL", async () => {
+      cacheManager.start();
+      mockKeyv.set.mockResolvedValue(true);
 
-      await cacheManager.set(CacheKey.GetChatModels, testData, shortTtl);
+      const value = { foo: "bar" };
+      const customTtl = 5000;
+      await cacheManager.set("test-key" as AllowedCacheKey, value, customTtl);
 
-      // Should exist immediately
-      let result = await cacheManager.get<string>(CacheKey.GetChatModels);
-      expect(result).toBe(testData);
-
-      // Advance time past TTL
-      vi.advanceTimersByTime(shortTtl + 100);
-
-      // Should be expired
-      result = await cacheManager.get<string>(CacheKey.GetChatModels);
-      expect(result).toBeUndefined();
+      expect(mockKeyv.set).toHaveBeenCalledWith("test-key", value, customTtl);
     });
 
-    it("should use default TTL (1 hour) when not specified", async () => {
-      const testData = "default-ttl";
-      await cacheManager.set(CacheKey.GetChatModels, testData);
+    test("throws when not started", async () => {
+      await expect(
+        cacheManager.set("test-key" as AllowedCacheKey, { foo: "bar" }),
+      ).rejects.toThrow("CacheManager: Not started");
+    });
 
-      // Should exist after 59 minutes
-      vi.advanceTimersByTime(59 * 60 * 1000);
-      let result = await cacheManager.get<string>(CacheKey.GetChatModels);
-      expect(result).toBe(testData);
+    test("throws on error", async () => {
+      cacheManager.start();
+      mockKeyv.set.mockRejectedValue(new Error("Write failed"));
 
-      // Should be expired after 1 hour + a bit
-      vi.advanceTimersByTime(2 * 60 * 1000);
-      result = await cacheManager.get<string>(CacheKey.GetChatModels);
-      expect(result).toBeUndefined();
+      await expect(
+        cacheManager.set("test-key" as AllowedCacheKey, { foo: "bar" }),
+      ).rejects.toThrow("Write failed");
     });
   });
 
   describe("delete", () => {
-    it("should delete an existing key", async () => {
-      await cacheManager.set(CacheKey.GetChatModels, "to-delete");
+    test("deletes key from cache", async () => {
+      cacheManager.start();
+      mockKeyv.delete.mockResolvedValue(true);
 
-      const deleted = await cacheManager.delete(CacheKey.GetChatModels);
-      expect(deleted).toBe(true);
+      const result = await cacheManager.delete("test-key" as AllowedCacheKey);
 
-      const result = await cacheManager.get<string>(CacheKey.GetChatModels);
+      expect(result).toBe(true);
+      expect(mockKeyv.delete).toHaveBeenCalledWith("test-key");
+    });
+
+    test("returns false when key does not exist", async () => {
+      cacheManager.start();
+      mockKeyv.delete.mockResolvedValue(false);
+
+      const result = await cacheManager.delete(
+        "missing-key" as AllowedCacheKey,
+      );
+
+      expect(result).toBe(false);
+    });
+
+    test("returns false when not started", async () => {
+      const result = await cacheManager.delete("test-key" as AllowedCacheKey);
+
+      expect(result).toBe(false);
+      expect(mockKeyv.delete).not.toHaveBeenCalled();
+    });
+
+    test("returns false on error", async () => {
+      cacheManager.start();
+      mockKeyv.delete.mockRejectedValue(new Error("Delete failed"));
+
+      const result = await cacheManager.delete("test-key" as AllowedCacheKey);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("getAndDelete", () => {
+    // These tests use real database calls since getAndDelete uses raw SQL
+    // for atomic delete-and-return semantics
+
+    beforeEach(async () => {
+      await ensureKeyvCacheTable();
+      await clearKeyvCache();
+    });
+
+    test("gets and deletes value atomically", async () => {
+      cacheManager.start();
+
+      // Insert test data directly into keyv_cache
+      await insertKeyvEntry("test-key", { foo: "bar" });
+
+      const result = await cacheManager.getAndDelete<{ foo: string }>(
+        "test-key" as AllowedCacheKey,
+      );
+
+      expect(result).toEqual({ foo: "bar" });
+
+      // Verify the entry was deleted
+      const exists = await keyvEntryExists("test-key");
+      expect(exists).toBe(false);
+    });
+
+    test("returns undefined if key does not exist", async () => {
+      cacheManager.start();
+
+      const result = await cacheManager.getAndDelete(
+        "missing-key" as AllowedCacheKey,
+      );
+
       expect(result).toBeUndefined();
     });
 
-    it("should return true when deleting non-existent key (cache-manager behavior)", async () => {
-      // Note: cache-manager library returns true even for non-existent keys
-      const deleted = await cacheManager.delete(CacheKey.GetChatModels);
-      expect(deleted).toBe(true);
+    test("returns undefined for expired entries", async () => {
+      cacheManager.start();
+
+      // Insert an expired entry (expires in the past)
+      await insertKeyvEntry("expired-key", { foo: "bar" }, Date.now() - 1000);
+
+      const result = await cacheManager.getAndDelete(
+        "expired-key" as AllowedCacheKey,
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    test("returns value for non-expired entries", async () => {
+      cacheManager.start();
+
+      // Insert an entry that expires in the future
+      await insertKeyvEntry("valid-key", { foo: "bar" }, Date.now() + 60000);
+
+      const result = await cacheManager.getAndDelete<{ foo: string }>(
+        "valid-key" as AllowedCacheKey,
+      );
+
+      expect(result).toEqual({ foo: "bar" });
+    });
+
+    test("returns undefined when not started", async () => {
+      const result = await cacheManager.getAndDelete(
+        "test-key" as AllowedCacheKey,
+      );
+
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe("deleteByPrefix", () => {
+    // These tests use real database calls since deleteByPrefix uses raw SQL
+
+    beforeEach(async () => {
+      await ensureKeyvCacheTable();
+      await clearKeyvCache();
+    });
+
+    test("deletes all entries matching prefix", async () => {
+      cacheManager.start();
+
+      // Insert multiple entries with same prefix
+      await insertKeyvEntry("chat-mcp-tools-agent1", { tools: ["a"] });
+      await insertKeyvEntry("chat-mcp-tools-agent2", { tools: ["b"] });
+      await insertKeyvEntry("chat-mcp-tools-agent3", { tools: ["c"] });
+      // Insert entry with different prefix
+      await insertKeyvEntry("other-key", { data: "keep" });
+
+      const deletedCount = await cacheManager.deleteByPrefix(
+        "chat-mcp-tools" as AllowedCacheKey,
+      );
+
+      expect(deletedCount).toBe(3);
+
+      // Verify the matching entries were deleted
+      expect(await keyvEntryExists("chat-mcp-tools-agent1")).toBe(false);
+      expect(await keyvEntryExists("chat-mcp-tools-agent2")).toBe(false);
+      expect(await keyvEntryExists("chat-mcp-tools-agent3")).toBe(false);
+
+      // Verify the non-matching entry still exists
+      expect(await keyvEntryExists("other-key")).toBe(true);
+    });
+
+    test("returns 0 when no entries match prefix", async () => {
+      cacheManager.start();
+
+      await insertKeyvEntry("other-key", { data: "value" });
+
+      const deletedCount = await cacheManager.deleteByPrefix(
+        "non-existent-prefix" as AllowedCacheKey,
+      );
+
+      expect(deletedCount).toBe(0);
+    });
+
+    test("returns 0 when not started", async () => {
+      const deletedCount = await cacheManager.deleteByPrefix(
+        "test-prefix" as AllowedCacheKey,
+      );
+
+      expect(deletedCount).toBe(0);
     });
   });
 
   describe("wrap", () => {
-    it("should call function and cache result on first call", async () => {
-      const mockFn = vi.fn().mockResolvedValue("computed-value");
+    test("returns cached value if it exists", async () => {
+      cacheManager.start();
+      mockKeyv.get.mockResolvedValue("cached-result");
 
-      const result = await cacheManager.wrap(CacheKey.GetChatModels, mockFn);
+      const fnc = vi.fn().mockResolvedValue("fresh-result");
+      const result = await cacheManager.wrap(
+        "test-key" as AllowedCacheKey,
+        fnc,
+      );
 
-      expect(result).toBe("computed-value");
-      expect(mockFn).toHaveBeenCalledTimes(1);
+      expect(result).toBe("cached-result");
+      expect(fnc).not.toHaveBeenCalled();
+      expect(mockKeyv.set).not.toHaveBeenCalled();
     });
 
-    it("should return cached value on subsequent calls", async () => {
-      const mockFn = vi
-        .fn()
-        .mockResolvedValueOnce("first-value")
-        .mockResolvedValueOnce("second-value");
+    test("calls function and caches result on cache miss", async () => {
+      cacheManager.start();
+      mockKeyv.get.mockResolvedValue(undefined);
+      mockKeyv.set.mockResolvedValue(true);
 
-      const result1 = await cacheManager.wrap(CacheKey.GetChatModels, mockFn);
-      const result2 = await cacheManager.wrap(CacheKey.GetChatModels, mockFn);
+      const fnc = vi.fn().mockResolvedValue("fresh-result");
+      const result = await cacheManager.wrap(
+        "test-key" as AllowedCacheKey,
+        fnc,
+      );
 
-      expect(result1).toBe("first-value");
-      expect(result2).toBe("first-value"); // Still returns cached value
-      expect(mockFn).toHaveBeenCalledTimes(1); // Only called once
+      expect(result).toBe("fresh-result");
+      expect(fnc).toHaveBeenCalled();
+      expect(mockKeyv.set).toHaveBeenCalledWith(
+        "test-key",
+        "fresh-result",
+        3600000,
+      );
     });
 
-    it("should respect custom TTL in wrap", async () => {
-      const mockFn = vi
-        .fn()
-        .mockResolvedValueOnce("first-value")
-        .mockResolvedValueOnce("second-value");
-      const shortTtl = 1000;
+    test("respects custom TTL", async () => {
+      cacheManager.start();
+      mockKeyv.get.mockResolvedValue(undefined);
+      mockKeyv.set.mockResolvedValue(true);
 
-      const result1 = await cacheManager.wrap(CacheKey.GetChatModels, mockFn, {
-        ttl: shortTtl,
+      const fnc = vi.fn().mockResolvedValue("result");
+      const customTtl = 10000;
+      await cacheManager.wrap("test-key" as AllowedCacheKey, fnc, {
+        ttl: customTtl,
       });
-      expect(result1).toBe("first-value");
-      expect(mockFn).toHaveBeenCalledTimes(1);
 
-      // Advance time past TTL
-      vi.advanceTimersByTime(shortTtl + 100);
-
-      // Should call function again after TTL expires
-      const result2 = await cacheManager.wrap(CacheKey.GetChatModels, mockFn, {
-        ttl: shortTtl,
-      });
-      expect(result2).toBe("second-value");
-      expect(mockFn).toHaveBeenCalledTimes(2);
-    });
-
-    it("should handle complex objects", async () => {
-      const complexData = {
-        models: [
-          { id: "1", name: "gpt-4", provider: "openai" },
-          { id: "2", name: "claude-3", provider: "anthropic" },
-        ],
-        metadata: { count: 2, lastUpdated: new Date().toISOString() },
-      };
-      const mockFn = vi.fn().mockResolvedValue(complexData);
-
-      const result = await cacheManager.wrap(CacheKey.GetChatModels, mockFn);
-
-      expect(result).toEqual(complexData);
-    });
-
-    it("should handle arrays", async () => {
-      const arrayData = ["model1", "model2", "model3"];
-      const mockFn = vi.fn().mockResolvedValue(arrayData);
-
-      const result = await cacheManager.wrap(CacheKey.GetChatModels, mockFn);
-
-      expect(result).toEqual(arrayData);
-      expect(Array.isArray(result)).toBe(true);
+      expect(mockKeyv.set).toHaveBeenCalledWith(
+        "test-key",
+        "result",
+        customTtl,
+      );
     });
   });
 
-  describe("suffixed keys", () => {
-    it("should support dynamic key suffixes", async () => {
-      const provider1Data = ["gpt-4", "gpt-3.5"];
-      const provider2Data = ["claude-3", "claude-2"];
+  describe("shutdown", () => {
+    test("disconnects Keyv and clears state", () => {
+      cacheManager.start();
+      cacheManager.shutdown();
 
-      await cacheManager.set(`${CacheKey.GetChatModels}-openai`, provider1Data);
-      await cacheManager.set(
-        `${CacheKey.GetChatModels}-anthropic`,
-        provider2Data,
-      );
+      expect(mockKeyv.disconnect).toHaveBeenCalled();
+    });
 
-      const result1 = await cacheManager.get<string[]>(
-        `${CacheKey.GetChatModels}-openai`,
-      );
-      const result2 = await cacheManager.get<string[]>(
-        `${CacheKey.GetChatModels}-anthropic`,
-      );
-
-      expect(result1).toEqual(provider1Data);
-      expect(result2).toEqual(provider2Data);
-
-      // Clean up
-      await cacheManager.delete(`${CacheKey.GetChatModels}-openai`);
-      await cacheManager.delete(`${CacheKey.GetChatModels}-anthropic`);
+    test("handles shutdown when not started", () => {
+      // Should not throw
+      expect(() => cacheManager.shutdown()).not.toThrow();
     });
   });
 });

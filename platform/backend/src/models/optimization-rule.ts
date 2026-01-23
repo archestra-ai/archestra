@@ -270,6 +270,7 @@ class OptimizationRuleModel {
         },
       ],
       gemini: [],
+      cohere: [],
       cerebras: [],
       vllm: [], // vLLM model pricing varies by deployment, so no defaults
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
@@ -302,6 +303,7 @@ class OptimizationRuleModel {
           },
         ],
         gemini: [],
+        cohere: [],
         cerebras: [],
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults

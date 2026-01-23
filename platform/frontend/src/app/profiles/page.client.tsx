@@ -1,10 +1,12 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArrowRight,
+  Bot,
   ChevronDown,
   ChevronUp,
   DollarSign,
@@ -17,26 +19,21 @@ import {
   Server,
   Shield,
   Tag,
-  Wrench,
-  X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import {
-  type ProfileLabel,
-  ProfileLabels,
-  type ProfileLabelsRef,
-} from "@/components/agent-labels";
+import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
+import { AgentDialog } from "@/components/agent-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
+import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -46,16 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -63,13 +51,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  useCreateProfile,
   useDeleteProfile,
-  useLabelKeys,
   useProfilesPaginated,
-  useUpdateProfile,
+  useProfilesQuery,
 } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
 import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
@@ -77,11 +62,6 @@ import {
   formatDate,
 } from "@/lib/utils";
 import { ProfileActions } from "./agent-actions";
-import { AssignToolsDialog } from "./assign-tools-dialog";
-// Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
-
-import type { archestraApiTypes } from "@shared";
-import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 
 type ProfilesInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
@@ -234,17 +214,11 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   const [connectingProfile, setConnectingProfile] = useState<{
     id: string;
     name: string;
+    agentType: "agent" | "mcp_gateway";
   } | null>(null);
-  const [assigningToolsProfile, setAssigningToolsProfile] = useState<
-    archestraApiTypes.GetAgentsResponses["200"]["data"][number] | null
-  >(null);
-  const [editingProfile, setEditingProfile] = useState<{
-    id: string;
-    name: string;
-    teams: Array<{ id: string; name: string }>;
-    labels: ProfileLabel[];
-    considerContextUntrusted: boolean;
-  } | null>(null);
+  const [editingProfile, setEditingProfile] = useState<ProfileData | null>(
+    null,
+  );
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(
     null,
   );
@@ -360,6 +334,27 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
       },
     },
     {
+      id: "modes",
+      header: "Modes",
+      cell: ({ row }) => {
+        const agent = row.original;
+        const isInternalAgent = agent.agentType === "agent";
+        const modes = isInternalAgent
+          ? ["LLM Proxy", "MCP Gateway", "Agent"]
+          : ["LLM Proxy", "MCP Gateway"];
+
+        return (
+          <div className="flex flex-wrap gap-1">
+            {modes.map((mode) => (
+              <Badge key={mode} variant="secondary" className="text-xs">
+                {mode}
+              </Badge>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
       id: "createdAt",
       accessorKey: "createdAt",
       header: ({ column }) => (
@@ -387,27 +382,25 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
           className="h-auto !p-0 font-medium hover:bg-transparent"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Connected Tools
+          Tools
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
       cell: ({ row }) => {
-        const agent = row.original;
-        return (
-          <div className="flex items-center gap-2">
-            {row.original.tools.length}
-            <PermissionButton
-              permissions={{ profile: ["update"] }}
-              tooltip="Assign Tools"
-              aria-label="Assign Tools"
-              variant="outline"
-              size="icon-sm"
-              onClick={() => setAssigningToolsProfile(agent)}
-            >
-              <Wrench className="h-4 w-4" />
-            </PermissionButton>
-          </div>
-        );
+        const toolsCount = row.original.tools.filter(
+          (t) => !t.delegateToAgentId,
+        ).length;
+        return <div>{toolsCount}</div>;
+      },
+    },
+    {
+      id: "subagentsCount",
+      header: "Subagents",
+      cell: ({ row }) => {
+        const subagentsCount = row.original.tools.filter(
+          (t) => t.delegateToAgentId,
+        ).length;
+        return <div>{subagentsCount}</div>;
       },
     },
     {
@@ -445,17 +438,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
             agent={agent}
             onConnect={setConnectingProfile}
             onEdit={(agentData) => {
-              setEditingProfile({
-                id: agentData.id,
-                name: agentData.name,
-                teams:
-                  (agentData.teams as unknown as Array<{
-                    id: string;
-                    name: string;
-                  }>) || [],
-                labels: agentData.labels || [],
-                considerContextUntrusted: agentData.considerContextUntrusted,
-              });
+              setEditingProfile(agentData);
             }}
             onDelete={setDeletingProfileId}
           />
@@ -532,12 +515,13 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
             </div>
           )}
 
-          <CreateProfileDialog
+          <AgentDialog
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
-            onProfileCreated={(profile) => {
+            agentType="mcp_gateway"
+            onCreated={(profile) => {
               setIsCreateDialogOpen(false);
-              setConnectingProfile(profile);
+              setConnectingProfile({ ...profile, agentType: "mcp_gateway" });
             }}
           />
 
@@ -549,23 +533,12 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
             />
           )}
 
-          {assigningToolsProfile && (
-            <AssignToolsDialog
-              agent={assigningToolsProfile}
-              open={!!assigningToolsProfile}
-              onOpenChange={(open) => !open && setAssigningToolsProfile(null)}
-            />
-          )}
-
-          {/* Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library */}
-
-          {editingProfile && (
-            <EditProfileDialog
-              agent={editingProfile}
-              open={!!editingProfile}
-              onOpenChange={(open) => !open && setEditingProfile(null)}
-            />
-          )}
+          <AgentDialog
+            open={!!editingProfile}
+            onOpenChange={(open) => !open && setEditingProfile(null)}
+            agent={editingProfile}
+            agentType="mcp_gateway"
+          />
 
           {deletingProfileId && (
             <DeleteProfileDialog
@@ -580,526 +553,19 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   );
 }
 
-function CreateProfileDialog({
-  open,
-  onOpenChange,
-  onProfileCreated,
+function ProfileConnectionColumns({
+  agentId,
+  agentType,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onProfileCreated?: (profile: { id: string; name: string }) => void;
+  agentId: string;
+  agentType: "agent" | "mcp_gateway";
 }) {
-  const [name, setName] = useState("");
-  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
-  const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  const [considerContextUntrusted, setConsiderContextUntrusted] =
-    useState(false);
-  const { data: teams } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const response = await archestraApiSdk.getTeams();
-      return response.data || [];
-    },
-  });
-  const { data: availableKeys = [] } = useLabelKeys();
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-  const createProfile = useCreateProfile();
-  const agentLabelsRef = useRef<ProfileLabelsRef>(null);
-  const { data: isProfileAdmin } = useHasPermissions({ profile: ["admin"] });
+  const [activeTab, setActiveTab] = useState<"proxy" | "mcp" | "a2a">("proxy");
+  const isAgent = agentType === "agent";
 
-  // Non-admin users must select at least one team
-  const requiresTeamSelection = !isProfileAdmin && assignedTeamIds.length === 0;
-  const hasNoAvailableTeams = !teams || teams.length === 0;
-
-  const handleAddTeam = useCallback(
-    (teamId: string) => {
-      if (teamId && !assignedTeamIds.includes(teamId)) {
-        setAssignedTeamIds([...assignedTeamIds, teamId]);
-        setSelectedTeamId("");
-      }
-    },
-    [assignedTeamIds],
-  );
-
-  const handleRemoveTeam = useCallback(
-    (teamId: string) => {
-      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-    },
-    [assignedTeamIds],
-  );
-
-  const getUnassignedTeams = useCallback(() => {
-    if (!teams) return [];
-    return teams.filter((team) => !assignedTeamIds.includes(team.id));
-  }, [teams, assignedTeamIds]);
-
-  const getTeamById = useCallback(
-    (teamId: string) => {
-      return teams?.find((team) => team.id === teamId);
-    },
-    [teams],
-  );
-
-  const handleClose = useCallback(() => {
-    setName("");
-    setAssignedTeamIds([]);
-    setLabels([]);
-    setSelectedTeamId("");
-    setConsiderContextUntrusted(false);
-    onOpenChange(false);
-  }, [onOpenChange]);
-
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!name.trim()) {
-        toast.error("Please enter a profile name");
-        return;
-      }
-
-      // Non-admin users must select at least one team
-      if (!isProfileAdmin && assignedTeamIds.length === 0) {
-        toast.error("Please select at least one team");
-        return;
-      }
-
-      // Save any unsaved label before submitting
-      const updatedLabels =
-        agentLabelsRef.current?.saveUnsavedLabel() || labels;
-
-      try {
-        const agent = await createProfile.mutateAsync({
-          name: name.trim(),
-          teams: assignedTeamIds,
-          labels: updatedLabels,
-          considerContextUntrusted,
-        });
-        if (!agent) {
-          throw new Error("Failed to create profile");
-        }
-        toast.success("Profile created successfully");
-        if (onProfileCreated) {
-          onProfileCreated({ id: agent.id, name: agent.name });
-        } else {
-          handleClose();
-        }
-      } catch (_error) {
-        toast.error("Failed to create profile");
-      }
-    },
-    [
-      name,
-      assignedTeamIds,
-      labels,
-      considerContextUntrusted,
-      createProfile,
-      isProfileAdmin,
-      onProfileCreated,
-      handleClose,
-    ],
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent
-        className="max-w-4xl max-h-[90vh] flex flex-col"
-        onInteractOutside={(e) => e.preventDefault()}
-      >
-        <DialogHeader>
-          <DialogTitle>Create new profile</DialogTitle>
-          <DialogDescription>
-            Create a new profile to use with the Archestra Platform proxy.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col flex-1 overflow-hidden"
-        >
-          <div className="grid gap-4 overflow-y-auto pr-2 pb-4 space-y-2">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Profile Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="My AI Profile"
-                autoFocus
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>
-                Team Access
-                {!isProfileAdmin && (
-                  <span className="text-destructive ml-1">(required)</span>
-                )}
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Assign teams to grant their members access to this profile.
-              </p>
-              <Select value={selectedTeamId} onValueChange={handleAddTeam}>
-                <SelectTrigger id="assign-team">
-                  <SelectValue placeholder="Select a team to assign" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams?.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      No teams available
-                    </div>
-                  ) : getUnassignedTeams().length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      All teams are already assigned
-                    </div>
-                  ) : (
-                    getUnassignedTeams().map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {assignedTeamIds.length > 0 ? (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {assignedTeamIds.map((teamId) => {
-                    const team = getTeamById(teamId);
-                    return (
-                      <Badge
-                        key={teamId}
-                        variant="secondary"
-                        className="flex items-center gap-1 pr-1"
-                      >
-                        <span>{team?.name || teamId}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTeam(teamId)}
-                          className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {isProfileAdmin
-                    ? "No teams assigned yet. Admins have access to all profiles."
-                    : hasNoAvailableTeams
-                      ? "You are not a member of any team. Contact an admin to be added to a team."
-                      : "No teams assigned yet."}
-                </p>
-              )}
-            </div>
-
-            <ProfileLabels
-              ref={agentLabelsRef}
-              labels={labels}
-              onLabelsChange={setLabels}
-              availableKeys={availableKeys}
-            />
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="consider-context-untrusted"
-                checked={considerContextUntrusted}
-                onCheckedChange={(checked) =>
-                  setConsiderContextUntrusted(checked === true)
-                }
-              />
-              <div className="grid gap-1">
-                <Label
-                  htmlFor="consider-context-untrusted"
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  Treat user context as untrusted
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Enable when user prompts may contain untrusted and sensitive
-                  data.
-                </p>
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="mt-4">
-            <Button type="button" variant="outline" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                createProfile.isPending ||
-                requiresTeamSelection ||
-                (!isProfileAdmin && hasNoAvailableTeams)
-              }
-            >
-              {createProfile.isPending ? "Creating..." : "Create profile"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function EditProfileDialog({
-  agent,
-  open,
-  onOpenChange,
-}: {
-  agent: {
-    id: string;
-    name: string;
-    teams: Array<{ id: string; name: string }>;
-    labels: ProfileLabel[];
-    considerContextUntrusted: boolean;
-  };
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const [name, setName] = useState(agent.name);
-  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>(
-    agent.teams?.map((t) => t.id) || [],
-  );
-  const [labels, setLabels] = useState<ProfileLabel[]>(agent.labels || []);
-  const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
-    agent.considerContextUntrusted,
-  );
-  const { data: teams } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const response = await archestraApiSdk.getTeams();
-      return response.data || [];
-    },
-  });
-  const { data: availableKeys = [] } = useLabelKeys();
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-  const updateProfile = useUpdateProfile();
-  const agentLabelsRef = useRef<ProfileLabelsRef>(null);
-  const { data: isProfileAdmin } = useHasPermissions({ profile: ["admin"] });
-
-  // Non-admin users must have at least one team assigned
-  const requiresTeamSelection = !isProfileAdmin && assignedTeamIds.length === 0;
-
-  const handleAddTeam = useCallback(
-    (teamId: string) => {
-      if (teamId && !assignedTeamIds.includes(teamId)) {
-        setAssignedTeamIds([...assignedTeamIds, teamId]);
-        setSelectedTeamId("");
-      }
-    },
-    [assignedTeamIds],
-  );
-
-  const handleRemoveTeam = useCallback(
-    (teamId: string) => {
-      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-    },
-    [assignedTeamIds],
-  );
-
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!name.trim()) {
-        toast.error("Please enter a profile name");
-        return;
-      }
-
-      // Non-admin users must have at least one team assigned
-      if (!isProfileAdmin && assignedTeamIds.length === 0) {
-        toast.error("Please select at least one team");
-        return;
-      }
-
-      // Save any unsaved label before submitting
-      const updatedLabels =
-        agentLabelsRef.current?.saveUnsavedLabel() || labels;
-
-      try {
-        await updateProfile.mutateAsync({
-          id: agent.id,
-          data: {
-            name: name.trim(),
-            teams: assignedTeamIds,
-            labels: updatedLabels,
-            considerContextUntrusted,
-          },
-        });
-        toast.success("Profile updated successfully");
-        onOpenChange(false);
-      } catch (_error) {
-        toast.error("Failed to update profile");
-      }
-    },
-    [
-      agent.id,
-      name,
-      assignedTeamIds,
-      labels,
-      updateProfile,
-      onOpenChange,
-      considerContextUntrusted,
-      isProfileAdmin,
-    ],
-  );
-
-  const getUnassignedTeams = useCallback(() => {
-    if (!teams) return [];
-    return teams.filter((team) => !assignedTeamIds.includes(team.id));
-  }, [teams, assignedTeamIds]);
-
-  const getTeamById = useCallback(
-    (teamId: string) => {
-      return teams?.find((team) => team.id === teamId);
-    },
-    [teams],
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-2xl max-h-[90vh] flex flex-col"
-        onInteractOutside={(e) => e.preventDefault()}
-      >
-        <DialogHeader>
-          <DialogTitle>Edit profile</DialogTitle>
-          <DialogDescription>
-            Update the profile's name and assign teams.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col flex-1 overflow-hidden"
-        >
-          <div className="grid gap-4 overflow-y-auto pr-2 pb-4 space-y-2">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-name">Profile Name</Label>
-              <Input
-                id="edit-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="My AI Profile"
-                autoFocus
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>
-                Team Access
-                {!isProfileAdmin && (
-                  <span className="text-destructive ml-1">(required)</span>
-                )}
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Assign teams to grant their members access to this profile.
-              </p>
-              <Select value={selectedTeamId} onValueChange={handleAddTeam}>
-                <SelectTrigger id="assign-team">
-                  <SelectValue placeholder="Select a team to assign" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams?.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      No teams available
-                    </div>
-                  ) : getUnassignedTeams().length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      All teams are already assigned
-                    </div>
-                  ) : (
-                    getUnassignedTeams().map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {assignedTeamIds.length > 0 ? (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {assignedTeamIds.map((teamId) => {
-                    const team = getTeamById(teamId);
-                    return (
-                      <Badge
-                        key={teamId}
-                        variant="secondary"
-                        className="flex items-center gap-1 pr-1"
-                      >
-                        <span>{team?.name || teamId}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTeam(teamId)}
-                          data-testid={`${E2eTestId.RemoveTeamBadge}-${team?.name || teamId}`}
-                          className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {isProfileAdmin
-                    ? "No teams assigned yet. Admins have access to all profiles."
-                    : "No teams assigned yet."}
-                </p>
-              )}
-            </div>
-
-            <ProfileLabels
-              ref={agentLabelsRef}
-              labels={labels}
-              onLabelsChange={setLabels}
-              availableKeys={availableKeys}
-            />
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="edit-consider-context-untrusted"
-                checked={considerContextUntrusted}
-                onCheckedChange={(checked) =>
-                  setConsiderContextUntrusted(checked === true)
-                }
-              />
-              <div className="grid gap-1">
-                <Label
-                  htmlFor="edit-consider-context-untrusted"
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  Treat user context as untrusted
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Enable when user prompts may contain untrusted and sensitive
-                  data.
-                </p>
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={updateProfile.isPending || requiresTeamSelection}
-            >
-              {updateProfile.isPending ? "Updating..." : "Update profile"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ProfileConnectionColumns({ agentId }: { agentId: string }) {
-  const [activeTab, setActiveTab] = useState<"proxy" | "mcp">("proxy");
+  // Fetch agent data for A2A connection instructions (non-suspense to avoid loading flicker)
+  const { data: profiles } = useProfilesQuery();
+  const agent = profiles?.find((p) => p.id === agentId);
 
   return (
     <div className="space-y-6">
@@ -1162,20 +628,68 @@ function ProfileConnectionColumns({ agentId }: { agentId: string }) {
             </div>
           </div>
         </button>
+
+        {isAgent && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("a2a")}
+            className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
+              activeTab === "a2a"
+                ? "bg-amber-500/5 border-2 border-amber-500/30"
+                : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Bot
+                className={`h-4 w-4 ${activeTab === "a2a" ? "text-amber-500" : ""}`}
+              />
+              <span className="font-medium">A2A Gateway</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <Bot className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
+                <span className="text-[10px]">Agent-to-Agent</span>
+              </div>
+            </div>
+          </button>
+        )}
       </div>
 
-      {/* Content */}
+      {/* Content - render all tabs, hide inactive ones to preload */}
       <div className="relative">
-        {activeTab === "proxy" ? (
-          <div className="animate-in fade-in-0 slide-in-from-left-2 duration-300">
-            <div className="p-4 rounded-lg border bg-card">
-              <ProxyConnectionInstructions agentId={agentId} />
-            </div>
+        <div className={activeTab === "proxy" ? "block" : "hidden"}>
+          <div className="p-4 rounded-lg border bg-card">
+            <ProxyConnectionInstructions agentId={agentId} />
           </div>
-        ) : (
-          <div className="animate-in fade-in-0 slide-in-from-right-2 duration-300">
+        </div>
+        <div className={activeTab === "mcp" ? "block" : "hidden"}>
+          <div className="p-4 rounded-lg border bg-card">
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner />
+                </div>
+              }
+            >
+              <McpConnectionInstructions
+                agentId={agentId}
+                hideProfileSelector
+              />
+            </Suspense>
+          </div>
+        </div>
+        {isAgent && agent && (
+          <div className={activeTab === "a2a" ? "block" : "hidden"}>
             <div className="p-4 rounded-lg border bg-card">
-              <McpConnectionInstructions agentId={agentId} />
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-8">
+                    <LoadingSpinner />
+                  </div>
+                }
+              >
+                <A2AConnectionInstructions agent={agent} />
+              </Suspense>
             </div>
           </div>
         )}
@@ -1189,13 +703,13 @@ function ConnectProfileDialog({
   open,
   onOpenChange,
 }: {
-  agent: { id: string; name: string };
+  agent: { id: string; name: string; agentType: "agent" | "mcp_gateway" };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] p-0 flex flex-col border-0">
+      <DialogContent className="max-w-5xl h-[90vh] p-0 flex flex-col border-0">
         {/* Header with gradient */}
         <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-6 pt-6 pb-5 shrink-0">
           <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
@@ -1215,7 +729,10 @@ function ConnectProfileDialog({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <ProfileConnectionColumns agentId={agent.id} />
+          <ProfileConnectionColumns
+            agentId={agent.id}
+            agentType={agent.agentType}
+          />
         </div>
 
         {/* Footer */}

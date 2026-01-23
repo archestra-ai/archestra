@@ -8,6 +8,10 @@ const {
   getAllAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
+  getAgentDelegations,
+  syncAgentDelegations,
+  deleteAgentDelegation,
+  getAllDelegationConnections,
 } = archestraApiSdk;
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -20,6 +24,7 @@ export function useAllProfileTools({
   sorting,
   filters,
   skipPagination,
+  enabled = true,
 }: {
   initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
   pagination?: {
@@ -38,6 +43,7 @@ export function useAllProfileTools({
     mcpServerOwnerId?: string;
   };
   skipPagination?: boolean;
+  enabled?: boolean;
 }) {
   return useQuery({
     queryKey: [
@@ -84,6 +90,7 @@ export function useAllProfileTools({
       );
     },
     initialData,
+    enabled,
   });
 }
 
@@ -127,6 +134,7 @@ export function useAssignTool() {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
@@ -220,6 +228,7 @@ export function useUnassignTool() {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
@@ -288,6 +297,131 @@ export function useAutoConfigurePolicies() {
       });
       queryClient.invalidateQueries({
         queryKey: ["tool-result-policies"],
+      });
+    },
+  });
+}
+
+// ============================================================================
+// Agent Delegations (Internal Agents Only)
+// ============================================================================
+
+/**
+ * Query key factory for agent delegations
+ */
+export const agentDelegationsQueryKeys = {
+  all: ["agent-delegations"] as const,
+  connections: ["agent-delegations", "connections"] as const,
+  byAgent: (agentId: string) => ["agent-delegations", agentId] as const,
+};
+
+/**
+ * Get all delegation connections for the organization.
+ * Used for canvas visualization.
+ */
+export function useAllDelegationConnections() {
+  return useQuery({
+    queryKey: agentDelegationsQueryKeys.connections,
+    queryFn: async () => {
+      const response = await getAllDelegationConnections();
+      return (
+        response.data ?? {
+          connections: [],
+          agents: [],
+        }
+      );
+    },
+  });
+}
+
+/**
+ * Get all delegation targets for an internal agent.
+ */
+export function useAgentDelegations(agentId: string | undefined) {
+  return useQuery({
+    queryKey: agentDelegationsQueryKeys.byAgent(agentId ?? ""),
+    queryFn: async () => {
+      if (!agentId) return [];
+      const response = await getAgentDelegations({ path: { agentId } });
+      return response.data ?? [];
+    },
+    enabled: !!agentId,
+    staleTime: 0, // Always refetch to ensure fresh data
+  });
+}
+
+/**
+ * Sync delegation targets for an internal agent (replace all with new list).
+ */
+export function useSyncAgentDelegations() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      agentId,
+      targetAgentIds,
+    }: {
+      agentId: string;
+      targetAgentIds: string[];
+    }) => {
+      const response = await syncAgentDelegations({
+        path: { agentId },
+        body: { targetAgentIds },
+      });
+      return response.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: agentDelegationsQueryKeys.byAgent(variables.agentId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: agentDelegationsQueryKeys.connections,
+      });
+      // Delegated agents create/delete tools, so invalidate tool caches
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate agent-specific tools (used by AgentToolsDisplay)
+      queryClient.invalidateQueries({
+        queryKey: ["agents", variables.agentId, "tools"],
+      });
+    },
+  });
+}
+
+/**
+ * Remove a specific delegation from an internal agent.
+ */
+export function useRemoveAgentDelegation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      agentId,
+      targetAgentId,
+    }: {
+      agentId: string;
+      targetAgentId: string;
+    }) => {
+      const response = await deleteAgentDelegation({
+        path: { agentId, targetAgentId },
+      });
+      return response.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: agentDelegationsQueryKeys.byAgent(variables.agentId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: agentDelegationsQueryKeys.connections,
+      });
+      // Delegated agents create/delete tools, so invalidate tool caches
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate agent-specific tools (used by AgentToolsDisplay)
+      queryClient.invalidateQueries({
+        queryKey: ["agents", variables.agentId, "tools"],
       });
     },
   });

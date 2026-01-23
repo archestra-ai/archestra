@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { usePrompts } from "@/lib/prompts.query";
+import { useInternalAgents } from "@/lib/agent.query";
 import { cn } from "@/lib/utils";
 
 interface InitialAgentSelectorProps {
@@ -30,16 +30,17 @@ export function InitialAgentSelector({
   onPromptChange,
   defaultAgentId,
 }: InitialAgentSelectorProps) {
-  const { data: prompts = [] } = usePrompts();
+  const { data: agents = [] } = useInternalAgents();
   const [open, setOpen] = useState(false);
 
-  const currentPrompt = useMemo(
-    () => prompts.find((p) => p.id === currentPromptId),
-    [prompts, currentPromptId],
+  const currentAgent = useMemo(
+    () => agents.find((a) => a.id === currentPromptId) ?? agents[0] ?? null,
+    [agents, currentPromptId],
   );
 
-  const handlePromptSelect = (promptId: string | null, agentId: string) => {
-    onPromptChange(promptId, agentId);
+  const handleAgentSelect = (agentId: string | null) => {
+    // For internal agents, the agent ID is both the "prompt ID" and agent ID
+    onPromptChange(agentId, agentId ?? defaultAgentId);
     setOpen(false);
   };
 
@@ -54,7 +55,7 @@ export function InitialAgentSelector({
         >
           <Bot className="h-3 w-3 shrink-0 opacity-70" />
           <span className="text-xs font-medium">
-            {currentPrompt?.name || "No agent selected"}
+            {currentAgent?.name ?? "Select agent"}
           </span>
           {open ? (
             <ChevronDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
@@ -69,29 +70,17 @@ export function InitialAgentSelector({
           <CommandList>
             <CommandEmpty>No agent found.</CommandEmpty>
             <CommandGroup>
-              <CommandItem
-                value="no-agent-selected"
-                onSelect={() => handlePromptSelect(null, defaultAgentId)}
-              >
-                No agent selected
-                <Check
-                  className={cn(
-                    "ml-auto h-4 w-4",
-                    currentPromptId === null ? "opacity-100" : "opacity-0",
-                  )}
-                />
-              </CommandItem>
-              {prompts.map((prompt) => (
+              {agents.map((agent) => (
                 <CommandItem
-                  key={prompt.id}
-                  value={prompt.name}
-                  onSelect={() => handlePromptSelect(prompt.id, prompt.agentId)}
+                  key={agent.id}
+                  value={agent.name}
+                  onSelect={() => handleAgentSelect(agent.id)}
                 >
-                  {prompt.name}
+                  {agent.name}
                   <Check
                     className={cn(
                       "ml-auto h-4 w-4",
-                      currentPromptId === prompt.id
+                      currentPromptId === agent.id
                         ? "opacity-100"
                         : "opacity-0",
                     )}

@@ -545,6 +545,19 @@ export const requiredEndpointPermissionsMap: Partial<
     profile: ["update"],
     prompt: ["read"],
   },
+  // Agent Delegation Routes (internal agents only)
+  [RouteId.GetAgentDelegations]: {
+    profile: ["read"],
+  },
+  [RouteId.SyncAgentDelegations]: {
+    profile: ["update"],
+  },
+  [RouteId.DeleteAgentDelegation]: {
+    profile: ["update"],
+  },
+  [RouteId.GetAllDelegationConnections]: {
+    profile: ["read"],
+  },
   [RouteId.GetLimits]: {
     limit: ["read"],
   },
@@ -676,7 +689,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteIncomingEmailSubscription]: {
     organization: ["update"],
   },
-  [RouteId.GetPromptEmailAddress]: {}, // Any authenticated user can view prompt email addresses
+  [RouteId.GetAgentEmailAddress]: {}, // Any authenticated user can view agent email addresses
 
   // ChatOps Routes (admin-only for management)
   [RouteId.GetChatOpsStatus]: {

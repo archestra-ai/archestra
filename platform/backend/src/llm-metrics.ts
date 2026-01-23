@@ -457,6 +457,17 @@ export function getObservableFetch(
             model,
             externalAgentId,
           );
+        } else if (provider === "cohere") {
+          const { input, output } = utils.adapters.cohere.getUsageTokens(
+            data.usage,
+          );
+          reportLLMTokens(
+            provider,
+            profile,
+            { input, output },
+            model,
+            externalAgentId,
+          );
         } else if (provider === "zhipuai") {
           const { input, output } = utils.adapters.zhipuai.getUsageTokens(
             data.usage,

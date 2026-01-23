@@ -73,7 +73,7 @@ async function seedMockData() {
   // Step 2: Create agents
   logger.info("\nCreating agents...");
   await AgentModel.getAgentOrCreateDefault(); // always recreate default agent
-  const agentData = generateMockAgents();
+  const agentData = generateMockAgents(org.id);
 
   await db.insert(schema.agentsTable).values(agentData);
   logger.info(`✅ Created ${agentData.length} agents`);

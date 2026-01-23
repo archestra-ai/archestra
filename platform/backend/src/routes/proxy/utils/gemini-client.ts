@@ -45,17 +45,19 @@ export function createGoogleGenAIClient(
     );
 
     // Build the client config
-    // If credentialsFile is provided, pass it via googleAuthOptions.keyFilename
-    // Otherwise, the SDK will use default ADC (Workload Identity, service account, etc.)
+    // Always pass projectId in googleAuthOptions to ensure the correct GCP project is used
+    // for API calls. Without this, ADC may use a different project from the credentials.
+    // If credentialsFile is provided, also pass it via keyFilename.
     return new GoogleGenAI({
       vertexai: true,
       project: vertexAi.project,
       location: vertexAi.location,
-      ...(hasCredentialsFile && {
-        googleAuthOptions: {
+      googleAuthOptions: {
+        projectId: vertexAi.project,
+        ...(hasCredentialsFile && {
           keyFilename: vertexAi.credentialsFile,
-        },
-      }),
+        }),
+      },
     });
   }
 

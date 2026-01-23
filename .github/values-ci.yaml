@@ -12,6 +12,7 @@ archestra:
     ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/openai/v1"
     ARCHESTRA_ANTHROPIC_BASE_URL: "http://e2e-tests-wiremock:8080/anthropic"
     ARCHESTRA_GEMINI_BASE_URL: "http://e2e-tests-wiremock:8080/gemini"
+    ARCHESTRA_COHERE_BASE_URL: "http://e2e-tests-wiremock:8080/cohere"
     ARCHESTRA_CEREBRAS_BASE_URL: "http://e2e-tests-wiremock:8080/cerebras/v1"
     ARCHESTRA_VLLM_BASE_URL: "http://e2e-tests-wiremock:8080/vllm/v1"
     ARCHESTRA_OLLAMA_BASE_URL: "http://e2e-tests-wiremock:8080/ollama/v1"
@@ -20,6 +21,7 @@ archestra:
     ARCHESTRA_CHAT_OPENAI_API_KEY: test-key
     ARCHESTRA_CHAT_ANTHROPIC_API_KEY: test-key
     ARCHESTRA_CHAT_GEMINI_API_KEY: test-key
+    ARCHESTRA_CHAT_COHERE_API_KEY: test-key
     ARCHESTRA_CHAT_CEREBRAS_API_KEY: test-key
     ARCHESTRA_CHAT_VLLM_API_KEY: test-key
     ARCHESTRA_CHAT_OLLAMA_API_KEY: test-key
@@ -38,6 +40,10 @@ archestra:
     ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS: "http://e2e-tests-keycloak:8080,http://localhost:30081"
     # Secrets manager configuration for BYOS tests
     ARCHESTRA_SECRETS_MANAGER: "Vault"
+    # Pin MCP server base image to a known version for CI e2e tests.
+    # This avoids a chicken-and-egg problem during release-please PRs where the version
+    # in platform/backend/src/config.ts gets bumped but the new image isn't published yet.
+    ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE: "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.33"
     # Vault configuration for BYOS tests
     # Vault runs as a Kubernetes service in the cluster
     # Pods access via K8s service name, host/Playwright access via NodePort mapped to 8200

@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
 import {
   addEdge,
   Background,
@@ -21,7 +20,7 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
-import { PromptDialog } from "@/components/chat/prompt-dialog";
+import { AgentDialog } from "@/components/agent-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import {
   AlertDialog,
@@ -49,20 +48,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useProfiles } from "@/lib/agent.query";
 import {
-  promptAgentsQueryKeys,
-  useAllPromptAgentConnections,
-  useSyncPromptAgents,
-} from "@/lib/prompt-agents.query";
-import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
+  useDeleteProfile,
+  useInternalAgents,
+  useProfile,
+  useProfiles,
+} from "@/lib/agent.query";
+import {
+  agentDelegationsQueryKeys,
+  useAllDelegationConnections,
+  useSyncAgentDelegations,
+} from "@/lib/agent-tools.query";
 import { AgentNode, type AgentNodeData } from "./agent-node";
 import { AgentNodeContext } from "./agent-node-context";
 import { DeletableEdge } from "./deletable-edge";
 import { resolveCollisions } from "./resolve-collisions";
 import { useLayoutNodes } from "./use-layout-nodes";
-
-type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
 const nodeTypes = { agent: AgentNode };
 const edgeTypes = { deletable: DeletableEdge };
@@ -95,52 +96,60 @@ function AgentsCanvasViewInner() {
   const queryClient = useQueryClient();
   const reactFlowInstance = useReactFlow();
   const { getLayoutedNodes } = useLayoutNodes();
-  const { data: prompts = [], isLoading: isLoadingPrompts } = usePrompts();
+  const { data: internalAgents = [], isLoading: isLoadingAgents } =
+    useInternalAgents();
   const { data: profiles = [] } = useProfiles();
-  const { data: connections = [], isLoading: isLoadingConnections } =
-    useAllPromptAgentConnections();
-  const syncPromptAgents = useSyncPromptAgents();
+  const { data: delegationData, isLoading: isLoadingConnections } =
+    useAllDelegationConnections();
+  const connections = delegationData?.connections ?? [];
+  const syncAgentDelegations = useSyncAgentDelegations();
 
-  const isLoading = isLoadingPrompts || isLoadingConnections;
+  const isLoading = isLoadingAgents || isLoadingConnections;
   const [isLayoutReady, setIsLayoutReady] = useState(false);
   const [isAutoLayouting, setIsAutoLayouting] = useState(false);
 
-  // Dialog state
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
-  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
-  const [deletingPromptId, setDeletingPromptId] = useState<string | null>(null);
-  const [connectingPrompt, setConnectingPrompt] = useState<Prompt | null>(null);
-  const [versionHistoryPrompt, setVersionHistoryPrompt] =
-    useState<Prompt | null>(null);
-
-  const { data: editingPrompt } = usePrompt(editingPromptId || "");
-  const deletePromptMutation = useDeletePrompt();
-
-  const handleEditAgent = useCallback((promptId: string) => {
-    setEditingPromptId(promptId);
-    setIsPromptDialogOpen(true);
-  }, []);
-
-  const handleDeleteAgent = useCallback((promptId: string) => {
-    setDeletingPromptId(promptId);
-  }, []);
-
-  const handleConnectAgent = useCallback(
-    (promptId: string) => {
-      const prompt = prompts.find((p) => p.id === promptId);
-      if (prompt) {
-        setConnectingPrompt(prompt);
-      }
-    },
-    [prompts],
+  // Dialog state - now using agents directly
+  const [isAgentDialogOpen, setIsAgentDialogOpen] = useState(false);
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+  const [connectingAgentId, setConnectingAgentId] = useState<string | null>(
+    null,
   );
+  const [versionHistoryAgentId, setVersionHistoryAgentId] = useState<
+    string | null
+  >(null);
+
+  // Lookup agent data for dialogs
+  const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
+  const connectingAgent = useMemo(
+    () => internalAgents.find((a) => a.id === connectingAgentId) ?? null,
+    [internalAgents, connectingAgentId],
+  );
+  const versionHistoryAgent = useMemo(
+    () => internalAgents.find((a) => a.id === versionHistoryAgentId) ?? null,
+    [internalAgents, versionHistoryAgentId],
+  );
+  const deleteAgentMutation = useDeleteProfile();
+
+  const handleEditAgent = useCallback((agentId: string) => {
+    setEditingAgentId(agentId);
+    setIsAgentDialogOpen(true);
+  }, []);
+
+  const handleDeleteAgent = useCallback((agentId: string) => {
+    setDeletingAgentId(agentId);
+  }, []);
+
+  const handleConnectAgent = useCallback((agentId: string) => {
+    setConnectingAgentId(agentId);
+  }, []);
 
   const confirmDelete = useCallback(() => {
-    if (deletingPromptId) {
-      deletePromptMutation.mutate(deletingPromptId);
-      setDeletingPromptId(null);
+    if (deletingAgentId) {
+      deleteAgentMutation.mutate(deletingAgentId);
+      setDeletingAgentId(null);
     }
-  }, [deletingPromptId, deletePromptMutation]);
+  }, [deletingAgentId, deleteAgentMutation]);
 
   const contextValue = useMemo(
     () => ({
@@ -156,7 +165,7 @@ function AgentsCanvasViewInner() {
   const [selectedProfileId, setSelectedProfileId] = useState<string>("all");
 
   // Track previous data for change detection
-  const prevPromptsRef = useRef<typeof prompts>([]);
+  const prevAgentsRef = useRef<typeof internalAgents>([]);
   const prevConnectionsRef = useRef<typeof connections>([]);
   const initialLoadDone = useRef(false);
 
@@ -176,15 +185,17 @@ function AgentsCanvasViewInner() {
 
     // Find directly matching agents
     const directMatchIds = new Set(
-      prompts
-        .filter((prompt) => {
+      internalAgents
+        .filter((agent) => {
           const matchesSearch =
-            !hasSearch || prompt.name.toLowerCase().includes(query);
+            !hasSearch || agent.name.toLowerCase().includes(query);
+          // For internal agents, filter by whether they match the selected profile
+          // (external profiles can still be referenced via teams)
           const matchesProfile =
-            !hasProfileFilter || prompt.agentId === selectedProfileId;
+            !hasProfileFilter || agent.id === selectedProfileId;
           return matchesSearch && matchesProfile;
         })
-        .map((p) => p.id),
+        .map((a) => a.id),
     );
 
     // Also include children of matching agents (recursive)
@@ -192,11 +203,11 @@ function AgentsCanvasViewInner() {
     const addChildren = (parentId: string) => {
       for (const conn of connections) {
         if (
-          conn.promptId === parentId &&
-          !matchingIds.has(conn.agentPromptId)
+          conn.sourceAgentId === parentId &&
+          !matchingIds.has(conn.targetAgentId)
         ) {
-          matchingIds.add(conn.agentPromptId);
-          addChildren(conn.agentPromptId); // Recursively add grandchildren
+          matchingIds.add(conn.targetAgentId);
+          addChildren(conn.targetAgentId); // Recursively add grandchildren
         }
       }
     };
@@ -210,7 +221,7 @@ function AgentsCanvasViewInner() {
         ? undefined
         : { opacity: 0.2, pointerEvents: "none" as const },
     }));
-  }, [nodes, searchQuery, selectedProfileId, prompts, connections]);
+  }, [nodes, searchQuery, selectedProfileId, internalAgents, connections]);
 
   // Save positions whenever nodes change (after initial load)
   useEffect(() => {
@@ -221,42 +232,44 @@ function AgentsCanvasViewInner() {
 
   // Load nodes with saved positions or apply auto-layout for new nodes
   useEffect(() => {
-    if (isLoading || prompts.length === 0) {
+    if (isLoading || internalAgents.length === 0) {
       return;
     }
 
-    const prevPromptIds = new Set(prevPromptsRef.current.map((p) => p.id));
-    const currentPromptIds = new Set(prompts.map((p) => p.id));
-    const newPromptIds = prompts
-      .filter((p) => !prevPromptIds.has(p.id))
-      .map((p) => p.id);
+    const prevAgentIds = new Set(prevAgentsRef.current.map((a) => a.id));
+    const currentAgentIds = new Set(internalAgents.map((a) => a.id));
+    const newAgentIds = internalAgents
+      .filter((a) => !prevAgentIds.has(a.id))
+      .map((a) => a.id);
 
-    const promptsChanged =
-      JSON.stringify([...currentPromptIds].sort()) !==
-      JSON.stringify([...prevPromptIds].sort());
+    const agentsChanged =
+      JSON.stringify([...currentAgentIds].sort()) !==
+      JSON.stringify([...prevAgentIds].sort());
 
-    // Check if prompt data changed (e.g., name updated)
-    const prevPromptData = new Map(
-      prevPromptsRef.current.map((p) => [p.id, p.name]),
+    // Check if agent data changed (e.g., name updated)
+    const prevAgentData = new Map(
+      prevAgentsRef.current.map((a) => [a.id, a.name]),
     );
-    const promptDataChanged = prompts.some(
-      (p) => prevPromptData.get(p.id) !== p.name,
+    const agentDataChanged = internalAgents.some(
+      (a) => prevAgentData.get(a.id) !== a.name,
     );
 
     // Check if connections changed (delegated agents added/removed)
     const prevConnectionIds = new Set(
-      prevConnectionsRef.current.map((c) => `${c.promptId}-${c.agentPromptId}`),
+      prevConnectionsRef.current.map(
+        (c) => `${c.sourceAgentId}-${c.targetAgentId}`,
+      ),
     );
     const currentConnectionIds = new Set(
-      connections.map((c) => `${c.promptId}-${c.agentPromptId}`),
+      connections.map((c) => `${c.sourceAgentId}-${c.targetAgentId}`),
     );
     const connectionsChanged =
       JSON.stringify([...currentConnectionIds].sort()) !==
       JSON.stringify([...prevConnectionIds].sort());
 
     if (
-      !promptsChanged &&
-      !promptDataChanged &&
+      !agentsChanged &&
+      !agentDataChanged &&
       !connectionsChanged &&
       isLayoutReady
     ) {
@@ -267,9 +280,9 @@ function AgentsCanvasViewInner() {
 
     // Create edges
     const initialEdges: Edge[] = connections.map((conn) => ({
-      id: `${conn.promptId}-${conn.agentPromptId}`,
-      source: conn.promptId,
-      target: conn.agentPromptId,
+      id: `${conn.sourceAgentId}-${conn.targetAgentId}`,
+      source: conn.sourceAgentId,
+      target: conn.targetAgentId,
       sourceHandle: "tools",
       type: "deletable",
       animated: true,
@@ -278,7 +291,7 @@ function AgentsCanvasViewInner() {
 
     // Check if this is a new agent being added (not initial load)
     const isNewAgentAdded =
-      initialLoadDone.current && newPromptIds.length > 0 && isLayoutReady;
+      initialLoadDone.current && newAgentIds.length > 0 && isLayoutReady;
 
     if (isNewAgentAdded) {
       // Position new agent to the right of the rightmost existing node
@@ -298,18 +311,18 @@ function AgentsCanvasViewInner() {
         const startX = maxX + 100;
         const newNodes: Node<AgentNodeData>[] = [];
 
-        for (let i = 0; i < newPromptIds.length; i++) {
-          const promptId = newPromptIds[i];
-          const prompt = prompts.find((p) => p.id === promptId);
-          if (prompt) {
+        for (let i = 0; i < newAgentIds.length; i++) {
+          const agentId = newAgentIds[i];
+          const agent = internalAgents.find((a) => a.id === agentId);
+          if (agent) {
             newNodes.push({
-              id: prompt.id,
+              id: agent.id,
               type: "agent" as const,
               position: {
                 x: startX,
                 y: topY + i * 100,
               },
-              data: { label: prompt.name, promptId: prompt.id },
+              data: { label: agent.name, promptId: agent.id },
             });
           }
         }
@@ -334,27 +347,27 @@ function AgentsCanvasViewInner() {
         return merged;
       });
       setEdges(initialEdges);
-      prevPromptsRef.current = prompts;
+      prevAgentsRef.current = internalAgents;
       prevConnectionsRef.current = connections;
       return;
     }
 
-    const hasAllPositions = prompts.every((p) => savedPositions[p.id]);
+    const hasAllPositions = internalAgents.every((a) => savedPositions[a.id]);
 
     if (hasAllPositions) {
       // Use saved positions
-      const nodesWithPositions: Node<AgentNodeData>[] = prompts.map(
-        (prompt) => ({
-          id: prompt.id,
+      const nodesWithPositions: Node<AgentNodeData>[] = internalAgents.map(
+        (agent) => ({
+          id: agent.id,
           type: "agent" as const,
-          position: savedPositions[prompt.id],
-          data: { label: prompt.name, promptId: prompt.id },
+          position: savedPositions[agent.id],
+          data: { label: agent.name, promptId: agent.id },
         }),
       );
       setNodes(nodesWithPositions);
       setEdges(initialEdges);
       setIsLayoutReady(true);
-      prevPromptsRef.current = prompts;
+      prevAgentsRef.current = internalAgents;
       prevConnectionsRef.current = connections;
       initialLoadDone.current = true;
       setTimeout(
@@ -368,18 +381,20 @@ function AgentsCanvasViewInner() {
       );
     } else {
       // Apply auto-layout for new/missing nodes
-      const initialNodes: Node<AgentNodeData>[] = prompts.map((prompt) => ({
-        id: prompt.id,
-        type: "agent" as const,
-        position: savedPositions[prompt.id] ?? { x: 0, y: 0 },
-        data: { label: prompt.name, promptId: prompt.id },
-      }));
+      const initialNodes: Node<AgentNodeData>[] = internalAgents.map(
+        (agent) => ({
+          id: agent.id,
+          type: "agent" as const,
+          position: savedPositions[agent.id] ?? { x: 0, y: 0 },
+          data: { label: agent.name, promptId: agent.id },
+        }),
+      );
 
       getLayoutedNodes(initialNodes, initialEdges).then((layoutedNodes) => {
         setNodes(layoutedNodes);
         setEdges(initialEdges);
         setIsLayoutReady(true);
-        prevPromptsRef.current = prompts;
+        prevAgentsRef.current = internalAgents;
         prevConnectionsRef.current = connections;
         initialLoadDone.current = true;
         setTimeout(
@@ -394,7 +409,7 @@ function AgentsCanvasViewInner() {
       });
     }
   }, [
-    prompts,
+    internalAgents,
     connections,
     isLoading,
     isLayoutReady,
@@ -471,8 +486,8 @@ function AgentsCanvasViewInner() {
   const getExistingConnections = useCallback(
     (sourceId: string) => {
       return connections
-        .filter((conn) => conn.promptId === sourceId)
-        .map((conn) => conn.agentPromptId);
+        .filter((conn) => conn.sourceAgentId === sourceId)
+        .map((conn) => conn.targetAgentId);
     },
     [connections],
   );
@@ -506,10 +521,10 @@ function AgentsCanvasViewInner() {
       const newConnections = [...existingConnections, connection.target];
 
       // Persist to backend
-      syncPromptAgents.mutate(
+      syncAgentDelegations.mutate(
         {
-          promptId: connection.source,
-          agentPromptIds: newConnections,
+          agentId: connection.source,
+          targetAgentIds: newConnections,
         },
         {
           onError: () => {
@@ -527,7 +542,7 @@ function AgentsCanvasViewInner() {
         },
       );
     },
-    [setEdges, getExistingConnections, syncPromptAgents],
+    [setEdges, getExistingConnections, syncAgentDelegations],
   );
 
   // Handle edge deletion
@@ -539,23 +554,23 @@ function AgentsCanvasViewInner() {
           (id) => id !== edge.target,
         );
 
-        syncPromptAgents.mutate(
+        syncAgentDelegations.mutate(
           {
-            promptId: edge.source,
-            agentPromptIds: newConnections,
+            agentId: edge.source,
+            targetAgentIds: newConnections,
           },
           {
             onError: () => {
               // Revert by refetching
               queryClient.invalidateQueries({
-                queryKey: promptAgentsQueryKeys.connections,
+                queryKey: agentDelegationsQueryKeys.connections,
               });
             },
           },
         );
       }
     },
-    [getExistingConnections, syncPromptAgents, queryClient],
+    [getExistingConnections, syncAgentDelegations, queryClient],
   );
 
   // Wait for data to load and layout to complete
@@ -567,7 +582,7 @@ function AgentsCanvasViewInner() {
     );
   }
 
-  if (prompts.length === 0) {
+  if (internalAgents.length === 0) {
     return (
       <div className="flex h-[calc(100vh-280px)] items-center justify-center">
         <p className="text-muted-foreground">Create agent</p>
@@ -652,31 +667,32 @@ function AgentsCanvasViewInner() {
         </div>
       </div>
 
-      <PromptDialog
-        open={isPromptDialogOpen}
+      <AgentDialog
+        open={isAgentDialogOpen}
         onOpenChange={(open) => {
-          setIsPromptDialogOpen(open);
+          setIsAgentDialogOpen(open);
           if (!open) {
-            setEditingPromptId(null);
+            setEditingAgentId(null);
           }
         }}
-        prompt={editingPrompt}
-        onViewVersionHistory={setVersionHistoryPrompt}
+        agent={editingAgent}
+        agentType="agent"
+        onViewVersionHistory={(agent) => setVersionHistoryAgentId(agent.id)}
       />
 
       <PromptVersionHistoryDialog
-        open={!!versionHistoryPrompt}
+        open={!!versionHistoryAgent}
         onOpenChange={(open) => {
           if (!open) {
-            setVersionHistoryPrompt(null);
+            setVersionHistoryAgentId(null);
           }
         }}
-        prompt={versionHistoryPrompt}
+        agent={versionHistoryAgent}
       />
 
       <AlertDialog
-        open={!!deletingPromptId}
-        onOpenChange={(open) => !open && setDeletingPromptId(null)}
+        open={!!deletingAgentId}
+        onOpenChange={(open) => !open && setDeletingAgentId(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -699,21 +715,21 @@ function AgentsCanvasViewInner() {
       </AlertDialog>
 
       <Dialog
-        open={!!connectingPrompt}
-        onOpenChange={(open) => !open && setConnectingPrompt(null)}
+        open={!!connectingAgent}
+        onOpenChange={(open) => !open && setConnectingAgentId(null)}
       >
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Connect to &quot;{connectingPrompt?.name}&quot;
+              Connect to &quot;{connectingAgent?.name}&quot;
             </DialogTitle>
             <DialogDescription>
               Use these details to connect to this agent as an A2A agent from
               your application.
             </DialogDescription>
           </DialogHeader>
-          {connectingPrompt && (
-            <A2AConnectionInstructions prompt={connectingPrompt} />
+          {connectingAgent && (
+            <A2AConnectionInstructions agent={connectingAgent} />
           )}
         </DialogContent>
       </Dialog>

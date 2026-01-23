@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { InsertPromptSchema, UpdatePromptSchema } from "./prompt";
+import { InsertAgentSchema, UpdateAgentSchema } from "./agent";
 
-describe("InsertPromptSchema", () => {
+describe("InsertAgentSchema", () => {
   describe("incomingEmailAllowedDomain validation", () => {
     it("accepts valid domain when internal mode and email enabled", () => {
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: "company.com",
@@ -15,9 +15,9 @@ describe("InsertPromptSchema", () => {
     });
 
     it("accepts subdomain when internal mode and email enabled", () => {
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: "mail.company.com",
@@ -26,9 +26,9 @@ describe("InsertPromptSchema", () => {
     });
 
     it("rejects missing domain when internal mode and email enabled", () => {
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: "",
@@ -42,9 +42,9 @@ describe("InsertPromptSchema", () => {
     });
 
     it("rejects invalid domain format when internal mode and email enabled", () => {
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: "not a domain",
@@ -56,9 +56,9 @@ describe("InsertPromptSchema", () => {
     });
 
     it("rejects domain with protocol prefix", () => {
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: "https://company.com",
@@ -70,9 +70,9 @@ describe("InsertPromptSchema", () => {
     });
 
     it("rejects domain with trailing slash", () => {
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: "company.com/",
@@ -84,9 +84,9 @@ describe("InsertPromptSchema", () => {
     });
 
     it("allows empty domain when security mode is private", () => {
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "private",
         incomingEmailAllowedDomain: "",
@@ -95,9 +95,9 @@ describe("InsertPromptSchema", () => {
     });
 
     it("allows empty domain when security mode is public", () => {
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "public",
         incomingEmailAllowedDomain: "",
@@ -106,9 +106,9 @@ describe("InsertPromptSchema", () => {
     });
 
     it("allows empty domain when email is disabled", () => {
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: false,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: "",
@@ -118,9 +118,9 @@ describe("InsertPromptSchema", () => {
 
     it("rejects domain exceeding max length", () => {
       const longDomain = `${"a".repeat(250)}.com`;
-      const result = InsertPromptSchema.safeParse({
-        name: "Test Prompt",
-        agentId: "123e4567-e89b-12d3-a456-426614174000",
+      const result = InsertAgentSchema.safeParse({
+        name: "Test Agent",
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: longDomain,
@@ -133,10 +133,11 @@ describe("InsertPromptSchema", () => {
   });
 });
 
-describe("UpdatePromptSchema", () => {
+describe("UpdateAgentSchema", () => {
   describe("incomingEmailAllowedDomain validation", () => {
     it("accepts valid domain when internal mode and email enabled", () => {
-      const result = UpdatePromptSchema.safeParse({
+      const result = UpdateAgentSchema.safeParse({
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: "company.com",
@@ -145,7 +146,8 @@ describe("UpdatePromptSchema", () => {
     });
 
     it("rejects invalid domain when internal mode and email enabled", () => {
-      const result = UpdatePromptSchema.safeParse({
+      const result = UpdateAgentSchema.safeParse({
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "internal",
         incomingEmailAllowedDomain: "invalid domain",
@@ -157,14 +159,16 @@ describe("UpdatePromptSchema", () => {
     });
 
     it("allows partial updates without triggering validation", () => {
-      const result = UpdatePromptSchema.safeParse({
+      const result = UpdateAgentSchema.safeParse({
+        teams: [],
         name: "Updated Name",
       });
       expect(result.success).toBe(true);
     });
 
     it("allows updating email enabled without domain when mode is not internal", () => {
-      const result = UpdatePromptSchema.safeParse({
+      const result = UpdateAgentSchema.safeParse({
+        teams: [],
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "public",
       });

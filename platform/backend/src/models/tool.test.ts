@@ -1280,26 +1280,35 @@ describe("ToolModel", () => {
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
-      // First seed Archestra tools (but don't assign to agent)
-      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
-      await seedAndAssignArchestraTools(tempAgent.id);
+      // Mock getKnowledgeGraphProviderType to return undefined (no knowledge graph configured)
+      const getProviderTypeSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProviderType")
+        .mockReturnValue(undefined);
 
-      // Create a new agent
-      const agent = await makeAgent({ name: "Test Agent" });
+      try {
+        // First seed Archestra tools (but don't assign to agent)
+        const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+        await seedAndAssignArchestraTools(tempAgent.id);
 
-      // Assign default tools (not all Archestra tools)
-      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+        // Create a new agent
+        const agent = await makeAgent({ name: "Test Agent" });
 
-      // Get the tools assigned to the agent
-      const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
-      const toolNames = mcpTools.map((t) => t.name);
+        // Assign default tools (not all Archestra tools)
+        await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
 
-      // Should have artifact_write and todo_write
-      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
-      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+        // Get the tools assigned to the agent
+        const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
+        const toolNames = mcpTools.map((t) => t.name);
 
-      // By default (no knowledge graph configured), should NOT have query_knowledge_graph
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+        // Should have artifact_write and todo_write
+        expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+        expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+
+        // By default (no knowledge graph configured), should NOT have query_knowledge_graph
+        expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+      } finally {
+        getProviderTypeSpy.mockRestore();
+      }
     });
 
     test("includes query_knowledge_graph when knowledge graph is configured", async ({

@@ -5,6 +5,7 @@ import { hasPermission } from "@/auth";
 import { initializeMetrics } from "@/llm-metrics";
 import { AgentLabelModel, AgentModel, TeamModel } from "@/models";
 import {
+  AgentVersionsResponseSchema,
   ApiError,
   constructResponseSchema,
   createPaginatedResponseSchema,
@@ -13,7 +14,7 @@ import {
   InsertAgentSchema,
   PaginationQuerySchema,
   SelectAgentSchema,
-  UpdateAgentSchema,
+  UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
 
@@ -28,6 +29,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             name: z.string().optional().describe("Filter by agent name"),
+            agentType: z
+              .enum(["mcp_gateway", "agent"])
+              .optional()
+              .describe(
+                "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -44,7 +51,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { name, limit, offset, sortBy, sortDirection }, user, headers },
+      {
+        query: { name, agentType, limit, offset, sortBy, sortDirection },
+        user,
+        headers,
+      },
       reply,
     ) => {
       const { success: isAgentAdmin } = await hasPermission(
@@ -55,7 +66,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await AgentModel.findAllPaginated(
           { limit, offset },
           { sortBy, sortDirection },
-          { name },
+          {
+            name,
+            agentType,
+          },
           user.id,
           isAgentAdmin,
         ),
@@ -70,15 +84,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetAllAgents,
         description: "Get all agents without pagination",
         tags: ["Agents"],
+        querystring: z.object({
+          agentType: z
+            .enum(["mcp_gateway", "agent"])
+            .optional()
+            .describe(
+              "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.",
+            ),
+        }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
-    async ({ headers, user }, reply) => {
+    async ({ query: { agentType }, headers, user }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
         { profile: ["admin"] },
         headers,
       );
-      return reply.send(await AgentModel.findAll(user.id, isAgentAdmin));
+      return reply.send(
+        await AgentModel.findAll(user.id, isAgentAdmin, {
+          agentType,
+        }),
+      );
     },
   );
 
@@ -193,7 +219,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateAgentSchema.partial(),
+        body: UpdateAgentSchemaBase.partial(),
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
@@ -266,6 +292,91 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({ success: true });
+    },
+  );
+
+  // Version history endpoint (internal agents only)
+  fastify.get(
+    "/api/agents/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetAgentVersions,
+        description:
+          "Get version history for an internal agent. Only applicable to internal agents.",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentVersionsResponseSchema),
+      },
+    },
+    async ({ params: { id }, headers, user }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const versions = await AgentModel.getVersions(id, user.id, isAgentAdmin);
+
+      if (!versions) {
+        throw new ApiError(
+          404,
+          "Agent not found or not an internal agent (versioning only applies to internal agents)",
+        );
+      }
+
+      return reply.send(versions);
+    },
+  );
+
+  // Rollback endpoint (internal agents only)
+  fastify.post(
+    "/api/agents/:id/rollback",
+    {
+      schema: {
+        operationId: RouteId.RollbackAgent,
+        description:
+          "Rollback an internal agent to a previous version. Only applicable to internal agents.",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          version: z
+            .number()
+            .int()
+            .positive()
+            .describe("Version to rollback to"),
+        }),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id }, body: { version }, headers, user }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // First verify the user has access to the agent
+      const agent = await AgentModel.findById(id, user.id, isAgentAdmin);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      if (agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Rollback only applies to internal agents (agentType='agent')",
+        );
+      }
+
+      const rolledBackAgent = await AgentModel.rollback(id, version);
+
+      if (!rolledBackAgent) {
+        throw new ApiError(404, "Version not found in agent history");
+      }
+
+      return reply.send(rolledBackAgent);
     },
   );
 

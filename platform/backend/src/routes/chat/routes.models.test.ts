@@ -1,6 +1,5 @@
 import type { GoogleGenAI } from "@google/genai";
 import { vi } from "vitest";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
@@ -12,6 +11,42 @@ import {
 // Mock fetch globally for testing API calls
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
+
+// Mock cacheManager while preserving other exports (like LRUCacheManager, CacheKey)
+const mockCacheStore = new Map<string, unknown>();
+vi.mock("@/cache-manager", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/cache-manager")>();
+  return {
+    ...actual,
+    cacheManager: {
+      get: vi.fn(async (key: string) => mockCacheStore.get(key)),
+      set: vi.fn(async (key: string, value: unknown) => {
+        mockCacheStore.set(key, value);
+        return value;
+      }),
+      delete: vi.fn(async (key: string) => {
+        const existed = mockCacheStore.has(key);
+        mockCacheStore.delete(key);
+        return existed;
+      }),
+      wrap: vi.fn(
+        async <T>(
+          key: string,
+          fn: () => Promise<T>,
+          _opts?: { ttl?: number },
+        ): Promise<T> => {
+          const cached = mockCacheStore.get(key);
+          if (cached !== undefined) {
+            return cached as T;
+          }
+          const result = await fn();
+          mockCacheStore.set(key, result);
+          return result;
+        },
+      ),
+    },
+  };
+});
 
 // Mock the Google GenAI client for Vertex AI tests
 vi.mock("@/routes/proxy/utils/gemini-client", () => ({
@@ -27,16 +62,12 @@ import {
 const mockCreateGoogleGenAIClient = vi.mocked(createGoogleGenAIClient);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 
-// Cache key for Vertex AI models (global cache)
-const VERTEX_AI_CACHE_KEY =
-  `${CacheKey.GetChatModels}-vertex-ai-global` as const;
-
 describe("chat-models", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockFetch.mockReset();
-    // Clear the Vertex AI cache to ensure clean state for caching tests
-    await cacheManager.delete(VERTEX_AI_CACHE_KEY);
+    // Clear the mock cache store to ensure clean state for caching tests
+    mockCacheStore.clear();
   });
 
   describe("fetchGeminiModels (API key mode)", () => {

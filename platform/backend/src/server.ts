@@ -42,6 +42,7 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
+import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -58,6 +59,7 @@ import {
   Anthropic,
   ApiError,
   Cerebras,
+  Cohere,
   Gemini,
   Ollama,
   OpenAi,
@@ -119,6 +121,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Cerebras.API.ChatCompletionResponseSchema, {
     id: "CerebrasChatCompletionResponse",
+  });
+  z.globalRegistry.add(Cohere.API.ChatRequestSchema, {
+    id: "CohereChatRequest",
+  });
+  z.globalRegistry.add(Cohere.API.ChatResponseSchema, {
+    id: "CohereChatResponse",
   });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",
@@ -541,6 +549,9 @@ const start = async () => {
   try {
     await seedRequiredStartingData();
 
+    // Start cache manager's background cleanup interval
+    cacheManager.start();
+
     // Initialize metrics with keys of custom agent labels
     const labelKeys = await AgentLabelModel.getAllKeys();
     initializeMetrics(labelKeys);
@@ -660,6 +671,9 @@ const start = async () => {
         clearInterval(emailRenewalIntervalId);
         clearInterval(processedEmailCleanupIntervalId);
         fastify.log.info("Email background job intervals cleared");
+
+        // Stop cache manager's background cleanup
+        cacheManager.shutdown();
 
         // Track which cleanup operations have completed
         const completedCleanups = new Set<

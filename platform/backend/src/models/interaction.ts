@@ -118,13 +118,13 @@ function isUuid(str: string): boolean {
 }
 
 /**
- * Extract all prompt IDs from external agent IDs.
+ * Extract all agent IDs from external agent IDs.
  * External agent IDs can be:
- * - A single prompt ID (UUID)
- * - A delegation chain (colon-separated UUIDs like "promptA:promptB:promptC")
+ * - A single agent ID (UUID)
+ * - A delegation chain (colon-separated UUIDs like "agentA:agentB:agentC")
  * - A non-UUID string like "Archestra Chat" (ignored)
  */
-function extractAllPromptIdsFromExternalAgentIds(
+function extractAllAgentIdsFromExternalAgentIds(
   externalAgentIds: (string | null)[],
 ): string[] {
   const allIds = new Set<string>();
@@ -148,47 +148,47 @@ function extractAllPromptIdsFromExternalAgentIds(
 }
 
 /**
- * Fetch prompt names for a list of prompt IDs.
+ * Fetch agent names for a list of agent IDs.
  */
-async function getPromptNamesById(
-  promptIds: string[],
+async function getAgentNamesById(
+  agentIds: string[],
 ): Promise<Map<string, string>> {
-  if (promptIds.length === 0) return new Map();
+  if (agentIds.length === 0) return new Map();
 
-  const prompts = await db
-    .select({ id: schema.promptsTable.id, name: schema.promptsTable.name })
-    .from(schema.promptsTable)
-    .where(inArray(schema.promptsTable.id, promptIds));
+  const agents = await db
+    .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+    .from(schema.agentsTable)
+    .where(inArray(schema.agentsTable.id, agentIds));
 
-  return new Map(prompts.map((p) => [p.id, p.name]));
+  return new Map(agents.map((a) => [a.id, a.name]));
 }
 
 /**
  * Resolve an external agent ID to a human-readable label.
- * - Single prompt ID: Returns the prompt name
- * - Delegation chain: Returns only the last (most specific) prompt name
+ * - Single agent ID: Returns the agent name
+ * - Delegation chain: Returns only the last (most specific) agent name
  * - Non-UUID: Returns null (will fall back to Main/Subagent)
  */
 function resolveExternalAgentIdLabel(
   externalAgentId: string | null,
-  promptNamesMap: Map<string, string>,
+  agentNamesMap: Map<string, string>,
 ): string | null {
   if (!externalAgentId) return null;
 
   // Check if it's a delegation chain (contains colons)
   if (externalAgentId.includes(":")) {
     const parts = externalAgentId.split(":");
-    // Get the last prompt ID in the chain (the actual executing agent)
-    const lastPromptId = parts[parts.length - 1];
-    if (isUuid(lastPromptId)) {
-      return promptNamesMap.get(lastPromptId) ?? null;
+    // Get the last agent ID in the chain (the actual executing agent)
+    const lastAgentId = parts[parts.length - 1];
+    if (isUuid(lastAgentId)) {
+      return agentNamesMap.get(lastAgentId) ?? null;
     }
     return null;
   }
 
-  // Single ID - return the prompt name if it exists
+  // Single ID - return the agent name if it exists
   if (isUuid(externalAgentId)) {
-    return promptNamesMap.get(externalAgentId) ?? null;
+    return agentNamesMap.get(externalAgentId) ?? null;
   }
 
   // Non-UUID (like "Archestra Chat") - no label
@@ -307,11 +307,11 @@ class InteractionModel {
         .where(whereClause),
     ]);
 
-    // Resolve external agent IDs (including delegation chains) to prompt names
-    const allPromptIds = extractAllPromptIdsFromExternalAgentIds(
+    // Resolve external agent IDs (including delegation chains) to agent names
+    const allAgentIds = extractAllAgentIdsFromExternalAgentIds(
       data.map((i) => i.externalAgentId),
     );
-    const promptNamesMap = await getPromptNamesById(allPromptIds);
+    const agentNamesMap = await getAgentNamesById(allAgentIds);
 
     // Add computed requestType and externalAgentIdLabel fields to each interaction
     const dataWithComputedFields = data.map((interaction) => ({
@@ -323,7 +323,7 @@ class InteractionModel {
       // Resolve externalAgentId to human-readable label (supports delegation chains)
       externalAgentIdLabel: resolveExternalAgentIdLabel(
         interaction.externalAgentId,
-        promptNamesMap,
+        agentNamesMap,
       ),
     }));
 
@@ -662,6 +662,13 @@ class InteractionModel {
 
   /**
    * Session summary returned by getSessions
+   *
+   * Performance optimization: This method splits the query into two phases:
+   * 1. Fast aggregation query for session stats (no ARRAY_AGG on large JSON columns)
+   * 2. Batch fetch of "last interaction" data using efficient indexed lookups
+   *
+   * The previous approach used ARRAY_AGG with FILTER on request::text which was O(n) on JSON size
+   * and caused 17+ second queries due to scanning megabytes of JSON per session.
    */
   static async getSessions(
     pagination: PaginationQuery,
@@ -699,7 +706,7 @@ class InteractionModel {
       profileId: string;
       profileName: string | null;
       externalAgentIds: string[];
-      externalAgentIdLabels: (string | null)[]; // Resolved prompt names for external agent IDs
+      externalAgentIdLabels: (string | null)[]; // Resolved agent names for external agent IDs
       userNames: string[];
       lastInteractionRequest: unknown | null;
       lastInteractionType: string | null;
@@ -785,10 +792,8 @@ class InteractionModel {
     // Cast id to text since session_id is VARCHAR and id is UUID
     const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
 
-    // Get sessions grouped by sessionId (with null sessions as individual entries)
-    // Use MAX for session_id and session_source to avoid grouping NULL values together
-    // The sessionGroupExpr (COALESCE) ensures each NULL session_id row gets a unique group
-    // For single interactions (null session), we include the interaction ID for direct navigation
+    // PHASE 1: Get sessions with lightweight aggregations (no ARRAY_AGG on large JSON)
+    // This is the fast path - simple aggregations on indexed columns
     const [sessionsData, [{ total }]] = await Promise.all([
       db
         .select({
@@ -815,32 +820,8 @@ class InteractionModel {
           profileName: schema.agentsTable.name,
           externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
           userNames: sql<string>`STRING_AGG(DISTINCT ${schema.usersTable.name}, ',')`,
-          // Get the request from the most recent "main" interaction in this session
-          // Excludes: prompt suggestion generator, title generation, and utility requests
-          lastInteractionRequest: sql<unknown>`(ARRAY_AGG(
-            ${schema.interactionsTable.request}
-            ORDER BY ${schema.interactionsTable.createdAt} DESC
-          ) FILTER (WHERE
-            ${schema.interactionsTable.request}::text NOT LIKE '%prompt suggestion generator%'
-            AND ${schema.interactionsTable.request}::text NOT LIKE '%Please write a 5-10 word title%'
-            AND LENGTH(${schema.interactionsTable.request}->'messages'->0->>'content') > 20
-          ))[1]`,
-          lastInteractionType: sql<string>`(ARRAY_AGG(
-            ${schema.interactionsTable.type}
-            ORDER BY ${schema.interactionsTable.createdAt} DESC
-          ) FILTER (WHERE
-            ${schema.interactionsTable.request}::text NOT LIKE '%prompt suggestion generator%'
-            AND ${schema.interactionsTable.request}::text NOT LIKE '%Please write a 5-10 word title%'
-            AND LENGTH(${schema.interactionsTable.request}->'messages'->0->>'content') > 20
-          ))[1]`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
-          // For Claude Code sessions, extract title from the response to the title generation request
-          // Claude Code sends "Please write a 5-10 word title..." and the response contains the title
-          claudeCodeTitle: sql<string>`(ARRAY_AGG(
-            ${schema.interactionsTable.response}->'content'->0->>'text'
-            ORDER BY ${schema.interactionsTable.createdAt} DESC
-          ) FILTER (WHERE ${schema.interactionsTable.request}::text LIKE '%Please write a 5-10 word title%'))[1]`,
         })
         .from(schema.interactionsTable)
         .leftJoin(
@@ -878,12 +859,23 @@ class InteractionModel {
         .where(whereClause),
     ]);
 
+    // PHASE 2: Batch fetch "last interaction" info for all sessions
+    // This is much faster than ARRAY_AGG because:
+    // 1. We only fetch for the paginated sessions (typically 10-50 rows)
+    // 2. Uses index on (session_id, created_at DESC)
+    // 3. Filtering happens in JS on already-fetched data, not in SQL on JSON text
+    const sessionKeys = sessionsData.map((s) => s.sessionId ?? s.interactionId);
+    const lastInteractionMap =
+      await InteractionModel.getLastInteractionsForSessions(
+        sessionKeys.filter((k): k is string => k !== null),
+      );
+
     // Collect all external agent IDs to resolve prompt names
     const allExternalAgentIds = sessionsData.flatMap((s) =>
       s.externalAgentIds ? s.externalAgentIds.split(",").filter(Boolean) : [],
     );
-    const promptNamesMap = await getPromptNamesById(
-      extractAllPromptIdsFromExternalAgentIds(allExternalAgentIds),
+    const agentNamesMap = await getAgentNamesById(
+      extractAllAgentIdsFromExternalAgentIds(allExternalAgentIds),
     );
 
     // Transform the data to the expected format
@@ -891,6 +883,11 @@ class InteractionModel {
       const externalAgentIds = s.externalAgentIds
         ? s.externalAgentIds.split(",").filter(Boolean)
         : [];
+
+      const sessionKey = s.sessionId ?? s.interactionId;
+      const lastInteraction = sessionKey
+        ? lastInteractionMap.get(sessionKey)
+        : null;
 
       return {
         sessionId: s.sessionId,
@@ -915,17 +912,188 @@ class InteractionModel {
         profileName: s.profileName,
         externalAgentIds,
         externalAgentIdLabels: externalAgentIds.map((id) =>
-          resolveExternalAgentIdLabel(id, promptNamesMap),
+          resolveExternalAgentIdLabel(id, agentNamesMap),
         ),
         userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
-        lastInteractionRequest: s.lastInteractionRequest,
-        lastInteractionType: s.lastInteractionType,
+        lastInteractionRequest: lastInteraction?.request ?? null,
+        lastInteractionType: lastInteraction?.type ?? null,
         conversationTitle: s.conversationTitle,
-        claudeCodeTitle: s.claudeCodeTitle,
+        claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
       };
     });
 
     return createPaginatedResult(sessions, Number(total), pagination);
+  }
+
+  /**
+   * Batch fetch the "last main interaction" info for a list of sessions.
+   *
+   * This is optimized for performance:
+   * - Uses window functions (ROW_NUMBER) instead of ARRAY_AGG to pick the first row
+   * - Filtering for "main" vs "subagent" requests happens in JS, not SQL text scanning
+   * - Returns only the needed columns, not the full interaction object
+   *
+   * For each session, returns the most recent interaction that qualifies as "main":
+   * - Not a prompt suggestion generator request
+   * - Not a title generation request
+   * - Has meaningful content (message > 20 chars)
+   */
+  private static async getLastInteractionsForSessions(
+    sessionKeys: string[],
+  ): Promise<
+    Map<
+      string,
+      { request: unknown; type: string; claudeCodeTitle: string | null }
+    >
+  > {
+    if (sessionKeys.length === 0) {
+      return new Map();
+    }
+
+    // Separate session IDs from interaction IDs (UUIDs)
+    // Session IDs can be any string, but interaction IDs must be valid UUIDs
+    const uuidKeys = sessionKeys.filter((k) => isUuid(k));
+
+    // Fetch the most recent N interactions per session, ordered by created_at DESC
+    // We limit to 20 per session since we only need the title and last main interaction,
+    // which are typically among the most recent. This prevents fetching thousands of
+    // interactions for long-running sessions.
+    // We filter in JS (much faster than SQL text scanning for the title/prompt checks)
+    const INTERACTIONS_PER_SESSION = 20;
+
+    // Build the WHERE clause using Drizzle's sql template
+    const sessionCondition =
+      sessionKeys.length > 0
+        ? sql`session_id IN (${sql.join(
+            sessionKeys.map((k) => sql`${k}`),
+            sql`, `,
+          )})`
+        : null;
+
+    const uuidCondition =
+      uuidKeys.length > 0
+        ? sql`id IN (${sql.join(
+            uuidKeys.map((k) => sql`${k}::uuid`),
+            sql`, `,
+          )})`
+        : null;
+
+    const whereConditions = [sessionCondition, uuidCondition].filter(Boolean);
+    const whereClause =
+      whereConditions.length === 1
+        ? whereConditions[0]
+        : sql.join(whereConditions as SQL[], sql` OR `);
+
+    // Use ROW_NUMBER() to limit interactions per session
+    const interactionsResult = await db.execute<{
+      id: string;
+      session_id: string | null;
+      request: unknown;
+      response: unknown;
+      type: string;
+      created_at: Date;
+    }>(sql`
+      WITH ranked AS (
+        SELECT
+          id, session_id, request, response, type, created_at,
+          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC) as rn
+        FROM interactions
+        WHERE ${whereClause}
+      )
+      SELECT id, session_id, request, response, type, created_at
+      FROM ranked
+      WHERE rn <= ${INTERACTIONS_PER_SESSION}
+      ORDER BY session_id, created_at DESC
+    `);
+
+    const interactions = interactionsResult.rows.map((row) => ({
+      id: row.id,
+      sessionId: row.session_id,
+      request: row.request,
+      response: row.response,
+      type: row.type,
+      createdAt: row.created_at,
+    }));
+
+    // Group by session and find the "last main interaction" and "title interaction"
+    const result = new Map<
+      string,
+      { request: unknown; type: string; claudeCodeTitle: string | null }
+    >();
+
+    // Group interactions by session key (sessionId or interaction id for single interactions)
+    const groupedBySession = new Map<string, Array<(typeof interactions)[0]>>();
+    for (const interaction of interactions) {
+      const key = interaction.sessionId ?? interaction.id;
+      const existing = groupedBySession.get(key) ?? [];
+      existing.push(interaction);
+      groupedBySession.set(key, existing);
+    }
+
+    // For each session, find the last "main" interaction and title
+    for (const [sessionKey, sessionInteractions] of groupedBySession) {
+      let lastMainInteraction: (typeof interactions)[0] | null = null;
+      // undefined = not yet found, null = found but no text, string = found with text
+      let claudeCodeTitle: string | null | undefined;
+
+      // Interactions are already ordered by created_at DESC
+      for (const interaction of sessionInteractions) {
+        const requestStr = JSON.stringify(interaction.request);
+
+        // Check for title generation request (Claude Code)
+        if (
+          requestStr.includes("Please write a 5-10 word title") &&
+          claudeCodeTitle === undefined
+        ) {
+          // Extract title from response
+          const response = interaction.response as {
+            content?: Array<{ text?: string }>;
+          };
+          claudeCodeTitle = response?.content?.[0]?.text ?? null;
+          continue;
+        }
+
+        // Skip if this is not a "main" interaction
+        if (
+          !lastMainInteraction &&
+          !requestStr.includes("prompt suggestion generator") &&
+          !requestStr.includes("Please write a 5-10 word title")
+        ) {
+          // Check message content length
+          const request = interaction.request as {
+            messages?: Array<{ content?: string | Array<{ text?: string }> }>;
+          };
+          const firstMessage = request?.messages?.[0]?.content;
+          const contentText =
+            typeof firstMessage === "string"
+              ? firstMessage
+              : Array.isArray(firstMessage)
+                ? firstMessage
+                    .map((c) => (typeof c === "string" ? c : (c.text ?? "")))
+                    .join(" ")
+                : "";
+
+          if (contentText.length > 20) {
+            lastMainInteraction = interaction;
+          }
+        }
+
+        // Early exit if we found both (undefined = not yet searched for title)
+        if (lastMainInteraction && claudeCodeTitle !== undefined) {
+          break;
+        }
+      }
+
+      if (lastMainInteraction || claudeCodeTitle) {
+        result.set(sessionKey, {
+          request: lastMainInteraction?.request ?? null,
+          type: lastMainInteraction?.type ?? "",
+          claudeCodeTitle: claudeCodeTitle ?? null,
+        });
+      }
+    }
+
+    return result;
   }
 }
 

@@ -324,6 +324,59 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Cohere API
+ */
+async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.cohere.baseUrl;
+  const url = `${baseUrl}/v2/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Cohere models",
+    );
+    throw new Error(`Failed to fetch Cohere models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    models: Array<{
+      name: string;
+      endpoints?: string[];
+      created_at?: string;
+    }>;
+  };
+
+  // Only include models that expose chat/generate endpoints (exclude embed/rerank)
+  const models = data.models
+    .filter((model) => {
+      const endpoints = model.endpoints || [];
+      // accept models that support chat or generate
+      return endpoints.includes("chat") || endpoints.includes("generate");
+    })
+    .map((model) => ({
+      id: model.name,
+      displayName: model.name,
+      provider: "cohere" as const,
+      createdAt: model.created_at,
+    }));
+
+  // Sort models to put command-r-08-2024 first (default choice)
+  return models.sort((a, b) => {
+    const preferredModel = "command-r-08-2024";
+    if (a.id === preferredModel) return -1;
+    if (b.id === preferredModel) return 1;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/**
  * Fetch models from Zhipuai API
  */
 async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -445,6 +498,7 @@ async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
       modelName?: string;
       providerName?: string;
       inferenceTypesSupported?: string[];
+      inputModalities?: string[];
     }>;
   };
 
@@ -476,7 +530,9 @@ async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
 
       // Include ON_DEMAND models always
       // Include INFERENCE_PROFILE models only if prefix is configured
-      return supportsOnDemand || (supportsInferenceProfile && inferenceProfilePrefix);
+      return (
+        supportsOnDemand || (supportsInferenceProfile && inferenceProfilePrefix)
+      );
     })
     .map((model) => {
       // Generate a readable display name
@@ -660,6 +716,7 @@ const modelFetchers: Record<
   openai: fetchOpenAiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
+  cohere: fetchCohereModels,
   zhipuai: fetchZhipuaiModels,
 };
 
@@ -721,7 +778,7 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "cerebras", "openai"].includes(provider)) {
+    if (["anthropic", "cerebras", "openai", "cohere"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

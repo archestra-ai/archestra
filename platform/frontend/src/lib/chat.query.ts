@@ -18,7 +18,6 @@ const {
   updateConversationEnabledTools,
   deleteConversationEnabledTools,
   getAgentTools,
-  getPromptTools,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -79,13 +78,11 @@ export function useCreateConversation() {
   return useMutation({
     mutationFn: async ({
       agentId,
-      promptId,
       selectedModel,
       selectedProvider,
       chatApiKeyId,
     }: {
       agentId: string;
-      promptId?: string;
       selectedModel?: string;
       selectedProvider?: SupportedProvider;
       chatApiKeyId?: string | null;
@@ -93,7 +90,6 @@ export function useCreateConversation() {
       const { data, error } = await createChatConversation({
         body: {
           agentId,
-          promptId,
           selectedModel,
           selectedProvider,
           chatApiKeyId: chatApiKeyId ?? undefined,
@@ -320,21 +316,25 @@ export function useProfileToolsWithIds(agentId: string | undefined) {
 }
 
 /**
- * Get agent delegation tools for a prompt
- * Returns tools created from prompt agents with real database IDs
+ * Get delegation tools for an internal agent
+ * Returns delegation tools (tools that delegate to other agents) assigned to this agent
  */
-export function usePromptTools(promptId: string | undefined) {
+export function useAgentDelegationTools(agentId: string | undefined) {
   return useQuery({
-    queryKey: ["prompts", promptId, "tools"],
+    queryKey: ["agents", agentId, "delegation-tools"],
     queryFn: async () => {
-      if (!promptId) return [];
-      const { data, error } = await getPromptTools({
-        path: { id: promptId },
+      if (!agentId) return [];
+      const { data, error } = await getAgentTools({
+        path: { agentId },
+        query: { excludeLlmProxyOrigin: true },
       });
-      if (error) throw new Error("Failed to fetch prompt tools");
-      return data;
+      if (error) throw new Error("Failed to fetch agent tools");
+      // Filter for delegation tools (tools with name starting with "delegate_to_")
+      return (data ?? []).filter((tool) =>
+        tool.name.startsWith("delegate_to_"),
+      );
     },
-    enabled: !!promptId,
+    enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
   });

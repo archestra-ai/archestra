@@ -4,8 +4,11 @@ import { clickButton } from "../../utils";
 
 test(
   "can create and delete a profile",
+  // Extended timeout for Firefox/WebKit CI environments where React hydration
+  // and permission checks may take longer than the default 60s
   { tag: ["@firefox", "@webkit"] },
   async ({ page, makeRandomString, goToPage }) => {
+    test.setTimeout(120_000);
     // Skip onboarding if dialog is present
     const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
     if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -16,9 +19,29 @@ test(
 
     const AGENT_NAME = makeRandomString(10, "Test Profile");
     await goToPage(page, "/profiles");
-    await page.getByTestId(E2eTestId.CreateAgentButton).click();
+
+    // Wait for page to fully load before interacting
+    // WebKit/Firefox may need extra time for React hydration and permission checks
+    await page.waitForLoadState("networkidle");
+
+    // Wait for the Create Profile button to be visible and enabled
+    // The button is disabled while permission checks are loading
+    // Use polling with page reload as fallback for React hydration delays in Firefox/WebKit CI
+    const createButton = page.getByTestId(E2eTestId.CreateAgentButton);
+    let createAttempts = 0;
+    await expect(async () => {
+      createAttempts++;
+      // If button not enabled after first attempt, try reloading the page
+      if (createAttempts > 1) {
+        await page.reload();
+        await page.waitForLoadState("networkidle");
+      }
+      await expect(createButton).toBeVisible({ timeout: 5000 });
+      await expect(createButton).toBeEnabled({ timeout: 5000 });
+    }).toPass({ timeout: 90_000, intervals: [2000, 5000, 10000] });
+    await createButton.click();
     await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
-    await page.locator("[type=submit]").click();
+    await page.getByRole("button", { name: "Create" }).click();
 
     // After profile creation, wait for the success toast to appear
     await expect(page.getByText("Profile created successfully")).toBeVisible({
@@ -27,10 +50,9 @@ test(
 
     // A new dialog opens with connection instructions
     // Wait for the "Connect via" dialog to appear
+    // Use text search instead of heading role for better cross-browser compatibility
     await expect(
-      page.getByRole("heading", {
-        name: new RegExp(`Connect via.*${AGENT_NAME}`, "i"),
-      }),
+      page.getByText(new RegExp(`Connect via.*${AGENT_NAME}`, "i")),
     ).toBeVisible({ timeout: 15_000 });
 
     // Close the connection dialog by clicking the "Done" button

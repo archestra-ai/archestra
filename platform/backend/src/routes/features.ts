@@ -53,6 +53,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
               provider: KnowledgeGraphProviderTypeSchema.optional(),
               displayName: z.string().optional(),
             }),
+            /** MCP server base Docker image (shown in UI for reference) */
+            mcpServerBaseImage: z.string(),
           }),
         },
       },
@@ -74,6 +76,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         globalToolPolicy,
         incomingEmail: getEmailProviderInfo(),
         knowledgeGraph: getKnowledgeGraphProviderInfo(),
+        mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
       });
     },
   );

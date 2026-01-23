@@ -1,6 +1,7 @@
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createCerebras } from "@ai-sdk/cerebras";
+import { createCohere } from "@ai-sdk/cohere";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
@@ -54,6 +55,9 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "openai";
   }
 
+  if (lowerModel.includes("command")) {
+    return "cohere";
+  }
   if (lowerModel.includes("glm") || lowerModel.includes("chatglm")) {
     return "zhipuai";
   }
@@ -99,6 +103,7 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
       secret?.secret?.zhipuaiApiKey ??
+      secret?.secret?.cohereApiKey ??
       secret?.secret?.bedrockApiKey;
     if (secretValue) {
       providerApiKey = secretValue as string;
@@ -119,6 +124,9 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "gemini" && config.chat.gemini.apiKey) {
       providerApiKey = config.chat.gemini.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "cohere" && config.chat.cohere.apiKey) {
+      providerApiKey = config.chat.cohere.apiKey;
       apiKeySource = "environment";
     } else if (provider === "vllm" && config.chat.vllm.apiKey) {
       providerApiKey = config.chat.vllm.apiKey;
@@ -221,6 +229,17 @@ export function createLLMModel(params: {
     // Use .chat() to force Chat Completions API (not Responses API)
     // so our proxy's tool policy evaluation is applied
     return client.chat(modelName);
+  }
+
+  if (provider === "cohere") {
+    // URL format: /v1/cohere/:agentId (SDK appends /chat)
+    // We use the native Cohere provider which uses the V2 API
+    const client = createCohere({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/cohere/${agentId}`,
+      headers,
+    });
+    return client(modelName);
   }
 
   if (provider === "cerebras") {

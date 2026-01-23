@@ -536,6 +536,235 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(agentTool);
     },
   );
+
+  // =============================================================================
+  // Agent Delegation Routes (internal agents only)
+  // =============================================================================
+
+  /**
+   * Get delegation targets for an internal agent
+   */
+  fastify.get(
+    "/api/agents/:agentId/delegations",
+    {
+      schema: {
+        operationId: RouteId.GetAgentDelegations,
+        description:
+          "Get all delegation targets for an internal agent. Only applicable to internal agents.",
+        tags: ["Agent Delegations"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string().uuid(),
+              name: z.string(),
+              systemPrompt: z.string().nullable(),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ params: { agentId }, headers, user }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Validate agent exists and is accessible
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      if (agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Delegations only apply to internal agents (agents with prompts)",
+        );
+      }
+
+      const delegations = await AgentToolModel.getDelegationTargets(agentId);
+      return reply.send(delegations);
+    },
+  );
+
+  /**
+   * Sync delegation targets for an internal agent (replace all with new list)
+   */
+  fastify.post(
+    "/api/agents/:agentId/delegations",
+    {
+      schema: {
+        operationId: RouteId.SyncAgentDelegations,
+        description:
+          "Sync delegation targets for an internal agent. Replaces all existing delegations with the new list.",
+        tags: ["Agent Delegations"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: z.object({
+          targetAgentIds: z.array(UuidIdSchema),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            added: z.array(z.string()),
+            removed: z.array(z.string()),
+          }),
+        ),
+      },
+    },
+    async ({ params: { agentId }, body, headers, user }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Validate agent exists and is accessible
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      if (agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Delegations only apply to internal agents (agents with prompts)",
+        );
+      }
+
+      // Validate all target agents exist and are internal
+      for (const targetAgentId of body.targetAgentIds) {
+        const targetAgent = await AgentModel.findById(targetAgentId);
+        if (!targetAgent) {
+          throw new ApiError(404, `Target agent ${targetAgentId} not found`);
+        }
+        if (targetAgent.agentType !== "agent") {
+          throw new ApiError(
+            400,
+            `Target agent ${targetAgentId} is not an internal agent`,
+          );
+        }
+        // Prevent self-delegation
+        if (targetAgentId === agentId) {
+          throw new ApiError(400, "An agent cannot delegate to itself");
+        }
+      }
+
+      const result = await AgentToolModel.syncDelegations(
+        agentId,
+        body.targetAgentIds,
+      );
+
+      // Clear chat MCP client cache
+      clearChatMcpClient(agentId);
+
+      return reply.send(result);
+    },
+  );
+
+  /**
+   * Remove a specific delegation from an agent
+   */
+  fastify.delete(
+    "/api/agents/:agentId/delegations/:targetAgentId",
+    {
+      schema: {
+        operationId: RouteId.DeleteAgentDelegation,
+        description: "Remove a specific delegation from an internal agent.",
+        tags: ["Agent Delegations"],
+        params: z.object({
+          agentId: UuidIdSchema,
+          targetAgentId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { agentId, targetAgentId }, headers, user }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Validate agent exists and is accessible
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      if (agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Delegations only apply to internal agents (agents with prompts)",
+        );
+      }
+
+      const success = await AgentToolModel.removeDelegation(
+        agentId,
+        targetAgentId,
+      );
+
+      if (!success) {
+        throw new ApiError(404, "Delegation not found");
+      }
+
+      // Clear chat MCP client cache
+      clearChatMcpClient(agentId);
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Get all delegation connections for canvas visualization
+   */
+  fastify.get(
+    "/api/agent-delegations",
+    {
+      schema: {
+        operationId: RouteId.GetAllDelegationConnections,
+        description:
+          "Get all agent delegation connections for canvas visualization.",
+        tags: ["Agent Delegations"],
+        response: constructResponseSchema(
+          z.object({
+            connections: z.array(
+              z.object({
+                sourceAgentId: z.string().uuid(),
+                sourceAgentName: z.string(),
+                targetAgentId: z.string().uuid(),
+                targetAgentName: z.string(),
+                toolId: z.string().uuid(),
+              }),
+            ),
+            agents: z.array(
+              z.object({
+                id: z.string().uuid(),
+                name: z.string(),
+                agentType: z.enum(["mcp_gateway", "agent"]),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const [connections, agents] = await Promise.all([
+        AgentToolModel.getAllDelegationConnections(organizationId),
+        AgentModel.findByOrganizationId(organizationId, { agentType: "agent" }),
+      ]);
+
+      return reply.send({
+        connections,
+        agents: agents.map((a) => ({
+          id: a.id,
+          name: a.name,
+          agentType: a.agentType,
+        })),
+      });
+    },
+  );
 };
 
 /**

@@ -702,17 +702,25 @@ describe("executeArchestraTool", () => {
     });
 
     test("should return error when provider is not configured", async () => {
-      // By default, the knowledge graph provider is not configured in tests
-      const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
-        { query: "test query" },
-        mockContext,
-      );
+      // Mock getKnowledgeGraphProvider to return null (not configured)
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(null);
 
-      expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "Knowledge graph provider is not configured",
-      );
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "test query" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(true);
+        expect((result.content[0] as any).text).toContain(
+          "Knowledge graph provider is not configured",
+        );
+      } finally {
+        getProviderSpy.mockRestore();
+      }
     });
 
     test("should return query result when provider is configured", async () => {

@@ -3,7 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import { archestraApiSdk } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, Loader2, X } from "lucide-react";
+import { Bot, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -39,11 +39,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateProfile,
   useInternalAgents,
-  useLabelKeys,
   useUpdateProfile,
 } from "@/lib/agent.query";
 import {
@@ -53,6 +53,7 @@ import {
 import { useHasPermissions } from "@/lib/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { useChatOpsStatus } from "@/lib/chatops.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
@@ -166,6 +167,9 @@ interface SubagentsEditorProps {
   selectedAgentIds: string[];
   onSelectionChange: (ids: string[]) => void;
   currentAgentId?: string;
+  searchQuery: string;
+  showAll: boolean;
+  onShowMore: () => void;
 }
 
 function SubagentsEditor({
@@ -173,9 +177,27 @@ function SubagentsEditor({
   selectedAgentIds,
   onSelectionChange,
   currentAgentId,
+  searchQuery,
+  showAll,
+  onShowMore,
 }: SubagentsEditorProps) {
   // Filter out current agent from available agents
   const filteredAgents = availableAgents.filter((a) => a.id !== currentAgentId);
+
+  // Filter by search query
+  const searchFilteredAgents = searchQuery.trim()
+    ? filteredAgents.filter((a) =>
+        a.name.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : filteredAgents;
+
+  // Apply show more limit (show all when searching)
+  const shouldShowAll = showAll || !!searchQuery.trim();
+  const visibleAgents =
+    shouldShowAll || searchFilteredAgents.length <= 10
+      ? searchFilteredAgents
+      : searchFilteredAgents.slice(0, 10);
+  const hiddenCount = searchFilteredAgents.length - 10;
 
   const handleToggle = (agentId: string) => {
     if (selectedAgentIds.includes(agentId)) {
@@ -193,9 +215,13 @@ function SubagentsEditor({
     );
   }
 
+  if (searchFilteredAgents.length === 0) {
+    return <p className="text-sm text-muted-foreground">No matching agents.</p>;
+  }
+
   return (
     <>
-      {filteredAgents.map((agent) => (
+      {visibleAgents.map((agent) => (
         <SubagentPill
           key={agent.id}
           agent={agent}
@@ -203,6 +229,16 @@ function SubagentsEditor({
           onToggle={handleToggle}
         />
       ))}
+      {!shouldShowAll && hiddenCount > 0 && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 text-xs border-dashed"
+          onClick={onShowMore}
+        >
+          +{hiddenCount} more
+        </Button>
+      )}
     </>
   );
 }
@@ -229,6 +265,7 @@ export function AgentDialog({
   onCreated,
 }: AgentDialogProps) {
   const { data: allInternalAgents = [] } = useInternalAgents();
+  const { data: catalogItems = [] } = useInternalMcpCatalog();
   const createAgent = useCreateProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
@@ -241,7 +278,6 @@ export function AgentDialog({
       return response.data || [];
     },
   });
-  const { data: availableKeys = [] } = useLabelKeys();
   const { data: isProfileAdmin } = useHasPermissions({ profile: ["admin"] });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
@@ -260,6 +296,12 @@ export function AgentDialog({
   const [selectedAgentType, setSelectedAgentType] = useState<
     "mcp_gateway" | "agent"
   >(agentType);
+  const [subagentsSearch, setSubagentsSearch] = useState("");
+  const [subagentsSearchOpen, setSubagentsSearchOpen] = useState(false);
+  const [subagentsShowAll, setSubagentsShowAll] = useState(false);
+  const [toolsSearch, setToolsSearch] = useState("");
+  const [toolsSearchOpen, setToolsSearchOpen] = useState(false);
+  const [toolsShowAll, setToolsShowAll] = useState(false);
 
   // Determine if this is an internal agent based on the selected type
   const isInternalAgent = selectedAgentType === "agent";
@@ -301,6 +343,13 @@ export function AgentDialog({
         setConsiderContextUntrusted(false);
         setSelectedAgentType(agentType);
       }
+      // Reset search when dialog opens
+      setSubagentsSearch("");
+      setSubagentsSearchOpen(false);
+      setSubagentsShowAll(false);
+      setToolsSearch("");
+      setToolsSearchOpen(false);
+      setToolsShowAll(false);
     }
   }, [open, agent, agentType]);
 
@@ -456,7 +505,7 @@ export function AgentDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-5xl h-[90vh] flex flex-col"
+        className="max-w-5xl h-[90vh] flex flex-col overflow-hidden"
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -484,70 +533,143 @@ export function AgentDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 py-4 px-1">
-          {/* Name - Common */}
-          <div className="space-y-2">
-            <Label htmlFor="agentName">Name *</Label>
-            <Input
-              id="agentName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={
-                isInternalAgent ? "Enter agent name" : "My AI Profile"
-              }
-              autoFocus
-            />
-          </div>
-
-          {/* Tools Section */}
-          <div className="space-y-2">
-            <Label>Tools</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <AgentToolsEditor ref={agentToolsEditorRef} agentId={agent?.id} />
-            </div>
-          </div>
-
-          {/* Subagents Section */}
-          <div className="space-y-2">
-            <Label>Subagents</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <SubagentsEditor
-                availableAgents={allInternalAgents}
-                selectedAgentIds={selectedDelegationTargetIds}
-                onSelectionChange={setSelectedDelegationTargetIds}
-                currentAgentId={agent?.id}
+        <div className="-mr-6 pr-6 flex-1 overflow-y-auto space-y-6 py-4">
+          {/* Main Section */}
+          <div className="rounded-lg border bg-card p-4 space-y-4">
+            {/* Name */}
+            <div className="space-y-2">
+              <Label htmlFor="agentName">Name *</Label>
+              <Input
+                id="agentName"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={
+                  isInternalAgent ? "Enter agent name" : "My AI Profile"
+                }
+                autoFocus
               />
             </div>
-          </div>
 
-          {/* Mode Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="agentType">Mode</Label>
-            <Select
-              value={selectedAgentType}
-              onValueChange={(value: "mcp_gateway" | "agent") =>
-                setSelectedAgentType(value)
-              }
-            >
-              <SelectTrigger id="agentType" className="w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="mcp_gateway">MCP Gateway</SelectItem>
-                <SelectItem value="agent">Agent</SelectItem>
-              </SelectContent>
-            </Select>
-            {isInternalAgent && (
+            {/* Tools */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label>Tools</Label>
+                {catalogItems.length > 10 &&
+                  (toolsSearchOpen ? (
+                    <div className="relative flex-1 max-w-[200px]">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                      <Input
+                        placeholder="Search..."
+                        value={toolsSearch}
+                        onChange={(e) => setToolsSearch(e.target.value)}
+                        className="h-7 pl-7 text-xs"
+                        autoFocus
+                        onBlur={() => {
+                          if (!toolsSearch) {
+                            setToolsSearchOpen(false);
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => setToolsSearchOpen(true)}
+                    >
+                      <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentToolsEditor
+                  ref={agentToolsEditorRef}
+                  agentId={agent?.id}
+                  searchQuery={toolsSearch}
+                  showAll={toolsShowAll}
+                  onShowMore={() => setToolsShowAll(true)}
+                />
+              </div>
+            </div>
+
+            {/* Subagents */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label>Subagents</Label>
+                {allInternalAgents.filter((a) => a.id !== agent?.id).length >
+                  10 &&
+                  (subagentsSearchOpen ? (
+                    <div className="relative flex-1 max-w-[200px]">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                      <Input
+                        placeholder="Search..."
+                        value={subagentsSearch}
+                        onChange={(e) => setSubagentsSearch(e.target.value)}
+                        className="h-7 pl-7 text-xs"
+                        autoFocus
+                        onBlur={() => {
+                          if (!subagentsSearch) {
+                            setSubagentsSearchOpen(false);
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => setSubagentsSearchOpen(true)}
+                    >
+                      <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <SubagentsEditor
+                  availableAgents={allInternalAgents}
+                  selectedAgentIds={selectedDelegationTargetIds}
+                  onSelectionChange={setSelectedDelegationTargetIds}
+                  currentAgentId={agent?.id}
+                  searchQuery={subagentsSearch}
+                  showAll={subagentsShowAll}
+                  onShowMore={() => setSubagentsShowAll(true)}
+                />
+              </div>
+            </div>
+
+            {/* Mode */}
+            <div className="space-y-2">
+              <Label htmlFor="agentType">Mode</Label>
+              <Select
+                value={selectedAgentType}
+                onValueChange={(value: "mcp_gateway" | "agent") =>
+                  setSelectedAgentType(value)
+                }
+              >
+                <SelectTrigger id="agentType" className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mcp_gateway">MCP Gateway</SelectItem>
+                  <SelectItem value="agent">Agent</SelectItem>
+                </SelectContent>
+              </Select>
               <p className="text-sm text-muted-foreground">
-                Agents can be used in chat with prompts and ChatOps
-                integrations.
+                {isInternalAgent
+                  ? "Agents can be used internally in Chat or externally via A2A webhook, email, or MS Teams."
+                  : "MCP Gateway allows external agents to connect to MCP server tools using the MCP protocol."}
               </p>
-            )}
+            </div>
           </div>
 
-          {/* Agent Prompts (Internal Agents Only) */}
+          {/* Agent Settings Section (Internal Agents Only) */}
           {isInternalAgent && (
-            <>
+            <div className="rounded-lg border bg-card p-4 space-y-4">
+              <h3 className="font-semibold">Agent Settings</h3>
+
+              {/* System Prompt */}
               <div className="space-y-2">
                 <Label htmlFor="systemPrompt">System Prompt</Label>
                 <Textarea
@@ -558,6 +680,8 @@ export function AgentDialog({
                   className="min-h-[150px] font-mono"
                 />
               </div>
+
+              {/* User Prompt */}
               <div className="space-y-2">
                 <Label htmlFor="userPrompt">User Prompt</Label>
                 <Textarea
@@ -568,100 +692,118 @@ export function AgentDialog({
                   className="min-h-[150px] font-mono"
                 />
               </div>
-            </>
-          )}
 
-          {/* Team Access - Common */}
-          <div className="space-y-2">
-            <Label>
-              Team
-              {!isProfileAdmin && !isInternalAgent && (
-                <span className="text-destructive ml-1">(required)</span>
-              )}
-            </Label>
-            <MultiSelectCombobox
-              options={
-                teams?.map((team) => ({
-                  value: team.id,
-                  label: team.name,
-                })) || []
-              }
-              value={assignedTeamIds}
-              onChange={setAssignedTeamIds}
-              placeholder={
-                hasNoAvailableTeams
-                  ? "No teams available"
-                  : assignedTeamIds.length === 0
-                    ? "Add teams... Only Admins can access agents without teams"
-                    : "Search teams..."
-              }
-              emptyMessage="No teams found."
-            />
-          </div>
-
-          {/* Labels - Common */}
-          <ProfileLabels
-            ref={agentLabelsRef}
-            labels={labels}
-            onLabelsChange={setLabels}
-            availableKeys={availableKeys}
-          />
-
-          {/* Consider Context Untrusted - Common */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="consider-context-untrusted"
-              checked={considerContextUntrusted}
-              onCheckedChange={(checked) =>
-                setConsiderContextUntrusted(checked === true)
-              }
-            />
-            <div className="grid gap-1">
-              <Label
-                htmlFor="consider-context-untrusted"
-                className="text-sm font-medium cursor-pointer"
-              >
-                Treat user context as untrusted
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Enable when user prompts may contain untrusted and sensitive
-                data.
-              </p>
-            </div>
-          </div>
-
-          {/* Internal Agent Only - ChatOps */}
-          {isInternalAgent && configuredChatopsProviders.length > 0 && (
-            <div className="space-y-2">
-              <Label>ChatOps Integrations</Label>
-              <p className="text-sm text-muted-foreground">
-                Select which chat platforms can trigger this agent
-              </p>
-              {configuredChatopsProviders.map((provider) => (
-                <div key={provider.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`chatops-${provider.id}`}
-                    checked={allowedChatops.includes(provider.id)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setAllowedChatops([...allowedChatops, provider.id]);
-                      } else {
-                        setAllowedChatops(
-                          allowedChatops.filter((id) => id !== provider.id),
-                        );
-                      }
-                    }}
-                  />
-                  <Label
-                    htmlFor={`chatops-${provider.id}`}
-                    className="cursor-pointer font-normal"
-                  >
-                    {provider.displayName}
-                  </Label>
+              {/* Agent Trigger Rules */}
+              {configuredChatopsProviders.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Agent Trigger Rules</Label>
+                  <div className="space-y-3 pt-1">
+                    {configuredChatopsProviders.map((provider) => (
+                      <div
+                        key={provider.id}
+                        className="flex items-center justify-between"
+                      >
+                        <div className="space-y-0.5">
+                          <label
+                            htmlFor={`chatops-${provider.id}`}
+                            className="text-sm cursor-pointer"
+                          >
+                            {provider.displayName}
+                          </label>
+                          <p className="text-xs text-muted-foreground">
+                            Allow this agent to be triggered via{" "}
+                            {provider.displayName}
+                          </p>
+                        </div>
+                        <Switch
+                          id={`chatops-${provider.id}`}
+                          checked={allowedChatops.includes(provider.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setAllowedChatops([
+                                ...allowedChatops,
+                                provider.id,
+                              ]);
+                            } else {
+                              setAllowedChatops(
+                                allowedChatops.filter(
+                                  (id) => id !== provider.id,
+                                ),
+                              );
+                            }
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
+
+          {/* Additional Settings Section */}
+          <div className="rounded-lg border bg-card p-4 space-y-4">
+            <h3 className="font-semibold">Additional Settings</h3>
+
+            {/* Team */}
+            <div className="space-y-2">
+              <Label>
+                Team
+                {!isProfileAdmin && !isInternalAgent && (
+                  <span className="text-destructive ml-1">(required)</span>
+                )}
+              </Label>
+              <MultiSelectCombobox
+                options={
+                  teams?.map((team) => ({
+                    value: team.id,
+                    label: team.name,
+                  })) || []
+                }
+                value={assignedTeamIds}
+                onChange={setAssignedTeamIds}
+                placeholder={
+                  hasNoAvailableTeams
+                    ? "No teams available"
+                    : assignedTeamIds.length === 0
+                      ? "Add teams... Only Admins can access agents without teams"
+                      : "Search teams..."
+                }
+                emptyMessage="No teams found."
+              />
+            </div>
+
+            {/* Labels */}
+            <ProfileLabels
+              ref={agentLabelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+            />
+
+            {/* Security */}
+            <div className="space-y-2">
+              <Label>Security</Label>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="consider-context-untrusted"
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    Treat user context as untrusted
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Enable when user prompts may contain untrusted and sensitive
+                    data.
+                  </p>
+                </div>
+                <Switch
+                  id="consider-context-untrusted"
+                  checked={considerContextUntrusted}
+                  onCheckedChange={setConsiderContextUntrusted}
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         <DialogFooter className="mt-4">

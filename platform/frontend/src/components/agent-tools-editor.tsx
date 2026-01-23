@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { useQueries } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import {
   forwardRef,
@@ -26,6 +27,7 @@ import {
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import {
+  fetchCatalogTools,
   useCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
@@ -53,12 +55,18 @@ export interface AgentToolsEditorRef {
 
 interface AgentToolsEditorProps {
   agentId?: string;
+  searchQuery?: string;
+  showAll?: boolean;
+  onShowMore?: () => void;
 }
 
 export const AgentToolsEditor = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
->(function AgentToolsEditor({ agentId }, ref) {
+>(function AgentToolsEditor(
+  { agentId, searchQuery = "", showAll = false, onShowMore },
+  ref,
+) {
   return (
     <Suspense
       fallback={
@@ -68,7 +76,13 @@ export const AgentToolsEditor = forwardRef<
         </div>
       }
     >
-      <AgentToolsEditorContent agentId={agentId} ref={ref} />
+      <AgentToolsEditorContent
+        agentId={agentId}
+        searchQuery={searchQuery}
+        showAll={showAll}
+        onShowMore={onShowMore}
+        ref={ref}
+      />
     </Suspense>
   );
 });
@@ -76,12 +90,37 @@ export const AgentToolsEditor = forwardRef<
 const AgentToolsEditorContent = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
->(function AgentToolsEditorContent({ agentId }, ref) {
+>(function AgentToolsEditorContent(
+  { agentId, searchQuery = "", showAll = false, onShowMore },
+  ref,
+) {
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
 
   // Fetch catalog items (MCP servers in registry)
   const { data: catalogItems = [] } = useInternalMcpCatalog();
+
+  // Fetch tool counts for all catalog items to enable sorting
+  const toolCountQueries = useQueries({
+    queries: catalogItems.map((catalog) => ({
+      queryKey: ["mcp-catalog", catalog.id, "tools"] as const,
+      queryFn: () => fetchCatalogTools(catalog.id),
+    })),
+  });
+
+  // Create a map of catalog ID to tool count
+  const toolCountByCatalog = useMemo(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < catalogItems.length; i++) {
+      const query = toolCountQueries[i];
+      const catalog = catalogItems[i];
+      if (catalog) {
+        const tools = query?.data as CatalogTool[] | undefined;
+        map.set(catalog.id, tools?.length ?? 0);
+      }
+    }
+    return map;
+  }, [catalogItems, toolCountQueries]);
 
   // Fetch assigned tools for this agent (only when editing existing agent)
   const { data: assignedToolsData } = useAllProfileTools({
@@ -101,6 +140,37 @@ const AgentToolsEditorContent = forwardRef<
     }
     return map;
   }, [assignedToolsData]);
+
+  // Sort catalog items: assigned tools first (by count desc), then servers with tools, then 0 tools
+  const sortedCatalogItems = useMemo(() => {
+    return [...catalogItems].sort((a, b) => {
+      const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
+      const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
+
+      // Items with assigned tools come first, sorted by assigned count descending
+      if (aAssigned > 0 && bAssigned === 0) return -1;
+      if (aAssigned === 0 && bAssigned > 0) return 1;
+      if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+
+      // Among items with same assigned count, sort by total tools available
+      const aCount = toolCountByCatalog.get(a.id) ?? 0;
+      const bCount = toolCountByCatalog.get(b.id) ?? 0;
+      if (aCount > 0 && bCount === 0) return -1;
+      if (aCount === 0 && bCount > 0) return 1;
+
+      // Finally, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+  }, [catalogItems, assignedToolsByCatalog, toolCountByCatalog]);
+
+  // Filter by search query
+  const filteredCatalogItems = useMemo(() => {
+    if (!searchQuery.trim()) return sortedCatalogItems;
+    const search = searchQuery.toLowerCase();
+    return sortedCatalogItems.filter((c) =>
+      c.name.toLowerCase().includes(search),
+    );
+  }, [sortedCatalogItems, searchQuery]);
 
   // Track pending changes for all catalogs
   const pendingChangesRef = useRef<Map<string, PendingCatalogChanges>>(
@@ -178,9 +248,21 @@ const AgentToolsEditorContent = forwardRef<
     );
   }
 
+  if (filteredCatalogItems.length === 0) {
+    return <p className="text-sm text-muted-foreground">No matching tools.</p>;
+  }
+
+  // Apply show more limit (show all when searching)
+  const shouldShowAll = showAll || !!searchQuery.trim();
+  const visibleItems =
+    shouldShowAll || filteredCatalogItems.length <= 10
+      ? filteredCatalogItems
+      : filteredCatalogItems.slice(0, 10);
+  const hiddenCount = filteredCatalogItems.length - 10;
+
   return (
     <div className="flex flex-wrap gap-2">
-      {catalogItems.map((catalog) => (
+      {visibleItems.map((catalog) => (
         <McpServerPill
           key={catalog.id}
           catalogItem={catalog}
@@ -189,6 +271,16 @@ const AgentToolsEditorContent = forwardRef<
           onClearPendingChanges={clearPendingChanges}
         />
       ))}
+      {!shouldShowAll && hiddenCount > 0 && onShowMore && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 text-xs border-dashed"
+          onClick={onShowMore}
+        >
+          +{hiddenCount} more
+        </Button>
+      )}
     </div>
   );
 });
@@ -312,13 +404,14 @@ function McpServerPill({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[420px] p-0"
+        className="w-[420px] max-h-[min(500px,70vh)] p-0 flex flex-col overflow-hidden"
         side="bottom"
         align="start"
         sideOffset={8}
         avoidCollisions
+        collisionPadding={16}
       >
-        <div className="p-4 border-b flex items-start justify-between gap-2">
+        <div className="p-4 border-b flex items-start justify-between gap-2 shrink-0">
           <div>
             <h4 className="font-semibold">{catalogItem.name}</h4>
             {catalogItem.description && (
@@ -339,7 +432,7 @@ function McpServerPill({
 
         {/* Credential Selector */}
         {showCredentialSelector && (
-          <div className="p-4 border-b space-y-2">
+          <div className="p-4 border-b space-y-2 shrink-0">
             <Label className="text-sm font-medium">Credential</Label>
             <TokenSelect
               catalogId={catalogItem.id}
@@ -361,11 +454,13 @@ function McpServerPill({
             No tools available for this server.
           </div>
         ) : (
-          <ToolChecklist
-            tools={allTools}
-            selectedToolIds={selectedToolIds}
-            setSelectedToolIds={setSelectedToolIds}
-          />
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <ToolChecklist
+              tools={allTools}
+              selectedToolIds={selectedToolIds}
+              setSelectedToolIds={setSelectedToolIds}
+            />
+          </div>
         )}
       </PopoverContent>
     </Popover>
@@ -408,8 +503,8 @@ function ToolChecklist({
   };
 
   return (
-    <div>
-      <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30">
+    <div className="flex flex-col min-h-0 flex-1">
+      <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30 shrink-0">
         <span className="text-xs text-muted-foreground">
           {selectedCount} of {tools.length} selected
         </span>
@@ -434,7 +529,7 @@ function ToolChecklist({
           </Button>
         </div>
       </div>
-      <div className="max-h-[350px] overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-2 space-y-0.5">
           {tools.map((tool) => {
             // Extract tool name without MCP server prefix

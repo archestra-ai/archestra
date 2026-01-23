@@ -1,5 +1,9 @@
 "use client";
 
+// Non-user-facing build marker to test chunk hashing during deployments
+const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
+void _BUILD_TEST_MARKER;
+
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";

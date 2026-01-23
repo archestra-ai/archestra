@@ -1,5 +1,9 @@
 "use client";
 
+// Non-user-facing build marker to test chunk hashing during deployments
+const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
+void _BUILD_TEST_MARKER;
+
 import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock, Info } from "lucide-react";

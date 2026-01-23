@@ -1,5 +1,8 @@
 "use client";
 
+const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
+void _BUILD_TEST_MARKER;
+
 import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, FileText, Globe, PanelRightClose } from "lucide-react";
 import Link from "next/link";

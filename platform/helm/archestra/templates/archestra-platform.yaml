@@ -61,6 +61,7 @@ spec:
   strategy:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  minReadySeconds: {{ .Values.archestra.minReadySeconds | default 0 }}
   template:
     metadata:
       labels:
@@ -131,12 +132,16 @@ spec:
             failureThreshold: 3
           # Readiness probe - marks the container as ready to receive traffic
           # Uses /ready endpoint which checks database connectivity
+          # successThreshold: 3 requires 3 consecutive successful checks (30s) before
+          # the pod receives traffic, preventing briefly-healthy pods from serving
+          # requests before crashing (which causes chunk loading errors)
           readinessProbe:
             httpGet:
               path: /ready
               port: backend
             periodSeconds: 10
             timeoutSeconds: 5
+            successThreshold: 3
             failureThreshold: 3
           {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
           volumeMounts:

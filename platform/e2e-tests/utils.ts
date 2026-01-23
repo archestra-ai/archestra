@@ -184,7 +184,10 @@ export async function selectCredentialAndAssignAllTools({
   // Select the credential option (closes the Select dropdown)
   await page.getByRole("option", { name: credentialName }).click();
   // Click "Select All" to assign all tools (if not already all selected)
-  const selectAllButton = page.getByRole("button", { name: "Select All", exact: true });
+  const selectAllButton = page.getByRole("button", {
+    name: "Select All",
+    exact: true,
+  });
   if (await selectAllButton.isEnabled()) {
     await selectAllButton.click();
   }

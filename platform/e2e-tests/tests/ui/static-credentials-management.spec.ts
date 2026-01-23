@@ -366,7 +366,11 @@ test("Verify tool calling using different static credentials", async ({
   await adminPage.waitForTimeout(500);
   // Make sure at least one tool is selected - scope to the popover content
   const adminPopoverContent = adminPage.locator('[data-radix-popper-content-wrapper]');
-  await adminPopoverContent.getByRole("button", { name: "Select All", exact: true }).click();
+  // Only click "Select All" if it's enabled (not all tools are already selected)
+  const adminSelectAllButton = adminPopoverContent.getByRole("button", { name: "Select All", exact: true });
+  if (await adminSelectAllButton.isEnabled()) {
+    await adminSelectAllButton.click();
+  }
   // Close the popover by pressing Escape
   await adminPage.keyboard.press("Escape");
   // Click Save button in the main dialog
@@ -392,7 +396,11 @@ test("Verify tool calling using different static credentials", async ({
   await editorPage.waitForTimeout(500);
   // Make sure at least one tool is selected - scope to the popover content
   const editorPopoverContent = editorPage.locator('[data-radix-popper-content-wrapper]');
-  await editorPopoverContent.getByRole("button", { name: "Select All", exact: true }).click();
+  // Only click "Select All" if it's enabled (not all tools are already selected)
+  const editorSelectAllButton = editorPopoverContent.getByRole("button", { name: "Select All", exact: true });
+  if (await editorSelectAllButton.isEnabled()) {
+    await editorSelectAllButton.click();
+  }
   // Close the popover by pressing Escape
   await editorPage.keyboard.press("Escape");
   // Click Save button in the main dialog

@@ -234,7 +234,11 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await adminPage.waitForTimeout(500);
     // Make sure at least one tool is selected - scope to the popover content
     const popoverContent1 = adminPage.locator('[data-radix-popper-content-wrapper]');
-    await popoverContent1.getByRole("button", { name: "Select All", exact: true }).click();
+    // Only click "Select All" if it's enabled (not all tools are already selected)
+    const selectAllButton1 = popoverContent1.getByRole("button", { name: "Select All", exact: true });
+    if (await selectAllButton1.isEnabled()) {
+      await selectAllButton1.click();
+    }
     // Close the popover by pressing Escape
     await adminPage.keyboard.press("Escape");
     // Click Save button in the main dialog
@@ -317,7 +321,11 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await adminPage.waitForTimeout(500);
     // Make sure at least one tool is selected - scope to the popover content
     const popoverContent2 = adminPage.locator('[data-radix-popper-content-wrapper]');
-    await popoverContent2.getByRole("button", { name: "Select All", exact: true }).click();
+    // Only click "Select All" if it's enabled (not all tools are already selected)
+    const selectAllButton2 = popoverContent2.getByRole("button", { name: "Select All", exact: true });
+    if (await selectAllButton2.isEnabled()) {
+      await selectAllButton2.click();
+    }
     // Close the popover by pressing Escape
     await adminPage.keyboard.press("Escape");
     // Click Save button in the main dialog

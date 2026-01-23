@@ -95,6 +95,9 @@ test("Verify tool calling using dynamic credentials", async ({
   });
   // Select "Resolve at call time" (dynamic credential) from dropdown
   await adminPage.getByRole("option", { name: "Resolve at call time" }).click();
+  // Close the popover by pressing Escape
+  await adminPage.keyboard.press("Escape");
+  await adminPage.waitForTimeout(200);
   // Click Save button at the bottom of the McpAssignmentsDialog
   await clickButton({ page: adminPage, options: { name: "Save" } });
   await adminPage.waitForLoadState("networkidle");

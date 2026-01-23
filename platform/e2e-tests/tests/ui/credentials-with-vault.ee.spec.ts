@@ -229,6 +229,9 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     });
     // Select default team credential from dropdown
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
+    // Close the popover by pressing Escape
+    await adminPage.keyboard.press("Escape");
+    await adminPage.waitForTimeout(200);
     // Click Save button at the bottom of the McpAssignmentsDialog
     await clickButton({ page: adminPage, options: { name: "Save" } });
     await adminPage.waitForLoadState("networkidle");
@@ -304,6 +307,9 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     });
     // Select default team credential from dropdown
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
+    // Close the popover by pressing Escape
+    await adminPage.keyboard.press("Escape");
+    await adminPage.waitForTimeout(200);
     // Click Save button at the bottom of the McpAssignmentsDialog
     await clickButton({ page: adminPage, options: { name: "Save" } });
     await adminPage.waitForLoadState("networkidle");

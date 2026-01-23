@@ -362,6 +362,9 @@ test("Verify tool calling using different static credentials", async ({
   });
   // Select admin static credential from dropdown
   await adminPage.getByRole("option", { name: "admin@example.com" }).click();
+  // Close the popover by pressing Escape
+  await adminPage.keyboard.press("Escape");
+  await adminPage.waitForTimeout(200);
   // Click Save button at the bottom of the McpAssignmentsDialog
   await clickButton({ page: adminPage, options: { name: "Save" } });
   await adminPage.waitForLoadState("networkidle");
@@ -381,6 +384,9 @@ test("Verify tool calling using different static credentials", async ({
   });
   // Select editor static credential from dropdown
   await editorPage.getByRole("option", { name: "editor@example.com" }).click();
+  // Close the popover by pressing Escape
+  await editorPage.keyboard.press("Escape");
+  await editorPage.waitForTimeout(200);
   // Click Save button at the bottom of the McpAssignmentsDialog
   await clickButton({ page: editorPage, options: { name: "Save" } });
   await editorPage.waitForLoadState("networkidle");

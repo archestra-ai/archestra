@@ -11,11 +11,11 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AgentToolsEditor,
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -567,7 +567,18 @@ export function AgentDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="-mr-6 pr-6 flex-1 overflow-y-auto py-4">
+        <div className="-mr-6 pr-6 flex-1 overflow-y-auto py-4 space-y-4">
+          {agentType === "profile" && (
+            <Alert variant="warning">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                This is a legacy entity that works both as MCP Gateway and LLM
+                Proxy. It appears on both tables and shares Name, Team, and
+                Labels.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="rounded-lg border bg-card p-4 space-y-4">
             {/* Name */}
             <div className="space-y-2">

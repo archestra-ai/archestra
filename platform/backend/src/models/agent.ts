@@ -1,4 +1,4 @@
-import { DEFAULT_PROFILE_NAME, isArchestraMcpServerTool } from "@shared";
+import { DEFAULT_PROFILE_NAME } from "@shared";
 import {
   and,
   asc,
@@ -515,8 +515,8 @@ class AgentModel {
         });
       }
 
-      // Add tool if it exists and is not an Archestra MCP tool (leftJoin returns null for agents with no tools)
-      if (tool && !isArchestraMcpServerTool(tool.name)) {
+      // Add tool if it exists (leftJoin returns null for agents with no tools)
+      if (tool) {
         agentsMap.get(agent.id)?.tools.push(tool);
       }
     }
@@ -629,10 +629,7 @@ class AgentModel {
     const agent = rows[0].agents;
     const tools = rows
       .map((row) => row.tools)
-      .filter(
-        (tool): tool is NonNullable<typeof tool> =>
-          tool !== null && !isArchestraMcpServerTool(tool.name),
-      );
+      .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
 
     const teams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const labels = await AgentLabelModel.getLabelsForAgent(id);
@@ -668,10 +665,7 @@ class AgentModel {
       const agent = rows[0].agents;
       const tools = rows
         .map((row) => row.tools)
-        .filter(
-          (tool): tool is NonNullable<typeof tool> =>
-            tool !== null && !isArchestraMcpServerTool(tool.name),
-        );
+        .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
 
       return {
         ...agent,

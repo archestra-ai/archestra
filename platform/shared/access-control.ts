@@ -718,6 +718,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm-proxies": {
     profile: ["read"],
   },
+  "/agents": {
+    profile: ["read"],
+  },
 
   "/logs": {
     interaction: ["read"],

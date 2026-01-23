@@ -265,28 +265,41 @@ jobs:
             runner: e2e-runner-16cpu
             projects: api
             shard: ""
+            extra_args: ""
             artifact: blob-report-api
           # UI tests - sharded across 3 parallel jobs
+          # Tests tagged @firefox/@webkit are excluded here and run in a dedicated sequential job
           - name: UI 1/3
             runner: e2e-runner-16cpu
-            projects: chromium --project=firefox --project=webkit --project=sso
+            projects: chromium --project=sso
             shard: "--shard=1/3"
+            extra_args: "--grep-invert '@firefox|@webkit'"
             artifact: blob-report-ui-1
           - name: UI 2/3
             runner: e2e-runner-16cpu
-            projects: chromium --project=firefox --project=webkit --project=sso
+            projects: chromium --project=sso
             shard: "--shard=2/3"
+            extra_args: "--grep-invert '@firefox|@webkit'"
             artifact: blob-report-ui-2
           - name: UI 3/3
             runner: e2e-runner-16cpu
-            projects: chromium --project=firefox --project=webkit --project=sso
+            projects: chromium --project=sso
             shard: "--shard=3/3"
+            extra_args: "--grep-invert '@firefox|@webkit'"
             artifact: blob-report-ui-3
+          # Multi-browser tests - run sequentially to avoid race conditions on shared backend state
+          - name: Multi-browser
+            runner: e2e-runner-16cpu
+            projects: chromium --project=firefox --project=webkit
+            shard: ""
+            extra_args: "--grep '@firefox|@webkit' --workers=1"
+            artifact: blob-report-multi-browser
           # Vault tests - isolated to avoid race conditions with secrets manager switching
           - name: Vault
             runner: e2e-runner-16cpu
             projects: credentials-with-vault
             shard: ""
+            extra_args: ""
             artifact: blob-report-vault
     steps:
       - name: Checkout repository
@@ -361,7 +374,7 @@ jobs:
             -e CI=true \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=${{ matrix.projects }} ${{ matrix.shard }}" \
+            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=${{ matrix.projects }} ${{ matrix.shard }} ${{ matrix.extra_args }}" \
             2>&1 | tee playwright-output.txt
 
       - name: Check for flaky tests

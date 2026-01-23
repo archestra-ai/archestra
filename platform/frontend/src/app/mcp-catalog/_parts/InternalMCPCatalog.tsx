@@ -160,6 +160,12 @@ export function InternalMCPCatalog({
               queryClient.invalidateQueries({
                 queryKey: ["tools", "unassigned"],
               });
+              // Invalidate catalog tools so the manage-tools dialog shows discovered tools
+              if (server.catalogId) {
+                queryClient.invalidateQueries({
+                  queryKey: ["mcp-catalog", server.catalogId, "tools"],
+                });
+              }
             } else if (server.localInstallationStatus === "error") {
               toast.error(`Failed to install ${server.name}`);
             }

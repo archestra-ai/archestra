@@ -7,6 +7,7 @@ import {
   clickButton,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   openManageCredentialsDialog,
+  selectCredentialAndAssignAllTools,
   verifyToolCallResultViaApi,
 } from "../../utils";
 
@@ -93,16 +94,10 @@ test("Verify tool calling using dynamic credentials", async ({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  // Wait for dropdown option to be visible and stable before clicking
-  const resolveAtCallTimeOption = adminPage.getByRole("option", {
-    name: "Resolve at call time",
+  await selectCredentialAndAssignAllTools({
+    page: adminPage,
+    credentialName: "Resolve at call time",
   });
-  await resolveAtCallTimeOption.waitFor({ state: "visible" });
-  // Additional wait to ensure option is stable (not animating)
-  await adminPage.waitForTimeout(200);
-  await resolveAtCallTimeOption.click();
-  await adminPage.getByText("Assign to 1 profile").click();
-  await adminPage.waitForLoadState("networkidle");
 
   /**
    * Credentials we have:

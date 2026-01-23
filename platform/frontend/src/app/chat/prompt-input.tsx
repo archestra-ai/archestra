@@ -41,8 +41,6 @@ interface ArchestraPromptInputProps {
   messageCount?: number;
   // Tools integration props
   agentId: string;
-  /** Prompt ID for tool state management */
-  promptId?: string | null;
   /** Optional - if not provided, it's initial chat mode (no conversation yet) */
   conversationId?: string;
   // API key selector props
@@ -68,7 +66,6 @@ const PromptInputContent = ({
   onModelChange,
   messageCount,
   agentId,
-  promptId,
   conversationId,
   currentConversationChatApiKeyId,
   currentProvider,
@@ -99,7 +96,6 @@ const PromptInputContent = ({
           <>
             <ChatToolsDisplay
               agentId={agentId}
-              promptId={promptId}
               conversationId={conversationId}
             />
             <AgentToolsDisplay
@@ -190,7 +186,6 @@ const ArchestraPromptInput = ({
   onModelChange,
   messageCount = 0,
   agentId,
-  promptId,
   conversationId,
   currentConversationChatApiKeyId,
   currentProvider,
@@ -210,7 +205,6 @@ const ArchestraPromptInput = ({
           onModelChange={onModelChange}
           messageCount={messageCount}
           agentId={agentId}
-          promptId={promptId}
           conversationId={conversationId}
           currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}

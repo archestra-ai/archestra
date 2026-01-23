@@ -55,13 +55,6 @@ archestra:
       maxUnavailable: 0
       maxSurge: 1
 
-  # Minimum number of seconds a new pod must be Ready before the Deployment considers
-  # it available (and proceeds to terminate old pods during a rolling update).
-  # This prevents old pods from being killed when new pods pass readiness briefly but
-  # then crash, which causes chunk loading errors when the HTML served by the new pod
-  # references static assets that only exist on that (now-dead) pod.
-  minReadySeconds: 30
-
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable
   #

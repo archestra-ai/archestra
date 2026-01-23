@@ -419,14 +419,6 @@ class AgentModel {
           toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
         })
         .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        // Double backslash needed: JS consumes one level, SQL gets the other
-        .where(
-          sql`NOT ${schema.toolsTable.name} LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
-        )
         .groupBy(schema.agentToolsTable.agentId)
         .as("toolsCounts");
 

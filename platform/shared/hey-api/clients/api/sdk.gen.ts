@@ -746,7 +746,7 @@ export const getInteractions = <ThrowOnError extends boolean = false>(options?: 
 export const getInteractionSessions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionSessionsData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionSessionsResponses, GetInteractionSessionsErrors, ThrowOnError>({ url: '/api/interactions/sessions', ...options });
 
 /**
- * Get all unique external agent IDs for filtering (from X-Archestra-Agent-Id header)
+ * Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)
  */
 export const getUniqueExternalAgentIds = <ThrowOnError extends boolean = false>(options?: Options<GetUniqueExternalAgentIdsData, ThrowOnError>) => (options?.client ?? client).get<GetUniqueExternalAgentIdsResponses, GetUniqueExternalAgentIdsErrors, ThrowOnError>({ url: '/api/interactions/external-agent-ids', ...options });
 

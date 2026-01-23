@@ -13871,7 +13871,10 @@ export type GetUniqueExternalAgentIdsResponses = {
     /**
      * Default Response
      */
-    200: Array<string>;
+    200: Array<{
+        id: string;
+        displayName: string;
+    }>;
 };
 
 export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];

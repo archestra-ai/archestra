@@ -48174,7 +48174,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique external agent IDs for filtering (from X-Archestra-Agent-Id header)",
+        "description": "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -48183,7 +48183,20 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "displayName"
+                    ],
+                    "additionalProperties": false
                   }
                 }
               }

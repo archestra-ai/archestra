@@ -448,24 +448,55 @@ async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
     }>;
   };
 
+  logger.info(
+    { url, modelCount: data.modelSummaries?.length, data },
+    "[fetchBedrockModels] full response from Bedrock ListFoundationModels",
+  );
+
   if (!data.modelSummaries) {
     logger.warn("No models returned from Bedrock ListFoundationModels");
     return [];
   }
 
-  // Filter to only include models that support on-demand inference
+  // Filter to include models that support on-demand or inference profile (cross-region)
+  // INFERENCE_PROFILE models (like Claude) require the prefix env var to be set
+  const inferenceProfilePrefix = config.llm.bedrock.inferenceProfilePrefix;
+
   return data.modelSummaries
-    .filter(
-      (model) => model.inferenceTypesSupported?.includes("ON_DEMAND") ?? false,
-    )
+    .filter((model) => {
+      // Must support TEXT input modality
+      if (!model.inputModalities?.includes("TEXT")) {
+        return false;
+      }
+
+      const supportsOnDemand =
+        model.inferenceTypesSupported?.includes("ON_DEMAND");
+      const supportsInferenceProfile =
+        model.inferenceTypesSupported?.includes("INFERENCE_PROFILE");
+
+      // Include ON_DEMAND models always
+      // Include INFERENCE_PROFILE models only if prefix is configured
+      return supportsOnDemand || (supportsInferenceProfile && inferenceProfilePrefix);
+    })
     .map((model) => {
       // Generate a readable display name
       const providerName = model.providerName || "Unknown";
       const modelName = model.modelName || model.modelId || "Unknown Model";
       const displayName = `${providerName} ${modelName}`;
 
+      // For INFERENCE_PROFILE models, prefix with region (e.g., "us" or "eu")
+      const isInferenceProfile =
+        model.inferenceTypesSupported?.includes("INFERENCE_PROFILE");
+      const prefix = inferenceProfilePrefix.endsWith(".")
+        ? inferenceProfilePrefix
+        : `${inferenceProfilePrefix}.`;
+      const modelId =
+        isInferenceProfile && inferenceProfilePrefix
+          ? `${prefix}${model.modelId}`
+          : model.modelId;
+
       return {
-        id: model.modelId || "",
+        id: modelId || "",
         displayName,
         provider: "bedrock" as const,
       };

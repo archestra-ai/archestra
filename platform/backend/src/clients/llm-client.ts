@@ -276,6 +276,10 @@ export function createLLMModel(params: {
       apiKey, // Bearer token for proxy authentication
       region: "us-east-1", // Placeholder - proxy extracts actual region from base URL
       baseURL: `http://localhost:${config.api.port}/v1/bedrock/${agentId}`,
+      secretAccessKey: undefined,
+      accessKeyId: undefined,
+      sessionToken: undefined,
+      credentialProvider: undefined,
       headers,
     });
     return client(modelName);

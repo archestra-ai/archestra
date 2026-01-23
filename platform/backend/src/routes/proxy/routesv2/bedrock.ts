@@ -71,8 +71,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.BedrockConverseWithAgent,
-        description:
-          "Send a message to Amazon Bedrock for a specific agent",
+        description: "Send a message to Amazon Bedrock for a specific agent",
         tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -246,7 +245,8 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       // Inject modelId from URL into request body if not present
       const bodyWithModel = {
         ...request.body,
-        modelId: request.body.modelId || decodeURIComponent(request.params.modelId),
+        modelId:
+          request.body.modelId || decodeURIComponent(request.params.modelId),
         _isStreaming: false,
       };
 
@@ -306,7 +306,8 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       // Inject modelId from URL into request body
       const bodyWithModel = {
         ...request.body,
-        modelId: request.body.modelId || decodeURIComponent(request.params.modelId),
+        modelId:
+          request.body.modelId || decodeURIComponent(request.params.modelId),
         _isStreaming: true,
       };
 

@@ -71,9 +71,11 @@ export const ConverseRequestSchema = z.object({
  * Schema variant for AI SDK routes where modelId comes from URL path.
  * The route handler injects modelId from URL params before processing.
  */
-export const ConverseRequestWithModelInUrlSchema = ConverseRequestSchema.extend({
-  modelId: z.string().optional(),
-});
+export const ConverseRequestWithModelInUrlSchema = ConverseRequestSchema.extend(
+  {
+    modelId: z.string().optional(),
+  },
+);
 
 // =============================================================================
 // RESPONSE SCHEMAS

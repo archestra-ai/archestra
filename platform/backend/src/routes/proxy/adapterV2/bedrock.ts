@@ -1,14 +1,8 @@
-import {
-  BedrockRuntimeClient,
-  ConverseCommand,
-  type ConverseCommandInput,
-  ConverseStreamCommand,
-  type ConverseStreamCommandInput,
-  type ConverseStreamOutput,
-} from "@aws-sdk/client-bedrock-runtime";
+import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { encode as toonEncode } from "@toon-format/toon";
+import { BedrockClient } from "@/clients/bedrock-client";
 import config from "@/config";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
@@ -1291,7 +1285,7 @@ export const bedrockAdapterFactory: LLMProvider<
   createClient(
     apiKey: string | undefined,
     _options?: CreateClientOptions,
-  ): BedrockRuntimeClient {
+  ): BedrockClient {
     logger.info(
       { hasApiKey: !!apiKey, apiKeyLength: apiKey?.length },
       "[BedrockAdapter] createClient called",
@@ -1305,41 +1299,14 @@ export const bedrockAdapterFactory: LLMProvider<
 
     logger.info({ region }, "[BedrockAdapter] region extracted from baseUrl");
     logger.info({ endpoint: baseUrl }, "[BedrockAdapter] baseUrl");
-    logger.info({ apiKey }, "[BedrockAdapter] apiKey");
+    logger.info({ hasApiKey: !!apiKey }, "[BedrockAdapter] apiKey");
 
-    // When using Bearer token auth, provide dummy credentials to bypass SigV4 signing
-    // The SDK requires credentials but we'll use Bearer token instead
-    const clientConfig: ConstructorParameters<typeof BedrockRuntimeClient>[0] =
-      {
-        region,
-        endpoint: baseUrl || undefined,
-      };
-
-    // if (apiKey) {
-    //   // Dummy credentials to prevent SDK from trying to load real AWS credentials
-    //   clientConfig.credentials = {
-    //     accessKeyId: "bearer-token-auth",
-    //     secretAccessKey: "bearer-token-auth",
-    //   };
-    // }
-
-    const client = new BedrockRuntimeClient(clientConfig);
-
-    // Add bearer token auth middleware
-    if (apiKey) {
-      client.middlewareStack.add(
-        (next) => async (args) => {
-          const request = args.request as { headers: Record<string, string> };
-          request.headers.Authorization = `Bearer ${apiKey}`;
-          return next(args);
-        },
-        {
-          step: "build",
-          name: "addBearerToken",
-          priority: "high",
-        },
-      );
-    }
+    // Create fetch-based client with Bearer token auth when apiKey is provided
+    const client = new BedrockClient({
+      baseUrl,
+      region,
+      apiKey,
+    });
 
     return client;
   },
@@ -1348,17 +1315,18 @@ export const bedrockAdapterFactory: LLMProvider<
     client: unknown,
     request: BedrockRequest,
   ): Promise<BedrockResponse> {
-    const bedrockClient = client as BedrockRuntimeClient;
+    const bedrockClient = client as BedrockClient;
     const commandInput = getCommandInput(request);
     // Only build mapping for Nova models (which require tool name encoding)
     const toolNameMapping = isNovaModel(request.modelId)
       ? buildToolNameMapping(request)
       : new Map<string, string>();
 
-    const command = new ConverseCommand(
-      commandInput as unknown as ConverseCommandInput,
+    // Use fetch-based client.converse()
+    const response = await bedrockClient.converse(
+      request.modelId,
+      commandInput,
     );
-    const response = await bedrockClient.send(command);
 
     // Convert response to our internal format with decoded tool names
     const outputContent: Array<
@@ -1416,105 +1384,11 @@ export const bedrockAdapterFactory: LLMProvider<
     client: unknown,
     request: BedrockRequest,
   ): Promise<AsyncIterable<BedrockStreamEventWithRaw>> {
-    const bedrockClient = client as BedrockRuntimeClient;
+    const bedrockClient = client as BedrockClient;
     const commandInput = getCommandInput(request);
 
-    const command = new ConverseStreamCommand(
-      commandInput as unknown as ConverseStreamCommandInput,
-    );
-    const response = await bedrockClient.send(command);
-
-    // Return async iterable that yields stream events with re-encoded raw bytes
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        if (!response.stream) return;
-
-        for await (const event of response.stream) {
-          // Re-encode the event to binary format for passthrough
-          // biome-ignore lint/suspicious/noExplicitAny: Building event dynamically from SDK response
-          const eventWithRaw: any = { ...event };
-
-          // Determine event type and encode to binary
-          if ("messageStart" in event && event.messageStart) {
-            eventWithRaw.__rawBytes = encodeEventStreamMessage(
-              "messageStart",
-              event.messageStart,
-            );
-          } else if ("contentBlockStart" in event && event.contentBlockStart) {
-            eventWithRaw.__rawBytes = encodeEventStreamMessage(
-              "contentBlockStart",
-              event.contentBlockStart,
-            );
-          } else if ("contentBlockDelta" in event && event.contentBlockDelta) {
-            eventWithRaw.__rawBytes = encodeEventStreamMessage(
-              "contentBlockDelta",
-              event.contentBlockDelta,
-            );
-          } else if ("contentBlockStop" in event && event.contentBlockStop) {
-            eventWithRaw.__rawBytes = encodeEventStreamMessage(
-              "contentBlockStop",
-              event.contentBlockStop,
-            );
-          } else if ("messageStop" in event && event.messageStop) {
-            eventWithRaw.__rawBytes = encodeEventStreamMessage(
-              "messageStop",
-              event.messageStop,
-            );
-          } else if ("metadata" in event && event.metadata) {
-            eventWithRaw.__rawBytes = encodeEventStreamMessage(
-              "metadata",
-              event.metadata,
-            );
-          } else if (
-            "internalServerException" in event &&
-            event.internalServerException
-          ) {
-            logger.error(
-              { event },
-              "[BedrockStream] Internal server exception",
-            );
-            throw new Error(
-              event.internalServerException.message ?? "Internal server error",
-            );
-          } else if (
-            "modelStreamErrorException" in event &&
-            event.modelStreamErrorException
-          ) {
-            logger.error({ event }, "[BedrockStream] Model stream error");
-            throw new Error(
-              event.modelStreamErrorException.message ?? "Model stream error",
-            );
-          } else if (
-            "serviceUnavailableException" in event &&
-            event.serviceUnavailableException
-          ) {
-            logger.error({ event }, "[BedrockStream] Service unavailable");
-            throw new Error(
-              event.serviceUnavailableException.message ??
-                "Service unavailable",
-            );
-          } else if (
-            "throttlingException" in event &&
-            event.throttlingException
-          ) {
-            logger.error({ event }, "[BedrockStream] Throttling exception");
-            throw new Error(
-              event.throttlingException.message ?? "Request throttled",
-            );
-          } else if (
-            "validationException" in event &&
-            event.validationException
-          ) {
-            logger.error({ event }, "[BedrockStream] Validation exception");
-            throw new Error(
-              event.validationException.message ?? "Validation error",
-            );
-          }
-
-          yield eventWithRaw as BedrockStreamEventWithRaw;
-        }
-      },
-    };
+    // Use fetch-based client.converseStream() - returns events with __rawBytes already set
+    return bedrockClient.converseStream(request.modelId, commandInput);
   },
 
   extractErrorMessage(error: unknown): string {

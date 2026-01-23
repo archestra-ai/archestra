@@ -74,6 +74,7 @@
     "@smithy/util-utf8": "^4.2.0",
     "@toon-format/toon": "^2.1.0",
     "ai": "^6.0.22",
+    "aws4fetch": "^1.0.20",
     "better-auth": "1.4.10",
     "botbuilder": "^4.23.3",
     "botframework-connector": "^4.23.3",

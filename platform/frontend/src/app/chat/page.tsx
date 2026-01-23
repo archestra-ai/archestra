@@ -141,7 +141,7 @@ export default function ChatPage() {
   >(null);
   const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
 
-  // Set initial agent from URL param or default when data loads
+  // Set initial agent from URL param, localStorage, or default when data loads
   useEffect(() => {
     // Wait for internal agents to load - these are the chat-compatible agents
     if (internalAgents.length === 0) return;
@@ -159,9 +159,14 @@ export default function ChatPage() {
       }
     }
 
-    // Default to first internal agent if no initialAgentId set
+    // Try to restore from localStorage, then default to first internal agent
     // Internal agents are the chat-compatible agents shown in the InitialAgentSelector
     if (!initialAgentId) {
+      const savedAgentId = localStorage.getItem("selected-chat-agent");
+      if (savedAgentId && internalAgents.some((a) => a.id === savedAgentId)) {
+        setInitialAgentId(savedAgentId);
+        return;
+      }
       setInitialAgentId(internalAgents[0].id);
     }
   }, [initialAgentId, searchParams, internalAgents]);
@@ -649,6 +654,7 @@ export default function ChatPage() {
   // Handle initial agent change (when no conversation exists)
   const handleInitialAgentChange = useCallback((agentId: string) => {
     setInitialAgentId(agentId);
+    localStorage.setItem("selected-chat-agent", agentId);
   }, []);
 
   // Handle initial submit (when no conversation exists)

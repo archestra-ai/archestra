@@ -17,7 +17,6 @@ import {
   getVisibleStaticCredentials,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   openManageCredentialsDialog,
-  selectCredentialAndAssignAllTools,
   verifyToolCallResultViaApi,
 } from "../../utils";
 
@@ -361,11 +360,12 @@ test("Verify tool calling using different static credentials", async ({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  await selectCredentialAndAssignAllTools({
-    page: adminPage,
-    credentialName: "admin@example.com",
-  });
-  // Verify tool call result using admin static credentials
+  // Select admin static credential from dropdown
+  await adminPage.getByRole("option", { name: "admin@example.com" }).click();
+  // Click Save button at the bottom of the McpAssignmentsDialog
+  await clickButton({ page: adminPage, options: { name: "Save" } });
+  await adminPage.waitForLoadState("networkidle");
+  // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
     request,
     expectedResult: "Admin-personal-credential",
@@ -379,10 +379,11 @@ test("Verify tool calling using different static credentials", async ({
     page: editorPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  await selectCredentialAndAssignAllTools({
-    page: editorPage,
-    credentialName: "editor@example.com",
-  });
+  // Select editor static credential from dropdown
+  await editorPage.getByRole("option", { name: "editor@example.com" }).click();
+  // Click Save button at the bottom of the McpAssignmentsDialog
+  await clickButton({ page: editorPage, options: { name: "Save" } });
+  await editorPage.waitForLoadState("networkidle");
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({
     request,

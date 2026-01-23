@@ -10,7 +10,6 @@ import {
   addCustomSelfHostedCatalogItem,
   clickButton,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
-  selectCredentialAndAssignAllTools,
   verifyToolCallResultViaApi,
 } from "../../utils";
 
@@ -228,10 +227,11 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       page: adminPage,
       catalogItemName: newCatalogItem.name,
     });
-    await selectCredentialAndAssignAllTools({
-      page: adminPage,
-      credentialName: DEFAULT_TEAM_NAME,
-    });
+    // Select default team credential from dropdown
+    await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
+    // Click Save button at the bottom of the McpAssignmentsDialog
+    await clickButton({ page: adminPage, options: { name: "Save" } });
+    await adminPage.waitForLoadState("networkidle");
 
     // Verify tool call result using default team credential
     await verifyToolCallResultViaApi({
@@ -302,10 +302,11 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       page: adminPage,
       catalogItemName: newCatalogItem.name,
     });
-    await selectCredentialAndAssignAllTools({
-      page: adminPage,
-      credentialName: DEFAULT_TEAM_NAME,
-    });
+    // Select default team credential from dropdown
+    await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
+    // Click Save button at the bottom of the McpAssignmentsDialog
+    await clickButton({ page: adminPage, options: { name: "Save" } });
+    await adminPage.waitForLoadState("networkidle");
 
     // Verify tool call result using default team credential
     await verifyToolCallResultViaApi({

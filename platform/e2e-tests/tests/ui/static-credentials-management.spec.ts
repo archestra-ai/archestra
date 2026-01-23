@@ -365,7 +365,7 @@ test("Verify tool calling using different static credentials", async ({
     page: adminPage,
     credentialName: "admin@example.com",
   });
-  // Verify tool call result using admin static credential
+  // Verify tool call result using admin static credentials
   await verifyToolCallResultViaApi({
     request,
     expectedResult: "Admin-personal-credential",

@@ -70,10 +70,15 @@ jobs:
 
   build-and-push-platform-docker-image-to-dockerhub:
     name: Build and push platform Docker image to Docker Hub
+    # The platform Docker image references the MCP server base image via ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE.
+    # This job depends on build-and-push-mcp-server-docker-image to ensure the MCP server base image is published
+    # first. If the MCP server image build fails, this job won't run, preventing the platform image from
+    # referencing a non-existent MCP server base image tag.
     if: needs.release-please.outputs.platform_release_created
     uses: ./.github/workflows/build-dockerhub-image.yml
     needs:
       - release-please
+      - build-and-push-mcp-server-docker-image
     permissions:
       contents: read
       id-token: write

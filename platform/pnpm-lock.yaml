@@ -37,19 +37,19 @@ importers:
   backend:
     dependencies:
       '@ai-sdk/anthropic':
-        specifier: ^3.0.9
+        specifier: ^3.0.14
         version: 3.0.14(zod@4.3.5)
       '@ai-sdk/cerebras':
-        specifier: ^2.0.5
+        specifier: ^2.0.13
         version: 2.0.13(zod@4.3.5)
       '@ai-sdk/cohere':
         specifier: ^3.0.8
         version: 3.0.8(zod@4.3.5)
       '@ai-sdk/google':
-        specifier: ^3.0.6
+        specifier: ^3.0.9
         version: 3.0.9(zod@4.3.5)
       '@ai-sdk/openai':
-        specifier: ^3.0.7
+        specifier: ^3.0.11
         version: 3.0.11(zod@4.3.5)
       '@anthropic-ai/sdk':
         specifier: ^0.71.2

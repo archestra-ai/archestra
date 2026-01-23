@@ -89,6 +89,10 @@
         {
           "type": "generic",
           "path": "helm/archestra/values.yaml"
+        },
+        {
+          "type": "generic",
+          "path": "backend/src/config.ts"
         }
       ]
     }

@@ -155,29 +155,17 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 
   await manageToolsButton.click();
-
-  // Wait for the dialog to open - the new McpAssignmentsDialog shows profile pills
-  // Click the first profile pill to open the popover with tool assignments
-  // Profile pills are buttons with the profile name and tool count like "Default (0/1)"
-  const profilePillButton = page
-    .getByRole("dialog")
-    .getByRole("button")
-    .filter({ hasText: /\(\d+\/\d+\)/ })
-    .first();
-  await profilePillButton.waitFor({ state: "visible", timeout: 15000 });
-  await profilePillButton.click();
-
-  // Wait for the popover to open - it contains the TokenSelect (combobox) for credentials
+  await page
+    .getByRole("button", { name: "Assign Tool to Profiles" })
+    .first()
+    .click();
+  await page.getByRole("checkbox").first().click();
   await page.waitForLoadState("networkidle");
-  // Use a more specific selector to find the combobox within the popover content
-  // The popover content has data-radix-popper-content-wrapper attribute
-  const popoverContent = page.locator("[data-radix-popper-content-wrapper]");
-  await popoverContent.waitFor({ state: "visible", timeout: 10000 });
-  const combobox = popoverContent.getByRole("combobox");
-  await combobox.waitFor({ state: "visible", timeout: 5000 });
+  const combobox = page.getByRole("combobox");
+  await combobox.waitFor({ state: "visible" });
   await combobox.click();
-  // Wait for the dropdown options to appear
-  await page.waitForTimeout(500);
+  // Wait a brief moment for dropdown to open (dropdowns are client-side, no network request needed)
+  await page.waitForTimeout(100);
 }
 
 export async function verifyToolCallResultViaApi({

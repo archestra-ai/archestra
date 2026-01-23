@@ -7,9 +7,7 @@ test.describe(
   { tag: ["@firefox", "@webkit"] },
   () => {
     // increase stability
-    // Extended timeout for Firefox/WebKit CI environments where React hydration
-    // and permission checks may take longer than the default 60s
-    test.describe.configure({ mode: "serial", retries: 4, timeout: 120_000 });
+    test.describe.configure({ mode: "serial", retries: 4 });
 
     test("shows error message when email is invalid", async ({
       page,

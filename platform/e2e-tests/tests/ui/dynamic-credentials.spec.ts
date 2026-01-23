@@ -101,24 +101,7 @@ test("Verify tool calling using dynamic credentials", async ({
   // Additional wait to ensure option is stable (not animating)
   await adminPage.waitForTimeout(200);
   await resolveAtCallTimeOption.click();
-  // Wait for the dropdown to close after selecting an option
-  await adminPage.waitForTimeout(500);
-  // Make sure at least one tool is selected - scope to the popover content to avoid matching buttons elsewhere
-  const popoverContent = adminPage.locator(
-    "[data-radix-popper-content-wrapper]",
-  );
-  // Only click "Select All" if it's enabled (not all tools are already selected)
-  const selectAllButton = popoverContent.getByRole("button", {
-    name: "Select All",
-    exact: true,
-  });
-  if (await selectAllButton.isEnabled()) {
-    await selectAllButton.click();
-  }
-  // Close the popover by pressing Escape
-  await adminPage.keyboard.press("Escape");
-  // Click Save button in the main dialog
-  await adminPage.getByRole("button", { name: "Save" }).click();
+  await adminPage.getByText("Assign to 1 profile").click();
   await adminPage.waitForLoadState("networkidle");
 
   /**

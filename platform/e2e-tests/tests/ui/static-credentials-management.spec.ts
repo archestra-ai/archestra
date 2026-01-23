@@ -362,35 +362,7 @@ test("Verify tool calling using different static credentials", async ({
   });
   // Select admin static credential
   await adminPage.getByRole("option", { name: "admin@example.com" }).click();
-  // Wait for the dropdown to close after selecting an option
-  await adminPage.waitForTimeout(500);
-  // Make sure at least one tool is selected - scope to the popover content
-  const adminPopoverContent = adminPage.locator(
-    "[data-radix-popper-content-wrapper]",
-  );
-  // Wait for the popover to be visible (it might have closed when selecting credential)
-  await adminPopoverContent.waitFor({ state: "visible", timeout: 5000 });
-  // Click on the first tool checkbox to ensure at least one tool is selected
-  // This is more reliable than Select All since it directly triggers the change
-  const adminFirstToolCheckbox = adminPopoverContent
-    .locator('button[role="checkbox"]')
-    .first();
-  // Check if the tool is already selected
-  const adminIsChecked =
-    await adminFirstToolCheckbox.getAttribute("data-state");
-  if (adminIsChecked !== "checked") {
-    await adminFirstToolCheckbox.click();
-  }
-  // Close the popover by pressing Escape
-  await adminPage.keyboard.press("Escape");
-  // Wait for the popover to close
-  await adminPage.waitForTimeout(300);
-  // Wait for the Save button to become enabled
-  const adminSaveButton = adminPage.getByRole("button", { name: "Save" });
-  await adminSaveButton.waitFor({ state: "visible", timeout: 5000 });
-  await expect(adminSaveButton).toBeEnabled({ timeout: 10000 });
-  // Click Save button in the main dialog
-  await adminSaveButton.click();
+  await adminPage.getByText("Assign to 1 profile").click();
   await adminPage.waitForLoadState("networkidle");
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
@@ -408,35 +380,7 @@ test("Verify tool calling using different static credentials", async ({
   });
   // Select editor static credential
   await editorPage.getByRole("option", { name: "editor@example.com" }).click();
-  // Wait for the dropdown to close after selecting an option
-  await editorPage.waitForTimeout(500);
-  // Make sure at least one tool is selected - scope to the popover content
-  const editorPopoverContent = editorPage.locator(
-    "[data-radix-popper-content-wrapper]",
-  );
-  // Wait for the popover to be visible (it might have closed when selecting credential)
-  await editorPopoverContent.waitFor({ state: "visible", timeout: 5000 });
-  // Click on the first tool checkbox to ensure at least one tool is selected
-  // This is more reliable than Select All since it directly triggers the change
-  const editorFirstToolCheckbox = editorPopoverContent
-    .locator('button[role="checkbox"]')
-    .first();
-  // Check if the tool is already selected
-  const editorIsChecked =
-    await editorFirstToolCheckbox.getAttribute("data-state");
-  if (editorIsChecked !== "checked") {
-    await editorFirstToolCheckbox.click();
-  }
-  // Close the popover by pressing Escape
-  await editorPage.keyboard.press("Escape");
-  // Wait for the popover to close
-  await editorPage.waitForTimeout(300);
-  // Wait for the Save button to become enabled
-  const editorSaveButton = editorPage.getByRole("button", { name: "Save" });
-  await editorSaveButton.waitFor({ state: "visible", timeout: 5000 });
-  await expect(editorSaveButton).toBeEnabled({ timeout: 10000 });
-  // Click Save button in the main dialog
-  await editorSaveButton.click();
+  await editorPage.getByText("Assign to 1 profile").click();
   await editorPage.waitForLoadState("networkidle");
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({

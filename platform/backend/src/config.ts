@@ -444,8 +444,7 @@ export default {
     },
     cohere: {
       enabled: Boolean(process.env.ARCHESTRA_COHERE_BASE_URL),
-      baseUrl:
-        process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.ai",
+      baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.ai",
     },
     cerebras: {
       baseUrl:
@@ -493,8 +492,7 @@ export default {
     cohere: {
       apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
       baseUrl:
-        process.env.ARCHESTRA_CHAT_COHERE_BASE_URL ||
-        "https://api.cohere.ai",
+        process.env.ARCHESTRA_CHAT_COHERE_BASE_URL || "https://api.cohere.ai",
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",

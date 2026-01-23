@@ -177,12 +177,12 @@ export const updateAgentTool = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
- * Get all delegation targets for an internal agent. Only applicable to internal agents.
+ * Get all delegation targets for an agent. Not applicable to LLM proxies.
  */
 export const getAgentDelegations = <ThrowOnError extends boolean = false>(options: Options<GetAgentDelegationsData, ThrowOnError>) => (options.client ?? client).get<GetAgentDelegationsResponses, GetAgentDelegationsErrors, ThrowOnError>({ url: '/api/agents/{agentId}/delegations', ...options });
 
 /**
- * Sync delegation targets for an internal agent. Replaces all existing delegations with the new list.
+ * Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.
  */
 export const syncAgentDelegations = <ThrowOnError extends boolean = false>(options: Options<SyncAgentDelegationsData, ThrowOnError>) => (options.client ?? client).post<SyncAgentDelegationsResponses, SyncAgentDelegationsErrors, ThrowOnError>({
     url: '/api/agents/{agentId}/delegations',
@@ -194,7 +194,7 @@ export const syncAgentDelegations = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Remove a specific delegation from an internal agent.
+ * Remove a specific delegation from an agent. Not applicable to LLM proxies.
  */
 export const deleteAgentDelegation = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentDelegationData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentDelegationResponses, DeleteAgentDelegationErrors, ThrowOnError>({ url: '/api/agents/{agentId}/delegations/{targetAgentId}', ...options });
 

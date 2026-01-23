@@ -27053,7 +27053,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Get all delegation targets for an internal agent. Only applicable to internal agents.",
+        "description": "Get all delegation targets for an agent. Not applicable to LLM proxies.",
         "parameters": [
           {
             "schema": {
@@ -27317,7 +27317,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Sync delegation targets for an internal agent. Replaces all existing delegations with the new list.",
+        "description": "Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -27602,7 +27602,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Remove a specific delegation from an internal agent.",
+        "description": "Remove a specific delegation from an agent. Not applicable to LLM proxies.",
         "parameters": [
           {
             "schema": {

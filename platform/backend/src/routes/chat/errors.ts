@@ -928,6 +928,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   openai: parseOpenAIError,
   anthropic: parseAnthropicError,
   gemini: parseGeminiError,
+  bedrock: parseAnthropicError, // Bedrock Claude models use Anthropic-like error format
   cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
   vllm: parseVllmError,
   ollama: parseOllamaError,
@@ -943,6 +944,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   openai: mapOpenAIErrorWrapper,
   anthropic: mapAnthropicErrorWrapper,
   gemini: mapGeminiErrorWrapper,
+  bedrock: mapAnthropicErrorWrapper, // Bedrock Claude models use Anthropic-like error format
   cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,

@@ -1,3 +1,4 @@
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createCerebras } from "@ai-sdk/cerebras";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
@@ -97,7 +98,8 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.anthropicApiKey ??
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
-      secret?.secret?.zhipuaiApiKey;
+      secret?.secret?.zhipuaiApiKey ??
+      secret?.secret?.bedrockApiKey;
     if (secretValue) {
       providerApiKey = secretValue as string;
       apiKeySource = resolvedApiKey.scope;
@@ -125,6 +127,9 @@ export async function resolveProviderApiKey(params: {
       providerApiKey = config.chat.ollama.apiKey;
     } else if (provider === "zhipuai" && config.chat.zhipuai.apiKey) {
       providerApiKey = config.chat.zhipuai.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "bedrock" && config.chat.bedrock.apiKey) {
+      providerApiKey = config.chat.bedrock.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -261,6 +266,19 @@ export function createLLMModel(params: {
       headers,
     });
     return client.chat(modelName);
+  }
+
+  if (provider === "bedrock") {
+    // URL format: /v1/bedrock/:agentId (SDK appends /converse)
+    // Bedrock uses Bearer token auth through the proxy
+    logger.info({ apiKey }, "Bedrock chat client API key");
+    const client = createAmazonBedrock({
+      apiKey, // Bearer token for proxy authentication
+      region: "us-east-1", // Placeholder - proxy extracts actual region from base URL
+      baseURL: `http://localhost:${config.api.port}/v1/bedrock/${agentId}`,
+      headers,
+    });
+    return client(modelName);
   }
 
   throw new Error(`Unsupported provider: ${provider}`);

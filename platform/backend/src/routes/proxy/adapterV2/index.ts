@@ -1,4 +1,5 @@
 export { anthropicAdapterFactory } from "./anthropic";
+export { bedrockAdapterFactory } from "./bedrock";
 export { cerebrasAdapterFactory } from "./cerebras";
 export { geminiAdapterFactory } from "./gemini";
 export { ollamaAdapterFactory } from "./ollama";

@@ -29,6 +29,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
+
 // ToolCompressionStats imported from @/types
 
 // =============================================================================
@@ -71,7 +72,10 @@ function generatePadding(currentBodyLength: number, targetSize = 80): string {
  * Encode an event to AWS Event Stream binary format.
  * Adds padding field "p" to match Bedrock's format.
  */
-function encodeEventStreamMessage(eventType: string, body: unknown): Uint8Array {
+function encodeEventStreamMessage(
+  eventType: string,
+  body: unknown,
+): Uint8Array {
   // Add padding to match Bedrock's format
   const bodyWithoutPadding = JSON.stringify(body);
   const padding = generatePadding(bodyWithoutPadding.length);
@@ -215,7 +219,9 @@ class BedrockRequestAdapter
   }
 
   isStreaming(): boolean {
-    return this.request.stream === true;
+    // Check _isStreaming flag injected by routes based on endpoint URL
+    // (converse-stream endpoints set _isStreaming: true, converse endpoints set _isStreaming: false)
+    return this.request._isStreaming === true;
   }
 
   getMessages(): CommonMessage[] {
@@ -1264,15 +1270,12 @@ export const bedrockAdapterFactory: LLMProvider<
     return adapter;
   },
 
+  // TODO: currently extracts only bearer
   extractApiKey(headers: BedrockHeaders): string | undefined {
     // Extract Bearer token from Authorization header
     const authHeader = headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       return authHeader.slice(7);
-    }
-    // Also accept raw token in authorization header
-    if (authHeader && !authHeader.includes(" ")) {
-      return authHeader;
     }
     return undefined;
   },
@@ -1289,6 +1292,10 @@ export const bedrockAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     _options?: CreateClientOptions,
   ): BedrockRuntimeClient {
+    logger.info(
+      { hasApiKey: !!apiKey, apiKeyLength: apiKey?.length },
+      "[BedrockAdapter] createClient called",
+    );
     const baseUrl = config.llm.bedrock.baseUrl;
 
     // Extract region from baseUrl (e.g., https://bedrock-runtime.us-east-1.amazonaws.com)
@@ -1296,10 +1303,27 @@ export const bedrockAdapterFactory: LLMProvider<
     const regionMatch = baseUrl.match(/bedrock-runtime\.([a-z0-9-]+)\./);
     const region = regionMatch?.[1] || "us-east-1";
 
-    const client = new BedrockRuntimeClient({
-      region,
-      endpoint: baseUrl || undefined,
-    });
+    logger.info({ region }, "[BedrockAdapter] region extracted from baseUrl");
+    logger.info({ endpoint: baseUrl }, "[BedrockAdapter] baseUrl");
+    logger.info({ apiKey }, "[BedrockAdapter] apiKey");
+
+    // When using Bearer token auth, provide dummy credentials to bypass SigV4 signing
+    // The SDK requires credentials but we'll use Bearer token instead
+    const clientConfig: ConstructorParameters<typeof BedrockRuntimeClient>[0] =
+      {
+        region,
+        endpoint: baseUrl || undefined,
+      };
+
+    // if (apiKey) {
+    //   // Dummy credentials to prevent SDK from trying to load real AWS credentials
+    //   clientConfig.credentials = {
+    //     accessKeyId: "bearer-token-auth",
+    //     secretAccessKey: "bearer-token-auth",
+    //   };
+    // }
+
+    const client = new BedrockRuntimeClient(clientConfig);
 
     // Add bearer token auth middleware
     if (apiKey) {

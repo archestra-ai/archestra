@@ -165,6 +165,15 @@ export const RouteId = {
     "zhipuaiChatCompletionsWithDefaultAgent",
   ZhipuaiChatCompletionsWithAgent: "zhipuaiChatCompletionsWithAgent",
 
+  // Proxy Routes - AWS Bedrock
+  BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
+  BedrockConverseWithAgent: "bedrockConverseWithAgent",
+  BedrockConverseStreamWithDefaultAgent: "bedrockConverseStreamWithDefaultAgent",
+  BedrockConverseStreamWithAgent: "bedrockConverseStreamWithAgent",
+  // AI SDK compatible routes (model ID in URL)
+  BedrockConverseWithAgentAndModel: "bedrockConverseWithAgentAndModel",
+  BedrockConverseStreamWithAgentAndModel: "bedrockConverseStreamWithAgentAndModel",
+
   // Chat Routes
   StreamChat: "streamChat",
   GetChatConversations: "getChatConversations",

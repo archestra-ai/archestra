@@ -45,7 +45,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       );
       const userId = await utils.userId.getUserId(request.headers);
       return handleLLMProxy(
-        request.body,
+        { ...request.body, _isStreaming: false },
         request.headers,
         reply,
         bedrockAdapterFactory,
@@ -92,7 +92,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       );
       const userId = await utils.userId.getUserId(request.headers);
       return handleLLMProxy(
-        request.body,
+        { ...request.body, _isStreaming: false },
         request.headers,
         reply,
         bedrockAdapterFactory,
@@ -135,8 +135,9 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+
       return handleLLMProxy(
-        request.body,
+        { ...request.body, _isStreaming: true },
         request.headers,
         reply,
         bedrockAdapterFactory,
@@ -182,8 +183,9 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+
       return handleLLMProxy(
-        request.body,
+        { ...request.body, _isStreaming: true },
         request.headers,
         reply,
         bedrockAdapterFactory,
@@ -245,6 +247,7 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const bodyWithModel = {
         ...request.body,
         modelId: request.body.modelId || decodeURIComponent(request.params.modelId),
+        _isStreaming: false,
       };
 
       return handleLLMProxy(
@@ -300,10 +303,11 @@ const bedrockProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       );
       const userId = await utils.userId.getUserId(request.headers);
 
-      // Inject modelId from URL into request body if not present
+      // Inject modelId from URL into request body
       const bodyWithModel = {
         ...request.body,
         modelId: request.body.modelId || decodeURIComponent(request.params.modelId),
+        _isStreaming: true,
       };
 
       return handleLLMProxy(

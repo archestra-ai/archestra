@@ -63,8 +63,8 @@ export const ConverseRequestSchema = z.object({
   performanceConfig: PerformanceConfigSchema.optional(),
   serviceTier: ServiceTierSchema.optional(),
   requestMetadata: z.record(z.string(), z.string()).optional(),
-  // Internal field for proxy compatibility (not in official API)
-  stream: z.boolean().optional(),
+  // Internal flag set by routes based on endpoint URL (converse-stream vs converse)
+  _isStreaming: z.boolean().optional(),
 });
 
 /**

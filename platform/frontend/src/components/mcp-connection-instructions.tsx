@@ -689,7 +689,7 @@ function ReadOnlyMcpServerPill({
     : credentialServer
       ? (credentialServer.teamDetails?.name ??
         credentialServer.ownerEmail ??
-        "Unknown")
+        "Deleted user")
       : null;
 
   // Check if we should show credential section

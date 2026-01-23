@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import {
   forwardRef,
   Suspense,

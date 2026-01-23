@@ -230,7 +230,6 @@ export async function verifyToolCallResultViaApi({
     toolResult = await callMcpTool(request, {
       profileId: defaultProfile.id,
       token,
-      sessionId: "",
       toolName,
     });
   } catch (error) {

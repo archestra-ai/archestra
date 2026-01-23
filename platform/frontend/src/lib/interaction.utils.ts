@@ -117,33 +117,25 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   private getInteractionClass(interaction: Interaction): InteractionUtils {
-    // Note: Type discriminator stored in database determines the interaction type
-    const type = this.type as string;
+    const type = this.type;
     if (type === "openai:chatCompletions") {
       return new OpenAiChatCompletionInteraction(interaction);
-    }
-    if (type === "anthropic:messages") {
+    } else if (type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);
-    } else if (this.type === "zhipuai:chatCompletions") {
+    } else if (type === "zhipuai:chatCompletions") {
       return new ZhipuaiChatCompletionInteraction(interaction);
-    }
-    if (this.type === "cerebras:chatCompletions") {
+    } else if (type === "cerebras:chatCompletions") {
       return new CerebrasChatCompletionInteraction(interaction);
-    }
-    if (this.type === "vllm:chatCompletions") {
+    } else if (type === "vllm:chatCompletions") {
       return new VllmChatCompletionInteraction(interaction);
-    }
-    if (this.type === "ollama:chatCompletions") {
+    } else if (type === "ollama:chatCompletions") {
       return new OllamaChatCompletionInteraction(interaction);
-    }
-    if (this.type === "cohere:chat") {
+    } else if (type === "cohere:chat") {
       return new CohereChatInteraction(interaction);
-    }
-    if (this.provider === "gemini" && this.endpoint === "generateContent") {
+    } else if (type === "gemini:generateContent") {
       return new GeminiGenerateContentInteraction(interaction);
     }
-    // Default to Gemini for any other provider
-    return new GeminiGenerateContentInteraction(interaction);
+    throw new Error(`Unsupported interaction type: ${type}`);
   }
 
   isLastMessageToolCall(): boolean {

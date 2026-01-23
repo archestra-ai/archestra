@@ -161,7 +161,6 @@ export async function callMcpTool(
   options: {
     profileId: string;
     token: string;
-    sessionId: string;
     toolName: string;
     arguments?: Record<string, unknown>;
   },

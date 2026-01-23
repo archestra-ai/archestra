@@ -30,10 +30,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             name: z.string().optional().describe("Filter by agent name"),
             agentType: z
-              .enum(["mcp_gateway", "agent"])
+              .enum(["profile", "mcp_gateway", "llm_proxy", "agent"])
               .optional()
               .describe(
-                "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.",
+                "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.",
               ),
           })
           .merge(PaginationQuerySchema)
@@ -86,10 +86,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Agents"],
         querystring: z.object({
           agentType: z
-            .enum(["mcp_gateway", "agent"])
+            .enum(["profile", "mcp_gateway", "llm_proxy", "agent"])
             .optional()
             .describe(
-              "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.",
+              "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.",
             ),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),

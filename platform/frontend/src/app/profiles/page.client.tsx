@@ -214,7 +214,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   const [connectingProfile, setConnectingProfile] = useState<{
     id: string;
     name: string;
-    agentType: "agent" | "mcp_gateway";
+    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
   } | null>(null);
   const [editingProfile, setEditingProfile] = useState<ProfileData | null>(
     null,
@@ -518,10 +518,10 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
           <AgentDialog
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
-            agentType="mcp_gateway"
+            agentType="profile"
             onCreated={(profile) => {
               setIsCreateDialogOpen(false);
-              setConnectingProfile({ ...profile, agentType: "mcp_gateway" });
+              setConnectingProfile({ ...profile, agentType: "profile" });
             }}
           />
 
@@ -537,7 +537,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
             open={!!editingProfile}
             onOpenChange={(open) => !open && setEditingProfile(null)}
             agent={editingProfile}
-            agentType="mcp_gateway"
+            agentType="profile"
           />
 
           {deletingProfileId && (
@@ -558,7 +558,7 @@ function ProfileConnectionColumns({
   agentType,
 }: {
   agentId: string;
-  agentType: "agent" | "mcp_gateway";
+  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
 }) {
   const [activeTab, setActiveTab] = useState<"proxy" | "mcp" | "a2a">("proxy");
   const isAgent = agentType === "agent";
@@ -703,7 +703,11 @@ function ConnectProfileDialog({
   open,
   onOpenChange,
 }: {
-  agent: { id: string; name: string; agentType: "agent" | "mcp_gateway" };
+  agent: {
+    id: string;
+    name: string;
+    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+  };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {

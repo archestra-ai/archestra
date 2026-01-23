@@ -742,7 +742,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.object({
                 id: z.string().uuid(),
                 name: z.string(),
-                agentType: z.enum(["mcp_gateway", "agent"]),
+                agentType: z.enum([
+                  "profile",
+                  "mcp_gateway",
+                  "llm_proxy",
+                  "agent",
+                ]),
               }),
             ),
           }),

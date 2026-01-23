@@ -248,8 +248,8 @@ interface AgentDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Agent to edit. If null/undefined, creates a new agent */
   agent?: Agent | null;
-  /** Agent type: 'agent' for internal agents with prompts, 'mcp_gateway' for external profiles */
-  agentType?: "mcp_gateway" | "agent";
+  /** Agent type: 'agent' for internal agents with prompts, 'profile' for external profiles */
+  agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
   /** Callback when viewing version history (internal agents only) */
   onViewVersionHistory?: (agent: Agent) => void;
   /** Callback when a new agent/profile is created (not called for updates) */
@@ -260,7 +260,7 @@ export function AgentDialog({
   open,
   onOpenChange,
   agent,
-  agentType = "mcp_gateway",
+  agentType = "profile",
   onViewVersionHistory,
   onCreated,
 }: AgentDialogProps) {
@@ -294,7 +294,7 @@ export function AgentDialog({
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
   const [selectedAgentType, setSelectedAgentType] = useState<
-    "mcp_gateway" | "agent"
+    "profile" | "mcp_gateway" | "llm_proxy" | "agent"
   >(agentType);
   const [subagentsSearch, setSubagentsSearch] = useState("");
   const [subagentsSearchOpen, setSubagentsSearchOpen] = useState(false);
@@ -315,7 +315,7 @@ export function AgentDialog({
         setName(agent.name);
         setUserPrompt(agent.userPrompt || "");
         setSystemPrompt(agent.systemPrompt || "");
-        setSelectedAgentType(agent.agentType || "mcp_gateway");
+        setSelectedAgentType(agent.agentType || "profile");
         // Reset delegation targets - will be populated by the next useEffect when data loads
         setSelectedDelegationTargetIds([]);
         // Parse allowedChatops from agent
@@ -647,15 +647,17 @@ export function AgentDialog({
               <Label htmlFor="agentType">Mode</Label>
               <Select
                 value={selectedAgentType}
-                onValueChange={(value: "mcp_gateway" | "agent") =>
-                  setSelectedAgentType(value)
-                }
+                onValueChange={(
+                  value: "profile" | "mcp_gateway" | "llm_proxy" | "agent",
+                ) => setSelectedAgentType(value)}
               >
                 <SelectTrigger id="agentType" className="w-[200px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="profile">Profile</SelectItem>
                   <SelectItem value="mcp_gateway">MCP Gateway</SelectItem>
+                  <SelectItem value="llm_proxy">LLM Proxy</SelectItem>
                   <SelectItem value="agent">Agent</SelectItem>
                 </SelectContent>
               </Select>

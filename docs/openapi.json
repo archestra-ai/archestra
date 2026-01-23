@@ -19211,14 +19211,16 @@
             "schema": {
               "type": "string",
               "enum": [
+                "profile",
                 "mcp_gateway",
+                "llm_proxy",
                 "agent"
               ]
             },
             "in": "query",
             "name": "agentType",
             "required": false,
-            "description": "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles."
+            "description": "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts."
           },
           {
             "schema": {
@@ -19306,7 +19308,9 @@
                           "agentType": {
                             "type": "string",
                             "enum": [
+                              "profile",
                               "mcp_gateway",
+                              "llm_proxy",
                               "agent"
                             ]
                           },
@@ -19869,7 +19873,9 @@
                   "agentType": {
                     "type": "string",
                     "enum": [
+                      "profile",
                       "mcp_gateway",
+                      "llm_proxy",
                       "agent"
                     ]
                   },
@@ -20004,7 +20010,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -20502,14 +20510,16 @@
             "schema": {
               "type": "string",
               "enum": [
+                "profile",
                 "mcp_gateway",
+                "llm_proxy",
                 "agent"
               ]
             },
             "in": "query",
             "name": "agentType",
             "required": false,
-            "description": "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles."
+            "description": "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts."
           }
         ],
         "responses": {
@@ -20545,7 +20555,9 @@
                       "agentType": {
                         "type": "string",
                         "enum": [
+                          "profile",
                           "mcp_gateway",
+                          "llm_proxy",
                           "agent"
                         ]
                       },
@@ -21070,7 +21082,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -21606,7 +21620,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -22121,7 +22137,9 @@
                   "agentType": {
                     "type": "string",
                     "enum": [
+                      "profile",
                       "mcp_gateway",
+                      "llm_proxy",
                       "agent"
                     ]
                   },
@@ -22263,7 +22281,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -23052,7 +23072,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         },
@@ -23645,7 +23667,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -27866,7 +27890,9 @@
                           "agentType": {
                             "type": "string",
                             "enum": [
+                              "profile",
                               "mcp_gateway",
+                              "llm_proxy",
                               "agent"
                             ]
                           }
@@ -36238,7 +36264,9 @@
                           "agentType": {
                             "type": "string",
                             "enum": [
+                              "profile",
                               "mcp_gateway",
+                              "llm_proxy",
                               "agent"
                             ]
                           }
@@ -36654,7 +36682,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }
@@ -37036,7 +37066,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }
@@ -37463,7 +37495,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }
@@ -38375,7 +38409,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }
@@ -38785,7 +38821,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }

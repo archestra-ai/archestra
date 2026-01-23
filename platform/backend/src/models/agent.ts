@@ -98,7 +98,7 @@ class AgentModel {
   static async findAll(
     userId?: string,
     isAgentAdmin?: boolean,
-    options?: { agentType?: "mcp_gateway" | "agent" },
+    options?: { agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent" },
   ): Promise<Agent[]> {
     let query = db
       .select()
@@ -187,7 +187,7 @@ class AgentModel {
    */
   static async findByOrganizationId(
     organizationId: string,
-    options?: { agentType?: "mcp_gateway" | "agent" },
+    options?: { agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent" },
   ): Promise<Agent[]> {
     const whereConditions: SQL[] = [
       eq(schema.agentsTable.organizationId, organizationId),
@@ -252,7 +252,7 @@ class AgentModel {
   static async findByOrganizationIdAndAccessibleTeams(
     organizationId: string,
     accessibleAgentIds: string[],
-    options?: { agentType?: "mcp_gateway" | "agent" },
+    options?: { agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent" },
   ): Promise<Agent[]> {
     if (accessibleAgentIds.length === 0) {
       return [];
@@ -345,7 +345,10 @@ class AgentModel {
   static async findAllPaginated(
     pagination: PaginationQuery,
     sorting?: SortingQuery,
-    filters?: { name?: string; agentType?: "mcp_gateway" | "agent" },
+    filters?: {
+      name?: string;
+      agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    },
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<PaginatedResult<Agent>> {

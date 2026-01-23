@@ -146,17 +146,6 @@ export default {
       person_profiles: "identified_only",
     } satisfies Partial<PostHogConfig>,
   },
-  orchestrator: {
-    /**
-     * Base Docker image used for MCP servers (shown in UI for reference).
-     */
-    get baseMcpServerDockerImage() {
-      return (
-        env("NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE") ||
-        "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
-      );
-    },
-  },
   /**
    * Mark enterprise license status to hide Archestra-specific branding and UI sections when enabled.
    */

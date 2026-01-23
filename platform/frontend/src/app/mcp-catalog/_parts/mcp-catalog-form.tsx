@@ -21,8 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import config from "@/lib/config";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeatureFlag, useFeatureValue } from "@/lib/features.hook";
 import { useGetSecret } from "@/lib/secrets.query";
 import {
   formSchema,
@@ -45,8 +44,6 @@ interface McpCatalogFormProps {
   footer?: React.ReactNode;
 }
 
-const { baseMcpServerDockerImage } = config.orchestrator;
-
 export function McpCatalogForm({
   mode,
   initialValues,
@@ -58,6 +55,9 @@ export function McpCatalogForm({
   const { data: localConfigSecret } = useGetSecret(
     initialValues?.localConfigSecretId ?? null,
   );
+
+  // Get MCP server base image from backend features endpoint
+  const mcpServerBaseImage = useFeatureValue("mcpServerBaseImage") ?? "";
 
   const form = useForm<McpCatalogFormValues>({
     resolver: zodResolver(formSchema),
@@ -237,7 +237,7 @@ export function McpCatalogForm({
                     <FormLabel>Docker Image (optional)</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder={baseMcpServerDockerImage}
+                        placeholder={mcpServerBaseImage}
                         className="font-mono"
                         {...field}
                       />

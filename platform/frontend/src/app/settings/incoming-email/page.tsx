@@ -297,7 +297,7 @@ export default function IncomingEmailSettingsPage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline"
             >
-              Learn more in the documentation
+              Learn more in our documentation
               <ExternalLink className="h-3 w-3" />
             </Link>
           </p>

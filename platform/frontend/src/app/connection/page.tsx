@@ -1,5 +1,9 @@
 "use client";
 
+// Non-user-facing build marker to test chunk hashing during deployments
+const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
+void _BUILD_TEST_MARKER;
+
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
@@ -26,9 +30,6 @@ export default function ConnectionPage() {
 
   return (
     <>
-      <span id="chunk-test" style={{ visibility: "hidden" }}>
-        {" "}
-      </span>
       <PermissivePolicyBar />
       <PageLayout
         title="Connect"

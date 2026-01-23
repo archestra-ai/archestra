@@ -1,5 +1,8 @@
 "use client";
 
+const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
+void _BUILD_TEST_MARKER;
+
 import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
 import { E2eTestId } from "@shared";
 import { requiredPagePermissionsMap } from "@shared/access-control";
@@ -336,9 +339,6 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <span id="chunk-test" style={{ visibility: "hidden" }}>
-        {" "}
-      </span>
       <SidebarHeader className="flex flex-col gap-2">
         {isLoadingAppearance ? <div className="h-[20px]" /> : logoToShow}
       </SidebarHeader>

@@ -365,16 +365,25 @@ test("Verify tool calling using different static credentials", async ({
   // Wait for the dropdown to close after selecting an option
   await adminPage.waitForTimeout(500);
   // Make sure at least one tool is selected - scope to the popover content
-  const adminPopoverContent = adminPage.locator('[data-radix-popper-content-wrapper]');
+  const adminPopoverContent = adminPage.locator(
+    "[data-radix-popper-content-wrapper]",
+  );
   // Only click "Select All" if it's enabled (not all tools are already selected)
-  const adminSelectAllButton = adminPopoverContent.getByRole("button", { name: "Select All", exact: true });
+  const adminSelectAllButton = adminPopoverContent.getByRole("button", {
+    name: "Select All",
+    exact: true,
+  });
   if (await adminSelectAllButton.isEnabled()) {
     await adminSelectAllButton.click();
   }
   // Close the popover by pressing Escape
   await adminPage.keyboard.press("Escape");
+  // Wait for the popover to close and Save button to become enabled
+  const adminSaveButton = adminPage.getByRole("button", { name: "Save" });
+  await adminSaveButton.waitFor({ state: "visible", timeout: 5000 });
+  await expect(adminSaveButton).toBeEnabled({ timeout: 5000 });
   // Click Save button in the main dialog
-  await adminPage.getByRole("button", { name: "Save" }).click();
+  await adminSaveButton.click();
   await adminPage.waitForLoadState("networkidle");
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
@@ -395,16 +404,25 @@ test("Verify tool calling using different static credentials", async ({
   // Wait for the dropdown to close after selecting an option
   await editorPage.waitForTimeout(500);
   // Make sure at least one tool is selected - scope to the popover content
-  const editorPopoverContent = editorPage.locator('[data-radix-popper-content-wrapper]');
+  const editorPopoverContent = editorPage.locator(
+    "[data-radix-popper-content-wrapper]",
+  );
   // Only click "Select All" if it's enabled (not all tools are already selected)
-  const editorSelectAllButton = editorPopoverContent.getByRole("button", { name: "Select All", exact: true });
+  const editorSelectAllButton = editorPopoverContent.getByRole("button", {
+    name: "Select All",
+    exact: true,
+  });
   if (await editorSelectAllButton.isEnabled()) {
     await editorSelectAllButton.click();
   }
   // Close the popover by pressing Escape
   await editorPage.keyboard.press("Escape");
+  // Wait for the popover to close and Save button to become enabled
+  const editorSaveButton = editorPage.getByRole("button", { name: "Save" });
+  await editorSaveButton.waitFor({ state: "visible", timeout: 5000 });
+  await expect(editorSaveButton).toBeEnabled({ timeout: 5000 });
   // Click Save button in the main dialog
-  await editorPage.getByRole("button", { name: "Save" }).click();
+  await editorSaveButton.click();
   await editorPage.waitForLoadState("networkidle");
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({

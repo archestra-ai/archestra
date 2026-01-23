@@ -233,16 +233,25 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     // Wait for the dropdown to close after selecting an option
     await adminPage.waitForTimeout(500);
     // Make sure at least one tool is selected - scope to the popover content
-    const popoverContent1 = adminPage.locator('[data-radix-popper-content-wrapper]');
+    const popoverContent1 = adminPage.locator(
+      "[data-radix-popper-content-wrapper]",
+    );
     // Only click "Select All" if it's enabled (not all tools are already selected)
-    const selectAllButton1 = popoverContent1.getByRole("button", { name: "Select All", exact: true });
+    const selectAllButton1 = popoverContent1.getByRole("button", {
+      name: "Select All",
+      exact: true,
+    });
     if (await selectAllButton1.isEnabled()) {
       await selectAllButton1.click();
     }
     // Close the popover by pressing Escape
     await adminPage.keyboard.press("Escape");
+    // Wait for the popover to close and Save button to become enabled
+    const saveButton1 = adminPage.getByRole("button", { name: "Save" });
+    await saveButton1.waitFor({ state: "visible", timeout: 5000 });
+    await expect(saveButton1).toBeEnabled({ timeout: 5000 });
     // Click Save button in the main dialog
-    await adminPage.getByRole("button", { name: "Save" }).click();
+    await saveButton1.click();
     await adminPage.waitForLoadState("networkidle");
 
     // Verify tool call result using admin static credential
@@ -320,16 +329,25 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     // Wait for the dropdown to close after selecting an option
     await adminPage.waitForTimeout(500);
     // Make sure at least one tool is selected - scope to the popover content
-    const popoverContent2 = adminPage.locator('[data-radix-popper-content-wrapper]');
+    const popoverContent2 = adminPage.locator(
+      "[data-radix-popper-content-wrapper]",
+    );
     // Only click "Select All" if it's enabled (not all tools are already selected)
-    const selectAllButton2 = popoverContent2.getByRole("button", { name: "Select All", exact: true });
+    const selectAllButton2 = popoverContent2.getByRole("button", {
+      name: "Select All",
+      exact: true,
+    });
     if (await selectAllButton2.isEnabled()) {
       await selectAllButton2.click();
     }
     // Close the popover by pressing Escape
     await adminPage.keyboard.press("Escape");
+    // Wait for the popover to close and Save button to become enabled
+    const saveButton2 = adminPage.getByRole("button", { name: "Save" });
+    await saveButton2.waitFor({ state: "visible", timeout: 5000 });
+    await expect(saveButton2).toBeEnabled({ timeout: 5000 });
     // Click Save button in the main dialog
-    await adminPage.getByRole("button", { name: "Save" }).click();
+    await saveButton2.click();
     await adminPage.waitForLoadState("networkidle");
 
     // Verify tool call result using admin static credential

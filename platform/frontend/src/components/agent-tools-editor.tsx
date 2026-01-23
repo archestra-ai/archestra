@@ -478,6 +478,7 @@ function ExpandableDescription({ description }: { description: string }) {
   const descriptionRef = useRef<HTMLDivElement>(null);
   const [isTruncated, setIsTruncated] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-check truncation when description changes
   useEffect(() => {
     const el = descriptionRef.current;
     if (el) {

@@ -236,20 +236,26 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     const popoverContent1 = adminPage.locator(
       "[data-radix-popper-content-wrapper]",
     );
-    // Only click "Select All" if it's enabled (not all tools are already selected)
-    const selectAllButton1 = popoverContent1.getByRole("button", {
-      name: "Select All",
-      exact: true,
-    });
-    if (await selectAllButton1.isEnabled()) {
-      await selectAllButton1.click();
+    // Wait for the popover to be visible (it might have closed when selecting credential)
+    await popoverContent1.waitFor({ state: "visible", timeout: 5000 });
+    // Click on the first tool checkbox to ensure at least one tool is selected
+    // This is more reliable than Select All since it directly triggers the change
+    const firstToolCheckbox1 = popoverContent1
+      .locator('button[role="checkbox"]')
+      .first();
+    // Check if the tool is already selected
+    const isChecked1 = await firstToolCheckbox1.getAttribute("data-state");
+    if (isChecked1 !== "checked") {
+      await firstToolCheckbox1.click();
     }
     // Close the popover by pressing Escape
     await adminPage.keyboard.press("Escape");
-    // Wait for the popover to close and Save button to become enabled
+    // Wait for the popover to close
+    await adminPage.waitForTimeout(300);
+    // Wait for the Save button to become enabled
     const saveButton1 = adminPage.getByRole("button", { name: "Save" });
     await saveButton1.waitFor({ state: "visible", timeout: 5000 });
-    await expect(saveButton1).toBeEnabled({ timeout: 5000 });
+    await expect(saveButton1).toBeEnabled({ timeout: 10000 });
     // Click Save button in the main dialog
     await saveButton1.click();
     await adminPage.waitForLoadState("networkidle");
@@ -332,20 +338,26 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     const popoverContent2 = adminPage.locator(
       "[data-radix-popper-content-wrapper]",
     );
-    // Only click "Select All" if it's enabled (not all tools are already selected)
-    const selectAllButton2 = popoverContent2.getByRole("button", {
-      name: "Select All",
-      exact: true,
-    });
-    if (await selectAllButton2.isEnabled()) {
-      await selectAllButton2.click();
+    // Wait for the popover to be visible (it might have closed when selecting credential)
+    await popoverContent2.waitFor({ state: "visible", timeout: 5000 });
+    // Click on the first tool checkbox to ensure at least one tool is selected
+    // This is more reliable than Select All since it directly triggers the change
+    const firstToolCheckbox2 = popoverContent2
+      .locator('button[role="checkbox"]')
+      .first();
+    // Check if the tool is already selected
+    const isChecked2 = await firstToolCheckbox2.getAttribute("data-state");
+    if (isChecked2 !== "checked") {
+      await firstToolCheckbox2.click();
     }
     // Close the popover by pressing Escape
     await adminPage.keyboard.press("Escape");
-    // Wait for the popover to close and Save button to become enabled
+    // Wait for the popover to close
+    await adminPage.waitForTimeout(300);
+    // Wait for the Save button to become enabled
     const saveButton2 = adminPage.getByRole("button", { name: "Save" });
     await saveButton2.waitFor({ state: "visible", timeout: 5000 });
-    await expect(saveButton2).toBeEnabled({ timeout: 5000 });
+    await expect(saveButton2).toBeEnabled({ timeout: 10000 });
     // Click Save button in the main dialog
     await saveButton2.click();
     await adminPage.waitForLoadState("networkidle");

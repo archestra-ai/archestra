@@ -216,9 +216,7 @@ function SubagentsEditor({
   }
 
   if (searchFilteredAgents.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">No matching agents.</p>
-    );
+    return <p className="text-sm text-muted-foreground">No matching agents.</p>;
   }
 
   return (

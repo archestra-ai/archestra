@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, Search, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   forwardRef,
   Suspense,
@@ -15,7 +15,6 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Popover,

@@ -6,8 +6,9 @@ test(
   "can create and delete a profile",
   // Extended timeout for Firefox/WebKit CI environments where React hydration
   // and permission checks may take longer than the default 60s
-  { tag: ["@firefox", "@webkit"], timeout: 120_000 },
+  { tag: ["@firefox", "@webkit"] },
   async ({ page, makeRandomString, goToPage }) => {
+    test.setTimeout(120_000);
     // Skip onboarding if dialog is present
     const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
     if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {

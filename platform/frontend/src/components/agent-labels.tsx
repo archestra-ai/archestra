@@ -180,9 +180,6 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
           <div className="flex flex-col items-center justify-center py-6 text-center border border-dashed rounded-lg bg-muted/30">
             <Tags className="h-8 w-8 mb-2 text-muted-foreground/50" />
             <p className="text-sm text-muted-foreground">No labels added yet</p>
-            <p className="text-xs text-muted-foreground/70">
-              Labels help organize and filter your profiles
-            </p>
           </div>
         )}
       </div>

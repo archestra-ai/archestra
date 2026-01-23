@@ -93,12 +93,15 @@ class AgentModel {
   }
 
   /**
-   * Find all agents with optional filtering by agentType
+   * Find all agents with optional filtering by agentType or agentTypes
    */
   static async findAll(
     userId?: string,
     isAgentAdmin?: boolean,
-    options?: { agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent" },
+    options?: {
+      agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+      agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+    },
   ): Promise<Agent[]> {
     let query = db
       .select()
@@ -116,8 +119,14 @@ class AgentModel {
     // Build where conditions
     const whereConditions: SQL[] = [];
 
-    // Filter by agentType if specified
-    if (options?.agentType !== undefined) {
+    // Filter by agentTypes if specified (array of types)
+    if (options?.agentTypes && options.agentTypes.length > 0) {
+      whereConditions.push(
+        inArray(schema.agentsTable.agentType, options.agentTypes),
+      );
+    }
+    // Filter by agentType if specified (single type, backwards compatible)
+    else if (options?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
     }
 
@@ -348,6 +357,7 @@ class AgentModel {
     filters?: {
       name?: string;
       agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+      agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
     },
     userId?: string,
     isAgentAdmin?: boolean,
@@ -363,8 +373,14 @@ class AgentModel {
       whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
     }
 
-    // Add agentType filter if provided
-    if (filters?.agentType !== undefined) {
+    // Add agentTypes filter if provided (array of types)
+    if (filters?.agentTypes && filters.agentTypes.length > 0) {
+      whereConditions.push(
+        inArray(schema.agentsTable.agentType, filters.agentTypes),
+      );
+    }
+    // Add agentType filter if provided (single type, backwards compatible)
+    else if (filters?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
     }
 

@@ -19224,6 +19224,24 @@
           },
           {
             "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "profile",
+                  "mcp_gateway",
+                  "llm_proxy",
+                  "agent"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "agentTypes",
+            "required": false,
+            "description": "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided."
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -20520,6 +20538,24 @@
             "name": "agentType",
             "required": false,
             "description": "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "profile",
+                  "mcp_gateway",
+                  "llm_proxy",
+                  "agent"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "agentTypes",
+            "required": false,
+            "description": "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided."
           }
         ],
         "responses": {

@@ -712,7 +712,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     conversation: ["read"],
   },
 
-  "/profiles": {
+  "/mcp-gateways": {
+    profile: ["read"],
+  },
+  "/llm-proxies": {
     profile: ["read"],
   },
 

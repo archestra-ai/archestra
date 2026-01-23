@@ -5586,6 +5586,10 @@ export type GetAgentsData = {
          * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.
          */
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        /**
+         * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
+         */
+        agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
@@ -5899,6 +5903,10 @@ export type GetAllAgentsData = {
          * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.
          */
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        /**
+         * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
+         */
+        agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
     };
     url: '/api/agents/all';
 };

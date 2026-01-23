@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArrowRight,
+  Bot,
   ChevronDown,
   ChevronUp,
   DollarSign,
@@ -23,6 +24,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import { AgentDialog } from "@/components/agent-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
@@ -48,7 +50,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
+import {
+  useDeleteProfile,
+  useProfilesPaginated,
+  useProfilesQuery,
+} from "@/lib/agent.query";
 import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
@@ -208,6 +214,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   const [connectingProfile, setConnectingProfile] = useState<{
     id: string;
     name: string;
+    agentType: "agent" | "mcp_gateway";
   } | null>(null);
   const [editingProfile, setEditingProfile] = useState<ProfileData | null>(
     null,
@@ -514,7 +521,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
             agentType="mcp_gateway"
             onCreated={(profile) => {
               setIsCreateDialogOpen(false);
-              setConnectingProfile(profile);
+              setConnectingProfile({ ...profile, agentType: "mcp_gateway" });
             }}
           />
 
@@ -546,8 +553,19 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   );
 }
 
-function ProfileConnectionColumns({ agentId }: { agentId: string }) {
-  const [activeTab, setActiveTab] = useState<"proxy" | "mcp">("proxy");
+function ProfileConnectionColumns({
+  agentId,
+  agentType,
+}: {
+  agentId: string;
+  agentType: "agent" | "mcp_gateway";
+}) {
+  const [activeTab, setActiveTab] = useState<"proxy" | "mcp" | "a2a">("proxy");
+  const isAgent = agentType === "agent";
+
+  // Fetch agent data for A2A connection instructions (non-suspense to avoid loading flicker)
+  const { data: profiles } = useProfilesQuery();
+  const agent = profiles?.find((p) => p.id === agentId);
 
   return (
     <div className="space-y-6">
@@ -610,20 +628,68 @@ function ProfileConnectionColumns({ agentId }: { agentId: string }) {
             </div>
           </div>
         </button>
+
+        {isAgent && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("a2a")}
+            className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
+              activeTab === "a2a"
+                ? "bg-amber-500/5 border-2 border-amber-500/30"
+                : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Bot
+                className={`h-4 w-4 ${activeTab === "a2a" ? "text-amber-500" : ""}`}
+              />
+              <span className="font-medium">A2A Gateway</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <Bot className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
+                <span className="text-[10px]">Agent-to-Agent</span>
+              </div>
+            </div>
+          </button>
+        )}
       </div>
 
-      {/* Content */}
+      {/* Content - render all tabs, hide inactive ones to preload */}
       <div className="relative">
-        {activeTab === "proxy" ? (
-          <div className="animate-in fade-in-0 slide-in-from-left-2 duration-300">
-            <div className="p-4 rounded-lg border bg-card">
-              <ProxyConnectionInstructions agentId={agentId} />
-            </div>
+        <div className={activeTab === "proxy" ? "block" : "hidden"}>
+          <div className="p-4 rounded-lg border bg-card">
+            <ProxyConnectionInstructions agentId={agentId} />
           </div>
-        ) : (
-          <div className="animate-in fade-in-0 slide-in-from-right-2 duration-300">
+        </div>
+        <div className={activeTab === "mcp" ? "block" : "hidden"}>
+          <div className="p-4 rounded-lg border bg-card">
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner />
+                </div>
+              }
+            >
+              <McpConnectionInstructions
+                agentId={agentId}
+                hideProfileSelector
+              />
+            </Suspense>
+          </div>
+        </div>
+        {isAgent && agent && (
+          <div className={activeTab === "a2a" ? "block" : "hidden"}>
             <div className="p-4 rounded-lg border bg-card">
-              <McpConnectionInstructions agentId={agentId} />
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-8">
+                    <LoadingSpinner />
+                  </div>
+                }
+              >
+                <A2AConnectionInstructions agent={agent} />
+              </Suspense>
             </div>
           </div>
         )}
@@ -637,13 +703,13 @@ function ConnectProfileDialog({
   open,
   onOpenChange,
 }: {
-  agent: { id: string; name: string };
+  agent: { id: string; name: string; agentType: "agent" | "mcp_gateway" };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] p-0 flex flex-col border-0">
+      <DialogContent className="max-w-5xl h-[90vh] p-0 flex flex-col border-0">
         {/* Header with gradient */}
         <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-6 pt-6 pb-5 shrink-0">
           <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
@@ -663,7 +729,10 @@ function ConnectProfileDialog({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <ProfileConnectionColumns agentId={agent.id} />
+          <ProfileConnectionColumns
+            agentId={agent.id}
+            agentType={agent.agentType}
+          />
         </div>
 
         {/* Footer */}

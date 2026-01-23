@@ -5,10 +5,6 @@ import { Check, ChevronDown, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import {
-  type ConnectionType,
-  ConnectionTypeSelector,
-} from "@/components/connection-type-selector";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -18,7 +14,7 @@ import {
 } from "@/components/ui/popover";
 import config from "@/lib/config";
 
-const { externalProxyUrl, internalProxyUrl } = config.api;
+const { internalProxyUrl } = config.api;
 
 type ProviderOption = SupportedProvider | "claude-code";
 
@@ -31,20 +27,15 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
-  const [connectionType, setConnectionType] =
-    useState<ConnectionType>("internal");
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
 
-  const baseUrl =
-    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
-
   const proxyUrl = agentId
-    ? `${baseUrl}/${getProviderPath(selectedProvider)}/${agentId}`
-    : `${baseUrl}/${getProviderPath(selectedProvider)}`;
+    ? `${internalProxyUrl}/${getProviderPath(selectedProvider)}/${agentId}`
+    : `${internalProxyUrl}/${getProviderPath(selectedProvider)}`;
 
-  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${baseUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
+  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${internalProxyUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
 
   return (
     <div className="space-y-3">
@@ -103,13 +94,6 @@ export function ProxyConnectionInstructions({
           </PopoverContent>
         </Popover>
       </ButtonGroup>
-
-      <ConnectionTypeSelector
-        value={connectionType}
-        onChange={setConnectionType}
-        gatewayName="LLM Gateway"
-        idPrefix="llm"
-      />
 
       {selectedProvider === "openai" && (
         <div className="space-y-4">

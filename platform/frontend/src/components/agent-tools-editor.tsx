@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { useQueries } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import {
   forwardRef,
@@ -26,6 +27,7 @@ import {
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import {
+  fetchCatalogTools,
   useCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
@@ -82,6 +84,43 @@ const AgentToolsEditorContent = forwardRef<
 
   // Fetch catalog items (MCP servers in registry)
   const { data: catalogItems = [] } = useInternalMcpCatalog();
+
+  // Fetch tool counts for all catalog items to enable sorting
+  const toolCountQueries = useQueries({
+    queries: catalogItems.map((catalog) => ({
+      queryKey: ["mcp-catalog", catalog.id, "tools"] as const,
+      queryFn: () => fetchCatalogTools(catalog.id),
+    })),
+  });
+
+  // Create a map of catalog ID to tool count
+  const toolCountByCatalog = useMemo(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < catalogItems.length; i++) {
+      const query = toolCountQueries[i];
+      const catalog = catalogItems[i];
+      if (catalog) {
+        const tools = query?.data as CatalogTool[] | undefined;
+        map.set(catalog.id, tools?.length ?? 0);
+      }
+    }
+    return map;
+  }, [catalogItems, toolCountQueries]);
+
+  // Sort catalog items: servers with tools first, then 0 tools at the end
+  const sortedCatalogItems = useMemo(() => {
+    return [...catalogItems].sort((a, b) => {
+      const aCount = toolCountByCatalog.get(a.id) ?? 0;
+      const bCount = toolCountByCatalog.get(b.id) ?? 0;
+
+      // Servers with tools come first
+      if (aCount > 0 && bCount === 0) return -1;
+      if (aCount === 0 && bCount > 0) return 1;
+
+      // Among servers with same tool availability, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+  }, [catalogItems, toolCountByCatalog]);
 
   // Fetch assigned tools for this agent (only when editing existing agent)
   const { data: assignedToolsData } = useAllProfileTools({
@@ -180,7 +219,7 @@ const AgentToolsEditorContent = forwardRef<
 
   return (
     <div className="flex flex-wrap gap-2">
-      {catalogItems.map((catalog) => (
+      {sortedCatalogItems.map((catalog) => (
         <McpServerPill
           key={catalog.id}
           catalogItem={catalog}

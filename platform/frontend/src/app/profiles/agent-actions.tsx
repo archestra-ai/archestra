@@ -11,7 +11,7 @@ type Profile = NonNullable<
 
 type ProfileActionsProps = {
   agent: Profile;
-  onConnect: (agent: Pick<Profile, "id" | "name">) => void;
+  onConnect: (agent: Pick<Profile, "id" | "name" | "agentType">) => void;
   onEdit: (agent: Profile) => void;
   onDelete: (agentId: string) => void;
 };

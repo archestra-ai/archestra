@@ -96,10 +96,12 @@ jobs:
 
   publish-platform-helm-chart:
     name: Publish platform Helm chart
+    # Depends on platform Docker image being published first, as the Helm chart references it
     if: needs.release-please.outputs.platform_release_created
     uses: ./.github/workflows/publish-platform-helm-chart.yml
     needs:
       - release-please
+      - build-and-push-platform-docker-image-to-dockerhub
     permissions:
       contents: write
       id-token: write # Required for Workload Identity Federation
@@ -112,9 +114,11 @@ jobs:
 
   trigger-website-deploy:
     name: Trigger Website Deploy
+    # Depends on Helm chart being published first, so the website shows the latest release info
     if: needs.release-please.outputs.platform_release_created
     uses: ./.github/workflows/trigger-website-deploy.yml
     needs:
       - release-please
+      - publish-platform-helm-chart
     secrets:
       WEBSITE_VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}

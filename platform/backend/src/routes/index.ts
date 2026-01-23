@@ -4,6 +4,7 @@ import geminiProxyRoutesV1 from "./proxy/gemini";
 import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
+import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
@@ -51,6 +52,8 @@ export const geminiProxyRoutes = config.llm.gemini.useV2Routes
 export const openAiProxyRoutes = config.llm.openai.useV2Routes
   ? openAiProxyRoutesV2
   : openAiProxyRoutesV1;
+// Cohere proxy routes - V2 only for now
+export const cohereProxyRoutes = cohereProxyRoutesV2;
 // vLLM proxy routes - V2 only (unified handler, OpenAI-compatible)
 export const vllmProxyRoutes = config.llm.vllm.useV2Routes
   ? vllmProxyRoutesV2

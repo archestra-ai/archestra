@@ -266,6 +266,7 @@ Existing provider implementations for reference:
 
 - OpenAI: `backend/src/routes/proxy/routesv2/openai.ts`, `backend/src/routes/proxy/adapterV2/openai.ts`
 - Anthropic: `backend/src/routes/proxy/routesv2/anthropic.ts`, `backend/src/routes/proxy/adapterV2/anthropic.ts`
+- Cohere: `backend/src/routes/proxy/routesv2/cohere.ts`, `backend/src/routes/proxy/adapterV2/cohere.ts`
 - Gemini: `backend/src/routes/proxy/routesv2/gemini.ts`, `backend/src/routes/proxy/adapterV2/gemini.ts`
 
 **OpenAI-compatible implementations** (reuse OpenAI types/adapters with minor modifications):

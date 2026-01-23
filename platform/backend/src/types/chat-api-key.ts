@@ -12,6 +12,7 @@ export const SupportedChatProviderSchema = z.enum([
   "anthropic",
   "cerebras",
   "gemini",
+  "cohere",
   "openai",
   "vllm",
   "ollama",

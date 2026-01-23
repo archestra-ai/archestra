@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import * as React from "react";
 import {
   Command,

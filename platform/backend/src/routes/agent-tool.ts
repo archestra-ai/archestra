@@ -668,7 +668,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteAgentDelegation,
-        description: "Remove a specific delegation from an agent. Not applicable to LLM proxies.",
+        description:
+          "Remove a specific delegation from an agent. Not applicable to LLM proxies.",
         tags: ["Agent Delegations"],
         params: z.object({
           agentId: UuidIdSchema,

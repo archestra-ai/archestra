@@ -658,7 +658,7 @@ class AgentToolModel {
         and(
           sql`${schema.agentToolsTable.credentialSourceMcpServerId} IS NULL`,
           sql`${schema.agentToolsTable.executionSourceMcpServerId} IS NULL`,
-        )!,
+        ) as SQL,
         // Uses dynamic team credential
         eq(schema.agentToolsTable.useDynamicTeamCredential, true),
       ];

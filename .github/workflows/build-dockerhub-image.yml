@@ -65,6 +65,17 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Extract previous version static assets
+        run: |
+          mkdir -p "${{ inputs.image_directory }}/prev-static-assets"
+          PREV_IMAGE="docker.io/archestra/${{ inputs.image_name }}:latest"
+          docker pull "$PREV_IMAGE" || true
+          CID=$(docker create "$PREV_IMAGE" 2>/dev/null) || true
+          if [ -n "$CID" ]; then
+            docker cp "${CID}:/static-assets-source/." "${{ inputs.image_directory }}/prev-static-assets/" || true
+            docker rm "$CID"
+          fi
+
       - name: Build Docker image
         id: build
         uses: ./.github/actions/build-platform-docker-image

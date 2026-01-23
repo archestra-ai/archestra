@@ -104,7 +104,7 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
         <Button
           variant="outline"
           size="sm"
-          className={`h-8 px-3 gap-1.5 text-xs ${!isSelected ? "border-dashed" : ""}`}
+          className={`h-8 px-3 gap-1.5 text-xs ${!isSelected ? "border-dashed opacity-50" : ""}`}
         >
           {isSelected && <span className="h-2 w-2 rounded-full bg-green-500" />}
           <Bot className="h-3 w-3" />
@@ -302,6 +302,7 @@ export function AgentDialog({
   const [toolsSearch, setToolsSearch] = useState("");
   const [toolsSearchOpen, setToolsSearchOpen] = useState(false);
   const [toolsShowAll, setToolsShowAll] = useState(false);
+  const [selectedToolsCount, setSelectedToolsCount] = useState(0);
 
   // Determine if this is an internal agent based on the selected type
   const isInternalAgent = selectedAgentType === "agent";
@@ -343,13 +344,14 @@ export function AgentDialog({
         setConsiderContextUntrusted(false);
         setSelectedAgentType(agentType);
       }
-      // Reset search when dialog opens
+      // Reset search and counts when dialog opens
       setSubagentsSearch("");
       setSubagentsSearchOpen(false);
       setSubagentsShowAll(false);
       setToolsSearch("");
       setToolsSearchOpen(false);
       setToolsShowAll(false);
+      setSelectedToolsCount(0);
     }
   }, [open, agent, agentType]);
 
@@ -553,7 +555,7 @@ export function AgentDialog({
             {/* Tools */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Label>Tools</Label>
+                <Label>Tools ({selectedToolsCount})</Label>
                 {catalogItems.length > 10 &&
                   (toolsSearchOpen ? (
                     <div className="relative flex-1 max-w-[200px]">
@@ -589,6 +591,7 @@ export function AgentDialog({
                   searchQuery={toolsSearch}
                   showAll={toolsShowAll}
                   onShowMore={() => setToolsShowAll(true)}
+                  onSelectedCountChange={setSelectedToolsCount}
                 />
               </div>
             </div>
@@ -596,7 +599,7 @@ export function AgentDialog({
             {/* Subagents */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Label>Subagents</Label>
+                <Label>Subagents ({selectedDelegationTargetIds.length})</Label>
                 {allInternalAgents.filter((a) => a.id !== agent?.id).length >
                   10 &&
                   (subagentsSearchOpen ? (

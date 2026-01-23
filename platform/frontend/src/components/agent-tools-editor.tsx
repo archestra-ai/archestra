@@ -58,13 +58,20 @@ interface AgentToolsEditorProps {
   searchQuery?: string;
   showAll?: boolean;
   onShowMore?: () => void;
+  onSelectedCountChange?: (count: number) => void;
 }
 
 export const AgentToolsEditor = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
 >(function AgentToolsEditor(
-  { agentId, searchQuery = "", showAll = false, onShowMore },
+  {
+    agentId,
+    searchQuery = "",
+    showAll = false,
+    onShowMore,
+    onSelectedCountChange,
+  },
   ref,
 ) {
   return (
@@ -81,6 +88,7 @@ export const AgentToolsEditor = forwardRef<
         searchQuery={searchQuery}
         showAll={showAll}
         onShowMore={onShowMore}
+        onSelectedCountChange={onSelectedCountChange}
         ref={ref}
       />
     </Suspense>
@@ -91,7 +99,13 @@ const AgentToolsEditorContent = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
 >(function AgentToolsEditorContent(
-  { agentId, searchQuery = "", showAll = false, onShowMore },
+  {
+    agentId,
+    searchQuery = "",
+    showAll = false,
+    onShowMore,
+    onSelectedCountChange,
+  },
   ref,
 ) {
   const assignTool = useAssignTool();
@@ -177,18 +191,32 @@ const AgentToolsEditorContent = forwardRef<
     new Map(),
   );
 
+  // Calculate total selected count from pending changes
+  const calculateTotalSelectedCount = useCallback(() => {
+    let total = 0;
+    for (const changes of pendingChangesRef.current.values()) {
+      total += changes.selectedToolIds.size;
+    }
+    return total;
+  }, []);
+
   // Register pending changes from a pill
   const registerPendingChanges = useCallback(
     (catalogId: string, changes: PendingCatalogChanges) => {
       pendingChangesRef.current.set(catalogId, changes);
+      onSelectedCountChange?.(calculateTotalSelectedCount());
     },
-    [],
+    [calculateTotalSelectedCount, onSelectedCountChange],
   );
 
   // Clear pending changes for a catalog
-  const clearPendingChanges = useCallback((catalogId: string) => {
-    pendingChangesRef.current.delete(catalogId);
-  }, []);
+  const clearPendingChanges = useCallback(
+    (catalogId: string) => {
+      pendingChangesRef.current.delete(catalogId);
+      onSelectedCountChange?.(calculateTotalSelectedCount());
+    },
+    [calculateTotalSelectedCount, onSelectedCountChange],
+  );
 
   // Expose saveChanges method to parent
   useImperativeHandle(ref, () => ({
@@ -393,8 +421,8 @@ function McpServerPill({
             "h-8 px-3 gap-1.5 text-xs",
             (hasPendingChanges
               ? selectedToolIds.size === 0
-              : !hasAssignedTools) && "border-dashed",
-            hasPendingChanges && "border-primary",
+              : !hasAssignedTools) && "border-dashed opacity-50",
+            hasPendingChanges && "border-primary opacity-100",
           )}
         >
           <span className="font-medium">{catalogItem.name}</span>

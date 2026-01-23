@@ -13,14 +13,13 @@ export type PendingToolAction =
 
 interface PendingToolState {
   actions: PendingToolAction[];
-  // Track which agent/prompt these actions are for (to invalidate if user switches)
+  // Track which agent these actions are for (to invalidate if user switches)
   agentId: string | null;
-  promptId: string | null;
 }
 
 function getState(): PendingToolState {
   if (typeof window === "undefined") {
-    return { actions: [], agentId: null, promptId: null };
+    return { actions: [], agentId: null };
   }
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -30,7 +29,7 @@ function getState(): PendingToolState {
   } catch {
     // Ignore parse errors
   }
-  return { actions: [], agentId: null, promptId: null };
+  return { actions: [], agentId: null };
 }
 
 function setState(state: PendingToolState): void {
@@ -40,21 +39,19 @@ function setState(state: PendingToolState): void {
 
 /**
  * Add a pending tool action.
- * If agentId/promptId changed, clears previous actions first.
+ * If agentId changed, clears previous actions first.
  */
 export function addPendingAction(
   action: PendingToolAction,
   agentId: string | null,
-  promptId: string | null,
 ): void {
   const state = getState();
 
   // If context changed, start fresh
-  if (state.agentId !== agentId || state.promptId !== promptId) {
+  if (state.agentId !== agentId) {
     setState({
       actions: [action],
       agentId,
-      promptId,
     });
     return;
   }
@@ -67,17 +64,14 @@ export function addPendingAction(
 }
 
 /**
- * Get all pending actions for the given context.
- * Returns empty array if context doesn't match.
+ * Get all pending actions for the given agent.
+ * Returns empty array if agent doesn't match.
  */
-export function getPendingActions(
-  agentId: string | null,
-  promptId: string | null,
-): PendingToolAction[] {
+export function getPendingActions(agentId: string | null): PendingToolAction[] {
   const state = getState();
 
-  // Only return actions if context matches
-  if (state.agentId !== agentId || state.promptId !== promptId) {
+  // Only return actions if agent matches
+  if (state.agentId !== agentId) {
     return [];
   }
 
@@ -93,13 +87,10 @@ export function clearPendingActions(): void {
 }
 
 /**
- * Check if there are any pending actions for the given context.
+ * Check if there are any pending actions for the given agent.
  */
-export function hasPendingActions(
-  agentId: string | null,
-  promptId: string | null,
-): boolean {
-  return getPendingActions(agentId, promptId).length > 0;
+export function hasPendingActions(agentId: string | null): boolean {
+  return getPendingActions(agentId).length > 0;
 }
 
 /**

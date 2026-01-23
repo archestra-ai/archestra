@@ -376,7 +376,8 @@ test("Verify tool calling using different static credentials", async ({
     .locator('button[role="checkbox"]')
     .first();
   // Check if the tool is already selected
-  const adminIsChecked = await adminFirstToolCheckbox.getAttribute("data-state");
+  const adminIsChecked =
+    await adminFirstToolCheckbox.getAttribute("data-state");
   if (adminIsChecked !== "checked") {
     await adminFirstToolCheckbox.click();
   }
@@ -421,7 +422,8 @@ test("Verify tool calling using different static credentials", async ({
     .locator('button[role="checkbox"]')
     .first();
   // Check if the tool is already selected
-  const editorIsChecked = await editorFirstToolCheckbox.getAttribute("data-state");
+  const editorIsChecked =
+    await editorFirstToolCheckbox.getAttribute("data-state");
   if (editorIsChecked !== "checked") {
     await editorFirstToolCheckbox.click();
   }

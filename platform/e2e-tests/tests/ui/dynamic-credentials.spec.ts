@@ -104,9 +104,14 @@ test("Verify tool calling using dynamic credentials", async ({
   // Wait for the dropdown to close after selecting an option
   await adminPage.waitForTimeout(500);
   // Make sure at least one tool is selected - scope to the popover content to avoid matching buttons elsewhere
-  const popoverContent = adminPage.locator('[data-radix-popper-content-wrapper]');
+  const popoverContent = adminPage.locator(
+    "[data-radix-popper-content-wrapper]",
+  );
   // Only click "Select All" if it's enabled (not all tools are already selected)
-  const selectAllButton = popoverContent.getByRole("button", { name: "Select All", exact: true });
+  const selectAllButton = popoverContent.getByRole("button", {
+    name: "Select All",
+    exact: true,
+  });
   if (await selectAllButton.isEnabled()) {
     await selectAllButton.click();
   }

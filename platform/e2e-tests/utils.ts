@@ -171,7 +171,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await page.waitForLoadState("networkidle");
   // Use a more specific selector to find the combobox within the popover content
   // The popover content has data-radix-popper-content-wrapper attribute
-  const popoverContent = page.locator('[data-radix-popper-content-wrapper]');
+  const popoverContent = page.locator("[data-radix-popper-content-wrapper]");
   await popoverContent.waitFor({ state: "visible", timeout: 10000 });
   const combobox = popoverContent.getByRole("combobox");
   await combobox.waitFor({ state: "visible", timeout: 5000 });

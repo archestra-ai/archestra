@@ -155,17 +155,45 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 
   await manageToolsButton.click();
+  // Click the Default Profile pill to open its assignment popover
   await page
-    .getByRole("button", { name: "Assign Tool to Profiles" })
+    .getByRole("button", { name: new RegExp(DEFAULT_PROFILE_NAME) })
     .first()
     .click();
-  await page.getByRole("checkbox").first().click();
-  await page.waitForLoadState("networkidle");
+  // Wait for popover to appear
+  await page.waitForTimeout(200);
+  // Click the credential combobox to open the dropdown
   const combobox = page.getByRole("combobox");
   await combobox.waitFor({ state: "visible" });
   await combobox.click();
   // Wait a brief moment for dropdown to open (dropdowns are client-side, no network request needed)
   await page.waitForTimeout(100);
+}
+
+/**
+ * After opening the TokenSelect dropdown via goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
+ * select a credential, ensure all tools are selected, close the popover, and save.
+ */
+export async function selectCredentialAndAssignAllTools({
+  page,
+  credentialName,
+}: {
+  page: Page;
+  credentialName: string;
+}) {
+  // Select the credential option (closes the Select dropdown)
+  await page.getByRole("option", { name: credentialName }).click();
+  // Click "Select All" to assign all tools (if not already all selected)
+  const selectAllButton = page.getByRole("button", { name: "Select All", exact: true });
+  if (await selectAllButton.isEnabled()) {
+    await selectAllButton.click();
+  }
+  // Close the popover by pressing Escape
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  // Click Save to apply all changes
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.waitForLoadState("networkidle");
 }
 
 export async function verifyToolCallResultViaApi({

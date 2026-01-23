@@ -17,6 +17,7 @@ import {
   getVisibleStaticCredentials,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   openManageCredentialsDialog,
+  selectCredentialAndAssignAllTools,
   verifyToolCallResultViaApi,
 } from "../../utils";
 
@@ -360,10 +361,10 @@ test("Verify tool calling using different static credentials", async ({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  // Select admin static credential
-  await adminPage.getByRole("option", { name: "admin@example.com" }).click();
-  await adminPage.getByText("Assign to 1 profile").click();
-  await adminPage.waitForLoadState("networkidle");
+  await selectCredentialAndAssignAllTools({
+    page: adminPage,
+    credentialName: "admin@example.com",
+  });
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
     request,
@@ -373,15 +374,15 @@ test("Verify tool calling using different static credentials", async ({
     cookieHeaders,
   });
 
-  // Assign tool to profiles using editor static credential
+  // Reassign tool to profiles using editor static credential (admin can see all credentials)
   await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
-    page: editorPage,
+    page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  // Select editor static credential
-  await editorPage.getByRole("option", { name: "editor@example.com" }).click();
-  await editorPage.getByText("Assign to 1 profile").click();
-  await editorPage.waitForLoadState("networkidle");
+  await selectCredentialAndAssignAllTools({
+    page: adminPage,
+    credentialName: "editor@example.com",
+  });
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({
     request,

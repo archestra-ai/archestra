@@ -1,5 +1,9 @@
 import { expect, test } from "../fixtures";
 
+// Run all provider tests sequentially to avoid WireMock stub timing issues
+// when multiple providers run in parallel against the same backend.
+test.describe.configure({ mode: "serial" });
+
 // biome-ignore lint/suspicious/noExplicitAny: test file uses dynamic response structures
 type AnyResponse = any;
 

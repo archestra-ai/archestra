@@ -118,6 +118,12 @@ export function useInstallMcpServer() {
           queryKey: ["mcp-servers", installedServer.id, "tools"],
         });
       }
+      // Invalidate catalog tools query so the manage-tools dialog shows discovered tools
+      if (variables.catalogId) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-catalog", variables.catalogId, "tools"],
+        });
+      }
       // Invalidate all chat MCP tools (new tools may be available)
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
     },

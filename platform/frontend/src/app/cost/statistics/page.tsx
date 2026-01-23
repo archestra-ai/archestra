@@ -1,9 +1,5 @@
 "use client";
 
-// Non-user-facing build marker to test chunk hashing during deployments
-const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
-void _BUILD_TEST_MARKER;
-
 import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock, Info } from "lucide-react";
@@ -410,6 +406,9 @@ export default function StatisticsPage() {
 
   return (
     <div className="space-y-6">
+      <span id="chunk-test" style={{ visibility: "hidden" }}>
+        {" "}
+      </span>
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
           <a

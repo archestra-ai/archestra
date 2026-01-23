@@ -1,8 +1,5 @@
 "use client";
 
-const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
-void _BUILD_TEST_MARKER;
-
 import type { archestraApiTypes } from "@shared";
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
@@ -78,6 +75,9 @@ export default function ProfilesPage({
 }) {
   return (
     <div className="w-full h-full">
+      <span id="chunk-test" style={{ visibility: "hidden" }}>
+        {" "}
+      </span>
       <PermissivePolicyBar />
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>

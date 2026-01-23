@@ -1,9 +1,5 @@
 "use client";
 
-// Non-user-facing build marker to test chunk hashing during deployments
-const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
-void _BUILD_TEST_MARKER;
-
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
@@ -52,6 +48,9 @@ export default function McpGatewayLogsPage({
 }) {
   return (
     <div>
+      <span id="chunk-test" style={{ visibility: "hidden" }}>
+        {" "}
+      </span>
       <ErrorBoundary>
         <McpToolCallsTable initialData={initialData} />
       </ErrorBoundary>

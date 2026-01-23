@@ -1,9 +1,5 @@
 "use client";
 
-// Non-user-facing build marker to test chunk hashing during deployments
-const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
-void _BUILD_TEST_MARKER;
-
 import { E2eTestId, formatSecretStorageType } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -369,6 +365,9 @@ function ChatSettingsContent() {
 
   return (
     <div className="space-y-4">
+      <span id="chunk-test" style={{ visibility: "hidden" }}>
+        {" "}
+      </span>
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-lg font-semibold">LLM Provider API Keys</h2>

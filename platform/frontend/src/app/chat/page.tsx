@@ -1,8 +1,5 @@
 "use client";
 
-const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
-void _BUILD_TEST_MARKER;
-
 import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, FileText, Globe, PanelRightClose } from "lucide-react";
 import Link from "next/link";
@@ -888,6 +885,9 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen w-full">
+      <span id="chunk-test" style={{ visibility: "hidden" }}>
+        {" "}
+      </span>
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />

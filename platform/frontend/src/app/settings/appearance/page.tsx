@@ -1,9 +1,5 @@
 "use client";
 
-// Non-user-facing build marker to test chunk hashing during deployments
-const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
-void _BUILD_TEST_MARKER;
-
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -65,6 +61,9 @@ export default function AppearanceSettingsPage() {
 
   return (
     <div>
+      <span id="chunk-test" style={{ visibility: "hidden" }}>
+        {" "}
+      </span>
       <div className="space-y-6">
         <LightDarkToggle currentThemeId={currentUITheme} />
         <LogoUpload currentLogo={logo} onLogoChange={handleLogoChange} />

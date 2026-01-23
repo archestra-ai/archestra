@@ -1,8 +1,5 @@
 "use client";
 
-const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
-void _BUILD_TEST_MARKER;
-
 import type { archestraApiTypes } from "@shared";
 import { Layers, MessageSquare, Search, User } from "lucide-react";
 import Link from "next/link";
@@ -303,6 +300,9 @@ export default function LlmProxyLogsPage({
 }) {
   return (
     <div>
+      <span id="chunk-test" style={{ visibility: "hidden" }}>
+        {" "}
+      </span>
       <ErrorBoundary>
         <SessionsTable initialData={initialData} />
       </ErrorBoundary>

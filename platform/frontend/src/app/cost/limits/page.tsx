@@ -1,9 +1,5 @@
 "use client";
 
-// Non-user-facing build marker to test chunk hashing during deployments
-const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
-void _BUILD_TEST_MARKER;
-
 import type { archestraApiTypes } from "@shared";
 import {
   ChevronsUpDown,
@@ -756,6 +752,9 @@ export default function LimitsPage() {
 
   return (
     <div className="space-y-6">
+      <span id="chunk-test" style={{ visibility: "hidden" }}>
+        {" "}
+      </span>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

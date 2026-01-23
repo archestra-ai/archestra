@@ -1,9 +1,5 @@
 "use client";
 
-// Non-user-facing build marker to test chunk hashing during deployments
-const _BUILD_TEST_MARKER = "chunk-hash-test-20260123";
-void _BUILD_TEST_MARKER;
-
 import type { archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useEffect, useState } from "react";
@@ -35,6 +31,9 @@ export function ToolsClient({
 
   return (
     <div className="w-full h-full">
+      <span id="chunk-test" style={{ visibility: "hidden" }}>
+        {" "}
+      </span>
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner className="mt-[30vh]" />}>
           <ToolsList initialData={initialData} />

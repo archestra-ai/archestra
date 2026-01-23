@@ -234,11 +234,6 @@ export function AgentDialog({
   const syncDelegations = useSyncAgentDelegations();
   const { data: currentDelegations = [] } = useAgentDelegations(agent?.id);
   const { data: chatopsProviders = [] } = useChatOpsStatus();
-  // TODO: Remove this mock data - temporary for UI preview
-  const mockChatopsProviders = [
-    { id: "msteams", displayName: "Microsoft Teams", configured: true },
-    { id: "email", displayName: "Email", configured: true },
-  ];
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -453,8 +448,7 @@ export function AgentDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  // TODO: Remove mockChatopsProviders and use chatopsProviders instead
-  const configuredChatopsProviders = mockChatopsProviders.filter(
+  const configuredChatopsProviders = chatopsProviders.filter(
     (provider) => provider.configured,
   );
 

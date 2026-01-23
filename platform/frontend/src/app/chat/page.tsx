@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, FileText, Globe, Plus } from "lucide-react";
+import { Eye, EyeOff, FileText, Globe, PanelRightClose } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -15,16 +15,15 @@ import {
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
+import { AgentDialog } from "@/components/agent-dialog";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { Response } from "@/components/ai-elements/response";
 import { AgentSelector } from "@/components/chat/agent-selector";
-import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
@@ -38,7 +37,11 @@ import {
 } from "@/components/ui/card";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
-import { useProfilesQuery } from "@/lib/agent.query";
+import {
+  useInternalAgents,
+  useProfile,
+  useProfilesQuery,
+} from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
   useConversation,
@@ -64,7 +67,6 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/pending-tool-state";
-import { usePrompt, usePromptsQuery } from "@/lib/prompts.query";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -120,8 +122,8 @@ export default function ChatPage() {
   // State for browser panel
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(false);
 
-  // Fetch prompts for conversation prompt name lookup
-  const { data: prompts = [] } = usePromptsQuery();
+  // Fetch internal agents for dialog editing
+  const { data: internalAgents = [] } = useInternalAgents();
 
   // Fetch profiles and models for initial chat (no conversation)
   // Using non-suspense queries to avoid blocking page render
@@ -137,13 +139,13 @@ export default function ChatPage() {
   // Track if URL params have been consumed (so we don't re-apply them after user clears selection)
   const urlParamsConsumedRef = useRef(false);
 
-  // Prompt edit dialog state
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
-  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
-  const [versionHistoryPrompt, setVersionHistoryPrompt] = useState<
-    (typeof prompts)[number] | null
+  // Agent edit dialog state
+  const [isAgentDialogOpen, setIsAgentDialogOpen] = useState(false);
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [versionHistoryAgent, setVersionHistoryAgent] = useState<
+    (typeof internalAgents)[number] | null
   >(null);
-  const { data: editingPrompt } = usePrompt(editingPromptId || "");
+  const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
 
   // Set initial agent from URL param or default when data loads
   useEffect(() => {
@@ -152,12 +154,13 @@ export default function ChatPage() {
     // Only process URL params once (don't re-apply after user clears selection)
     if (!urlParamsConsumedRef.current) {
       // Check for promptId in URL query params (e.g., from /agents canvas "Chat" button)
+      // With migration, promptId now refers to internal agent ID
       const urlPromptId = searchParams.get("promptId");
       if (urlPromptId) {
-        const matchingPrompt = prompts.find((p) => p.id === urlPromptId);
-        if (matchingPrompt) {
+        const matchingAgent = internalAgents.find((a) => a.id === urlPromptId);
+        if (matchingAgent) {
           setInitialPromptId(urlPromptId);
-          setInitialAgentId(matchingPrompt.agentId);
+          setInitialAgentId(urlPromptId); // Internal agent IS the profile
           urlParamsConsumedRef.current = true;
           return;
         }
@@ -169,10 +172,10 @@ export default function ChatPage() {
         const matchingProfile = allProfiles.find((p) => p.id === urlAgentId);
         if (matchingProfile) {
           setInitialAgentId(urlAgentId);
-          // Find a prompt for this agent if one exists
-          const agentPrompt = prompts.find((p) => p.agentId === urlAgentId);
-          if (agentPrompt) {
-            setInitialPromptId(agentPrompt.id);
+          // Check if this is an internal agent
+          const internalAgent = internalAgents.find((a) => a.id === urlAgentId);
+          if (internalAgent) {
+            setInitialPromptId(urlAgentId);
           }
           urlParamsConsumedRef.current = true;
           return;
@@ -184,7 +187,7 @@ export default function ChatPage() {
     if (!initialAgentId) {
       setInitialAgentId(allProfiles[0].id);
     }
-  }, [allProfiles, initialAgentId, searchParams, prompts]);
+  }, [allProfiles, initialAgentId, searchParams, internalAgents]);
 
   // Initialize model from localStorage or default to first available
   useEffect(() => {
@@ -328,9 +331,9 @@ export default function ChatPage() {
     [conversation, chatModels, updateConversationMutation],
   );
 
-  // Find the specific prompt for this conversation (if any)
-  const _conversationPrompt = conversation?.promptId
-    ? prompts.find((p) => p.id === conversation.promptId)
+  // Find the specific internal agent for this conversation (if any)
+  const _conversationInternalAgent = conversation?.agentId
+    ? internalAgents.find((a) => a.id === conversation.agentId)
     : undefined;
 
   // Get current agent info
@@ -714,7 +717,6 @@ export default function ChatPage() {
           agentId: initialAgentId,
           selectedModel: initialModel,
           selectedProvider,
-          promptId: initialPromptId ?? undefined,
           chatApiKeyId: initialApiKeyId,
         },
         {
@@ -802,7 +804,6 @@ export default function ChatPage() {
         agentId: initialAgentId,
         selectedModel: initialModel,
         selectedProvider,
-        promptId: initialPromptId ?? undefined,
         chatApiKeyId: initialApiKeyId,
       },
       {
@@ -819,7 +820,6 @@ export default function ChatPage() {
     conversationId,
     initialAgentId,
     initialModel,
-    initialPromptId,
     initialApiKeyId,
     chatModels,
     createConversationMutation,
@@ -898,7 +898,11 @@ export default function ChatPage() {
                 <div className="flex-shrink-0">
                   {conversationId ? (
                     <AgentSelector
-                      currentPromptId={conversation?.promptId ?? null}
+                      currentPromptId={
+                        conversation?.agent?.agentType === "agent"
+                          ? (conversation?.agentId ?? null)
+                          : null
+                      }
                       currentAgentId={conversation?.agentId ?? ""}
                       currentModel={conversation?.selectedModel ?? ""}
                     />
@@ -912,44 +916,6 @@ export default function ChatPage() {
                     />
                   )}
                 </div>
-
-                {/* Agent tools display - wraps internally, takes remaining space */}
-                {(conversationId
-                  ? conversation?.promptId
-                  : initialPromptId) && (
-                  <AgentToolsDisplay
-                    agentId={
-                      conversationId
-                        ? (conversation?.agentId ?? "")
-                        : (initialAgentId ?? "")
-                    }
-                    promptId={
-                      conversationId
-                        ? (conversation?.promptId ?? null)
-                        : initialPromptId
-                    }
-                    conversationId={conversationId}
-                    addAgentsButton={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 px-2 gap-1.5 text-xs border-dashed"
-                        onClick={() => {
-                          const promptIdToEdit = conversationId
-                            ? conversation?.promptId
-                            : initialPromptId;
-                          if (promptIdToEdit) {
-                            setEditingPromptId(promptIdToEdit);
-                            setIsPromptDialogOpen(true);
-                          }
-                        }}
-                      >
-                        <Plus className="h-3 w-3" />
-                        Add agents
-                      </Button>
-                    }
-                  />
-                )}
               </div>
               {/* Right side - controls stay fixed in first row */}
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -964,17 +930,19 @@ export default function ChatPage() {
                     Browser
                   </Button>
                 )}
-                {!isArtifactOpen && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={toggleArtifactPanel}
-                    className="text-xs"
-                  >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleArtifactPanel}
+                  className="text-xs"
+                >
+                  {isArtifactOpen ? (
+                    <PanelRightClose className="h-3 w-3 mr-1" />
+                  ) : (
                     <FileText className="h-3 w-3 mr-1" />
-                    Show Artifact
-                  </Button>
-                )}
+                  )}
+                  {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1043,112 +1011,54 @@ export default function ChatPage() {
             ) : (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center space-y-6 max-w-2xl px-4">
-                  {initialPromptId ? (
-                    // Agent selected - show prompt
-                    (() => {
-                      const selectedPrompt = prompts.find(
-                        (p) => p.id === initialPromptId,
-                      );
+                  {initialPromptId
+                    ? // Agent selected - show prompt
+                      (() => {
+                        const selectedAgent = internalAgents.find(
+                          (a) => a.id === initialPromptId,
+                        );
 
-                      return (
-                        <>
-                          <p className="text-lg text-muted-foreground">
-                            To start conversation with{" "}
-                            <span className="font-medium text-foreground">
-                              {selectedPrompt?.name}
-                            </span>{" "}
-                            {selectedPrompt?.userPrompt
-                              ? "click on a suggested prompt or type a new below"
-                              : "start typing below"}
-                          </p>
-                          {selectedPrompt?.userPrompt && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const userPrompt = selectedPrompt.userPrompt;
-                                if (!userPrompt) return;
-                                const syntheticEvent = {
-                                  preventDefault: () => {},
-                                } as React.FormEvent<HTMLFormElement>;
-                                handleInitialSubmit(
-                                  { text: userPrompt, files: [] },
-                                  syntheticEvent,
-                                );
-                              }}
-                              className="w-full text-left cursor-pointer hover:opacity-80 transition-opacity"
-                            >
-                              <Message
-                                from="assistant"
-                                className="max-w-none justify-center"
+                        return (
+                          <>
+                            <p className="text-lg text-muted-foreground">
+                              To start conversation with{" "}
+                              <span className="font-medium text-foreground">
+                                {selectedAgent?.name}
+                              </span>{" "}
+                              start typing below
+                            </p>
+                            {selectedAgent?.userPrompt && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const userPrompt = selectedAgent.userPrompt;
+                                  if (!userPrompt) return;
+                                  const syntheticEvent = {
+                                    preventDefault: () => {},
+                                  } as React.FormEvent<HTMLFormElement>;
+                                  handleInitialSubmit(
+                                    { text: userPrompt, files: [] },
+                                    syntheticEvent,
+                                  );
+                                }}
+                                className="w-full text-left cursor-pointer hover:opacity-80 transition-opacity"
                               >
-                                <MessageContent className="max-w-none text-center">
-                                  <Response>
-                                    {selectedPrompt.userPrompt}
-                                  </Response>
-                                </MessageContent>
-                              </Message>
-                            </button>
-                          )}
-                          <p className="text-sm text-muted-foreground">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleInitialPromptChange(
-                                  null,
-                                  allProfiles[0]?.id ?? "",
-                                )
-                              }
-                              className="underline hover:text-foreground"
-                            >
-                              back to agent selection
-                            </button>
-                          </p>
-                        </>
-                      );
-                    })()
-                  ) : (
-                    // No agent selected - show agent list
-                    <>
-                      <p className="text-lg text-muted-foreground">
-                        {prompts.length > 0
-                          ? "To start conversation select an agent or start typing below"
-                          : "To start conversation start typing below"}
-                      </p>
-                      {prompts.length > 0 ? (
-                        <div className="flex flex-wrap justify-center gap-2">
-                          {prompts.map((prompt) => (
-                            <Button
-                              key={prompt.id}
-                              variant="outline"
-                              size="sm"
-                              className="h-8 px-3 text-sm"
-                              onClick={() =>
-                                handleInitialPromptChange(
-                                  prompt.id,
-                                  prompt.agentId,
-                                )
-                              }
-                            >
-                              {prompt.name}
-                            </Button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingPromptId(null);
-                              setIsPromptDialogOpen(true);
-                            }}
-                            className="underline hover:text-foreground"
-                          >
-                            create agent
-                          </button>
-                        </p>
-                      )}
-                    </>
-                  )}
+                                <Message
+                                  from="assistant"
+                                  className="max-w-none justify-center"
+                                >
+                                  <MessageContent className="max-w-none text-center">
+                                    <Response>
+                                      {selectedAgent.userPrompt}
+                                    </Response>
+                                  </MessageContent>
+                                </Message>
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()
+                    : null}
                 </div>
               </div>
             )}
@@ -1202,11 +1112,6 @@ export default function ChatPage() {
                       : initialProvider
                   }
                   textareaRef={textareaRef}
-                  onProfileChange={
-                    conversationId && conversation?.agent.id
-                      ? undefined
-                      : setInitialAgentId
-                  }
                   initialApiKeyId={
                     conversationId && conversation?.agent.id
                       ? undefined
@@ -1219,7 +1124,9 @@ export default function ChatPage() {
                   }
                   promptId={
                     conversationId && conversation?.agent.id
-                      ? (conversation?.promptId ?? null)
+                      ? conversation?.agent?.agentType === "agent"
+                        ? conversation?.agentId
+                        : null
                       : initialPromptId
                   }
                   allowFileUploads={organization?.allowChatFileUploads ?? false}
@@ -1259,26 +1166,27 @@ export default function ChatPage() {
         onToggle={toggleArtifactPanel}
       />
 
-      <PromptDialog
-        open={isPromptDialogOpen}
+      <AgentDialog
+        open={isAgentDialogOpen}
         onOpenChange={(open) => {
-          setIsPromptDialogOpen(open);
+          setIsAgentDialogOpen(open);
           if (!open) {
-            setEditingPromptId(null);
+            setEditingAgentId(null);
           }
         }}
-        prompt={editingPrompt}
-        onViewVersionHistory={setVersionHistoryPrompt}
+        agent={editingAgent}
+        agentType="agent"
+        onViewVersionHistory={setVersionHistoryAgent}
       />
 
       <PromptVersionHistoryDialog
-        open={!!versionHistoryPrompt}
+        open={!!versionHistoryAgent}
         onOpenChange={(open) => {
           if (!open) {
-            setVersionHistoryPrompt(null);
+            setVersionHistoryAgent(null);
           }
         }}
-        prompt={versionHistoryPrompt}
+        agent={versionHistoryAgent}
       />
     </div>
   );

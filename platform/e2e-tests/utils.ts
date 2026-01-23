@@ -222,7 +222,7 @@ export async function verifyToolCallResultViaApi({
   let toolResult: Awaited<ReturnType<typeof callMcpTool>>;
 
   try {
-    const sessionId = await initializeMcpSession(request, {
+    await initializeMcpSession(request, {
       profileId: defaultProfile.id,
       token,
     });
@@ -230,7 +230,6 @@ export async function verifyToolCallResultViaApi({
     toolResult = await callMcpTool(request, {
       profileId: defaultProfile.id,
       token,
-      sessionId,
       toolName,
     });
   } catch (error) {

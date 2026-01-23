@@ -4,44 +4,33 @@ import type { archestraApiTypes } from "@shared";
 import { Plus } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { PromptDialog } from "@/components/chat/prompt-dialog";
+import { AgentDialog } from "@/components/agent-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useProfiles } from "@/lib/agent.query";
-import { usePrompt } from "@/lib/prompts.query";
+import { useProfile } from "@/lib/agent.query";
 
-type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
+type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
 export default function AgentsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { data: allProfiles = [] } = useProfiles();
+  // Dialog state for creating/editing internal agents
+  const [isAgentDialogOpen, setIsAgentDialogOpen] = useState(false);
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [versionHistoryAgent, setVersionHistoryAgent] =
+    useState<InternalAgent | null>(null);
 
-  // Dialog state for creating new agents
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
-  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
-  const [versionHistoryPrompt, setVersionHistoryPrompt] =
-    useState<Prompt | null>(null);
+  const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
 
-  const { data: editingPrompt } = usePrompt(editingPromptId || "");
-
-  const handleCreatePrompt = useCallback(() => {
-    setEditingPromptId(null);
-    setIsPromptDialogOpen(true);
+  const handleCreateAgent = useCallback(() => {
+    setEditingAgentId(null);
+    setIsAgentDialogOpen(true);
   }, []);
-
-  const hasNoProfiles = allProfiles.length === 0;
 
   return (
     <ErrorBoundary>
@@ -56,57 +45,44 @@ export default function AgentsLayout({
         }
         actionButton={
           <WithPermissions
-            permissions={{ prompt: ["create"] }}
+            permissions={{ profile: ["create"] }}
             noPermissionHandle="hide"
           >
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <PermissionButton
-                      permissions={{ prompt: ["create"] }}
-                      onClick={handleCreatePrompt}
-                      disabled={hasNoProfiles}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Create Agent
-                    </PermissionButton>
-                  </span>
-                </TooltipTrigger>
-                {hasNoProfiles && (
-                  <TooltipContent>
-                    <p>No profiles available. Create a profile first.</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+            <PermissionButton
+              permissions={{ profile: ["create"] }}
+              onClick={handleCreateAgent}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create Agent
+            </PermissionButton>
           </WithPermissions>
         }
       >
         {children}
 
-        {/* Create/Edit Prompt Dialog */}
-        <PromptDialog
-          open={isPromptDialogOpen}
+        {/* Create/Edit Agent Dialog */}
+        <AgentDialog
+          open={isAgentDialogOpen}
           onOpenChange={(open) => {
-            setIsPromptDialogOpen(open);
+            setIsAgentDialogOpen(open);
             if (!open) {
-              setEditingPromptId(null);
+              setEditingAgentId(null);
             }
           }}
-          prompt={editingPrompt}
-          onViewVersionHistory={setVersionHistoryPrompt}
+          agent={editingAgent}
+          agentType="agent"
+          onViewVersionHistory={setVersionHistoryAgent}
         />
 
         {/* Version History Dialog */}
         <PromptVersionHistoryDialog
-          open={!!versionHistoryPrompt}
+          open={!!versionHistoryAgent}
           onOpenChange={(open) => {
             if (!open) {
-              setVersionHistoryPrompt(null);
+              setVersionHistoryAgent(null);
             }
           }}
-          prompt={versionHistoryPrompt}
+          agent={versionHistoryAgent}
         />
       </PageLayout>
     </ErrorBoundary>

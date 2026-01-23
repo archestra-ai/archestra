@@ -16,7 +16,7 @@ This document is human-built, shouldn't be updated with AI. Don't change anythin
 
 In this guide we will use an exemplary Express ([Node.js](https://nodejs.org/)) application to show how seamlessly agents written with AI SDK can be reconfigured to use Archestra as a security layer.
 
-The full example can be found on: [https://github.com/archestra-ai/archestra/tree/main/platform/examples/ai-sdk-express](https://github.com/archestra-ai/archestra/tree/main/platform/examples/ai-sdk-express)
+The full example can be found on: [https://github.com/archestra-ai/examples/tree/main/ai-sdk-express](https://github.com/archestra-ai/examples/tree/main/ai-sdk-express)
 
 ## Problem
 
@@ -120,7 +120,7 @@ You can create and manage profiles in the Archestra Platform UI at [http://local
 Feel free to use our official [Node.js](https://nodejs.org/) (Express) CLI chat example:
 
 ```shell
-git clone git@github.com:archestra-ai/archestra.git
+git clone git@github.com:archestra-ai/examples.git
 cd examples/ai-sdk-express
 pnpm install
 pnpm dev

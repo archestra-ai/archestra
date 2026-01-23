@@ -10,7 +10,7 @@ import {
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
-import { PromptModel } from "@/models";
+import { AgentModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -197,18 +197,18 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Endpoint to get the agent email address for a prompt
+   * Endpoint to get the agent email address for an agent
    * Used by the frontend to display the email address for an agent
    */
   fastify.get(
-    "/api/prompts/:promptId/email-address",
+    "/api/agents/:agentId/email-address",
     {
       schema: {
-        operationId: RouteId.GetPromptEmailAddress,
+        operationId: RouteId.GetAgentEmailAddress,
         description: "Get the email address for invoking an agent",
-        tags: ["Prompts"],
+        tags: ["Agents"],
         params: z.object({
-          promptId: z.string().uuid(),
+          agentId: z.string().uuid(),
         }),
         /**
          * Schema for email address response
@@ -228,12 +228,12 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { promptId } = request.params;
+      const { agentId } = request.params;
 
-      // Get prompt's incoming email settings
-      const prompt = await PromptModel.findById(promptId);
-      if (!prompt) {
-        throw new ApiError(404, "Prompt not found");
+      // Verify agent exists
+      const agent = await AgentModel.findById(agentId);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
       }
 
       const provider = getEmailProvider();
@@ -242,20 +242,20 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send({
           providerEnabled: false,
           emailAddress: null,
-          agentIncomingEmailEnabled: prompt.incomingEmailEnabled,
-          agentSecurityMode: prompt.incomingEmailSecurityMode,
-          agentAllowedDomain: prompt.incomingEmailAllowedDomain,
+          agentIncomingEmailEnabled: agent.incomingEmailEnabled,
+          agentSecurityMode: agent.incomingEmailSecurityMode,
+          agentAllowedDomain: agent.incomingEmailAllowedDomain,
         });
       }
 
-      const emailAddress = provider.generateEmailAddress(promptId);
+      const emailAddress = provider.generateEmailAddress(agentId);
 
       return reply.send({
         providerEnabled: true,
         emailAddress,
-        agentIncomingEmailEnabled: prompt.incomingEmailEnabled,
-        agentSecurityMode: prompt.incomingEmailSecurityMode,
-        agentAllowedDomain: prompt.incomingEmailAllowedDomain,
+        agentIncomingEmailEnabled: agent.incomingEmailEnabled,
+        agentSecurityMode: agent.incomingEmailSecurityMode,
+        agentAllowedDomain: agent.incomingEmailAllowedDomain,
       });
     },
   );

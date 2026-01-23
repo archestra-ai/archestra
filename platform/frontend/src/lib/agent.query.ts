@@ -21,6 +21,8 @@ const {
   updateAgent,
   getLabelKeys,
   getLabelValues,
+  getAgentVersions,
+  rollbackAgent,
 } = archestraApiSdk;
 
 // For backward compatibility - returns all agents as an array (suspense version)
@@ -191,5 +193,63 @@ export function useLabelValues(params?: { key?: string }) {
     queryFn: async () =>
       (await getLabelValues({ query: key ? { key } : {} })).data ?? [],
     enabled: key !== undefined,
+  });
+}
+
+// ============================================================================
+// Internal Agents (Prompt-based agents) - Version History & Rollback
+// ============================================================================
+
+/**
+ * Get internal agents only (agents with prompts).
+ * Non-suspense version for components that need loading states.
+ */
+export function useInternalAgents() {
+  return useQuery({
+    queryKey: ["agents", "all", { agentType: "agent" }],
+    queryFn: async () => {
+      const response = await getAllAgents({ query: { agentType: "agent" } });
+      return response.data ?? [];
+    },
+  });
+}
+
+/**
+ * Get version history for an internal agent.
+ * Only applicable to internal agents (agents with prompts).
+ */
+export function useAgentVersions(id: string | undefined) {
+  return useQuery({
+    queryKey: ["agents", id, "versions"],
+    queryFn: async () => {
+      if (!id) return null;
+      const response = await getAgentVersions({ path: { id } });
+      return response.data ?? null;
+    },
+    enabled: !!id,
+  });
+}
+
+/**
+ * Rollback an internal agent to a previous version.
+ * Only applicable to internal agents (agents with prompts).
+ */
+export function useRollbackAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      const response = await rollbackAgent({
+        path: { id },
+        body: { version },
+      });
+      return response.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: ["agents", variables.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["agents", variables.id, "versions"],
+      });
+    },
   });
 }

@@ -13,6 +13,9 @@ export const SelectConversationSchema = createSelectSchema(
   agent: z.object({
     id: z.string(),
     name: z.string(),
+    systemPrompt: z.string().nullable(),
+    userPrompt: z.string().nullable(),
+    agentType: z.enum(["mcp_gateway", "agent"]),
   }),
   messages: z.array(z.any()), // UIMessage[] from AI SDK
 });

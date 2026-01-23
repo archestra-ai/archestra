@@ -24,7 +24,6 @@ import {
   ConversationEnabledToolModel,
   ConversationModel,
   MessageModel,
-  PromptModel,
   TeamModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
@@ -168,16 +167,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Use prompt ID as external agent ID if available, otherwise use header value
-      // This allows prompt names to be displayed in LLM proxy logs
+      // Use agent ID as external agent ID if available, otherwise use header value
+      // This allows agent names to be displayed in LLM proxy logs
       const headerExternalAgentId = getExternalAgentId(headers);
-      const externalAgentId = conversation.promptId ?? headerExternalAgentId;
+      const externalAgentId = conversation.agentId ?? headerExternalAgentId;
 
-      // Fetch enabled tool IDs, custom selection status, and agent prompts in parallel
-      const [enabledToolIds, hasCustomSelection, prompt] = await Promise.all([
+      // Fetch enabled tool IDs and custom selection status in parallel
+      const [enabledToolIds, hasCustomSelection] = await Promise.all([
         ConversationEnabledToolModel.findByConversation(conversationId),
         ConversationEnabledToolModel.hasCustomSelection(conversationId),
-        PromptModel.findById(conversation.promptId),
       ]);
 
       // Fetch MCP tools with enabled tool filtering
@@ -190,25 +188,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userIsProfileAdmin,
         enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
         conversationId: conversation.id,
-        promptId: conversation.promptId ?? undefined,
         organizationId,
         // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
         sessionId: conversation.id,
-        // Pass promptId as initial delegation chain (will be extended by delegated agents)
-        delegationChain: conversation.promptId ?? undefined,
+        // Pass agentId as initial delegation chain (will be extended by delegated agents)
+        delegationChain: conversation.agentId,
       });
 
-      // Build system prompt from prompts' systemPrompt and userPrompt fields
+      // Build system prompt from agent's systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
       const systemPromptParts: string[] = [];
       const userPromptParts: string[] = [];
 
-      // Collect system and user prompts from all assigned prompts
-      if (prompt?.systemPrompt) {
-        systemPromptParts.push(prompt.systemPrompt);
+      // Collect system and user prompts from the agent
+      if (conversation.agent.systemPrompt) {
+        systemPromptParts.push(conversation.agent.systemPrompt);
       }
-      if (prompt?.userPrompt) {
-        userPromptParts.push(prompt.userPrompt);
+      if (conversation.agent.userPrompt) {
+        userPromptParts.push(conversation.agent.userPrompt);
       }
 
       // Combine all prompts into system prompt (system prompts first, then user prompts)
@@ -236,7 +233,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: conversation.selectedModel,
           provider,
           providerSource: conversation.selectedProvider ? "stored" : "detected",
-          promptId: prompt?.id,
           hasSystemPromptParts: systemPromptParts.length > 0,
           hasUserPromptParts: userPromptParts.length > 0,
           systemPromptProvided: !!systemPrompt,
@@ -546,7 +542,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         body: InsertConversationSchema.pick({
           agentId: true,
-          promptId: true,
           title: true,
           selectedModel: true,
           selectedProvider: true,
@@ -554,7 +549,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         })
           .required({ agentId: true })
           .partial({
-            promptId: true,
             title: true,
             selectedModel: true,
             selectedProvider: true,
@@ -565,14 +559,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        body: {
-          agentId,
-          promptId,
-          title,
-          selectedModel,
-          selectedProvider,
-          chatApiKeyId,
-        },
+        body: { agentId, title, selectedModel, selectedProvider, chatApiKeyId },
         user,
         organizationId,
         headers,
@@ -632,13 +619,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Creating conversation with model",
       );
 
-      // Create conversation with agent and optional prompt
+      // Create conversation with agent
       return reply.send(
         await ConversationModel.create({
           userId: user.id,
           organizationId,
           agentId,
-          promptId,
           title,
           selectedModel: modelToUse,
           selectedProvider: providerToUse,

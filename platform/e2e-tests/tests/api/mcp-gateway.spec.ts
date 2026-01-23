@@ -30,8 +30,12 @@ test.describe("MCP Gateway - Authentication", () => {
   let archestraToken: string;
 
   test.beforeAll(async ({ request, createAgent }) => {
-    // Create test profile
-    const createResponse = await createAgent(request, "MCP Gateway Auth Test");
+    // Create test profile with unique name to avoid conflicts in parallel runs
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const createResponse = await createAgent(
+      request,
+      `MCP Gateway Auth Test ${uniqueSuffix}`,
+    );
     const profile = await createResponse.json();
     profileId = profile.id;
 

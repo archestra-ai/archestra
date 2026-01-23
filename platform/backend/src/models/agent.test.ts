@@ -11,8 +11,7 @@ describe("AgentModel", () => {
     await AgentModel.create({ name: "Test Agent", teams: [] });
     await AgentModel.create({ name: "Test Agent 2", teams: [] });
 
-    // Expecting 3: 2 created + 1 default agent from migration
-    expect(await AgentModel.findAll()).toHaveLength(3);
+    expect(await AgentModel.findAll()).toHaveLength(2);
   });
 
   describe("exists", () => {
@@ -122,8 +121,7 @@ describe("AgentModel", () => {
       await AgentModel.create({ name: "Agent 3", teams: [] });
 
       const agents = await AgentModel.findAll(admin.id, true);
-      // Expecting 4: 3 created + 1 default agent from migration
-      expect(agents).toHaveLength(4);
+      expect(agents).toHaveLength(3);
     });
 
     test("member only sees agents in their teams", async ({
@@ -564,8 +562,7 @@ describe("AgentModel", () => {
 
       const agents = await AgentModel.findAll();
 
-      // Expecting 3: 2 created + 1 default agent from migration
-      expect(agents).toHaveLength(3);
+      expect(agents).toHaveLength(2);
 
       // Check first agent's labels are sorted
       const agent1 = agents.find((a) => a.name === "Agent 1");
@@ -640,7 +637,7 @@ describe("AgentModel", () => {
     }) => {
       const admin = await makeAdmin();
 
-      // Create 3 agents (+ 1 default from migration = 4 total)
+      // Create 3 agents
       await AgentModel.create({
         name: "Agent 1",
         teams: [],
@@ -664,7 +661,7 @@ describe("AgentModel", () => {
       );
 
       expect(result.data.length).toBe(result.pagination.total);
-      expect(result.pagination.total).toBe(4); // 3 + 1 default
+      expect(result.pagination.total).toBe(3);
     });
 
     test("pagination works correctly when agents have many tools", async ({
@@ -727,7 +724,7 @@ describe("AgentModel", () => {
 
       // agent4 and agent5 have no tools (just the default archestra tools)
 
-      // Query with limit=20 - this should return all 6 agents (5 + 1 default)
+      // Query with limit=20 - this should return all 5 agents
       // Bug scenario: if LIMIT was applied to joined rows, we'd only get 2 agents
       const result = await AgentModel.findAllPaginated(
         { limit: 20, offset: 0 },
@@ -737,8 +734,8 @@ describe("AgentModel", () => {
         true,
       );
 
-      expect(result.data).toHaveLength(6); // 5 created + 1 default
-      expect(result.pagination.total).toBe(6);
+      expect(result.data).toHaveLength(5);
+      expect(result.pagination.total).toBe(5);
 
       // Verify all agents are returned (not just the first 2 with many tools)
       const agentNames = result.data.map((a) => a.name).sort();
@@ -855,7 +852,7 @@ describe("AgentModel", () => {
         admin.id,
         true,
       );
-      expect(resultByName.data).toHaveLength(5); // 4 + 1 default
+      expect(resultByName.data).toHaveLength(4);
       expect(resultByName.data[0].name).toBe("Alpha");
 
       // Test sortBy createdAt
@@ -866,7 +863,7 @@ describe("AgentModel", () => {
         admin.id,
         true,
       );
-      expect(resultByDate.data).toHaveLength(5);
+      expect(resultByDate.data).toHaveLength(4);
 
       // Test sortBy toolsCount
       const resultByToolsCount = await AgentModel.findAllPaginated(
@@ -876,7 +873,7 @@ describe("AgentModel", () => {
         admin.id,
         true,
       );
-      expect(resultByToolsCount.data).toHaveLength(5);
+      expect(resultByToolsCount.data).toHaveLength(4);
       // Agent with most tools should be first
       expect(resultByToolsCount.data[0].name).toBe("Zebra");
 
@@ -888,7 +885,7 @@ describe("AgentModel", () => {
         admin.id,
         true,
       );
-      expect(resultByTeam.data).toHaveLength(5);
+      expect(resultByTeam.data).toHaveLength(4);
     });
 
     test("pagination offset works correctly with many tools", async ({
@@ -928,7 +925,7 @@ describe("AgentModel", () => {
       );
 
       expect(page1.data).toHaveLength(2);
-      expect(page1.pagination.total).toBe(6); // 5 + 1 default
+      expect(page1.pagination.total).toBe(5);
 
       // Second page (limit=2, offset=2)
       const page2 = await AgentModel.findAllPaginated(
@@ -940,7 +937,7 @@ describe("AgentModel", () => {
       );
 
       expect(page2.data).toHaveLength(2);
-      expect(page2.pagination.total).toBe(6);
+      expect(page2.pagination.total).toBe(5);
 
       // Verify no overlap between pages
       const page1Ids = page1.data.map((a) => a.id);

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { InsertAgent } from "@/types";
 import { randomBool, randomElement } from "./utils";
 
 const AGENT_NAME_TEMPLATES = [
@@ -50,21 +49,37 @@ function generateAgentName(index: number): string {
   return `${template}${suffix}`;
 }
 
-type MockAgent = InsertAgent & { id: string };
+// Raw agent data for direct database insertion (without junction table fields like teams)
+type MockAgentRaw = {
+  id: string;
+  name: string;
+  organizationId: string;
+  isDemo: boolean;
+  isDefault: boolean;
+  considerContextUntrusted: boolean;
+  agentType: "mcp_gateway" | "agent";
+};
 
 /**
- * Generate mock agent data
+ * Generate mock agent data for direct database insertion
+ * @param organizationId - Organization ID to associate agents with
  * @param count - Number of agents to generate (defaults to 90)
  */
-export function generateMockAgents(count = 90): MockAgent[] {
-  const agents: MockAgent[] = [];
+export function generateMockAgents(
+  organizationId: string,
+  count = 90,
+): MockAgentRaw[] {
+  const agents: MockAgentRaw[] = [];
 
   for (let i = 0; i < count; i++) {
     agents.push({
       id: randomUUID(),
       name: generateAgentName(i),
+      organizationId,
       isDemo: randomBool(0.3), // 30% chance of being a demo agent
-      teams: [],
+      isDefault: false,
+      considerContextUntrusted: false,
+      agentType: "mcp_gateway", // Mock agents are external profiles
     });
   }
 

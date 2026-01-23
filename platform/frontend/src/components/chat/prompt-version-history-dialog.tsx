@@ -12,35 +12,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { usePromptVersions, useRollbackPrompt } from "@/lib/prompts.query";
+import { useAgentVersions, useRollbackAgent } from "@/lib/agent.query";
 import { formatDate } from "@/lib/utils";
 import { TruncatedText } from "../truncated-text";
 
-type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
+type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type HistoryEntry = NonNullable<
-  archestraApiTypes.GetPromptVersionsResponses["200"]
+  archestraApiTypes.GetAgentVersionsResponses["200"]
 >["history"][number];
 
 interface PromptVersionHistoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  prompt: Prompt | null;
+  agent: InternalAgent | null;
 }
 
 export function PromptVersionHistoryDialog({
   open,
   onOpenChange,
-  prompt,
+  agent,
 }: PromptVersionHistoryDialogProps) {
-  const { data: versions, isLoading } = usePromptVersions(prompt?.id || "");
-  const rollbackMutation = useRollbackPrompt();
+  const { data: versions, isLoading } = useAgentVersions(agent?.id);
+  const rollbackMutation = useRollbackAgent();
 
   const handleRollback = async (version: number) => {
-    if (!prompt) return;
+    if (!agent) return;
 
     try {
       await rollbackMutation.mutateAsync({
-        id: prompt.id,
+        id: agent.id,
         version,
       });
       toast.success("Rolled back to selected version");
@@ -59,9 +59,9 @@ export function PromptVersionHistoryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Version History: {prompt?.name}</DialogTitle>
+          <DialogTitle>Version History: {agent?.name}</DialogTitle>
           <DialogDescription>
-            View and rollback to previous versions of this prompt
+            View and rollback to previous versions of this agent
           </DialogDescription>
         </DialogHeader>
 
@@ -77,7 +77,7 @@ export function PromptVersionHistoryDialog({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">
-                      Version {current.version}
+                      Version {current.promptVersion}
                     </span>
                     <Badge variant="default" className="text-xs">
                       <Check className="h-3 w-3 mr-1" />
@@ -85,7 +85,7 @@ export function PromptVersionHistoryDialog({
                     </Badge>
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {formatDate({ date: current.createdAt })}
+                    {formatDate({ date: current.updatedAt })}
                   </span>
                 </div>
 

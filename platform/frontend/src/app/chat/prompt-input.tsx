@@ -23,11 +23,11 @@ import {
   PromptInputTools,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
-import { ProfileSelector } from "@/components/chat/profile-selector";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -54,8 +54,6 @@ interface ArchestraPromptInputProps {
   onApiKeyChange?: (apiKeyId: string) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
-  /** Callback for profile change in initial chat mode (no conversation) */
-  onProfileChange?: (agentId: string) => void;
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
   /** Whether models are still loading - passed to API key selector */
@@ -77,7 +75,6 @@ const PromptInputContent = ({
   initialApiKeyId,
   onApiKeyChange,
   textareaRef: externalTextareaRef,
-  onProfileChange,
   allowFileUploads = false,
   isModelsLoading = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -99,18 +96,18 @@ const PromptInputContent = ({
     <PromptInput globalDrop multiple onSubmit={onSubmit}>
       <PromptInputHeader className="pt-3">
         {agentId && (
-          <div className="flex flex-wrap items-center gap-2">
-            <ProfileSelector
-              currentAgentId={agentId}
-              conversationId={conversationId}
-              onProfileChange={onProfileChange}
-            />
+          <>
             <ChatToolsDisplay
               agentId={agentId}
               promptId={promptId}
               conversationId={conversationId}
             />
-          </div>
+            <AgentToolsDisplay
+              agentId={agentId}
+              conversationId={conversationId}
+              addAgentsButton={null}
+            />
+          </>
         )}
       </PromptInputHeader>
       {/* File attachments display - shown inline above textarea */}
@@ -200,7 +197,6 @@ const ArchestraPromptInput = ({
   initialApiKeyId,
   onApiKeyChange,
   textareaRef,
-  onProfileChange,
   allowFileUploads = false,
   isModelsLoading = false,
 }: ArchestraPromptInputProps) => {
@@ -221,7 +217,6 @@ const ArchestraPromptInput = ({
           initialApiKeyId={initialApiKeyId}
           onApiKeyChange={onApiKeyChange}
           textareaRef={textareaRef}
-          onProfileChange={onProfileChange}
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
         />

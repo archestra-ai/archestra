@@ -5272,16 +5272,16 @@ export type GetHealthResponses = {
 
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
-export type GetV1A2aByPromptIdWellKnownAgentJsonData = {
+export type GetV1A2aByAgentIdWellKnownAgentJsonData = {
     body?: never;
     path: {
-        promptId: string;
+        agentId: string;
     };
     query?: never;
-    url: '/v1/a2a/{promptId}/.well-known/agent.json';
+    url: '/v1/a2a/{agentId}/.well-known/agent.json';
 };
 
-export type GetV1A2aByPromptIdWellKnownAgentJsonResponses = {
+export type GetV1A2aByAgentIdWellKnownAgentJsonResponses = {
     /**
      * Default Response
      */
@@ -5308,9 +5308,9 @@ export type GetV1A2aByPromptIdWellKnownAgentJsonResponses = {
     };
 };
 
-export type GetV1A2aByPromptIdWellKnownAgentJsonResponse = GetV1A2aByPromptIdWellKnownAgentJsonResponses[keyof GetV1A2aByPromptIdWellKnownAgentJsonResponses];
+export type GetV1A2aByAgentIdWellKnownAgentJsonResponse = GetV1A2aByAgentIdWellKnownAgentJsonResponses[keyof GetV1A2aByAgentIdWellKnownAgentJsonResponses];
 
-export type PostV1A2aByPromptIdData = {
+export type PostV1A2aByAgentIdData = {
     body: {
         jsonrpc: '2.0';
         id: string | number;
@@ -5325,13 +5325,13 @@ export type PostV1A2aByPromptIdData = {
         };
     };
     path: {
-        promptId: string;
+        agentId: string;
     };
     query?: never;
-    url: '/v1/a2a/{promptId}';
+    url: '/v1/a2a/{agentId}';
 };
 
-export type PostV1A2aByPromptIdResponses = {
+export type PostV1A2aByAgentIdResponses = {
     /**
      * Default Response
      */
@@ -5358,7 +5358,7 @@ export type PostV1A2aByPromptIdResponses = {
     };
 };
 
-export type PostV1A2aByPromptIdResponse = PostV1A2aByPromptIdResponses[keyof PostV1A2aByPromptIdResponses];
+export type PostV1A2aByAgentIdResponse = PostV1A2aByAgentIdResponses[keyof PostV1A2aByAgentIdResponses];
 
 export type GetAgentsData = {
     body?: never;
@@ -5368,6 +5368,10 @@ export type GetAgentsData = {
          * Filter by agent name
          */
         name?: string;
+        /**
+         * Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.
+         */
+        agentType?: 'mcp_gateway' | 'agent';
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
@@ -5442,10 +5446,24 @@ export type GetAgentsResponses = {
     200: {
         data: Array<{
             id: string;
+            organizationId: string;
             name: string;
             isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
+            agentType: 'mcp_gateway' | 'agent';
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            promptVersion: number | null;
+            promptHistory: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            allowedChatops: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -5453,7 +5471,7 @@ export type GetAgentsResponses = {
                 agentId: string | null;
                 catalogId: string | null;
                 mcpServerId: string | null;
-                promptAgentId: string | null;
+                delegateToAgentId: string | null;
                 name: string;
                 /**
                  *
@@ -5503,10 +5521,20 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 
 export type CreateAgentData = {
     body: {
+        organizationId?: string;
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
+        agentType?: 'mcp_gateway' | 'agent';
+        systemPrompt?: string | null;
+        userPrompt?: string | null;
+        allowedChatops?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain?: string | null;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -5585,10 +5613,24 @@ export type CreateAgentResponses = {
      */
     200: {
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'mcp_gateway' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5596,7 +5638,7 @@ export type CreateAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -5638,7 +5680,12 @@ export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponse
 export type GetAllAgentsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.
+         */
+        agentType?: 'mcp_gateway' | 'agent';
+    };
     url: '/api/agents/all';
 };
 
@@ -5707,10 +5754,24 @@ export type GetAllAgentsResponses = {
      */
     200: Array<{
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'mcp_gateway' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5718,7 +5779,7 @@ export type GetAllAgentsResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -5829,10 +5890,24 @@ export type GetDefaultAgentResponses = {
      */
     200: {
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'mcp_gateway' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5840,7 +5915,7 @@ export type GetDefaultAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -6032,10 +6107,24 @@ export type GetAgentResponses = {
      */
     200: {
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'mcp_gateway' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6043,7 +6132,7 @@ export type GetAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -6084,10 +6173,20 @@ export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 
 export type UpdateAgentData = {
     body?: {
+        organizationId?: string;
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
+        agentType?: 'mcp_gateway' | 'agent';
+        systemPrompt?: string | null;
+        userPrompt?: string | null;
+        allowedChatops?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain?: string | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -6168,10 +6267,24 @@ export type UpdateAgentResponses = {
      */
     200: {
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'mcp_gateway' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6179,7 +6292,7 @@ export type UpdateAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -6217,6 +6330,295 @@ export type UpdateAgentResponses = {
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetAgentVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/versions';
+};
+
+export type GetAgentVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAgentVersionsError = GetAgentVersionsErrors[keyof GetAgentVersionsErrors];
+
+export type GetAgentVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        current: {
+            id: string;
+            organizationId: string;
+            name: string;
+            isDemo: boolean;
+            isDefault: boolean;
+            considerContextUntrusted: boolean;
+            agentType: 'mcp_gateway' | 'agent';
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            promptVersion: number | null;
+            promptHistory: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            allowedChatops: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
+            createdAt: string;
+            updatedAt: string;
+            tools: Array<{
+                id: string;
+                agentId: string | null;
+                catalogId: string | null;
+                mcpServerId: string | null;
+                delegateToAgentId: string | null;
+                name: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                description: string | null;
+                policiesAutoConfiguredAt: string | null;
+                policiesAutoConfiguringStartedAt: string | null;
+                policiesAutoConfiguredReasoning: string | null;
+                createdAt: string;
+                updatedAt: string;
+            }>;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
+        };
+        history: Array<{
+            version: number;
+            userPrompt: string | null;
+            systemPrompt: string | null;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetAgentVersionsResponse = GetAgentVersionsResponses[keyof GetAgentVersionsResponses];
+
+export type RollbackAgentData = {
+    body: {
+        /**
+         * Version to rollback to
+         */
+        version: number;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/rollback';
+};
+
+export type RollbackAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RollbackAgentError = RollbackAgentErrors[keyof RollbackAgentErrors];
+
+export type RollbackAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        isDemo: boolean;
+        isDefault: boolean;
+        considerContextUntrusted: boolean;
+        agentType: 'mcp_gateway' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            catalogId: string | null;
+            mcpServerId: string | null;
+            delegateToAgentId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+    };
+};
+
+export type RollbackAgentResponse = RollbackAgentResponses[keyof RollbackAgentResponses];
 
 export type GetLabelKeysData = {
     body?: never;
@@ -6944,7 +7346,7 @@ export type GetAgentToolsResponses = {
         agentId: string | null;
         catalogId: string | null;
         mcpServerId: string | null;
-        promptAgentId: string | null;
+        delegateToAgentId: string | null;
         name: string;
         /**
          *
@@ -7063,6 +7465,337 @@ export type UpdateAgentToolResponses = {
 };
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
+
+export type GetAgentDelegationsData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/delegations';
+};
+
+export type GetAgentDelegationsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAgentDelegationsError = GetAgentDelegationsErrors[keyof GetAgentDelegationsErrors];
+
+export type GetAgentDelegationsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        systemPrompt: string | null;
+    }>;
+};
+
+export type GetAgentDelegationsResponse = GetAgentDelegationsResponses[keyof GetAgentDelegationsResponses];
+
+export type SyncAgentDelegationsData = {
+    body: {
+        targetAgentIds: Array<string>;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/delegations';
+};
+
+export type SyncAgentDelegationsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SyncAgentDelegationsError = SyncAgentDelegationsErrors[keyof SyncAgentDelegationsErrors];
+
+export type SyncAgentDelegationsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        added: Array<string>;
+        removed: Array<string>;
+    };
+};
+
+export type SyncAgentDelegationsResponse = SyncAgentDelegationsResponses[keyof SyncAgentDelegationsResponses];
+
+export type DeleteAgentDelegationData = {
+    body?: never;
+    path: {
+        agentId: string;
+        targetAgentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/delegations/{targetAgentId}';
+};
+
+export type DeleteAgentDelegationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteAgentDelegationError = DeleteAgentDelegationErrors[keyof DeleteAgentDelegationErrors];
+
+export type DeleteAgentDelegationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteAgentDelegationResponse = DeleteAgentDelegationResponses[keyof DeleteAgentDelegationResponses];
+
+export type GetAllDelegationConnectionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-delegations';
+};
+
+export type GetAllDelegationConnectionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAllDelegationConnectionsError = GetAllDelegationConnectionsErrors[keyof GetAllDelegationConnectionsErrors];
+
+export type GetAllDelegationConnectionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        connections: Array<{
+            sourceAgentId: string;
+            sourceAgentName: string;
+            targetAgentId: string;
+            targetAgentName: string;
+            toolId: string;
+        }>;
+        agents: Array<{
+            id: string;
+            name: string;
+            agentType: 'mcp_gateway' | 'agent';
+        }>;
+    };
+};
+
+export type GetAllDelegationConnectionsResponse = GetAllDelegationConnectionsResponses[keyof GetAllDelegationConnectionsResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
@@ -9484,7 +10217,6 @@ export type GetChatConversationsResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -9499,6 +10231,9 @@ export type GetChatConversationsResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'mcp_gateway' | 'agent';
         };
         messages: Array<unknown>;
     }>;
@@ -9509,7 +10244,6 @@ export type GetChatConversationsResponse = GetChatConversationsResponses[keyof G
 export type CreateChatConversationData = {
     body: {
         agentId: string;
-        promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
         selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
@@ -9588,7 +10322,6 @@ export type CreateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -9603,6 +10336,9 @@ export type CreateChatConversationResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'mcp_gateway' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -9766,7 +10502,6 @@ export type GetChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -9781,6 +10516,9 @@ export type GetChatConversationResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'mcp_gateway' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -9872,7 +10610,6 @@ export type UpdateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -9887,6 +10624,9 @@ export type UpdateChatConversationResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'mcp_gateway' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10059,7 +10799,6 @@ export type GenerateChatConversationTitleResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -10074,6 +10813,9 @@ export type GenerateChatConversationTitleResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'mcp_gateway' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10162,7 +10904,6 @@ export type UpdateChatMessageResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
@@ -10177,6 +10918,9 @@ export type UpdateChatMessageResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'mcp_gateway' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10625,7 +11369,7 @@ export type ListChatOpsBindingsResponses = {
         provider: 'ms-teams';
         channelId: string;
         workspaceId: string | null;
-        promptId: string;
+        agentId: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -11822,16 +12566,16 @@ export type PostApiWebhooksIncomingEmailResponses = {
 
 export type PostApiWebhooksIncomingEmailResponse = PostApiWebhooksIncomingEmailResponses[keyof PostApiWebhooksIncomingEmailResponses];
 
-export type GetPromptEmailAddressData = {
+export type GetAgentEmailAddressData = {
     body?: never;
     path: {
-        promptId: string;
+        agentId: string;
     };
     query?: never;
-    url: '/api/prompts/{promptId}/email-address';
+    url: '/api/agents/{agentId}/email-address';
 };
 
-export type GetPromptEmailAddressErrors = {
+export type GetAgentEmailAddressErrors = {
     /**
      * Default Response
      */
@@ -11888,9 +12632,9 @@ export type GetPromptEmailAddressErrors = {
     };
 };
 
-export type GetPromptEmailAddressError = GetPromptEmailAddressErrors[keyof GetPromptEmailAddressErrors];
+export type GetAgentEmailAddressError = GetAgentEmailAddressErrors[keyof GetAgentEmailAddressErrors];
 
-export type GetPromptEmailAddressResponses = {
+export type GetAgentEmailAddressResponses = {
     /**
      * Default Response
      */
@@ -11903,7 +12647,7 @@ export type GetPromptEmailAddressResponses = {
     };
 };
 
-export type GetPromptEmailAddressResponse = GetPromptEmailAddressResponses[keyof GetPromptEmailAddressResponses];
+export type GetAgentEmailAddressResponse = GetAgentEmailAddressResponses[keyof GetAgentEmailAddressResponses];
 
 export type GetIncomingEmailStatusData = {
     body?: never;
@@ -18839,1123 +19583,6 @@ export type GetPolicyConfigSubagentPromptResponses = {
 
 export type GetPolicyConfigSubagentPromptResponse = GetPolicyConfigSubagentPromptResponses[keyof GetPolicyConfigSubagentPromptResponses];
 
-export type GetAllPromptAgentConnectionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/prompt-agents';
-};
-
-export type GetAllPromptAgentConnectionsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAllPromptAgentConnectionsError = GetAllPromptAgentConnectionsErrors[keyof GetAllPromptAgentConnectionsErrors];
-
-export type GetAllPromptAgentConnectionsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        promptId: string;
-        agentPromptId: string;
-    }>;
-};
-
-export type GetAllPromptAgentConnectionsResponse = GetAllPromptAgentConnectionsResponses[keyof GetAllPromptAgentConnectionsResponses];
-
-export type GetPromptAgentsData = {
-    body?: never;
-    path: {
-        promptId: string;
-    };
-    query?: never;
-    url: '/api/prompts/{promptId}/agents';
-};
-
-export type GetPromptAgentsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptAgentsError = GetPromptAgentsErrors[keyof GetPromptAgentsErrors];
-
-export type GetPromptAgentsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        promptId: string;
-        agentPromptId: string;
-        createdAt: string;
-        name: string;
-        systemPrompt: string | null;
-        profileId: string;
-        profileName: string;
-    }>;
-};
-
-export type GetPromptAgentsResponse = GetPromptAgentsResponses[keyof GetPromptAgentsResponses];
-
-export type SyncPromptAgentsData = {
-    body: {
-        agentPromptIds: Array<string>;
-    };
-    path: {
-        promptId: string;
-    };
-    query?: never;
-    url: '/api/prompts/{promptId}/agents';
-};
-
-export type SyncPromptAgentsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type SyncPromptAgentsError = SyncPromptAgentsErrors[keyof SyncPromptAgentsErrors];
-
-export type SyncPromptAgentsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        added: Array<string>;
-        removed: Array<string>;
-    };
-};
-
-export type SyncPromptAgentsResponse = SyncPromptAgentsResponses[keyof SyncPromptAgentsResponses];
-
-export type DeletePromptAgentData = {
-    body?: never;
-    path: {
-        promptId: string;
-        agentPromptId: string;
-    };
-    query?: never;
-    url: '/api/prompts/{promptId}/agents/{agentPromptId}';
-};
-
-export type DeletePromptAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeletePromptAgentError = DeletePromptAgentErrors[keyof DeletePromptAgentErrors];
-
-export type DeletePromptAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeletePromptAgentResponse = DeletePromptAgentResponses[keyof DeletePromptAgentResponses];
-
-export type GetPromptsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/prompts';
-};
-
-export type GetPromptsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptsError = GetPromptsErrors[keyof GetPromptsErrors];
-
-export type GetPromptsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetPromptsResponse = GetPromptsResponses[keyof GetPromptsResponses];
-
-export type CreatePromptData = {
-    body: {
-        name: string;
-        agentId: string;
-        userPrompt?: string | null;
-        systemPrompt?: string | null;
-        version?: number;
-        allowedChatops?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        incomingEmailEnabled?: boolean;
-        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/prompts';
-};
-
-export type CreatePromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreatePromptError = CreatePromptErrors[keyof CreatePromptErrors];
-
-export type CreatePromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreatePromptResponse = CreatePromptResponses[keyof CreatePromptResponses];
-
-export type DeletePromptData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}';
-};
-
-export type DeletePromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeletePromptError = DeletePromptErrors[keyof DeletePromptErrors];
-
-export type DeletePromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeletePromptResponse = DeletePromptResponses[keyof DeletePromptResponses];
-
-export type GetPromptData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}';
-};
-
-export type GetPromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptError = GetPromptErrors[keyof GetPromptErrors];
-
-export type GetPromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
-
-export type UpdatePromptData = {
-    body?: {
-        name?: string;
-        agentId?: string;
-        userPrompt?: string | null;
-        systemPrompt?: string | null;
-        allowedChatops?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        incomingEmailEnabled?: boolean;
-        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain?: string | null;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}';
-};
-
-export type UpdatePromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdatePromptError = UpdatePromptErrors[keyof UpdatePromptErrors];
-
-export type UpdatePromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdatePromptResponse = UpdatePromptResponses[keyof UpdatePromptResponses];
-
-export type GetPromptVersionsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}/versions';
-};
-
-export type GetPromptVersionsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptVersionsError = GetPromptVersionsErrors[keyof GetPromptVersionsErrors];
-
-export type GetPromptVersionsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        current: {
-            id: string;
-            organizationId: string;
-            name: string;
-            agentId: string;
-            userPrompt: string | null;
-            systemPrompt: string | null;
-            version: number;
-            history: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown>;
-            allowedChatops: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown>;
-            incomingEmailEnabled: boolean;
-            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-            incomingEmailAllowedDomain: string | null;
-            createdAt: string;
-            updatedAt: string;
-        };
-        history: Array<{
-            version: number;
-            userPrompt: string | null;
-            systemPrompt: string | null;
-            createdAt: string;
-        }>;
-    };
-};
-
-export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
-
-export type GetPromptToolsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}/tools';
-};
-
-export type GetPromptToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptToolsError = GetPromptToolsErrors[keyof GetPromptToolsErrors];
-
-export type GetPromptToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string | null;
-        catalogId: string | null;
-        mcpServerId: string | null;
-        promptAgentId: string | null;
-        name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description: string | null;
-        policiesAutoConfiguredAt: string | null;
-        policiesAutoConfiguringStartedAt: string | null;
-        policiesAutoConfiguredReasoning: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agentPromptId: string;
-    }>;
-};
-
-export type GetPromptToolsResponse = GetPromptToolsResponses[keyof GetPromptToolsResponses];
-
-export type RollbackPromptData = {
-    body: {
-        version: number;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}/rollback';
-};
-
-export type RollbackPromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RollbackPromptError = RollbackPromptErrors[keyof RollbackPromptErrors];
-
-export type RollbackPromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type RollbackPromptResponse = RollbackPromptResponses[keyof RollbackPromptResponses];
-
 export type GetSecretsTypeData = {
     body?: never;
     path?: never;
@@ -22441,7 +22068,7 @@ export type GetToolsResponses = {
     200: Array<{
         id: string;
         catalogId: string | null;
-        promptAgentId: string | null;
+        delegateToAgentId: string | null;
         name: string;
         /**
          *

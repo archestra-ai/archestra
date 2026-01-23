@@ -1531,6 +1531,425 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions lastInteraction and claudeCodeTitle", () => {
+    test("returns lastInteractionRequest and lastInteractionType for session with single interaction", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "single-interaction-session",
+        request: {
+          model: "gpt-4",
+          messages: [
+            {
+              role: "user",
+              content:
+                "This is a meaningful message with more than 20 characters",
+            },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Response",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "single-interaction-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].lastInteractionType).toBe(
+        "openai:chatCompletions",
+      );
+    });
+
+    test("skips prompt suggestion generator requests when finding lastInteractionRequest", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // First: a real user request (should be the lastInteractionRequest)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-with-prompt-suggestion",
+        request: {
+          model: "gpt-4",
+          messages: [
+            {
+              role: "user",
+              content:
+                "This is a real user question that should be shown as last request",
+            },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Second: a prompt suggestion request (should be skipped)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-with-prompt-suggestion",
+        request: {
+          model: "gpt-4",
+          messages: [
+            {
+              role: "user",
+              content:
+                "You are a prompt suggestion generator. Generate suggestions.",
+            },
+          ],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now() + 1000,
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "session-with-prompt-suggestion" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      const lastRequest = sessions.data[0].lastInteractionRequest as {
+        messages: Array<{ content: string }>;
+      };
+      expect(lastRequest.messages[0].content).toContain("real user question");
+    });
+
+    test("skips title generation requests when finding lastInteractionRequest", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // First: a real user request
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-with-title-gen",
+        request: {
+          model: "gpt-4",
+          messages: [
+            {
+              role: "user",
+              content:
+                "This is a real question about programming that should appear",
+            },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Second: a title generation request (should be skipped for lastInteractionRequest)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-with-title-gen",
+        request: {
+          model: "gpt-4",
+          messages: [
+            {
+              role: "user",
+              content: "Please write a 5-10 word title for this conversation.",
+            },
+          ],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now() + 1000,
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "My Generated Title Here",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "session-with-title-gen" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      const lastRequest = sessions.data[0].lastInteractionRequest as {
+        messages: Array<{ content: string }>;
+      };
+      expect(lastRequest.messages[0].content).toContain("real question");
+    });
+
+    test("extracts claudeCodeTitle from title generation response", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Real request
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-with-claude-title",
+        request: {
+          model: "claude-3-5-sonnet",
+          messages: [
+            {
+              role: "user",
+              content: "Help me write a Python script for data analysis",
+            },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "claude-3-5-sonnet",
+          choices: [],
+        },
+        type: "anthropic:messages",
+      });
+
+      // Title generation request with response containing the title
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-with-claude-title",
+        request: {
+          model: "claude-3-5-sonnet",
+          messages: [
+            {
+              role: "user",
+              content:
+                "Please write a 5-10 word title summarizing this conversation.",
+            },
+          ],
+        },
+        response: {
+          id: "msg_title",
+          content: [{ type: "text", text: "Python Data Analysis Script Help" }],
+          model: "claude-3-5-sonnet",
+          role: "assistant",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          type: "message",
+          usage: { input_tokens: 100, output_tokens: 10 },
+        },
+        type: "anthropic:messages",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "session-with-claude-title" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].claudeCodeTitle).toBe(
+        "Python Data Analysis Script Help",
+      );
+    });
+
+    test("handles title generation request with malformed response (no text)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Real request (should be returned as lastInteractionRequest)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-malformed-title",
+        request: {
+          model: "claude-3-5-sonnet",
+          messages: [
+            {
+              role: "user",
+              content: "Help me write a Python script for data analysis",
+            },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "claude-3-5-sonnet",
+          choices: [],
+        },
+        type: "anthropic:messages",
+      });
+
+      // Title generation request with malformed response (missing text)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "session-malformed-title",
+        request: {
+          model: "claude-3-5-sonnet",
+          messages: [
+            {
+              role: "user",
+              content:
+                "Please write a 5-10 word title summarizing this conversation.",
+            },
+          ],
+        },
+        response: {
+          id: "msg_title",
+          content: [], // Empty content array - no text
+          model: "claude-3-5-sonnet",
+          role: "assistant",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          type: "message",
+          usage: { input_tokens: 100, output_tokens: 0 },
+        },
+        type: "anthropic:messages",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "session-malformed-title" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      // Should have the main interaction but null for title
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].claudeCodeTitle).toBeNull();
+    });
+
+    test("returns null for lastInteractionRequest when all messages are too short", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Short utility message (< 20 chars)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "short-session",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "hi" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "short-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastInteractionRequest).toBeNull();
+    });
+
+    test("handles single interactions without sessionId (null session)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      const interaction = await InteractionModel.create({
+        profileId: agent.id,
+        // No sessionId - this is a single interaction
+        request: {
+          model: "gpt-4",
+          messages: [
+            {
+              role: "user",
+              content: "This is a standalone interaction without a session ID",
+            },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+      );
+
+      // Find our session (identified by interactionId since sessionId is null)
+      const ourSession = sessions.data.find(
+        (s) => s.interactionId === interaction.id,
+      );
+      expect(ourSession).toBeDefined();
+      expect(ourSession?.sessionId).toBeNull();
+      expect(ourSession?.interactionId).toBe(interaction.id);
+      expect(ourSession?.lastInteractionRequest).not.toBeNull();
+    });
+  });
+
   describe("getUniqueUserIds", () => {
     test("returns unique user IDs with names", async ({
       makeAdmin,

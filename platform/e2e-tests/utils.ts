@@ -169,11 +169,15 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
 
   // Wait for the popover to open - it contains the TokenSelect (combobox) for credentials
   await page.waitForLoadState("networkidle");
-  const combobox = page.getByRole("combobox");
-  await combobox.waitFor({ state: "visible" });
+  // Use a more specific selector to find the combobox within the popover content
+  // The popover content has data-radix-popper-content-wrapper attribute
+  const popoverContent = page.locator('[data-radix-popper-content-wrapper]');
+  await popoverContent.waitFor({ state: "visible", timeout: 10000 });
+  const combobox = popoverContent.getByRole("combobox");
+  await combobox.waitFor({ state: "visible", timeout: 5000 });
   await combobox.click();
-  // Wait a brief moment for dropdown to open (dropdowns are client-side, no network request needed)
-  await page.waitForTimeout(100);
+  // Wait for the dropdown options to appear
+  await page.waitForTimeout(500);
 }
 
 export async function verifyToolCallResultViaApi({

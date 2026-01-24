@@ -23,6 +23,11 @@ import {
   PromptInputTools,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
@@ -120,8 +125,8 @@ const PromptInputContent = ({
       </PromptInputBody>
       <PromptInputFooter>
         <PromptInputTools>
-          {/* File attachment button - only shown when file uploads are enabled */}
-          {allowFileUploads && (
+          {/* File attachment button - always shown, disabled with tooltip when file uploads are disabled */}
+          {allowFileUploads ? (
             <PromptInputActionMenu>
               <PromptInputActionMenuTrigger>
                 <PaperclipIcon className="size-4" />
@@ -130,6 +135,19 @@ const PromptInputContent = ({
                 <PromptInputActionAddAttachments label="Attach files" />
               </PromptInputActionMenuContent>
             </PromptInputActionMenu>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0} className="inline-flex">
+                  <PromptInputActionMenuTrigger disabled>
+                    <PaperclipIcon className="size-4" />
+                  </PromptInputActionMenuTrigger>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={4}>
+                File uploads are disabled by your administrator
+              </TooltipContent>
+            </Tooltip>
           )}
           <ModelSelector
             selectedModel={selectedModel}

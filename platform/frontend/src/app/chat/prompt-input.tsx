@@ -23,16 +23,16 @@ import {
   PromptInputTools,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -138,11 +138,11 @@ const PromptInputContent = ({
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span tabIndex={0} className="inline-flex">
+                <button type="button" className="inline-flex">
                   <PromptInputActionMenuTrigger disabled>
                     <PaperclipIcon className="size-4" />
                   </PromptInputActionMenuTrigger>
-                </span>
+                </button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={4}>
                 File uploads are disabled by your administrator

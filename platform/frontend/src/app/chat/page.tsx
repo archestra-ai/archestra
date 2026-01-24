@@ -996,7 +996,7 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto">
             <ChatMessages
               conversationId={conversationId}
-              agentId={currentProfileId || initialAgentId}
+              agentId={currentProfileId || initialAgentId || undefined}
               agentName={
                 _conversationInternalAgent?.name ||
                 internalAgents.find((a) => a.id === initialAgentId)?.name
@@ -1152,7 +1152,7 @@ export default function ChatPage() {
         }}
         agent={
           conversationId && conversation
-            ? conversation.agent
+            ? _conversationInternalAgent
             : initialAgentId
               ? internalAgents.find((a) => a.id === initialAgentId)
               : undefined

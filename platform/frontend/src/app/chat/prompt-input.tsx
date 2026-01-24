@@ -1,5 +1,6 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import type { ChatStatus } from "ai";
 import { PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
@@ -13,6 +14,7 @@ import {
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
+  PromptInputButton,
   PromptInputFooter,
   PromptInputHeader,
   type PromptInputMessage,
@@ -128,7 +130,9 @@ const PromptInputContent = ({
           {/* File attachment button - always shown, disabled with tooltip when file uploads are disabled */}
           {allowFileUploads ? (
             <PromptInputActionMenu>
-              <PromptInputActionMenuTrigger>
+              <PromptInputActionMenuTrigger
+                data-testid={E2eTestId.ChatFileUploadButton}
+              >
                 <PaperclipIcon className="size-4" />
               </PromptInputActionMenuTrigger>
               <PromptInputActionMenuContent>
@@ -138,11 +142,14 @@ const PromptInputContent = ({
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" className="inline-flex">
-                  <PromptInputActionMenuTrigger disabled>
+                <span
+                  className="inline-flex cursor-pointer"
+                  data-testid={E2eTestId.ChatDisabledFileUploadButton}
+                >
+                  <PromptInputButton disabled>
                     <PaperclipIcon className="size-4" />
-                  </PromptInputActionMenuTrigger>
-                </button>
+                  </PromptInputButton>
+                </span>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={4}>
                 File uploads are disabled by your administrator

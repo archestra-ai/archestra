@@ -7,10 +7,6 @@ import type { FormEvent } from "react";
 import { useCallback, useRef } from "react";
 import {
   PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
@@ -23,6 +19,7 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
+  usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
@@ -93,6 +90,7 @@ const PromptInputContent = ({
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
+  const attachments = usePromptInputAttachments();
 
   // Check if agent has tools or delegations
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
@@ -160,18 +158,19 @@ const PromptInputContent = ({
       </PromptInputBody>
       <PromptInputFooter>
         <PromptInputTools>
-          {/* File attachment button - always shown, disabled with tooltip when file uploads are disabled */}
+          {/* File attachment button - direct click opens file browser, shows tooltip when disabled */}
           {allowFileUploads ? (
-            <PromptInputActionMenu>
-              <PromptInputActionMenuTrigger
-                data-testid={E2eTestId.ChatFileUploadButton}
-              >
-                <PaperclipIcon className="size-4" />
-              </PromptInputActionMenuTrigger>
-              <PromptInputActionMenuContent>
-                <PromptInputActionAddAttachments label="Attach files" />
-              </PromptInputActionMenuContent>
-            </PromptInputActionMenu>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              onClick={() => attachments.openFileDialog()}
+              data-testid={E2eTestId.ChatFileUploadButton}
+            >
+              <PaperclipIcon className="size-4" />
+              <span className="sr-only">Attach files</span>
+            </Button>
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>

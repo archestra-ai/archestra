@@ -67,6 +67,9 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     textInput: { setInput: vi.fn() },
     attachments: { files: [] },
   }),
+  usePromptInputAttachments: () => ({
+    openFileDialog: vi.fn(),
+  }),
 }));
 
 vi.mock("@/components/chat/agent-tools-display", () => ({

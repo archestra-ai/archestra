@@ -493,6 +493,25 @@ export function AgentDialog({
       return;
     }
 
+    // Validate email domain when security mode is "internal"
+    if (
+      isInternalAgent &&
+      incomingEmailEnabled &&
+      incomingEmailSecurityMode === "internal"
+    ) {
+      const trimmedDomain = incomingEmailAllowedDomain.trim();
+      if (!trimmedDomain) {
+        toast.error("Allowed domain is required for internal security mode");
+        return;
+      }
+      // Basic domain format validation (no @, valid characters)
+      const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
+      if (!domainRegex.test(trimmedDomain)) {
+        toast.error("Please enter a valid domain (e.g., example.com)");
+        return;
+      }
+    }
+
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
@@ -504,17 +523,16 @@ export function AgentDialog({
         await agentToolsEditorRef.current?.saveChanges();
       }
 
-      // Build email settings if applicable
-      const emailSettings =
-        isInternalAgent && features?.incomingEmail?.enabled
-          ? {
-              incomingEmailEnabled,
-              incomingEmailSecurityMode,
-              ...(incomingEmailSecurityMode === "internal" && {
-                incomingEmailAllowedDomain: incomingEmailAllowedDomain.trim(),
-              }),
-            }
-          : {};
+      // Build email settings for internal agents (always save, backend controls enforcement)
+      const emailSettings = isInternalAgent
+        ? {
+            incomingEmailEnabled,
+            incomingEmailSecurityMode,
+            ...(incomingEmailSecurityMode === "internal" && {
+              incomingEmailAllowedDomain: incomingEmailAllowedDomain.trim(),
+            }),
+          }
+        : {};
 
       if (agent) {
         // Update existing agent

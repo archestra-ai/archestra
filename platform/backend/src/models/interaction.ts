@@ -195,6 +195,37 @@ function resolveExternalAgentIdLabel(
   return null;
 }
 
+/**
+ * Build a display name for an external agent ID.
+ * - Single agent ID: Returns "AgentName" or the ID if not found
+ * - Delegation chain: Returns "Agent1 → Agent2 → Agent3" format
+ * - Non-UUID: Returns the original string as-is
+ */
+function buildExternalAgentDisplayName(
+  externalAgentId: string,
+  agentNamesMap: Map<string, string>,
+): string {
+  // Check if it's a delegation chain (contains colons)
+  if (externalAgentId.includes(":")) {
+    const parts = externalAgentId.split(":");
+    const names = parts.map((part) => {
+      if (isUuid(part)) {
+        return agentNamesMap.get(part) ?? part.slice(0, 8);
+      }
+      return part;
+    });
+    return names.join(" → ");
+  }
+
+  // Single ID - return the agent name or truncated ID
+  if (isUuid(externalAgentId)) {
+    return agentNamesMap.get(externalAgentId) ?? externalAgentId.slice(0, 8);
+  }
+
+  // Non-UUID (like "Archestra Chat") - return as-is
+  return externalAgentId;
+}
+
 class InteractionModel {
   static async create(data: InsertInteraction) {
     const [interaction] = await db
@@ -454,13 +485,14 @@ class InteractionModel {
   }
 
   /**
-   * Get all unique external agent IDs
+   * Get all unique external agent IDs with display names
    * Used for filtering dropdowns in the UI
+   * Returns agent info (id and displayName) for the dropdown to display names but filter by id
    */
   static async getUniqueExternalAgentIds(
     requestingUserId?: string,
     isAgentAdmin?: boolean,
-  ): Promise<string[]> {
+  ): Promise<{ id: string; displayName: string }[]> {
     // Build where clause for access control
     const conditions: SQL[] = [
       isNotNull(schema.interactionsTable.externalAgentId),
@@ -489,9 +521,20 @@ class InteractionModel {
       .where(and(...conditions))
       .orderBy(asc(schema.interactionsTable.externalAgentId));
 
-    return result
+    const externalAgentIds = result
       .map((r) => r.externalAgentId)
       .filter((id): id is string => id !== null);
+
+    // Get all unique agent IDs from the external agent IDs (including from chains)
+    const allAgentIds =
+      extractAllAgentIdsFromExternalAgentIds(externalAgentIds);
+    const agentNamesMap = await getAgentNamesById(allAgentIds);
+
+    // Build display names for each external agent ID
+    return externalAgentIds.map((id) => ({
+      id,
+      displayName: buildExternalAgentDisplayName(id, agentNamesMap),
+    }));
   }
 
   /**

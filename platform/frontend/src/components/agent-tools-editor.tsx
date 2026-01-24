@@ -58,13 +58,20 @@ interface AgentToolsEditorProps {
   searchQuery?: string;
   showAll?: boolean;
   onShowMore?: () => void;
+  onSelectedCountChange?: (count: number) => void;
 }
 
 export const AgentToolsEditor = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
 >(function AgentToolsEditor(
-  { agentId, searchQuery = "", showAll = false, onShowMore },
+  {
+    agentId,
+    searchQuery = "",
+    showAll = false,
+    onShowMore,
+    onSelectedCountChange,
+  },
   ref,
 ) {
   return (
@@ -81,6 +88,7 @@ export const AgentToolsEditor = forwardRef<
         searchQuery={searchQuery}
         showAll={showAll}
         onShowMore={onShowMore}
+        onSelectedCountChange={onSelectedCountChange}
         ref={ref}
       />
     </Suspense>
@@ -91,7 +99,13 @@ const AgentToolsEditorContent = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
 >(function AgentToolsEditorContent(
-  { agentId, searchQuery = "", showAll = false, onShowMore },
+  {
+    agentId,
+    searchQuery = "",
+    showAll = false,
+    onShowMore,
+    onSelectedCountChange,
+  },
   ref,
 ) {
   const assignTool = useAssignTool();
@@ -177,18 +191,32 @@ const AgentToolsEditorContent = forwardRef<
     new Map(),
   );
 
+  // Calculate total selected count from pending changes
+  const calculateTotalSelectedCount = useCallback(() => {
+    let total = 0;
+    for (const changes of pendingChangesRef.current.values()) {
+      total += changes.selectedToolIds.size;
+    }
+    return total;
+  }, []);
+
   // Register pending changes from a pill
   const registerPendingChanges = useCallback(
     (catalogId: string, changes: PendingCatalogChanges) => {
       pendingChangesRef.current.set(catalogId, changes);
+      onSelectedCountChange?.(calculateTotalSelectedCount());
     },
-    [],
+    [calculateTotalSelectedCount, onSelectedCountChange],
   );
 
   // Clear pending changes for a catalog
-  const clearPendingChanges = useCallback((catalogId: string) => {
-    pendingChangesRef.current.delete(catalogId);
-  }, []);
+  const clearPendingChanges = useCallback(
+    (catalogId: string) => {
+      pendingChangesRef.current.delete(catalogId);
+      onSelectedCountChange?.(calculateTotalSelectedCount());
+    },
+    [calculateTotalSelectedCount, onSelectedCountChange],
+  );
 
   // Expose saveChanges method to parent
   useImperativeHandle(ref, () => ({
@@ -393,8 +421,8 @@ function McpServerPill({
             "h-8 px-3 gap-1.5 text-xs",
             (hasPendingChanges
               ? selectedToolIds.size === 0
-              : !hasAssignedTools) && "border-dashed",
-            hasPendingChanges && "border-primary",
+              : !hasAssignedTools) && "border-dashed opacity-50",
+            hasPendingChanges && "border-primary opacity-100",
           )}
         >
           <span className="font-medium">{catalogItem.name}</span>
@@ -471,6 +499,59 @@ interface ToolChecklistProps {
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
   setSelectedToolIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+}
+
+function ExpandableDescription({ description }: { description: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const descriptionRef = useRef<HTMLDivElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-check truncation when description changes
+  useEffect(() => {
+    const el = descriptionRef.current;
+    if (el) {
+      // Check if text is truncated (scrollHeight > clientHeight means overflow)
+      setIsTruncated(el.scrollHeight > el.clientHeight);
+    }
+  }, [description]);
+
+  return (
+    <div className="text-xs text-muted-foreground mt-0.5">
+      <div
+        ref={descriptionRef}
+        className={cn(!expanded && "line-clamp-2")}
+        style={{ wordBreak: "break-word" }}
+      >
+        {description}
+      </div>
+      {isTruncated && !expanded && (
+        <button
+          type="button"
+          className="text-primary hover:underline mt-0.5"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setExpanded(true);
+          }}
+        >
+          Show more...
+        </button>
+      )}
+      {expanded && (
+        <button
+          type="button"
+          className="text-primary hover:underline mt-0.5"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setExpanded(false);
+          }}
+        >
+          Show less
+        </button>
+      )}
+    </div>
+  );
 }
 
 function ToolChecklist({
@@ -554,9 +635,7 @@ function ToolChecklist({
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium">{toolName}</div>
                   {tool.description && (
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {tool.description}
-                    </div>
+                    <ExpandableDescription description={tool.description} />
                   )}
                 </div>
               </label>

@@ -57,7 +57,7 @@ type MockAgentRaw = {
   isDemo: boolean;
   isDefault: boolean;
   considerContextUntrusted: boolean;
-  agentType: "mcp_gateway" | "agent";
+  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
 };
 
 /**
@@ -79,7 +79,7 @@ export function generateMockAgents(
       isDemo: randomBool(0.3), // 30% chance of being a demo agent
       isDefault: false,
       considerContextUntrusted: false,
-      agentType: "mcp_gateway", // Mock agents are external profiles
+      agentType: "profile", // Mock agents are external profiles
     });
   }
 

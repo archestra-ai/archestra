@@ -177,12 +177,12 @@ export const updateAgentTool = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
- * Get all delegation targets for an internal agent. Only applicable to internal agents.
+ * Get all delegation targets for an agent. Not applicable to LLM proxies.
  */
 export const getAgentDelegations = <ThrowOnError extends boolean = false>(options: Options<GetAgentDelegationsData, ThrowOnError>) => (options.client ?? client).get<GetAgentDelegationsResponses, GetAgentDelegationsErrors, ThrowOnError>({ url: '/api/agents/{agentId}/delegations', ...options });
 
 /**
- * Sync delegation targets for an internal agent. Replaces all existing delegations with the new list.
+ * Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.
  */
 export const syncAgentDelegations = <ThrowOnError extends boolean = false>(options: Options<SyncAgentDelegationsData, ThrowOnError>) => (options.client ?? client).post<SyncAgentDelegationsResponses, SyncAgentDelegationsErrors, ThrowOnError>({
     url: '/api/agents/{agentId}/delegations',
@@ -194,7 +194,7 @@ export const syncAgentDelegations = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Remove a specific delegation from an internal agent.
+ * Remove a specific delegation from an agent. Not applicable to LLM proxies.
  */
 export const deleteAgentDelegation = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentDelegationData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentDelegationResponses, DeleteAgentDelegationErrors, ThrowOnError>({ url: '/api/agents/{agentId}/delegations/{targetAgentId}', ...options });
 
@@ -746,7 +746,7 @@ export const getInteractions = <ThrowOnError extends boolean = false>(options?: 
 export const getInteractionSessions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionSessionsData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionSessionsResponses, GetInteractionSessionsErrors, ThrowOnError>({ url: '/api/interactions/sessions', ...options });
 
 /**
- * Get all unique external agent IDs for filtering (from X-Archestra-Agent-Id header)
+ * Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)
  */
 export const getUniqueExternalAgentIds = <ThrowOnError extends boolean = false>(options?: Options<GetUniqueExternalAgentIdsData, ThrowOnError>) => (options?.client ?? client).get<GetUniqueExternalAgentIdsResponses, GetUniqueExternalAgentIdsErrors, ThrowOnError>({ url: '/api/interactions/external-agent-ids', ...options });
 

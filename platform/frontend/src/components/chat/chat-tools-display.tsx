@@ -29,7 +29,6 @@ import { Button } from "../ui/button";
 
 interface ChatToolsDisplayProps {
   agentId: string;
-  promptId?: string | null;
   /** Required for enable/disable functionality. Optional for read-only display. */
   conversationId?: string;
   className?: string;
@@ -47,7 +46,6 @@ interface ChatToolsDisplayProps {
  */
 export function ChatToolsDisplay({
   agentId,
-  promptId,
   conversationId,
   className,
   readOnly = false,
@@ -67,12 +65,12 @@ export function ChatToolsDisplay({
   // Load pending actions from localStorage on mount and when context changes
   useEffect(() => {
     if (!conversationId) {
-      const actions = getPendingActions(agentId, promptId ?? null);
+      const actions = getPendingActions(agentId);
       setLocalPendingActions(actions);
     } else {
       setLocalPendingActions([]);
     }
-  }, [agentId, promptId, conversationId]);
+  }, [agentId, conversationId]);
 
   // Handle click outside to close tooltips
   useEffect(() => {
@@ -193,7 +191,7 @@ export function ChatToolsDisplay({
     if (!conversationId) {
       // Store in localStorage and update local state
       const action: PendingToolAction = { type: "enable", toolId };
-      addPendingAction(action, agentId, promptId ?? null);
+      addPendingAction(action, agentId);
       setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
@@ -210,7 +208,7 @@ export function ChatToolsDisplay({
     if (!conversationId) {
       // Store in localStorage and update local state
       const action: PendingToolAction = { type: "disable", toolId };
-      addPendingAction(action, agentId, promptId ?? null);
+      addPendingAction(action, agentId);
       setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
@@ -229,7 +227,7 @@ export function ChatToolsDisplay({
     if (!conversationId) {
       // Store in localStorage and update local state
       const action: PendingToolAction = { type: "disableAll", toolIds };
-      addPendingAction(action, agentId, promptId ?? null);
+      addPendingAction(action, agentId);
       setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
@@ -248,7 +246,7 @@ export function ChatToolsDisplay({
     if (!conversationId) {
       // Store in localStorage and update local state
       const action: PendingToolAction = { type: "enableAll", toolIds };
-      addPendingAction(action, agentId, promptId ?? null);
+      addPendingAction(action, agentId);
       setLocalPendingActions((prev) => [...prev, action]);
       return;
     }

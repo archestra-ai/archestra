@@ -15,7 +15,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, Search, X } from "lucide-react";
+import { Bot, LayoutGrid, Plus, Search, X } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -40,6 +40,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyContent,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -573,8 +580,8 @@ function AgentsCanvasViewInner() {
     [getExistingConnections, syncAgentDelegations, queryClient],
   );
 
-  // Wait for data to load and layout to complete
-  if (isLoading || !isLayoutReady) {
+  // Wait for data to load
+  if (isLoading) {
     return (
       <div className="flex h-[calc(100vh-280px)] items-center justify-center">
         <p className="text-muted-foreground">Loading agents...</p>
@@ -582,10 +589,46 @@ function AgentsCanvasViewInner() {
     );
   }
 
+  // Show empty state when no agents (before layout check since layout is not needed)
   if (internalAgents.length === 0) {
     return (
+      <>
+        <Empty className="h-[calc(100vh-280px)]">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Bot />
+            </EmptyMedia>
+            <EmptyTitle>No agents yet</EmptyTitle>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setIsAgentDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Agent
+            </Button>
+          </EmptyContent>
+        </Empty>
+
+        <AgentDialog
+          open={isAgentDialogOpen}
+          onOpenChange={(open) => {
+            setIsAgentDialogOpen(open);
+            if (!open) {
+              setEditingAgentId(null);
+            }
+          }}
+          agent={editingAgent}
+          agentType="agent"
+          onViewVersionHistory={(agent) => setVersionHistoryAgentId(agent.id)}
+        />
+      </>
+    );
+  }
+
+  // Wait for layout to complete when there are agents
+  if (!isLayoutReady) {
+    return (
       <div className="flex h-[calc(100vh-280px)] items-center justify-center">
-        <p className="text-muted-foreground">Create agent</p>
+        <p className="text-muted-foreground">Loading agents...</p>
       </div>
     );
   }

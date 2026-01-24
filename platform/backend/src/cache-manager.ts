@@ -197,13 +197,13 @@ class CacheManager {
 
     try {
       // Use raw SQL for atomic delete-and-return
-      // Keyv stores: key (text), value (jsonb), expires (bigint ms timestamp)
+      // Keyv stores: key (text), value (text containing JSON with {value, expires})
       // The key is namespaced with "keyv:" prefix by Keyv
-      const now = Date.now();
+      // Note: expires is stored inside the JSON value, not as a separate column
       const keyvKey = `keyv:${key}`;
       const result = await db.execute<{ value: string }>(
         sql`DELETE FROM keyv_cache
-            WHERE key = ${keyvKey} AND (expires IS NULL OR expires > ${now})
+            WHERE key = ${keyvKey}
             RETURNING value`,
       );
 
@@ -211,11 +211,18 @@ class CacheManager {
         return undefined;
       }
 
-      // Keyv stores values as JSON strings in the value column
+      // Keyv stores values as JSON strings: {"value": <actual-value>, "expires": <timestamp>}
       const rawValue = result.rows[0].value;
-      return (typeof rawValue === "string" ? JSON.parse(rawValue) : rawValue) as
-        | T
-        | undefined;
+      const parsed =
+        typeof rawValue === "string" ? JSON.parse(rawValue) : rawValue;
+
+      // Check expiration from the JSON payload
+      if (parsed.expires && Date.now() > parsed.expires) {
+        // Entry was expired, treat as not found
+        return undefined;
+      }
+
+      return parsed.value as T | undefined;
     } catch (error) {
       logger.error(
         { error, key },

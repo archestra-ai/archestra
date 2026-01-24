@@ -19211,14 +19211,34 @@
             "schema": {
               "type": "string",
               "enum": [
+                "profile",
                 "mcp_gateway",
+                "llm_proxy",
                 "agent"
               ]
             },
             "in": "query",
             "name": "agentType",
             "required": false,
-            "description": "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles."
+            "description": "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "profile",
+                  "mcp_gateway",
+                  "llm_proxy",
+                  "agent"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "agentTypes",
+            "required": false,
+            "description": "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided."
           },
           {
             "schema": {
@@ -19306,7 +19326,9 @@
                           "agentType": {
                             "type": "string",
                             "enum": [
+                              "profile",
                               "mcp_gateway",
+                              "llm_proxy",
                               "agent"
                             ]
                           },
@@ -19869,7 +19891,9 @@
                   "agentType": {
                     "type": "string",
                     "enum": [
+                      "profile",
                       "mcp_gateway",
+                      "llm_proxy",
                       "agent"
                     ]
                   },
@@ -20004,7 +20028,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -20502,14 +20528,34 @@
             "schema": {
               "type": "string",
               "enum": [
+                "profile",
                 "mcp_gateway",
+                "llm_proxy",
                 "agent"
               ]
             },
             "in": "query",
             "name": "agentType",
             "required": false,
-            "description": "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles."
+            "description": "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "profile",
+                  "mcp_gateway",
+                  "llm_proxy",
+                  "agent"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "agentTypes",
+            "required": false,
+            "description": "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided."
           }
         ],
         "responses": {
@@ -20545,7 +20591,9 @@
                       "agentType": {
                         "type": "string",
                         "enum": [
+                          "profile",
                           "mcp_gateway",
+                          "llm_proxy",
                           "agent"
                         ]
                       },
@@ -21070,7 +21118,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -21606,7 +21656,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -22121,7 +22173,9 @@
                   "agentType": {
                     "type": "string",
                     "enum": [
+                      "profile",
                       "mcp_gateway",
+                      "llm_proxy",
                       "agent"
                     ]
                   },
@@ -22263,7 +22317,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -23052,7 +23108,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         },
@@ -23645,7 +23703,9 @@
                     "agentType": {
                       "type": "string",
                       "enum": [
+                        "profile",
                         "mcp_gateway",
+                        "llm_proxy",
                         "agent"
                       ]
                     },
@@ -26993,7 +27053,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Get all delegation targets for an internal agent. Only applicable to internal agents.",
+        "description": "Get all delegation targets for an agent. Not applicable to LLM proxies.",
         "parameters": [
           {
             "schema": {
@@ -27257,7 +27317,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Sync delegation targets for an internal agent. Replaces all existing delegations with the new list.",
+        "description": "Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -27542,7 +27602,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Remove a specific delegation from an internal agent.",
+        "description": "Remove a specific delegation from an agent. Not applicable to LLM proxies.",
         "parameters": [
           {
             "schema": {
@@ -27866,7 +27926,9 @@
                           "agentType": {
                             "type": "string",
                             "enum": [
+                              "profile",
                               "mcp_gateway",
+                              "llm_proxy",
                               "agent"
                             ]
                           }
@@ -36238,7 +36300,9 @@
                           "agentType": {
                             "type": "string",
                             "enum": [
+                              "profile",
                               "mcp_gateway",
+                              "llm_proxy",
                               "agent"
                             ]
                           }
@@ -36654,7 +36718,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }
@@ -37036,7 +37102,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }
@@ -37463,7 +37531,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }
@@ -38375,7 +38445,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }
@@ -38785,7 +38857,9 @@
                         "agentType": {
                           "type": "string",
                           "enum": [
+                            "profile",
                             "mcp_gateway",
+                            "llm_proxy",
                             "agent"
                           ]
                         }
@@ -48174,7 +48248,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique external agent IDs for filtering (from X-Archestra-Agent-Id header)",
+        "description": "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -48183,7 +48257,20 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "displayName"
+                    ],
+                    "additionalProperties": false
                   }
                 }
               }

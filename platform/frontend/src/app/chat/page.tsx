@@ -1,7 +1,15 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, FileText, Globe, PanelRightClose } from "lucide-react";
+import {
+  Bot,
+  Eye,
+  EyeOff,
+  FileText,
+  Globe,
+  PanelRightClose,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -35,13 +43,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
-import {
-  useInternalAgents,
-  useProfile,
-  useProfilesQuery,
-} from "@/lib/agent.query";
+import { useInternalAgents, useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
   useConversation,
@@ -127,13 +139,11 @@ export default function ChatPage() {
 
   // Fetch profiles and models for initial chat (no conversation)
   // Using non-suspense queries to avoid blocking page render
-  const { data: allProfiles = [] } = useProfilesQuery();
   const { modelsByProvider, isLoading: isModelsLoading } =
     useModelsByProviderQuery();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
-  const [initialPromptId, setInitialPromptId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
   // Track if URL params have been consumed (so we don't re-apply them after user clears selection)
@@ -147,47 +157,35 @@ export default function ChatPage() {
   >(null);
   const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
 
-  // Set initial agent from URL param or default when data loads
+  // Set initial agent from URL param, localStorage, or default when data loads
   useEffect(() => {
-    if (allProfiles.length === 0) return;
+    // Wait for internal agents to load - these are the chat-compatible agents
+    if (internalAgents.length === 0) return;
 
     // Only process URL params once (don't re-apply after user clears selection)
     if (!urlParamsConsumedRef.current) {
-      // Check for promptId in URL query params (e.g., from /agents canvas "Chat" button)
-      // With migration, promptId now refers to internal agent ID
-      const urlPromptId = searchParams.get("promptId");
-      if (urlPromptId) {
-        const matchingAgent = internalAgents.find((a) => a.id === urlPromptId);
-        if (matchingAgent) {
-          setInitialPromptId(urlPromptId);
-          setInitialAgentId(urlPromptId); // Internal agent IS the profile
-          urlParamsConsumedRef.current = true;
-          return;
-        }
-      }
-
-      // Check for agentId in URL query params (legacy support)
       const urlAgentId = searchParams.get("agentId");
       if (urlAgentId) {
-        const matchingProfile = allProfiles.find((p) => p.id === urlAgentId);
-        if (matchingProfile) {
+        const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
+        if (matchingAgent) {
           setInitialAgentId(urlAgentId);
-          // Check if this is an internal agent
-          const internalAgent = internalAgents.find((a) => a.id === urlAgentId);
-          if (internalAgent) {
-            setInitialPromptId(urlAgentId);
-          }
           urlParamsConsumedRef.current = true;
           return;
         }
       }
     }
 
-    // Default to first profile if no initialAgentId set
+    // Try to restore from localStorage, then default to first internal agent
+    // Internal agents are the chat-compatible agents shown in the InitialAgentSelector
     if (!initialAgentId) {
-      setInitialAgentId(allProfiles[0].id);
+      const savedAgentId = localStorage.getItem("selected-chat-agent");
+      if (savedAgentId && internalAgents.some((a) => a.id === savedAgentId)) {
+        setInitialAgentId(savedAgentId);
+        return;
+      }
+      setInitialAgentId(internalAgents[0].id);
     }
-  }, [allProfiles, initialAgentId, searchParams, internalAgents]);
+  }, [initialAgentId, searchParams, internalAgents]);
 
   // Initialize model from localStorage or default to first available
   useEffect(() => {
@@ -259,7 +257,6 @@ export default function ChatPage() {
       // Reset initial state when navigating to /chat without a conversation
       // This ensures a fresh state when user clicks "New chat" or navigates back
       if (!conversationParam) {
-        setInitialPromptId(null);
         // Reset initialAgentId to trigger re-selection from useEffect
         setInitialAgentId(null);
       }
@@ -670,14 +667,11 @@ export default function ChatPage() {
     });
   };
 
-  // Handle initial prompt change (when no conversation exists)
-  const handleInitialPromptChange = useCallback(
-    (promptId: string | null, agentId: string) => {
-      setInitialAgentId(agentId);
-      setInitialPromptId(promptId);
-    },
-    [],
-  );
+  // Handle initial agent change (when no conversation exists)
+  const handleInitialAgentChange = useCallback((agentId: string) => {
+    setInitialAgentId(agentId);
+    localStorage.setItem("selected-chat-agent", agentId);
+  }, []);
 
   // Handle initial submit (when no conversation exists)
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
@@ -700,10 +694,7 @@ export default function ChatPage() {
       pendingFilesRef.current = message.files || [];
 
       // Check if there are pending tool actions to apply
-      const pendingActions = getPendingActions(
-        initialAgentId,
-        initialPromptId ?? null,
-      );
+      const pendingActions = getPendingActions(initialAgentId);
 
       // Find the provider for the initial model
       const modelInfo = chatModels.find((m) => m.id === initialModel);
@@ -762,7 +753,6 @@ export default function ChatPage() {
     },
     [
       initialAgentId,
-      initialPromptId,
       initialModel,
       initialApiKeyId,
       chatModels,
@@ -827,9 +817,7 @@ export default function ChatPage() {
   ]);
 
   // Determine which agent ID to use for prompt input
-  const activeAgentId = conversationId
-    ? conversation?.agent?.id
-    : initialAgentId;
+  const activeAgentId = conversation?.agent?.id ?? initialAgentId;
 
   // If API key is not configured, show setup message
   // Only show after loading completes to avoid flash of incorrect content
@@ -854,6 +842,31 @@ export default function ChatPage() {
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  // If no agents exist, show empty state
+  if (!isLoadingApiKeyCheck && internalAgents.length === 0) {
+    return (
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Bot />
+          </EmptyMedia>
+          <EmptyTitle>No agents yet</EmptyTitle>
+          <EmptyDescription>
+            Create an agent to start chatting.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button asChild>
+            <Link href="/agents?create=true">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Agent
+            </Link>
+          </Button>
+        </EmptyContent>
+      </Empty>
     );
   }
 
@@ -908,11 +921,8 @@ export default function ChatPage() {
                     />
                   ) : (
                     <InitialAgentSelector
-                      currentPromptId={initialPromptId}
-                      onPromptChange={handleInitialPromptChange}
-                      defaultAgentId={
-                        initialAgentId ?? allProfiles[0]?.id ?? ""
-                      }
+                      currentAgentId={initialAgentId}
+                      onAgentChange={handleInitialAgentChange}
                     />
                   )}
                 </div>
@@ -1011,11 +1021,11 @@ export default function ChatPage() {
             ) : (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center space-y-6 max-w-2xl px-4">
-                  {initialPromptId
+                  {initialAgentId
                     ? // Agent selected - show prompt
                       (() => {
                         const selectedAgent = internalAgents.find(
-                          (a) => a.id === initialPromptId,
+                          (a) => a.id === initialAgentId,
                         );
 
                         return (
@@ -1121,13 +1131,6 @@ export default function ChatPage() {
                     conversationId && conversation?.agent.id
                       ? undefined
                       : setInitialApiKeyId
-                  }
-                  promptId={
-                    conversationId && conversation?.agent.id
-                      ? conversation?.agent?.agentType === "agent"
-                        ? conversation?.agentId
-                        : null
-                      : initialPromptId
                   }
                   allowFileUploads={organization?.allowChatFileUploads ?? false}
                   isModelsLoading={isModelsLoading}

@@ -5583,9 +5583,13 @@ export type GetAgentsData = {
          */
         name?: string;
         /**
-         * Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.
+         * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.
          */
-        agentType?: 'mcp_gateway' | 'agent';
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        /**
+         * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
+         */
+        agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
@@ -5665,7 +5669,7 @@ export type GetAgentsResponses = {
             isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
             userPrompt: string | null;
             promptVersion: number | null;
@@ -5740,7 +5744,7 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
-        agentType?: 'mcp_gateway' | 'agent';
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
         userPrompt?: string | null;
         allowedChatops?: string | number | boolean | null | {
@@ -5832,7 +5836,7 @@ export type CreateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -5896,9 +5900,13 @@ export type GetAllAgentsData = {
     path?: never;
     query?: {
         /**
-         * Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.
+         * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.
          */
-        agentType?: 'mcp_gateway' | 'agent';
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        /**
+         * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
+         */
+        agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
     };
     url: '/api/agents/all';
 };
@@ -5973,7 +5981,7 @@ export type GetAllAgentsResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -6109,7 +6117,7 @@ export type GetDefaultAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -6326,7 +6334,7 @@ export type GetAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -6392,7 +6400,7 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
-        agentType?: 'mcp_gateway' | 'agent';
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
         userPrompt?: string | null;
         allowedChatops?: string | number | boolean | null | {
@@ -6486,7 +6494,7 @@ export type UpdateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -6625,7 +6633,7 @@ export type GetAgentVersionsResponses = {
             isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
             userPrompt: string | null;
             promptVersion: number | null;
@@ -6775,7 +6783,7 @@ export type RollbackAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -8004,7 +8012,7 @@ export type GetAllDelegationConnectionsResponses = {
         agents: Array<{
             id: string;
             name: string;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         }>;
     };
 };
@@ -10447,7 +10455,7 @@ export type GetChatConversationsResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     }>;
@@ -10552,7 +10560,7 @@ export type CreateChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10732,7 +10740,7 @@ export type GetChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10840,7 +10848,7 @@ export type UpdateChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -11029,7 +11037,7 @@ export type GenerateChatConversationTitleResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -11134,7 +11142,7 @@ export type UpdateChatMessageResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -13871,7 +13879,10 @@ export type GetUniqueExternalAgentIdsResponses = {
     /**
      * Default Response
      */
-    200: Array<string>;
+    200: Array<{
+        id: string;
+        displayName: string;
+    }>;
 };
 
 export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];

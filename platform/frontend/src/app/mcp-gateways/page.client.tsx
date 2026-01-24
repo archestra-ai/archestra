@@ -6,14 +6,11 @@ import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArrowRight,
-  Bot,
   ChevronDown,
   ChevronUp,
   DollarSign,
   ExternalLink,
   Eye,
-  Lock,
-  Network,
   Plus,
   Search,
   Server,
@@ -24,7 +21,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import { AgentDialog } from "@/components/agent-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
@@ -50,35 +46,31 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  useDeleteProfile,
-  useProfilesPaginated,
-  useProfilesQuery,
-} from "@/lib/agent.query";
+import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
 import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   formatDate,
 } from "@/lib/utils";
-import { ProfileActions } from "./agent-actions";
+import { McpGatewayActions } from "./mcp-gateway-actions";
 
-type ProfilesInitialData = {
+type McpGatewaysInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
   teams: archestraApiTypes.GetTeamsResponses["200"];
 };
 
-export default function ProfilesPage({
+export default function McpGatewaysPage({
   initialData,
 }: {
-  initialData?: ProfilesInitialData;
+  initialData?: McpGatewaysInitialData;
 }) {
   return (
     <div className="w-full h-full">
       <PermissivePolicyBar />
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <Profiles initialData={initialData} />
+          <McpGateways initialData={initialData} />
         </Suspense>
       </ErrorBoundary>
     </div>
@@ -102,7 +94,7 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-function ProfileTeamsBadges({
+function TeamsBadges({
   teams,
 }: {
   teams: Array<{ id: string; name: string }> | undefined;
@@ -118,12 +110,7 @@ function ProfileTeamsBadges({
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {visibleTeams.map((team) => (
-        <Badge
-          key={team.id}
-          variant="secondary"
-          className="text-xs"
-          data-testid={`${E2eTestId.ProfileTeamBadge}-${team.name}`}
-        >
+        <Badge key={team.id} variant="secondary" className="text-xs">
           {team.name}
         </Badge>
       ))}
@@ -151,7 +138,11 @@ function ProfileTeamsBadges({
   );
 }
 
-function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
+function McpGateways({
+  initialData,
+}: {
+  initialData?: McpGatewaysInitialData;
+}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -186,6 +177,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
+    agentTypes: ["mcp_gateway", "profile"],
   });
 
   const agents = agentsResponse?.data || [];
@@ -211,19 +203,19 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   }, [sortBy, sortDirection]);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [connectingProfile, setConnectingProfile] = useState<{
+  const [connectingGateway, setConnectingGateway] = useState<{
     id: string;
     name: string;
-    agentType: "agent" | "mcp_gateway";
+    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
   } | null>(null);
-  const [editingProfile, setEditingProfile] = useState<ProfileData | null>(
+  const [editingGateway, setEditingGateway] = useState<GatewayData | null>(
     null,
   );
-  const [deletingProfileId, setDeletingProfileId] = useState<string | null>(
+  const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
 
-  type ProfileData =
+  type GatewayData =
     archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
@@ -274,7 +266,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
     [searchParams, router, pathname],
   );
 
-  const columns: ColumnDef<ProfileData>[] = [
+  const columns: ColumnDef<GatewayData>[] = [
     {
       id: "name",
       accessorKey: "name",
@@ -295,13 +287,23 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
           <div className="font-medium">
             <div className="flex items-center gap-2">
               {agent.name}
-              {agent.isDefault && (
-                <Badge
-                  variant="outline"
-                  className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30 text-xs font-bold"
-                >
-                  DEFAULT
-                </Badge>
+              {agent.agentType === "profile" && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="outline"
+                        className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs cursor-help"
+                      >
+                        Profile
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      This is a legacy entity that works both as MCP Gateway and
+                      LLM Proxy
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               {agent.labels && agent.labels.length > 0 && (
                 <TooltipProvider>
@@ -329,27 +331,6 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
                 </TooltipProvider>
               )}
             </div>
-          </div>
-        );
-      },
-    },
-    {
-      id: "modes",
-      header: "Modes",
-      cell: ({ row }) => {
-        const agent = row.original;
-        const isInternalAgent = agent.agentType === "agent";
-        const modes = isInternalAgent
-          ? ["LLM Proxy", "MCP Gateway", "Agent"]
-          : ["LLM Proxy", "MCP Gateway"];
-
-        return (
-          <div className="flex flex-wrap gap-1">
-            {modes.map((mode) => (
-              <Badge key={mode} variant="secondary" className="text-xs">
-                {mode}
-              </Badge>
-            ))}
           </div>
         );
       },
@@ -416,7 +397,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
         </Button>
       ),
       cell: ({ row }) => (
-        <ProfileTeamsBadges
+        <TeamsBadges
           teams={
             row.original.teams as unknown as Array<{
               id: string;
@@ -434,13 +415,13 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
       cell: ({ row }) => {
         const agent = row.original;
         return (
-          <ProfileActions
+          <McpGatewayActions
             agent={agent}
-            onConnect={setConnectingProfile}
+            onConnect={setConnectingGateway}
             onEdit={(agentData) => {
-              setEditingProfile(agentData);
+              setEditingGateway(agentData);
             }}
-            onDelete={setDeletingProfileId}
+            onDelete={setDeletingGatewayId}
           />
         );
       },
@@ -449,12 +430,11 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
 
   return (
     <PageLayout
-      title="Profiles"
+      title="MCP Gateways"
       description={
         <p className="text-sm text-muted-foreground">
-          Profiles organize access, MCP tools, cost limits, and observability
-          for N8N workflows, custom applications, or teams sharing an MCP
-          gateway.{" "}
+          MCP Gateways provide a unified MCP endpoint for your AI agents to
+          access tools and subagents.{" "}
           <a
             href="https://archestra.ai/docs/platform-agents"
             target="_blank"
@@ -472,7 +452,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
           data-testid={E2eTestId.CreateAgentButton}
         >
           <Plus className="mr-2 h-4 w-4" />
-          Create Profile
+          Create MCP Gateway
         </PermissionButton>
       }
     >
@@ -482,7 +462,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <DebouncedInput
-                placeholder="Search profiles by name..."
+                placeholder="Search gateways by name..."
                 initialValue={searchQuery}
                 onChange={handleSearchChange}
                 className="pl-9"
@@ -493,8 +473,8 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
           {!agents || agents.length === 0 ? (
             <div className="text-muted-foreground">
               {nameFilter
-                ? "No profiles found matching your search"
-                : "No profiles found"}
+                ? "No MCP gateways found matching your search"
+                : "No MCP gateways found"}
             </div>
           ) : (
             <div data-testid={E2eTestId.AgentsTable}>
@@ -519,32 +499,32 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
             agentType="mcp_gateway"
-            onCreated={(profile) => {
+            onCreated={(gateway) => {
               setIsCreateDialogOpen(false);
-              setConnectingProfile({ ...profile, agentType: "mcp_gateway" });
+              setConnectingGateway({ ...gateway, agentType: "mcp_gateway" });
             }}
           />
 
-          {connectingProfile && (
-            <ConnectProfileDialog
-              agent={connectingProfile}
-              open={!!connectingProfile}
-              onOpenChange={(open) => !open && setConnectingProfile(null)}
+          {connectingGateway && (
+            <ConnectGatewayDialog
+              agent={connectingGateway}
+              open={!!connectingGateway}
+              onOpenChange={(open) => !open && setConnectingGateway(null)}
             />
           )}
 
           <AgentDialog
-            open={!!editingProfile}
-            onOpenChange={(open) => !open && setEditingProfile(null)}
-            agent={editingProfile}
-            agentType="mcp_gateway"
+            open={!!editingGateway}
+            onOpenChange={(open) => !open && setEditingGateway(null)}
+            agent={editingGateway}
+            agentType={editingGateway?.agentType || "mcp_gateway"}
           />
 
-          {deletingProfileId && (
-            <DeleteProfileDialog
-              agentId={deletingProfileId}
-              open={!!deletingProfileId}
-              onOpenChange={(open) => !open && setDeletingProfileId(null)}
+          {deletingGatewayId && (
+            <DeleteGatewayDialog
+              agentId={deletingGatewayId}
+              open={!!deletingGatewayId}
+              onOpenChange={(open) => !open && setDeletingGatewayId(null)}
             />
           )}
         </div>
@@ -553,55 +533,19 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   );
 }
 
-function ProfileConnectionColumns({
+function GatewayConnectionColumns({
   agentId,
   agentType,
 }: {
   agentId: string;
-  agentType: "agent" | "mcp_gateway";
+  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
 }) {
-  const [activeTab, setActiveTab] = useState<"proxy" | "mcp" | "a2a">("proxy");
-  const isAgent = agentType === "agent";
-
-  // Fetch agent data for A2A connection instructions (non-suspense to avoid loading flicker)
-  const { data: profiles } = useProfilesQuery();
-  const agent = profiles?.find((p) => p.id === agentId);
+  const [activeTab, setActiveTab] = useState<"proxy" | "mcp">("mcp");
 
   return (
     <div className="space-y-6">
       {/* Tab Selection with inline features */}
       <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={() => setActiveTab("proxy")}
-          className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
-            activeTab === "proxy"
-              ? "bg-blue-500/5 border-2 border-blue-500/30"
-              : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Network
-              className={`h-4 w-4 ${activeTab === "proxy" ? "text-blue-500" : ""}`}
-            />
-            <span className="font-medium">LLM Proxy</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Lock className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
-              <span className="text-[10px]">Security</span>
-            </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
-              <span className="text-[10px]">Observability</span>
-            </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <DollarSign className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
-              <span className="text-[10px]">Cost</span>
-            </div>
-          </div>
-        </button>
-
         <button
           type="button"
           onClick={() => setActiveTab("mcp")}
@@ -629,26 +573,31 @@ function ProfileConnectionColumns({
           </div>
         </button>
 
-        {isAgent && (
+        {/* Show LLM Proxy tab for profile type (backwards compatibility) */}
+        {agentType === "profile" && (
           <button
             type="button"
-            onClick={() => setActiveTab("a2a")}
+            onClick={() => setActiveTab("proxy")}
             className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
-              activeTab === "a2a"
-                ? "bg-amber-500/5 border-2 border-amber-500/30"
+              activeTab === "proxy"
+                ? "bg-blue-500/5 border-2 border-blue-500/30"
                 : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
             }`}
           >
             <div className="flex items-center gap-2">
-              <Bot
-                className={`h-4 w-4 ${activeTab === "a2a" ? "text-amber-500" : ""}`}
+              <Server
+                className={`h-4 w-4 ${activeTab === "proxy" ? "text-blue-500" : ""}`}
               />
-              <span className="font-medium">A2A Gateway</span>
+              <span className="font-medium">LLM Proxy</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-                <Bot className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
-                <span className="text-[10px]">Agent-to-Agent</span>
+                <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
+                <span className="text-[10px]">Observability</span>
+              </div>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <DollarSign className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+                <span className="text-[10px]">Cost</span>
               </div>
             </div>
           </button>
@@ -657,11 +606,6 @@ function ProfileConnectionColumns({
 
       {/* Content - render all tabs, hide inactive ones to preload */}
       <div className="relative">
-        <div className={activeTab === "proxy" ? "block" : "hidden"}>
-          <div className="p-4 rounded-lg border bg-card">
-            <ProxyConnectionInstructions agentId={agentId} />
-          </div>
-        </div>
         <div className={activeTab === "mcp" ? "block" : "hidden"}>
           <div className="p-4 rounded-lg border bg-card">
             <Suspense
@@ -678,18 +622,10 @@ function ProfileConnectionColumns({
             </Suspense>
           </div>
         </div>
-        {isAgent && agent && (
-          <div className={activeTab === "a2a" ? "block" : "hidden"}>
+        {agentType === "profile" && (
+          <div className={activeTab === "proxy" ? "block" : "hidden"}>
             <div className="p-4 rounded-lg border bg-card">
-              <Suspense
-                fallback={
-                  <div className="flex items-center justify-center py-8">
-                    <LoadingSpinner />
-                  </div>
-                }
-              >
-                <A2AConnectionInstructions agent={agent} />
-              </Suspense>
+              <ProxyConnectionInstructions agentId={agentId} />
             </div>
           </div>
         )}
@@ -698,12 +634,16 @@ function ProfileConnectionColumns({
   );
 }
 
-function ConnectProfileDialog({
+function ConnectGatewayDialog({
   agent,
   open,
   onOpenChange,
 }: {
-  agent: { id: string; name: string; agentType: "agent" | "mcp_gateway" };
+  agent: {
+    id: string;
+    name: string;
+    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+  };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -717,7 +657,7 @@ function ConnectProfileDialog({
             <DialogHeader>
               <div className="flex items-center gap-2 mb-1">
                 <div className="p-1.5 rounded-full bg-primary/10">
-                  <Network className="h-4 w-4 text-primary" />
+                  <Shield className="h-4 w-4 text-primary" />
                 </div>
                 <DialogTitle className="text-xl font-semibold">
                   Connect via "{agent.name}"
@@ -729,7 +669,7 @@ function ConnectProfileDialog({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <ProfileConnectionColumns
+          <GatewayConnectionColumns
             agentId={agent.id}
             agentType={agent.agentType}
           />
@@ -764,7 +704,7 @@ function ConnectProfileDialog({
   );
 }
 
-function DeleteProfileDialog({
+function DeleteGatewayDialog({
   agentId,
   open,
   onOpenChange,
@@ -773,26 +713,26 @@ function DeleteProfileDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const deleteProfile = useDeleteProfile();
+  const deleteGateway = useDeleteProfile();
 
   const handleDelete = useCallback(async () => {
     try {
-      await deleteProfile.mutateAsync(agentId);
-      toast.success("Profile deleted successfully");
+      await deleteGateway.mutateAsync(agentId);
+      toast.success("MCP Gateway deleted successfully");
       onOpenChange(false);
     } catch (_error) {
-      toast.error("Failed to delete profile");
+      toast.error("Failed to delete MCP Gateway");
     }
-  }, [agentId, deleteProfile, onOpenChange]);
+  }, [agentId, deleteGateway, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Delete profile</DialogTitle>
+          <DialogTitle>Delete MCP Gateway</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this profile? This action cannot be
-            undone.
+            Are you sure you want to delete this MCP Gateway? This action cannot
+            be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -806,9 +746,9 @@ function DeleteProfileDialog({
           <Button
             variant="destructive"
             onClick={handleDelete}
-            disabled={deleteProfile.isPending}
+            disabled={deleteGateway.isPending}
           >
-            {deleteProfile.isPending ? "Deleting..." : "Delete profile"}
+            {deleteGateway.isPending ? "Deleting..." : "Delete MCP Gateway"}
           </Button>
         </DialogFooter>
       </DialogContent>

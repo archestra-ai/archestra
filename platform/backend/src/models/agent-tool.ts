@@ -28,6 +28,7 @@ import type {
   UpdateAgentTool,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
+import McpServerUserModel from "./mcp-server-user";
 
 class AgentToolModel {
   // ============================================================================
@@ -207,6 +208,37 @@ class AgentToolModel {
       (r): r is typeof r & { targetAgentId: string } =>
         r.targetAgentId !== null,
     );
+  }
+
+  // ============================================================================
+  // ACCESS CONTROL HELPERS
+  // ============================================================================
+
+  /**
+   * Get all MCP server IDs that a user has access to (through team membership or personal access).
+   * Used for filtering agent_tools to only show assignments with accessible credentials.
+   */
+  private static async getUserAccessibleMcpServerIds(
+    userId: string,
+  ): Promise<string[]> {
+    // Get MCP servers accessible through team membership
+    const teamAccessibleServers = await db
+      .select({ mcpServerId: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
+      )
+      .where(eq(schema.teamMembersTable.userId, userId));
+
+    const teamAccessibleIds = teamAccessibleServers.map((s) => s.mcpServerId);
+
+    // Get personal MCP servers
+    const personalIds =
+      await McpServerUserModel.getUserPersonalMcpServerIds(userId);
+
+    // Combine and deduplicate
+    return [...new Set([...teamAccessibleIds, ...personalIds])];
   }
 
   // ============================================================================
@@ -597,6 +629,7 @@ class AgentToolModel {
 
     // Apply access control filtering for users that are not agent admins
     if (userId && !isAgentAdmin) {
+      // Filter by accessible agents (profiles)
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
@@ -609,6 +642,45 @@ class AgentToolModel {
       whereConditions.push(
         inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
       );
+
+      // Filter by accessible credentials (MCP servers)
+      // Only show agent_tools where the user has access to the credential/execution source
+      const accessibleMcpServerIds =
+        await AgentToolModel.getUserAccessibleMcpServerIds(userId);
+
+      // Build credential access condition:
+      // - No credential required (both null), OR
+      // - Uses dynamic team credential, OR
+      // - Credential source is accessible, OR
+      // - Execution source is accessible
+      const credentialAccessConditions: SQL[] = [
+        // No credential required (both null)
+        and(
+          sql`${schema.agentToolsTable.credentialSourceMcpServerId} IS NULL`,
+          sql`${schema.agentToolsTable.executionSourceMcpServerId} IS NULL`,
+        ) as SQL,
+        // Uses dynamic team credential
+        eq(schema.agentToolsTable.useDynamicTeamCredential, true),
+      ];
+
+      // Add accessible credential/execution sources if user has any
+      if (accessibleMcpServerIds.length > 0) {
+        credentialAccessConditions.push(
+          inArray(
+            schema.agentToolsTable.credentialSourceMcpServerId,
+            accessibleMcpServerIds,
+          ),
+          inArray(
+            schema.agentToolsTable.executionSourceMcpServerId,
+            accessibleMcpServerIds,
+          ),
+        );
+      }
+
+      const credentialAccessCondition = or(...credentialAccessConditions);
+      if (credentialAccessCondition) {
+        whereConditions.push(credentialAccessCondition);
+      }
     }
 
     // Filter by search query (tool name)

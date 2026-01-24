@@ -11,11 +11,11 @@ import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
 } from "@/lib/utils";
-import AgentsPage from "./page.client";
+import McpGatewaysPage from "./page.client";
 
 export const dynamic = "force-dynamic";
 
-export default async function AgentsPageServer() {
+export default async function McpGatewaysPageServer() {
   let initialData: {
     agents: archestraApiTypes.GetAgentsResponses["200"] | null;
     teams: archestraApiTypes.GetTeamsResponses["200"];
@@ -35,7 +35,7 @@ export default async function AgentsPageServer() {
               offset: 0,
               sortBy: DEFAULT_SORT_BY,
               sortDirection: DEFAULT_SORT_DIRECTION,
-              agentTypes: ["agent"],
+              agentTypes: ["mcp_gateway", "profile"],
             },
           })
         ).data || null,
@@ -45,5 +45,5 @@ export default async function AgentsPageServer() {
     console.error(error);
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
-  return <AgentsPage initialData={initialData} />;
+  return <McpGatewaysPage initialData={initialData} />;
 }

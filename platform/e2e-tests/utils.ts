@@ -155,18 +155,35 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 
   await manageToolsButton.click();
-  await page
-    .getByRole("button", { name: "Assign Tool to Profiles" })
-    .first()
-    .click();
-  await page.getByRole("checkbox").first().click();
+
+  // Wait for dialog to open
   await page.waitForLoadState("networkidle");
+
+  // The new McpAssignmentsDialog shows profile pills - click on "Default Profile" to open popover
+  const profilePill = page.getByRole("button", {
+    name: new RegExp(`${DEFAULT_PROFILE_NAME}.*\\(\\d+/\\d+\\)`),
+  });
+  await profilePill.waitFor({ state: "visible", timeout: 10_000 });
+  await profilePill.click();
+
+  // Wait for the popover to open - it contains the credential selector and tool checkboxes
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(500);
+
+  // Click the first tool checkbox to select a tool
+  // The checkbox is inside the popover, wait for it to be visible
+  const checkbox = page.getByRole("checkbox").first();
+  await checkbox.waitFor({ state: "visible", timeout: 5_000 });
+  await checkbox.click();
+
+  // The combobox (credential selector) is now in the popover
   const combobox = page.getByRole("combobox");
   await combobox.waitFor({ state: "visible" });
   await combobox.click();
   // Wait a brief moment for dropdown to open (dropdowns are client-side, no network request needed)
   await page.waitForTimeout(100);
 }
+
 
 export async function verifyToolCallResultViaApi({
   request,

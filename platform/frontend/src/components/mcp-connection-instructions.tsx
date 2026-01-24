@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID, archestraApiSdk } from "@shared";
 import {
   Bot,
   Check,
@@ -102,8 +102,28 @@ export function McpConnectionInstructions({
   });
 
   // Group tools by MCP server for the selected profile
-  const mcpServerToolGroups = useMemo(() => {
-    if (!mcpServers || !assignedToolsData?.data) return new Map();
+  const { mcpServerToolGroups, archestraTools } = useMemo(() => {
+    if (!assignedToolsData?.data)
+      return {
+        mcpServerToolGroups: new Map<
+          string,
+          {
+            server: (typeof mcpServers)[0];
+            tools: Array<{
+              id: string;
+              name: string;
+              description?: string | null;
+            }>;
+            credentialSourceMcpServerId?: string | null;
+            useDynamicTeamCredential?: boolean;
+          }
+        >(),
+        archestraTools: [] as Array<{
+          id: string;
+          name: string;
+          description?: string | null;
+        }>,
+      };
 
     const groups = new Map<
       string,
@@ -115,9 +135,27 @@ export function McpConnectionInstructions({
       }
     >();
 
+    const archestraToolsList: Array<{
+      id: string;
+      name: string;
+      description?: string | null;
+    }> = [];
+
     assignedToolsData.data.forEach((agentTool) => {
       const tool = agentTool.tool;
-      if (tool.mcpServerId) {
+
+      // Check if this is an Archestra built-in tool
+      if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+        const toolName = tool.name.split("__").pop() ?? tool.name;
+        archestraToolsList.push({
+          id: tool.id,
+          name: toolName,
+          description: tool.description,
+        });
+        return;
+      }
+
+      if (tool.mcpServerId && mcpServers) {
         const server = mcpServers.find((s) => s.id === tool.mcpServerId);
         if (server) {
           const existing = groups.get(tool.mcpServerId);
@@ -145,7 +183,7 @@ export function McpConnectionInstructions({
       }
     });
 
-    return groups;
+    return { mcpServerToolGroups: groups, archestraTools: archestraToolsList };
   }, [mcpServers, assignedToolsData]);
 
   const getToolsCountForProfile = useCallback(
@@ -394,8 +432,13 @@ export function McpConnectionInstructions({
       {selectedProfile && (
         <div className="space-y-2">
           <Label className="text-sm font-medium">Tools</Label>
-          {mcpServerToolGroups.size > 0 ? (
+          {mcpServerToolGroups.size > 0 || archestraTools.length > 0 ? (
             <div className="flex flex-wrap gap-2">
+              {/* Archestra built-in tools */}
+              {archestraTools.length > 0 && (
+                <ReadOnlyArchestraPill tools={archestraTools} />
+              )}
+              {/* MCP server tools */}
               {Array.from(mcpServerToolGroups.entries()).map(
                 ([
                   serverId,
@@ -646,7 +689,7 @@ function ReadOnlyMcpServerPill({
     : credentialServer
       ? (credentialServer.teamDetails?.name ??
         credentialServer.ownerEmail ??
-        "Unknown")
+        "Deleted user")
       : null;
 
   // Check if we should show credential section
@@ -838,6 +881,101 @@ function ReadOnlySubagentPill({ agent }: ReadOnlySubagentPillProps) {
               </div>
             </div>
           )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Read-only Archestra Tools Pill with popover
+interface ReadOnlyArchestraPillProps {
+  tools: Array<{ id: string; name: string; description?: string | null }>;
+}
+
+function ReadOnlyArchestraPill({ tools }: ReadOnlyArchestraPillProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 gap-1.5 text-xs"
+        >
+          <span className="font-medium">Archestra</span>
+          <span className="text-muted-foreground">({tools.length})</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[420px] p-0"
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        avoidCollisions
+      >
+        <div className="p-4 border-b flex items-start justify-between gap-2">
+          <div>
+            <h4 className="font-semibold">Archestra Built-in Tools</h4>
+            <p className="text-sm text-muted-foreground mt-1">
+              Built-in tools for managing Archestra resources
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 shrink-0"
+            onClick={() => setOpen(false)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Tool List - Read Only */}
+        <div className="opacity-60">
+          <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30">
+            <span className="text-xs text-muted-foreground">
+              {tools.length} of {tools.length} selected
+            </span>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-6 px-2"
+                disabled
+              >
+                Select All
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-6 px-2"
+                disabled
+              >
+                Deselect All
+              </Button>
+            </div>
+          </div>
+          <div className="max-h-[350px] overflow-y-auto">
+            <div className="p-2 space-y-0.5">
+              {tools.map((tool) => (
+                <div
+                  key={tool.id}
+                  className="flex items-start gap-3 p-2 rounded-md bg-primary/10"
+                >
+                  <Checkbox checked disabled className="mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">{tool.name}</div>
+                    {tool.description && (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {tool.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </PopoverContent>
     </Popover>

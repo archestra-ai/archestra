@@ -1,5 +1,6 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import type { ChatStatus } from "ai";
 import { PaperclipIcon, Plus } from "lucide-react";
 import type { FormEvent } from "react";
@@ -13,6 +14,7 @@ import {
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
+  PromptInputButton,
   PromptInputFooter,
   PromptInputHeader,
   type PromptInputMessage,
@@ -29,6 +31,11 @@ import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat.query";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
@@ -153,16 +160,34 @@ const PromptInputContent = ({
       </PromptInputBody>
       <PromptInputFooter>
         <PromptInputTools>
-          {/* File attachment button - only shown when file uploads are enabled */}
-          {allowFileUploads && (
+          {/* File attachment button - always shown, disabled with tooltip when file uploads are disabled */}
+          {allowFileUploads ? (
             <PromptInputActionMenu>
-              <PromptInputActionMenuTrigger>
+              <PromptInputActionMenuTrigger
+                data-testid={E2eTestId.ChatFileUploadButton}
+              >
                 <PaperclipIcon className="size-4" />
               </PromptInputActionMenuTrigger>
               <PromptInputActionMenuContent>
                 <PromptInputActionAddAttachments label="Attach files" />
               </PromptInputActionMenuContent>
             </PromptInputActionMenu>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex cursor-pointer"
+                  data-testid={E2eTestId.ChatDisabledFileUploadButton}
+                >
+                  <PromptInputButton disabled>
+                    <PaperclipIcon className="size-4" />
+                  </PromptInputButton>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={4}>
+                File uploads are disabled by your administrator
+              </TooltipContent>
+            </Tooltip>
           )}
           <ModelSelector
             selectedModel={selectedModel}

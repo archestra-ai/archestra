@@ -33,7 +33,6 @@ import { ConversationArtifactPanel } from "@/components/chat/conversation-artifa
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
-import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -905,7 +904,6 @@ export default function ChatPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />
-          <PermissivePolicyBar />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2">
             <div className="flex items-start justify-between gap-2">

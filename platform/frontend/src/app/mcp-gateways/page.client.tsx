@@ -26,7 +26,6 @@ import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
-import { PermissivePolicyBar } from "@/components/permissive-policy-bar";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,7 +66,6 @@ export default function McpGatewaysPage({
 }) {
   return (
     <div className="w-full h-full">
-      <PermissivePolicyBar />
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
           <McpGateways initialData={initialData} />

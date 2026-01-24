@@ -211,9 +211,22 @@ function SubagentsEditor({
 
   if (filteredAgents.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        No other agents available.
-      </p>
+      <>
+        <p className="text-sm text-muted-foreground">
+          No other agents available.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 gap-1.5 text-xs border-dashed"
+          asChild
+        >
+          <a href="/agents?create=true" target="_blank" rel="noopener">
+            <span className="font-medium">Create a New Agent</span>
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </Button>
+      </>
     );
   }
 

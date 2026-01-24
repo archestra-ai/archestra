@@ -3,7 +3,7 @@ import { expect, test } from "../../fixtures";
 import { clickButton } from "../../utils";
 
 test(
-  "can create and delete a profile",
+  "can create and delete an MCP Gateway",
   // Extended timeout for Firefox/WebKit CI environments where React hydration
   // and permission checks may take longer than the default 60s
   { tag: ["@firefox", "@webkit"] },
@@ -17,14 +17,14 @@ test(
       await page.waitForTimeout(500);
     }
 
-    const AGENT_NAME = makeRandomString(10, "Test Profile");
-    await goToPage(page, "/profiles");
+    const AGENT_NAME = makeRandomString(10, "Test MCP Gateway");
+    await goToPage(page, "/mcp-gateways");
 
     // Wait for page to fully load before interacting
     // WebKit/Firefox may need extra time for React hydration and permission checks
     await page.waitForLoadState("networkidle");
 
-    // Wait for the Create Profile button to be visible and enabled
+    // Wait for the Create MCP Gateway button to be visible and enabled
     // The button is disabled while permission checks are loading
     // Use polling with page reload as fallback for React hydration delays in Firefox/WebKit CI
     const createButton = page.getByTestId(E2eTestId.CreateAgentButton);
@@ -43,8 +43,10 @@ test(
     await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
     await page.getByRole("button", { name: "Create" }).click();
 
-    // After profile creation, wait for the success toast to appear
-    await expect(page.getByText("Profile created successfully")).toBeVisible({
+    // After MCP Gateway creation, wait for the success toast to appear
+    await expect(
+      page.getByText("MCP Gateway created successfully"),
+    ).toBeVisible({
       timeout: 15_000,
     });
 
@@ -62,24 +64,24 @@ test(
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
     await page.waitForLoadState("networkidle");
 
-    // Poll for the profile to appear in the table (handles async creation)
-    const profileLocator = page
+    // Poll for the MCP Gateway to appear in the table (handles async creation)
+    const gatewayLocator = page
       .getByTestId(E2eTestId.AgentsTable)
       .getByText(AGENT_NAME);
 
     await expect(async () => {
       await page.reload();
       await page.waitForLoadState("networkidle");
-      await expect(profileLocator).toBeVisible({ timeout: 5000 });
+      await expect(gatewayLocator).toBeVisible({ timeout: 5000 });
     }).toPass({ timeout: 30_000, intervals: [2000, 3000, 5000] });
 
-    // Delete created profile - click the delete button directly
+    // Delete created MCP Gateway - click the delete button directly
     await page
       .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
       .click();
-    await clickButton({ page, options: { name: "Delete profile" } });
+    await clickButton({ page, options: { name: "Delete MCP Gateway" } });
 
     // Wait for deletion to complete
-    await expect(profileLocator).not.toBeVisible({ timeout: 10000 });
+    await expect(gatewayLocator).not.toBeVisible({ timeout: 10000 });
   },
 );

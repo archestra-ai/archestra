@@ -49,7 +49,17 @@ export default function IncomingEmailSettingsPage() {
   if (!emailInfo?.enabled) {
     return (
       <div className="space-y-6">
-        <EmailNotConfiguredMessage />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Incoming Email
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <EmailNotConfiguredMessage />
+          </CardContent>
+        </Card>
       </div>
     );
   }

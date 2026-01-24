@@ -104,6 +104,23 @@ vi.mock("@/components/ui/tooltip", () => ({
   ),
 }));
 
+// Mock the React Query hooks that the component uses
+vi.mock("@/lib/agent-tools.query", () => ({
+  useAgentDelegations: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@/lib/chat.query", () => ({
+  useProfileToolsWithIds: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 // Import the component after mocks are set up
 import ArchestraPromptInput from "./prompt-input";
 
@@ -171,20 +188,19 @@ describe("ArchestraPromptInput", () => {
       expect(screen.getByTestId("model-selector")).toBeInTheDocument();
     });
 
-    it("should render chat tools display when agentId is provided", () => {
+    it("should render 'Add tools & sub-agents' button when no tools or delegations exist", () => {
       render(
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
       );
 
-      expect(screen.getByTestId("chat-tools-display")).toBeInTheDocument();
-    });
-
-    it("should render agent tools display when agentId is provided", () => {
-      render(
-        <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
-      );
-
-      expect(screen.getByTestId("agent-tools-display")).toBeInTheDocument();
+      // With empty tools and delegations from mocks, should show the "Add tools" button
+      expect(screen.getByText("Add tools & sub-agents")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-tools-display"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("agent-tools-display"),
+      ).not.toBeInTheDocument();
     });
   });
 });

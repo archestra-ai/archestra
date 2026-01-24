@@ -44,7 +44,8 @@ export function CreateSsoProviderDialog({
   const createSsoProvider = useCreateSsoProvider();
 
   const form = useForm<SsoProviderFormValues>({
-    resolver: zodResolver(SsoProviderFormSchema),
+    // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
+    resolver: zodResolver(SsoProviderFormSchema as any),
     defaultValues: defaultValues || {
       providerId: "",
       issuer: "",

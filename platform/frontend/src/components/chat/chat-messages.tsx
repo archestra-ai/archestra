@@ -1,7 +1,14 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Conversation,
   ConversationContent,
@@ -166,6 +173,78 @@ export function ChatMessages({
     }
   };
 
+  // Ref for the text position marker
+  const textMarkerRef = useRef<HTMLSpanElement>(null);
+
+  // Calculate arrow dimensions based on actual text position
+  const [arrowDimensions, setArrowDimensions] = useState({
+    width: 400,
+    height: 300,
+    pathD: "M 350 340 Q 300 340 250 340 L 100 340 Q 60 340 60 300 L 60 5",
+    visible: false,
+    left: 248,
+    top: 85,
+  });
+
+  const updateArrowDimensions = useCallback(() => {
+    if (!textMarkerRef.current) return;
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    // Only show arrow on large screens with sufficient height
+    const isVisible = viewportWidth >= 1280 && viewportHeight >= 600;
+
+    if (!isVisible) {
+      setArrowDimensions((prev) => ({ ...prev, visible: false }));
+      return;
+    }
+
+    // Get the actual position of the text marker
+    const textRect = textMarkerRef.current.getBoundingClientRect();
+    const textX = textRect.left;
+    const textY = textRect.top;
+
+    // Agent selector position (top left area)
+    const selectorX = 248;
+    const selectorY = 85;
+
+    // Calculate SVG dimensions - arrow should end at text marker position
+    const svgWidth = Math.max(textX - selectorX, 200); // Width from selector to text
+    const svgHeight = Math.max(textY - selectorY, 100); // Height from selector to text
+
+    // Path coordinates (relative to SVG origin)
+    // Arrow tip at top left
+    const _startX = 60;
+    const startY = 5;
+    // End point should be exactly at the text marker position
+    const endX = svgWidth; // No margin - end exactly at text
+    const endY = svgHeight - 10;
+    // Curve control point
+    const curveY = endY - 40;
+
+    setArrowDimensions({
+      width: svgWidth,
+      height: svgHeight,
+      pathD: `M ${endX} ${endY} Q ${endX - 50} ${endY} ${endX - 100} ${endY} L 100 ${endY} Q 60 ${endY} 60 ${curveY} L 60 ${startY}`,
+      visible: isVisible,
+      left: selectorX,
+      top: selectorY,
+    });
+  }, []);
+
+  useEffect(() => {
+    // Initial calculation after mount
+    const timer = setTimeout(updateArrowDimensions, 100);
+
+    // Update on resize
+    window.addEventListener("resize", updateArrowDimensions);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", updateArrowDimensions);
+    };
+  }, [updateArrowDimensions]);
+
   if (messages.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
@@ -176,48 +255,55 @@ export function ChatMessages({
     if (agentName) {
       return (
         <div className="flex items-center justify-center h-full relative">
-          {/* Custom bent arrow pointing to agent selector */}
-          <svg
-            className="fixed pointer-events-none z-50"
-            width="600"
-            height="400"
-            style={{
-              top: "85px",
-              left: "248px",
-            }}
-            aria-hidden="true"
-          >
-            <title>Arrow pointing to agent selector</title>
-            <defs>
-              <marker
-                id="arrowhead"
-                markerWidth="10"
-                markerHeight="7"
-                refX="9"
-                refY="3.5"
-                orient="auto"
-              >
-                <polygon
-                  points="0 0, 10 3.5, 0 7"
-                  fill="rgb(156, 163, 175)"
-                  strokeWidth="0"
-                  opacity="0.6"
-                />
-              </marker>
-            </defs>
-            <path
-              d="M 350 340 Q 300 340 250 340 L 100 340 Q 60 340 60 300 L 60 5"
-              stroke="rgb(156, 163, 175)"
-              strokeWidth="2"
-              fill="none"
-              strokeDasharray="5,5"
-              markerEnd="url(#arrowhead)"
-              opacity="0.5"
-            />
-          </svg>
+          {/* Custom bent arrow pointing to agent selector - hidden on mobile */}
+          {arrowDimensions.visible && (
+            <svg
+              className="fixed pointer-events-none z-50"
+              width={arrowDimensions.width}
+              height={arrowDimensions.height}
+              style={{
+                top: `${arrowDimensions.top}px`,
+                left: `${arrowDimensions.left}px`,
+              }}
+              aria-hidden="true"
+            >
+              <title>Arrow pointing to agent selector</title>
+              <defs>
+                <marker
+                  id="arrowhead"
+                  markerWidth="10"
+                  markerHeight="7"
+                  refX="9"
+                  refY="3.5"
+                  orient="auto"
+                >
+                  <polygon
+                    points="0 0, 10 3.5, 0 7"
+                    fill="rgb(156, 163, 175)"
+                    strokeWidth="0"
+                    opacity="0.6"
+                  />
+                </marker>
+              </defs>
+              <path
+                d={arrowDimensions.pathD}
+                stroke="rgb(156, 163, 175)"
+                strokeWidth="2"
+                fill="none"
+                strokeDasharray="5,5"
+                markerEnd="url(#arrowhead)"
+                opacity="0.5"
+              />
+            </svg>
+          )}
 
           <div className="text-center space-y-6 max-w-2xl px-4 relative">
-            <p className="text-lg text-muted-foreground">
+            <p className="text-lg text-muted-foreground relative">
+              <span
+                ref={textMarkerRef}
+                className="absolute -left-4 top-1/2 -translate-y-1/2 w-0 h-0"
+                aria-hidden="true"
+              />
               Chat with{" "}
               <span className="font-medium text-foreground">{agentName}</span>{" "}
               agent,

@@ -1,7 +1,6 @@
 "use client";
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
-import { Link } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
@@ -65,15 +64,14 @@ export function DefaultCredentialsWarning({
             rel="noopener noreferrer"
             className="inline-flex items-center underline"
           >
-            <Link className="mr-1 flex-shrink-0" size={12} />
             Set ENV
-          </a>
-          <br />
+          </a>{" "}
+          or{" "}
           <a
             href="/settings/account"
             className="inline-flex items-center underline"
           >
-            Change password
+            Change
           </a>
         </p>
       </AlertDescription>

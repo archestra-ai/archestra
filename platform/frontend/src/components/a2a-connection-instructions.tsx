@@ -6,6 +6,7 @@ import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import { EmailNotConfiguredMessage } from "@/components/email-not-configured-message";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -519,84 +520,84 @@ curl -X GET "${agentCardUrl}" \\
         </div>
       </div>
 
-      {/* Email Invocation Section - show when global email feature is enabled */}
-      {globalEmailEnabled && (
-        <>
-          <Separator />
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-muted-foreground" />
-              <Label className="text-sm font-medium">Email Invocation</Label>
+      {/* Email Invocation Section - always show, with configuration guidance when not enabled */}
+      <Separator />
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Mail className="h-4 w-4 text-muted-foreground" />
+          <Label className="text-sm font-medium">Email Invocation</Label>
+        </div>
+
+        {!globalEmailEnabled ? (
+          <div className="bg-muted/50 rounded-md p-3">
+            <EmailNotConfiguredMessage />
+          </div>
+        ) : agentEmailEnabled ? (
+          <>
+            {/* Security mode description */}
+            <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
+              {agent.incomingEmailSecurityMode === "private" && (
+                <p>
+                  <strong>Private mode:</strong> Only emails from registered
+                  users with access to this agent will be processed.
+                </p>
+              )}
+              {agent.incomingEmailSecurityMode === "internal" && (
+                <p>
+                  <strong>Internal mode:</strong> Only emails from{" "}
+                  <span className="font-mono text-xs">
+                    @{agent.incomingEmailAllowedDomain || "your-domain.com"}
+                  </span>{" "}
+                  will be processed.
+                </p>
+              )}
+              {agent.incomingEmailSecurityMode === "public" && (
+                <p>
+                  <strong>Public mode:</strong> Any email will be processed. Use
+                  with caution.
+                </p>
+              )}
             </div>
 
-            {agentEmailEnabled ? (
-              <>
-                {/* Security mode description */}
-                <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
-                  {agent.incomingEmailSecurityMode === "private" && (
-                    <p>
-                      <strong>Private mode:</strong> Only emails from registered
-                      users with access to this agent will be processed.
-                    </p>
-                  )}
-                  {agent.incomingEmailSecurityMode === "internal" && (
-                    <p>
-                      <strong>Internal mode:</strong> Only emails from{" "}
-                      <span className="font-mono text-xs">
-                        @{agent.incomingEmailAllowedDomain || "your-domain.com"}
-                      </span>{" "}
-                      will be processed.
-                    </p>
-                  )}
-                  {agent.incomingEmailSecurityMode === "public" && (
-                    <p>
-                      <strong>Public mode:</strong> Any email will be processed.
-                      Use with caution.
-                    </p>
-                  )}
-                </div>
-
-                {/* Email address */}
-                {agentEmailAddress && (
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">
-                      Send an email to invoke this agent. The email body will be
-                      used as the first message.
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-                        <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                        <CodeText className="text-xs text-primary break-all flex-1">
-                          {agentEmailAddress}
-                        </CodeText>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 flex-shrink-0"
-                          onClick={handleCopyEmail}
-                        >
-                          {copiedEmail ? (
-                            <Check className="h-3 w-3 text-green-500" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
+            {/* Email address */}
+            {agentEmailAddress && (
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">
+                  Send an email to invoke this agent. The email body will be
+                  used as the first message.
+                </Label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+                    <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                    <CodeText className="text-xs text-primary break-all flex-1">
+                      {agentEmailAddress}
+                    </CodeText>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 flex-shrink-0"
+                      onClick={handleCopyEmail}
+                    >
+                      {copiedEmail ? (
+                        <Check className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </Button>
                   </div>
-                )}
-              </>
-            ) : (
-              <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
-                <p>
-                  Email invocation is not enabled for this agent. Enable it in
-                  the agent settings to allow triggering via email.
-                </p>
+                </div>
               </div>
             )}
+          </>
+        ) : (
+          <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
+            <p>
+              Email invocation is not enabled for this agent. Enable it in the
+              agent settings to allow triggering via email.
+            </p>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }

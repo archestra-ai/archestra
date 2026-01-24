@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, X } from "lucide-react";
+import { ExternalLink, Loader2, X } from "lucide-react";
 import {
   forwardRef,
   Suspense,
@@ -307,6 +307,20 @@ const AgentToolsEditorContent = forwardRef<
           onClick={onShowMore}
         >
           +{hiddenCount} more
+        </Button>
+      )}
+      {/* Show "Install New MCP Server" when there's no "+N more" button */}
+      {(shouldShowAll || hiddenCount <= 0) && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 gap-1.5 text-xs border-dashed"
+          asChild
+        >
+          <a href="/mcp-catalog/registry" target="_blank" rel="noopener">
+            <span className="font-medium">Install New MCP Server</span>
+            <ExternalLink className="h-3 w-3" />
+          </a>
         </Button>
       )}
     </div>

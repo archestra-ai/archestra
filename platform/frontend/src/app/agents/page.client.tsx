@@ -207,6 +207,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   } | null>(null);
   const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+
+  // Handle 'create' URL parameter to open the Create Agent dialog
+  useEffect(() => {
+    if (searchParams.get("create") === "true") {
+      setIsCreateDialogOpen(true);
+      // Remove the 'create' parameter from URL after opening the dialog
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("create");
+      router.replace(`${pathname}?${newParams.toString()}`);
+    }
+  }, [searchParams, pathname, router]);
   const [versionHistoryAgent, setVersionHistoryAgent] =
     useState<AgentData | null>(null);
 

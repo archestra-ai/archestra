@@ -3,6 +3,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   Bot,
+  Edit,
   Eye,
   EyeOff,
   FileText,
@@ -24,9 +25,7 @@ import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
-import { Message, MessageContent } from "@/components/ai-elements/message";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
-import { Response } from "@/components/ai-elements/response";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
@@ -53,7 +52,7 @@ import {
 } from "@/components/ui/empty";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
-import { useInternalAgents, useProfile } from "@/lib/agent.query";
+import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
   useConversation,
@@ -123,7 +122,7 @@ export default function ChatPage() {
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
-    "custom-request" | "create-catalog"
+    "custom-request" | "create-catalog" | "edit-agent"
   >();
 
   // Check if user can create catalog items directly
@@ -149,13 +148,10 @@ export default function ChatPage() {
   // Track if URL params have been consumed (so we don't re-apply them after user clears selection)
   const urlParamsConsumedRef = useRef(false);
 
-  // Agent edit dialog state
-  const [isAgentDialogOpen, setIsAgentDialogOpen] = useState(false);
-  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  // Version history dialog state
   const [versionHistoryAgent, setVersionHistoryAgent] = useState<
     (typeof internalAgents)[number] | null
   >(null);
-  const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
 
   // Set initial agent from URL param, localStorage, or default when data loads
   useEffect(() => {
@@ -621,6 +617,14 @@ export default function ChatPage() {
     }
   }, [status, conversation?.id]);
 
+  // Auto-focus textarea on initial page load
+  useEffect(() => {
+    // Use requestAnimationFrame to ensure DOM is ready
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }, []);
+
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
     if (status === "submitted" || status === "streaming") {
@@ -908,7 +912,7 @@ export default function ChatPage() {
               {/* Left side - agent selector stays fixed, tools wrap internally */}
               <div className="flex items-start gap-2 min-w-0 flex-1">
                 {/* Agent/Profile selector - fixed width */}
-                <div className="flex-shrink-0">
+                <div className="flex-shrink-0 flex items-center gap-2">
                   {conversationId ? (
                     <AgentSelector
                       currentPromptId={
@@ -924,6 +928,20 @@ export default function ChatPage() {
                       currentAgentId={initialAgentId}
                       onAgentChange={handleInitialAgentChange}
                     />
+                  )}
+                  {/* Edit agent button */}
+                  {(conversationId
+                    ? conversation?.agentId
+                    : initialAgentId) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openDialog("edit-agent")}
+                      title="Edit agent, tools, sub-agents"
+                      className="h-8 px-2"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
                   )}
                 </div>
               </div>
@@ -976,102 +994,75 @@ export default function ChatPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {conversationId ? (
-              <ChatMessages
-                conversationId={conversationId}
-                agentId={currentProfileId}
-                messages={messages}
-                hideToolCalls={hideToolCalls}
-                status={status}
-                isLoadingConversation={isLoadingConversation}
-                onMessagesUpdate={setMessages}
-                onUserMessageEdit={(
-                  editedMessage,
-                  updatedMessages,
-                  editedPartIndex,
-                ) => {
-                  // After user message is edited, set messages WITHOUT the edited one, then send it fresh
-                  if (setMessages && sendMessage) {
-                    // Set flag to prevent message sync from overwriting our state
-                    userMessageJustEdited.current = true;
-
-                    // Remove the edited message (last one) - we'll re-send it via sendMessage()
-                    const messagesWithoutEditedMessage = updatedMessages.slice(
-                      0,
-                      -1,
-                    );
-                    setMessages(messagesWithoutEditedMessage);
-
-                    // Send the edited message to generate new response (same as handleSubmit)
-                    // Use the specific part that was edited (via editedPartIndex) instead of finding
-                    // the first text part, in case the message has multiple text parts
-                    const editedPart = editedMessage.parts?.[editedPartIndex];
-                    const editedText =
-                      editedPart?.type === "text" ? editedPart.text : "";
-                    if (editedText?.trim()) {
-                      sendMessage({
-                        role: "user",
-                        parts: [{ type: "text", text: editedText }],
-                      });
+            <ChatMessages
+              conversationId={conversationId}
+              agentId={currentProfileId || initialAgentId}
+              agentName={
+                _conversationInternalAgent?.name ||
+                internalAgents.find((a) => a.id === initialAgentId)?.name
+              }
+              suggestedPrompt={
+                conversationId
+                  ? undefined
+                  : internalAgents.find((a) => a.id === initialAgentId)
+                      ?.userPrompt
+              }
+              onSuggestedPromptClick={
+                conversationId
+                  ? undefined
+                  : () => {
+                      const selectedAgent = internalAgents.find(
+                        (a) => a.id === initialAgentId,
+                      );
+                      const userPrompt = selectedAgent?.userPrompt;
+                      if (!userPrompt) return;
+                      const syntheticEvent = {
+                        preventDefault: () => {},
+                      } as React.FormEvent<HTMLFormElement>;
+                      handleInitialSubmit(
+                        { text: userPrompt, files: [] },
+                        syntheticEvent,
+                      );
                     }
-                  }
-                }}
-                error={error}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center space-y-6 max-w-2xl px-4">
-                  {initialAgentId
-                    ? // Agent selected - show prompt
-                      (() => {
-                        const selectedAgent = internalAgents.find(
-                          (a) => a.id === initialAgentId,
-                        );
+              }
+              messages={messages}
+              hideToolCalls={hideToolCalls}
+              status={status}
+              isLoadingConversation={isLoadingConversation}
+              onMessagesUpdate={setMessages}
+              onUserMessageEdit={(
+                editedMessage,
+                updatedMessages,
+                editedPartIndex,
+              ) => {
+                // After user message is edited, set messages WITHOUT the edited one, then send it fresh
+                if (setMessages && sendMessage) {
+                  // Set flag to prevent message sync from overwriting our state
+                  userMessageJustEdited.current = true;
 
-                        return (
-                          <>
-                            <p className="text-lg text-muted-foreground">
-                              To start conversation with{" "}
-                              <span className="font-medium text-foreground">
-                                {selectedAgent?.name}
-                              </span>{" "}
-                              start typing below
-                            </p>
-                            {selectedAgent?.userPrompt && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const userPrompt = selectedAgent.userPrompt;
-                                  if (!userPrompt) return;
-                                  const syntheticEvent = {
-                                    preventDefault: () => {},
-                                  } as React.FormEvent<HTMLFormElement>;
-                                  handleInitialSubmit(
-                                    { text: userPrompt, files: [] },
-                                    syntheticEvent,
-                                  );
-                                }}
-                                className="w-full text-left cursor-pointer hover:opacity-80 transition-opacity"
-                              >
-                                <Message
-                                  from="assistant"
-                                  className="max-w-none justify-center"
-                                >
-                                  <MessageContent className="max-w-none text-center">
-                                    <Response>
-                                      {selectedAgent.userPrompt}
-                                    </Response>
-                                  </MessageContent>
-                                </Message>
-                              </button>
-                            )}
-                          </>
-                        );
-                      })()
-                    : null}
-                </div>
-              </div>
-            )}
+                  // Remove the edited message (last one) - we'll re-send it via sendMessage()
+                  const messagesWithoutEditedMessage = updatedMessages.slice(
+                    0,
+                    -1,
+                  );
+                  setMessages(messagesWithoutEditedMessage);
+
+                  // Send the edited message to generate new response (same as handleSubmit)
+                  // Use the specific part that was edited (via editedPartIndex) instead of finding
+                  // the first text part, in case the message has multiple text parts
+                  const editedPart = editedMessage.parts?.[editedPartIndex];
+                  const editedText =
+                    editedPart?.type === "text" ? editedPart.text : "";
+                  if (editedText?.trim()) {
+                    sendMessage({
+                      role: "user",
+                      parts: [{ type: "text", text: editedText }],
+                    });
+                  }
+                }
+              }}
+              error={error}
+            />
           </div>
 
           {activeAgentId && (
@@ -1134,6 +1125,7 @@ export default function ChatPage() {
                   }
                   allowFileUploads={organization?.allowChatFileUploads ?? false}
                   isModelsLoading={isModelsLoading}
+                  onEditAgent={() => openDialog("edit-agent")}
                 />
                 <div className="text-center">
                   <Version inline />
@@ -1153,6 +1145,20 @@ export default function ChatPage() {
         onClose={() => closeDialog("create-catalog")}
         onSuccess={() => router.push("/mcp-catalog/registry")}
       />
+      <AgentDialog
+        open={isDialogOpened("edit-agent")}
+        onOpenChange={(open) => {
+          if (!open) closeDialog("edit-agent");
+        }}
+        agent={
+          conversationId && conversation
+            ? conversation.agent
+            : initialAgentId
+              ? internalAgents.find((a) => a.id === initialAgentId)
+              : undefined
+        }
+        agentType="agent"
+      />
 
       {isBrowserPanelOpen && isBrowserStreamingEnabled && hasPlaywrightMcp && (
         <BrowserPanel
@@ -1167,19 +1173,6 @@ export default function ChatPage() {
         artifact={conversation?.artifact}
         isOpen={isArtifactOpen}
         onToggle={toggleArtifactPanel}
-      />
-
-      <AgentDialog
-        open={isAgentDialogOpen}
-        onOpenChange={(open) => {
-          setIsAgentDialogOpen(open);
-          if (!open) {
-            setEditingAgentId(null);
-          }
-        }}
-        agent={editingAgent}
-        agentType="agent"
-        onViewVersionHistory={setVersionHistoryAgent}
       />
 
       <PromptVersionHistoryDialog

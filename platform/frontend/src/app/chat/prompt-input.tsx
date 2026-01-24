@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatStatus } from "ai";
-import { PaperclipIcon } from "lucide-react";
+import { PaperclipIcon, Plus } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useRef } from "react";
 import {
@@ -28,6 +28,9 @@ import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { Button } from "@/components/ui/button";
+import { useAgentDelegations } from "@/lib/agent-tools.query";
+import { useProfileToolsWithIds } from "@/lib/chat.query";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -56,6 +59,8 @@ interface ArchestraPromptInputProps {
   allowFileUploads?: boolean;
   /** Whether models are still loading - passed to API key selector */
   isModelsLoading?: boolean;
+  /** Callback to open edit agent dialog */
+  onEditAgent?: () => void;
 }
 
 // Inner component that has access to the controller context
@@ -74,12 +79,17 @@ const PromptInputContent = ({
   textareaRef: externalTextareaRef,
   allowFileUploads = false,
   isModelsLoading = false,
+  onEditAgent,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
+
+  // Check if agent has tools or delegations
+  const { data: tools = [] } = useProfileToolsWithIds(agentId);
+  const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
 
   // Handle speech transcription by updating controller state
   const handleTranscriptionChange = useCallback(
@@ -89,23 +99,46 @@ const PromptInputContent = ({
     [controller.textInput],
   );
 
+  // Check if there are tools or delegated agents
+  const hasTools = tools.length > 0;
+  const hasDelegatedAgents = delegatedAgents.length > 0;
+  const hasContent = hasTools || hasDelegatedAgents;
+
   return (
     <PromptInput globalDrop multiple onSubmit={onSubmit}>
-      <PromptInputHeader className="pt-3">
-        {agentId && (
-          <>
-            <ChatToolsDisplay
-              agentId={agentId}
-              conversationId={conversationId}
-            />
-            <AgentToolsDisplay
-              agentId={agentId}
-              conversationId={conversationId}
-              addAgentsButton={null}
-            />
-          </>
-        )}
-      </PromptInputHeader>
+      {agentId && (
+        <PromptInputHeader>
+          {hasContent ? (
+            <>
+              {hasTools && (
+                <ChatToolsDisplay
+                  agentId={agentId}
+                  conversationId={conversationId}
+                />
+              )}
+              {hasDelegatedAgents && (
+                <AgentToolsDisplay
+                  agentId={agentId}
+                  conversationId={conversationId}
+                  addAgentsButton={null}
+                />
+              )}
+            </>
+          ) : (
+            <div className="flex items-start">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 gap-1.5 text-xs border-dashed"
+                onClick={onEditAgent}
+              >
+                <Plus className="h-3 w-3" />
+                <span>Add tools & sub-agents</span>
+              </Button>
+            </div>
+          )}
+        </PromptInputHeader>
+      )}
       {/* File attachments display - shown inline above textarea */}
       <PromptInputAttachments className="px-3 pt-2 pb-0">
         {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -194,6 +227,7 @@ const ArchestraPromptInput = ({
   textareaRef,
   allowFileUploads = false,
   isModelsLoading = false,
+  onEditAgent,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -213,6 +247,7 @@ const ArchestraPromptInput = ({
           textareaRef={textareaRef}
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
+          onEditAgent={onEditAgent}
         />
       </PromptInputProvider>
     </div>

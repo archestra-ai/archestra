@@ -184,7 +184,6 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await page.waitForTimeout(100);
 }
 
-
 export async function verifyToolCallResultViaApi({
   request,
   expectedResult,

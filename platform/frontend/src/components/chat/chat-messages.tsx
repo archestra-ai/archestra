@@ -75,6 +75,9 @@ function isToolPart(part: any): part is {
 export function ChatMessages({
   conversationId,
   agentId,
+  agentName,
+  suggestedPrompt,
+  onSuggestedPromptClick,
   messages,
   hideToolCalls = false,
   status,
@@ -169,6 +172,83 @@ export function ChatMessages({
       return null;
     }
 
+    // Unified empty state for both new chat and existing chat with no messages
+    if (agentName) {
+      return (
+        <div className="flex items-center justify-center h-full relative">
+          {/* Custom bent arrow pointing to agent selector */}
+          <svg
+            className="fixed pointer-events-none z-50"
+            width="600"
+            height="400"
+            style={{
+              top: "85px",
+              left: "248px",
+            }}
+            aria-hidden="true"
+          >
+            <title>Arrow pointing to agent selector</title>
+            <defs>
+              <marker
+                id="arrowhead"
+                markerWidth="10"
+                markerHeight="7"
+                refX="9"
+                refY="3.5"
+                orient="auto"
+              >
+                <polygon
+                  points="0 0, 10 3.5, 0 7"
+                  fill="rgb(156, 163, 175)"
+                  strokeWidth="0"
+                  opacity="0.6"
+                />
+              </marker>
+            </defs>
+            <path
+              d="M 350 340 Q 300 340 250 340 L 100 340 Q 60 340 60 300 L 60 5"
+              stroke="rgb(156, 163, 175)"
+              strokeWidth="2"
+              fill="none"
+              strokeDasharray="5,5"
+              markerEnd="url(#arrowhead)"
+              opacity="0.5"
+            />
+          </svg>
+
+          <div className="text-center space-y-6 max-w-2xl px-4 relative">
+            <p className="text-lg text-muted-foreground">
+              Chat with{" "}
+              <span className="font-medium text-foreground">{agentName}</span>{" "}
+              agent,
+              <br />
+              or{" "}
+              <a
+                href="/agents?create=true"
+                className="text-primary hover:underline"
+              >
+                create a new one
+              </a>
+            </p>
+            {suggestedPrompt && onSuggestedPromptClick && (
+              <button
+                type="button"
+                onClick={onSuggestedPromptClick}
+                className="w-full text-left cursor-pointer hover:opacity-80 transition-opacity"
+              >
+                <Message from="assistant" className="max-w-none justify-center">
+                  <MessageContent className="max-w-none text-left">
+                    <Response>{suggestedPrompt}</Response>
+                  </MessageContent>
+                </Message>
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Fallback for when no agent name is provided
     return (
       <div className="flex-1 flex h-full items-center justify-center text-center text-muted-foreground">
         <p className="text-sm">Start a conversation by sending a message</p>

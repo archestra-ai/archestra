@@ -3,7 +3,14 @@
 import type { archestraApiTypes } from "@shared";
 import { archestraApiSdk } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Bot, Loader2, Search, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  ExternalLink,
+  Loader2,
+  Search,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -38,6 +45,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateProfile,
   useInternalAgents,
+  useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
 import {
@@ -233,6 +241,20 @@ function SubagentsEditor({
           +{hiddenCount} more
         </Button>
       )}
+      {/* Show "Create a New Agent" when there's no "+N more" button */}
+      {(shouldShowAll || hiddenCount <= 0) && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 gap-1.5 text-xs border-dashed"
+          asChild
+        >
+          <a href="/agents?create=true" target="_blank" rel="noopener">
+            <span className="font-medium">Create a New Agent</span>
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </Button>
+      )}
     </>
   );
 }
@@ -316,6 +338,9 @@ export function AgentDialog({
   const syncDelegations = useSyncAgentDelegations();
   const { data: currentDelegations = [] } = useAgentDelegations(agent?.id);
   const { data: chatopsProviders = [] } = useChatOpsStatus();
+
+  // Fetch fresh agent data when dialog opens
+  const { data: freshAgent, refetch: refetchAgent } = useProfile(agent?.id);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -357,27 +382,37 @@ export function AgentDialog({
   // Reset form when dialog opens/closes or agent changes
   useEffect(() => {
     if (open) {
-      if (agent) {
+      // Refetch agent data when dialog opens to ensure fresh data
+      if (agent?.id) {
+        refetchAgent();
+      }
+
+      // Use fresh agent data if available, otherwise fall back to prop
+      const agentData = freshAgent || agent;
+
+      if (agentData) {
         // Edit mode
-        setName(agent.name);
-        setUserPrompt(agent.userPrompt || "");
-        setSystemPrompt(agent.systemPrompt || "");
+        setName(agentData.name);
+        setUserPrompt(agentData.userPrompt || "");
+        setSystemPrompt(agentData.systemPrompt || "");
         // Reset delegation targets - will be populated by the next useEffect when data loads
         setSelectedDelegationTargetIds([]);
         // Parse allowedChatops from agent
-        const chatopsValue = agent.allowedChatops;
+        const chatopsValue = agentData.allowedChatops;
         if (Array.isArray(chatopsValue)) {
           setAllowedChatops(chatopsValue as string[]);
         } else {
           setAllowedChatops([]);
         }
         // Teams and labels
-        const agentTeams = agent.teams as unknown as
+        const agentTeams = agentData.teams as unknown as
           | Array<{ id: string; name: string }>
           | undefined;
         setAssignedTeamIds(agentTeams?.map((t) => t.id) || []);
-        setLabels(agent.labels || []);
-        setConsiderContextUntrusted(agent.considerContextUntrusted || false);
+        setLabels(agentData.labels || []);
+        setConsiderContextUntrusted(
+          agentData.considerContextUntrusted || false,
+        );
       } else {
         // Create mode - reset all fields
         setName("");
@@ -398,7 +433,7 @@ export function AgentDialog({
       setToolsShowAll(false);
       setSelectedToolsCount(0);
     }
-  }, [open, agent]);
+  }, [open, agent, freshAgent, refetchAgent]);
 
   // Sync selectedDelegationTargetIds with currentDelegations when data loads
   const currentDelegationIds = currentDelegations.map((a) => a.id).join(",");

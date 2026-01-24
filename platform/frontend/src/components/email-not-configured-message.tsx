@@ -19,7 +19,8 @@ export function EmailNotConfiguredMessage({
 }: EmailNotConfiguredMessageProps) {
   return (
     <p className={className}>
-      Email invocation is not configured for your organization. See the{" "}
+      Email invocation of Agents is not configured for your organization. See
+      the{" "}
       <Link
         href="https://archestra.ai/docs/platform-agents#incoming-email"
         target="_blank"

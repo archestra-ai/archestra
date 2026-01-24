@@ -434,7 +434,9 @@ export function AgentDialog({
         setIncomingEmailSecurityMode(
           agentData.incomingEmailSecurityMode || "private",
         );
-        setIncomingEmailAllowedDomain(agentData.incomingEmailAllowedDomain || "");
+        setIncomingEmailAllowedDomain(
+          agentData.incomingEmailAllowedDomain || "",
+        );
       } else {
         // Create mode - reset all fields
         setName("");
@@ -505,7 +507,8 @@ export function AgentDialog({
         return;
       }
       // Basic domain format validation (no @, valid characters)
-      const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
+      const domainRegex =
+        /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
       if (!domainRegex.test(trimmedDomain)) {
         toast.error("Please enter a valid domain (e.g., example.com)");
         return;
@@ -615,7 +618,6 @@ export function AgentDialog({
     incomingEmailEnabled,
     incomingEmailSecurityMode,
     incomingEmailAllowedDomain,
-    features?.incomingEmail?.enabled,
     agentType,
     agent,
     isInternalAgent,

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-desktop/main/schemas/mcp-servers.schema.json",
+  "mcpServers": {
+    "mcp-ui-demo": {
+      "description": "MCP-UI Demo Server - Demonstrates all UIResource types (HTML, URL, RemoteDOM)",
+      "command": "node",
+      "args": ["servers/mcp-ui/examples/typescript-server-demo/dist/index.js"],
+      "env": {
+        "PORT": "3000"
+      },
+      "metadata": {
+        "category": "ui",
+        "tools": ["showExternalUrl", "showRawHtml", "showRemoteDom"],
+        "uiResourceTypes": ["text/html", "text/uri-list", "application/vnd.mcp-ui.remote-dom"]
+      }
+    },
+    "threejs-visualization": {
+      "description": "Three.js 3D Visualization Server - Interactive 3D graphics in chat",
+      "command": "node",
+      "args": ["servers/ext-apps/examples/threejs-server/dist/index.js"],
+      "env": {
+        "PORT": "3001"
+      },
+      "metadata": {
+        "category": "visualization",
+        "uiResourceTypes": ["application/vnd.mcp-ui.remote-dom"]
+      }
+    },
+    "map-server": {
+      "description": "Map Server - Geographic visualization and mapping",
+      "command": "node",
+      "args": ["servers/ext-apps/examples/map-server/dist/index.js"],
+      "env": {
+        "PORT": "3002"
+      },
+      "metadata": {
+        "category": "visualization",
+        "uiResourceTypes": ["application/vnd.mcp-ui.remote-dom"]
+      }
+    }
+  }
+}

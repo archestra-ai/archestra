@@ -403,8 +403,8 @@ export function McpServerCard({
         <span className="text-muted-foreground">
           Assignments:{" "}
           <span className="font-medium text-foreground">
-            {getToolsAssignedCount()}{" "}
-            {toolsDiscoveredCount ? `(out of ${toolsDiscoveredCount})` : ""}
+            {getToolsAssignedCount()}
+            {toolsDiscoveredCount ? `/${toolsDiscoveredCount}` : ""}
           </span>
         </span>
       </div>

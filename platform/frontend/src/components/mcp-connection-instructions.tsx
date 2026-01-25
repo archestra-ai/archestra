@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -46,7 +47,7 @@ import {
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
-const { internalProxyUrl } = config.api;
+const { externalProxyUrls, internalProxyUrl } = config.api;
 
 interface McpConnectionInstructionsProps {
   agentId: string;
@@ -73,6 +74,9 @@ export function McpConnectionInstructions({
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
+  const [connectionUrl, setConnectionUrl] = useState<string>(
+    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
+  );
 
   // Fetch tokens filtered by the selected profile's teams
   const { data: tokensData } = useTokens({ profileId: selectedProfileId });
@@ -201,8 +205,7 @@ export function McpConnectionInstructions({
     [mcpServers],
   );
 
-  // Use the new URL format with selected profile ID
-  const mcpUrl = `${internalProxyUrl}/mcp/${selectedProfileId}`;
+  const mcpUrl = `${connectionUrl}/mcp/${selectedProfileId}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -556,6 +559,12 @@ export function McpConnectionInstructions({
           </SelectContent>
         </Select>
       </div>
+
+      <ConnectionBaseUrlSelect
+        value={connectionUrl}
+        onChange={setConnectionUrl}
+        idPrefix="mcp"
+      />
 
       <div className="space-y-3">
         <div className="space-y-2">

@@ -6,7 +6,7 @@ import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import { EmailNotConfiguredMessage } from "@/components/email-not-configured-message";
+import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,8 +23,9 @@ import { useFeatures } from "@/lib/features.query";
 import { useAgentEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
+import { EmailNotConfiguredMessage } from "./email-not-configured-message";
 
-const { internalProxyUrl } = config.api;
+const { externalProxyUrls, internalProxyUrl } = config.api;
 
 type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
@@ -52,6 +53,9 @@ export function A2AConnectionInstructions({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
+  const [connectionUrl, setConnectionUrl] = useState<string>(
+    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
+  );
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
     null,
@@ -79,7 +83,7 @@ export function A2AConnectionInstructions({
   }, [agentEmailAddress]);
 
   // A2A endpoint
-  const a2aEndpoint = `${internalProxyUrl}/a2a/${agent.id}`;
+  const a2aEndpoint = `${connectionUrl}/a2a/${agent.id}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -187,7 +191,7 @@ export function A2AConnectionInstructions({
   }, [agent.id]);
 
   // Agent Card URL for discovery
-  const agentCardUrl = `${internalProxyUrl}/a2a/${agent.id}/.well-known/agent.json`;
+  const agentCardUrl = `${connectionUrl}/a2a/${agent.id}/.well-known/agent.json`;
 
   // cURL example code for sending messages
   const curlCode = useMemo(
@@ -262,6 +266,11 @@ curl -X GET "${agentCardUrl}" \\
 
   return (
     <div className="space-y-6">
+      <ConnectionBaseUrlSelect
+        value={connectionUrl}
+        onChange={setConnectionUrl}
+        idPrefix="a2a"
+      />
       {/* A2A Endpoint URL */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">A2A Endpoint URL</Label>

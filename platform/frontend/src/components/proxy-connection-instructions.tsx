@@ -5,6 +5,7 @@ import { Check, ChevronDown, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/popover";
 import config from "@/lib/config";
 
-const { internalProxyUrl } = config.api;
+const { externalProxyUrls, internalProxyUrl } = config.api;
 
 type ProviderOption = SupportedProvider | "claude-code";
 
@@ -27,15 +28,18 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
+  const [connectionUrl, setConnectionUrl] = useState<string>(
+    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
+  );
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
 
   const proxyUrl = agentId
-    ? `${internalProxyUrl}/${getProviderPath(selectedProvider)}/${agentId}`
-    : `${internalProxyUrl}/${getProviderPath(selectedProvider)}`;
+    ? `${connectionUrl}/${getProviderPath(selectedProvider)}/${agentId}`
+    : `${connectionUrl}/${getProviderPath(selectedProvider)}`;
 
-  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${internalProxyUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
+  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${connectionUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
 
   return (
     <div className="space-y-3">
@@ -88,6 +92,12 @@ export function ProxyConnectionInstructions({
           </PopoverContent>
         </Popover>
       </ButtonGroup>
+
+      <ConnectionBaseUrlSelect
+        value={connectionUrl}
+        onChange={setConnectionUrl}
+        idPrefix="llm"
+      />
 
       {selectedProvider === "openai" && (
         <div className="space-y-4">

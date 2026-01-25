@@ -92,10 +92,10 @@ export const getDatabaseUrl = (): string => {
 };
 
 /**
- * Parse port from ARCHESTRA_API_BASE_URL if provided
+ * Parse port from ARCHESTRA_INTERNAL_API_BASE_URL if provided
  */
 const getPortFromUrl = (): number => {
-  const url = process.env.ARCHESTRA_API_BASE_URL;
+  const url = process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
   const defaultPort = 9000;
 
   if (!url) {

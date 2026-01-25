@@ -189,10 +189,16 @@ export function ChatMessages({
   const updateArrowDimensions = useCallback(() => {
     if (!textMarkerRef.current) return;
 
-    const viewportWidth = window.innerWidth;
+    // Get the parent container dimensions (changes when artifact panel opens/closes)
+    const parentContainer = textMarkerRef.current.closest(".flex-1");
+    if (!parentContainer) return;
+
+    const containerRect = parentContainer.getBoundingClientRect();
+    const containerWidth = containerRect.width;
     const viewportHeight = window.innerHeight;
-    // Only show arrow on large screens with sufficient height
-    const isVisible = viewportWidth >= 1280 && viewportHeight >= 600;
+
+    // Only show arrow if container has sufficient width and viewport has height
+    const isVisible = containerWidth >= 768 && viewportHeight >= 600;
 
     if (!isVisible) {
       setArrowDimensions((prev) => ({ ...prev, visible: false }));
@@ -236,12 +242,41 @@ export function ChatMessages({
     // Initial calculation after mount
     const timer = setTimeout(updateArrowDimensions, 100);
 
-    // Update on resize
+    // Update on window resize
     window.addEventListener("resize", updateArrowDimensions);
+
+    // Use ResizeObserver to detect when the parent container changes size
+    // This will trigger when the artifact panel opens/closes
+    const resizeObserver = new ResizeObserver(() => {
+      updateArrowDimensions();
+    });
+
+    // Find the main content area that actually resizes when artifact panel toggles
+    // Look for the parent that contains the overflow-y-auto class
+    const parentContainer =
+      textMarkerRef.current?.closest(".overflow-y-auto")?.parentElement
+        ?.parentElement;
+    if (parentContainer) {
+      resizeObserver.observe(parentContainer);
+    }
+
+    // Also add a small delay and retry to ensure element is found
+    const retryTimer = setTimeout(() => {
+      if (!parentContainer && textMarkerRef.current) {
+        const container =
+          textMarkerRef.current.closest(".overflow-y-auto")?.parentElement
+            ?.parentElement;
+        if (container) {
+          resizeObserver.observe(container);
+        }
+      }
+    }, 500);
 
     return () => {
       clearTimeout(timer);
+      clearTimeout(retryTimer);
       window.removeEventListener("resize", updateArrowDimensions);
+      resizeObserver.disconnect();
     };
   }, [updateArrowDimensions]);
 

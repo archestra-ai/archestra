@@ -34,6 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
+import { useHasPermissions } from "@/lib/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat.query";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
@@ -95,6 +96,11 @@ const PromptInputContent = ({
   // Check if agent has tools or delegations
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
   const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
+
+  // Check if user can update organization settings (to show settings link in tooltip)
+  const { data: canUpdateOrganization } = useHasPermissions({
+    organization: ["update"],
+  });
 
   // Handle speech transcription by updating controller state
   const handleTranscriptionChange = useCallback(
@@ -184,7 +190,20 @@ const PromptInputContent = ({
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={4}>
-                File uploads are disabled by your administrator
+                {canUpdateOrganization ? (
+                  <span>
+                    File uploads are disabled.{" "}
+                    <a
+                      href="/settings/security"
+                      className="underline hover:no-underline"
+                      aria-label="Enable file uploads in security settings"
+                    >
+                      Enable in settings
+                    </a>
+                  </span>
+                ) : (
+                  "File uploads are disabled by your administrator"
+                )}
               </TooltipContent>
             </Tooltip>
           )}

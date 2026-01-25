@@ -1102,21 +1102,46 @@ class InteractionModel {
           !requestStr.includes("prompt suggestion generator") &&
           !requestStr.includes("Please write a 5-10 word title")
         ) {
-          // Check message content length
+          // Check message content length - support both OpenAI/Anthropic and Gemini formats
           const request = interaction.request as {
+            // OpenAI/Anthropic format
             messages?: Array<{ content?: string | Array<{ text?: string }> }>;
+            // Gemini format
+            contents?: Array<{
+              role?: string;
+              parts?: Array<{ text?: string }>;
+            }>;
           };
-          const firstMessage = request?.messages?.[0]?.content;
-          const contentText =
-            typeof firstMessage === "string"
-              ? firstMessage
-              : Array.isArray(firstMessage)
-                ? firstMessage
-                    .map((c) => (typeof c === "string" ? c : (c.text ?? "")))
-                    .join(" ")
-                : "";
 
-          if (contentText.length > 20) {
+          let contentText = "";
+
+          // Try OpenAI/Anthropic format first (messages[].content)
+          const firstMessage = request?.messages?.[0]?.content;
+          if (firstMessage) {
+            contentText =
+              typeof firstMessage === "string"
+                ? firstMessage
+                : Array.isArray(firstMessage)
+                  ? firstMessage
+                      .map((c) => (typeof c === "string" ? c : (c.text ?? "")))
+                      .join(" ")
+                  : "";
+          }
+
+          // Try Gemini format (contents[].parts[].text)
+          if (!contentText && request?.contents) {
+            const userContent = request.contents.find(
+              (c) => c.role === "user" || !c.role,
+            );
+            if (userContent?.parts) {
+              contentText = userContent.parts
+                .map((p) => p.text ?? "")
+                .filter(Boolean)
+                .join(" ");
+            }
+          }
+
+          if (contentText.length > 0) {
             lastMainInteraction = interaction;
           }
         }

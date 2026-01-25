@@ -815,8 +815,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Use the configured default provider for title generation
-      const provider = config.chat.defaultProvider;
+      // Use the conversation's selected provider for title generation
+      // This ensures the title is generated using the same provider as the chat
+      // Fall back to detecting from model name for backward compatibility
+      const provider =
+        (conversation.selectedProvider as SupportedChatProvider | null) ??
+        detectProviderFromModel(conversation.selectedModel);
 
       // Resolve API key using the centralized function (handles all providers)
       const { apiKey } = await resolveProviderApiKey({

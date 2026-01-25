@@ -7,6 +7,17 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { SupportedChatProviderSchema } from "./chat-api-key";
 
+// Override selectedProvider to use the proper enum type
+// For select schema, it's nullable (matches DB schema)
+const selectExtendedFields = {
+  selectedProvider: SupportedChatProviderSchema.nullable(),
+};
+
+// For insert/update schema, selectedProvider is optional
+const insertUpdateExtendedFields = {
+  selectedProvider: SupportedChatProviderSchema.optional(),
+};
+
 export const SelectConversationSchema = createSelectSchema(
   schema.conversationsTable,
 ).extend({
@@ -18,14 +29,12 @@ export const SelectConversationSchema = createSelectSchema(
     agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
   }),
   messages: z.array(z.any()), // UIMessage[] from AI SDK
+  ...selectExtendedFields,
 });
 
 export const InsertConversationSchema = createInsertSchema(
   schema.conversationsTable,
-  {
-    // Override selectedProvider to use the proper enum type
-    selectedProvider: SupportedChatProviderSchema.nullable().optional(),
-  },
+  insertUpdateExtendedFields,
 ).omit({
   id: true,
   createdAt: true,
@@ -34,10 +43,7 @@ export const InsertConversationSchema = createInsertSchema(
 
 export const UpdateConversationSchema = createUpdateSchema(
   schema.conversationsTable,
-  {
-    // Override selectedProvider to use the proper enum type
-    selectedProvider: SupportedChatProviderSchema.nullable().optional(),
-  },
+  insertUpdateExtendedFields,
 ).pick({
   title: true,
   selectedModel: true,

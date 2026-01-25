@@ -164,6 +164,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   openai: "gpt-4o-mini",
   gemini: "gemini-1.5-flash",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
+  cohere: "command-light", // Cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model

@@ -64,18 +64,20 @@ describe("FAST_MODELS", () => {
     expect(FAST_MODELS.openai).toBe("gpt-4o-mini");
     expect(FAST_MODELS.gemini).toBe("gemini-1.5-flash");
     expect(FAST_MODELS.cerebras).toBe("llama-3.3-70b");
+    expect(FAST_MODELS.cohere).toBe("command-light");
     expect(FAST_MODELS.vllm).toBe("default");
     expect(FAST_MODELS.ollama).toBe("llama3.2");
     expect(FAST_MODELS.zhipuai).toBe("glm-4-flash");
   });
 
-  it("has entries for all 7 supported providers", () => {
+  it("has entries for all 8 supported providers", () => {
     const providers = Object.keys(FAST_MODELS);
-    expect(providers).toHaveLength(7);
+    expect(providers).toHaveLength(8);
     expect(providers).toContain("anthropic");
     expect(providers).toContain("openai");
     expect(providers).toContain("gemini");
     expect(providers).toContain("cerebras");
+    expect(providers).toContain("cohere");
     expect(providers).toContain("vllm");
     expect(providers).toContain("ollama");
     expect(providers).toContain("zhipuai");

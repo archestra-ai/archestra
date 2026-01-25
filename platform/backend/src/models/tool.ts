@@ -387,8 +387,9 @@ class ToolModel {
       return [];
     }
 
-    // Return tools that are assigned via junction table AND have catalogId set
-    // This includes both regular MCP server tools and Archestra builtin tools
+    // Return tools that are assigned via junction table AND are either:
+    // - MCP tools (have catalogId set) - includes regular MCP server tools and Archestra builtin tools
+    // - Delegation tools (have delegateToAgentId set)
     // Excludes proxy-discovered tools which have agentId set and catalogId null
     const tools = await db
       .select()
@@ -396,7 +397,10 @@ class ToolModel {
       .where(
         and(
           inArray(schema.toolsTable.id, assignedToolIds),
-          isNotNull(schema.toolsTable.catalogId),
+          or(
+            isNotNull(schema.toolsTable.catalogId),
+            isNotNull(schema.toolsTable.delegateToAgentId),
+          ),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));

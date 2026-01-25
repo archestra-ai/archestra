@@ -92,10 +92,10 @@ export function AgentSelector({
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className="h-8 justify-between"
+            className="h-8 justify-between max-w-[300px] min-w-0"
           >
             <Bot className="h-3 w-3 shrink-0 opacity-70" />
-            <span className="text-xs font-medium">
+            <span className="text-xs font-medium truncate flex-1 text-left">
               {currentAgent?.name ?? "Select agent"}
             </span>
             {open ? (

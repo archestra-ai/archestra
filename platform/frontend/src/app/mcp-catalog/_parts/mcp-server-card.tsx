@@ -396,14 +396,27 @@ export function McpServerCard({
     </>
   );
 
+  const assignedCount = getToolsAssignedCount();
+  const isZeroAssignments = assignedCount === 0 && toolsDiscoveredCount > 0;
+
   const toolsAssigned = (
     <>
-      <div className="flex items-center gap-2">
-        <Wrench className="h-4 w-4 text-muted-foreground" />
-        <span className="text-muted-foreground">
+      <div
+        className={`flex items-center gap-2 ${isZeroAssignments ? "text-red-500 animate-pulse" : ""}`}
+      >
+        <Wrench
+          className={`h-4 w-4 ${isZeroAssignments ? "text-red-500" : "text-muted-foreground"}`}
+        />
+        <span
+          className={
+            isZeroAssignments ? "text-red-500" : "text-muted-foreground"
+          }
+        >
           Assignments:{" "}
-          <span className="font-medium text-foreground">
-            {getToolsAssignedCount()}
+          <span
+            className={`font-medium ${isZeroAssignments ? "text-red-500" : "text-foreground"}`}
+          >
+            {assignedCount}
             {toolsDiscoveredCount ? `/${toolsDiscoveredCount}` : ""}
           </span>
         </span>
@@ -413,7 +426,7 @@ export function McpServerCard({
           onClick={() => setIsToolsDialogOpen(true)}
           size="sm"
           variant="link"
-          className="h-7 text-xs"
+          className={`h-7 text-xs ${isZeroAssignments ? "text-red-500 animate-pulse" : ""}`}
           data-testid={`${E2eTestId.ManageToolsButton}-${installedServer?.catalogName}`}
         >
           Manage

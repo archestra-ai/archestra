@@ -275,7 +275,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "name",
       accessorKey: "name",
-      size: 200,
+      size: 300,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -290,13 +290,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         const agent = row.original;
         return (
           <div className="font-medium">
-            <div className="flex items-center gap-2">
-              {agent.name}
+            <div className="flex items-start gap-2">
+              <span className="break-words min-w-0">{agent.name}</span>
               {agent.labels && agent.labels.length > 0 && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="inline-flex">
+                      <div className="inline-flex shrink-0">
                         <Tag className="h-4 w-4 text-muted-foreground" />
                       </div>
                     </TooltipTrigger>
@@ -592,7 +592,11 @@ function ConnectAgentDialog({
                   <Bot className="h-4 w-4 text-primary" />
                 </div>
                 <DialogTitle className="text-xl font-semibold">
-                  Connect to "{agent.name}"
+                  Connect to "
+                  <span className="truncate inline-block max-w-xs align-bottom">
+                    {agent.name}
+                  </span>
+                  "
                 </DialogTitle>
               </div>
             </DialogHeader>

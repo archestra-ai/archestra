@@ -223,9 +223,11 @@ export function ConnectionOptions({
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select an agent">
                       {selectedA2aAgent && (
-                        <div className="flex items-center gap-2">
-                          <Bot className="h-4 w-4" />
-                          <span>{selectedA2aAgent.name}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Bot className="h-4 w-4 shrink-0" />
+                          <span className="truncate">
+                            {selectedA2aAgent.name}
+                          </span>
                         </div>
                       )}
                     </SelectValue>
@@ -233,9 +235,9 @@ export function ConnectionOptions({
                   <SelectContent>
                     {internalAgents?.map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
-                        <div className="flex items-center gap-2">
-                          <Bot className="h-4 w-4" />
-                          <span>{agent.name}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Bot className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{agent.name}</span>
                         </div>
                       </SelectItem>
                     ))}

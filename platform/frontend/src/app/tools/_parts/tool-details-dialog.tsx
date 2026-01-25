@@ -172,7 +172,9 @@ export function ToolDetailsDialog({
                   >
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4" />
-                      <span className="font-semibold text-sm">Assignments</span>
+                      <span className="font-semibold text-sm">
+                        Agent assignments
+                      </span>
                       <Badge variant="secondary" className="ml-2">
                         {tool.assignmentCount}
                       </Badge>
@@ -188,7 +190,7 @@ export function ToolDetailsDialog({
                   <div className="border-t border-border">
                     {tool.assignments.length === 0 ? (
                       <div className="p-4 text-sm text-muted-foreground text-center">
-                        No profile assignments
+                        Not assigned to agents.
                       </div>
                     ) : (
                       <div className="divide-y divide-border">

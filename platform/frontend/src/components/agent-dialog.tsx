@@ -6,8 +6,11 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
+  Building2,
   ExternalLink,
+  Globe,
   Loader2,
+  Lock,
   Search,
   X,
 } from "lucide-react";
@@ -115,11 +118,13 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
         <Button
           variant="outline"
           size="sm"
-          className={`h-8 px-3 gap-1.5 text-xs ${!isSelected ? "border-dashed opacity-50" : ""}`}
+          className={`h-8 px-3 gap-1.5 text-xs max-w-[200px] ${!isSelected ? "border-dashed opacity-50" : ""}`}
         >
-          {isSelected && <span className="h-2 w-2 rounded-full bg-green-500" />}
-          <Bot className="h-3 w-3" />
-          <span className="font-medium">{agent.name}</span>
+          {isSelected && (
+            <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+          )}
+          <Bot className="h-3 w-3 shrink-0" />
+          <span className="font-medium truncate">{agent.name}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -130,8 +135,8 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
         avoidCollisions
       >
         <div className="p-4 border-b flex items-start justify-between gap-2">
-          <div className="flex-1">
-            <h4 className="font-semibold">{agent.name}</h4>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold truncate">{agent.name}</h4>
             {agent.systemPrompt && (
               <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                 {agent.systemPrompt}
@@ -893,12 +898,12 @@ export function AgentDialog({
               <div className="space-y-2">
                 <Label>Email Invocation</Label>
                 {features?.incomingEmail?.enabled ? (
-                  <div className="space-y-3 pt-1">
+                  <div className="border rounded-lg bg-muted/30 p-4 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <label
                           htmlFor="incoming-email-enabled"
-                          className="text-sm cursor-pointer"
+                          className="text-sm font-medium cursor-pointer"
                         >
                           Enable email invocation
                         </label>
@@ -914,7 +919,7 @@ export function AgentDialog({
                     </div>
 
                     {incomingEmailEnabled && (
-                      <>
+                      <div className="space-y-4 pt-2 border-t">
                         <div className="space-y-2">
                           <Label
                             htmlFor="incoming-email-security-mode"
@@ -929,31 +934,63 @@ export function AgentDialog({
                             ) => setIncomingEmailSecurityMode(value)}
                           >
                             <SelectTrigger id="incoming-email-security-mode">
-                              <SelectValue />
+                              <SelectValue placeholder="Select security mode">
+                                <div className="flex items-center gap-2">
+                                  {incomingEmailSecurityMode === "private" && (
+                                    <>
+                                      <Lock className="h-4 w-4" />
+                                      <span>Private</span>
+                                    </>
+                                  )}
+                                  {incomingEmailSecurityMode === "internal" && (
+                                    <>
+                                      <Building2 className="h-4 w-4" />
+                                      <span>Internal</span>
+                                    </>
+                                  )}
+                                  {incomingEmailSecurityMode === "public" && (
+                                    <>
+                                      <Globe className="h-4 w-4" />
+                                      <span>Public</span>
+                                    </>
+                                  )}
+                                </div>
+                              </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="private">
-                                <div className="flex flex-col items-start">
-                                  <span>Private</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Only registered users with access
-                                  </span>
+                                <div className="flex items-start gap-2">
+                                  <Lock className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">Private</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Only registered users with access
+                                    </span>
+                                  </div>
                                 </div>
                               </SelectItem>
                               <SelectItem value="internal">
-                                <div className="flex flex-col items-start">
-                                  <span>Internal</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Only emails from allowed domain
-                                  </span>
+                                <div className="flex items-start gap-2">
+                                  <Building2 className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">
+                                      Internal
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Only emails from allowed domain
+                                    </span>
+                                  </div>
                                 </div>
                               </SelectItem>
                               <SelectItem value="public">
-                                <div className="flex flex-col items-start">
-                                  <span>Public</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Any email (use with caution)
-                                  </span>
+                                <div className="flex items-start gap-2">
+                                  <Globe className="h-4 w-4 mt-0.5 text-amber-500" />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">Public</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Any email (use with caution)
+                                    </span>
+                                  </div>
                                 </div>
                               </SelectItem>
                             </SelectContent>
@@ -983,11 +1020,13 @@ export function AgentDialog({
                             </p>
                           </div>
                         )}
-                      </>
+                      </div>
                     )}
                   </div>
                 ) : (
-                  <EmailNotConfiguredMessage />
+                  <div className="border rounded-lg bg-muted/30 p-4">
+                    <EmailNotConfiguredMessage />
+                  </div>
                 )}
               </div>
             )}

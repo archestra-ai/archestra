@@ -661,6 +661,95 @@ describe("GeminiStreamAdapter", () => {
         outputTokens: 50,
       });
     });
+
+    test("processes inline data (image) chunks correctly", () => {
+      const adapter = geminiAdapterFactory.createStreamAdapter();
+
+      const chunk = {
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: "image/png",
+                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                  },
+                },
+              ],
+            },
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-flash-preview-native-audio-dialog",
+        responseId: "test-image-response",
+      } as unknown as GeminiStreamChunk;
+
+      const result = adapter.processChunk(chunk);
+
+      // Should return SSE data for the image chunk
+      expect(result.sseData).toBeTruthy();
+      expect(result.isToolCallChunk).toBe(false);
+
+      // Should store inline data for reconstruction
+      const response = adapter.toProviderResponse();
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+      expect(parts.some((p) => "inlineData" in p)).toBe(true);
+    });
+
+    test("processes mixed text and inline data chunks", () => {
+      const adapter = geminiAdapterFactory.createStreamAdapter();
+
+      // First chunk with text
+      adapter.processChunk({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [{ text: "Here is the generated image:" }],
+            },
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-flash-preview-native-audio-dialog",
+        responseId: "test-mixed-response",
+      } as GeminiStreamChunk);
+
+      // Second chunk with image
+      adapter.processChunk({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: "image/png",
+                    data: "imageBase64Data",
+                  },
+                },
+              ],
+            },
+            finishReason: FinishReason.STOP,
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-flash-preview-native-audio-dialog",
+        responseId: "test-mixed-response",
+      } as unknown as GeminiStreamChunk);
+
+      const response = adapter.toProviderResponse();
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+
+      // Should have both text and inline data parts
+      expect(parts).toHaveLength(2);
+      expect(parts[0]).toEqual({ text: "Here is the generated image:" });
+      expect(parts[1]).toHaveProperty("inlineData");
+      expect(
+        (parts[1] as { inlineData: { mimeType: string } }).inlineData.mimeType,
+      ).toBe("image/png");
+    });
   });
 
   describe("formatEndSSE", () => {

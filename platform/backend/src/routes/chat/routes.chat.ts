@@ -293,6 +293,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         streamTextConfig.system = systemPrompt;
       }
 
+      // For Gemini image generation models, enable image output via responseModalities
+      // Models like gemini-2.5-flash-preview-image-generation require this to return images
+      const isGeminiImageModel =
+        provider === "gemini" &&
+        conversation.selectedModel.toLowerCase().includes("image");
+      if (isGeminiImageModel) {
+        streamTextConfig.providerOptions = {
+          google: {
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        };
+        logger.info(
+          { model: conversation.selectedModel },
+          "Enabled image generation for Gemini model",
+        );
+      }
+
       const result = streamText(streamTextConfig);
 
       // Convert to UI message stream response (Response object)

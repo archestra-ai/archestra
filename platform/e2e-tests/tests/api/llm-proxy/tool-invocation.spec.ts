@@ -1,5 +1,9 @@
 import { expect, test } from "../fixtures";
 
+// Run all provider tests sequentially to avoid WireMock stub timing issues
+// when multiple providers run in parallel against the same backend.
+test.describe.configure({ mode: "serial" });
+
 // biome-ignore lint/suspicious/noExplicitAny: test file uses dynamic response structures
 type AnyResponse = any;
 
@@ -312,6 +316,77 @@ const geminiConfig: ToolInvocationTestConfig = {
     interactions.find((i) =>
       i.request?.contents?.some((c: { parts?: Array<{ text?: string }> }) =>
         c.parts?.some((p) => p.text?.includes(content)),
+      ),
+    ),
+};
+
+const cohereConfig: ToolInvocationTestConfig = {
+  providerName: "Cohere",
+
+  endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "command-r-plus-08-2024",
+    messages: [{ role: "user", content: [{ type: "text", text: content }] }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+
+  trustedDataPolicyAttributePath: "$.content[0].text",
+
+  assertToolCallBlocked: (response) => {
+    expect(response.message).toBeDefined();
+
+    const textContent = response.message.content?.find(
+      (c: { type: string }) => c.type === "text",
+    );
+    expect(textContent).toBeDefined();
+    expect(textContent.text).toContain("read_file");
+    expect(textContent.text).toContain("denied");
+
+    const hasToolCalls = response.message.tool_calls?.length > 0;
+    expect(hasToolCalls).toBeFalsy();
+  },
+
+  assertToolCallsPresent: (response, expectedTools) => {
+    expect(response.message).toBeDefined();
+    expect(response.message.tool_calls).toBeDefined();
+
+    const toolCalls = response.message.tool_calls;
+    expect(toolCalls.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = toolCalls.find(
+        (tc: { function: { name: string } }) => tc.function.name === toolName,
+      );
+      expect(found).toBeDefined();
+    }
+  },
+
+  assertToolArgument: (response, toolName, argName, matcher) => {
+    const toolCalls = response.message.tool_calls;
+    const toolCall = toolCalls.find(
+      (tc: { function: { name: string } }) => tc.function.name === toolName,
+    );
+    const args = JSON.parse(toolCall.function.arguments);
+    matcher(args[argName]);
+  },
+
+  findInteractionByContent: (interactions, content) =>
+    interactions.find((i) =>
+      i.request?.messages?.some((m: { content?: Array<{ text?: string }> }) =>
+        m.content?.some((c) => c.text?.includes(content)),
       ),
     ),
 };
@@ -629,6 +704,7 @@ const testConfigs: ToolInvocationTestConfig[] = [
   anthropicConfig,
   geminiConfig,
   cerebrasConfig,
+  cohereConfig,
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,

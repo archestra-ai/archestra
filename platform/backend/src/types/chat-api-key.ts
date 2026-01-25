@@ -12,12 +12,22 @@ export const SupportedChatProviderSchema = z.enum([
   "anthropic",
   "cerebras",
   "gemini",
+  "cohere",
   "openai",
   "vllm",
   "ollama",
   "zhipuai",
 ]);
 export type SupportedChatProvider = z.infer<typeof SupportedChatProviderSchema>;
+
+/**
+ * Type guard to check if a value is a valid SupportedChatProvider
+ */
+export function isSupportedChatProvider(
+  value: unknown,
+): value is SupportedChatProvider {
+  return SupportedChatProviderSchema.safeParse(value).success;
+}
 
 // Chat API Key scope
 export const ChatApiKeyScopeSchema = z.enum(["personal", "team", "org_wide"]);

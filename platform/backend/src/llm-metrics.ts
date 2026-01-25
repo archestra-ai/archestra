@@ -36,14 +36,27 @@ let currentLabelKeys: string[] = [];
 const sanitizeRegexp = /[^a-zA-Z0-9_]/g;
 
 /**
+ * Sanitize a label key for Prometheus compatibility.
+ * Prometheus label names must match [a-zA-Z_][a-zA-Z0-9_]*
+ * - Replace invalid characters with underscores
+ * - Prefix with underscore if starts with a digit
+ */
+function sanitizeLabelKey(key: string): string {
+  let sanitized = key.replace(sanitizeRegexp, "_");
+  // Prometheus labels cannot start with a digit
+  if (/^[0-9]/.test(sanitized)) {
+    sanitized = `_${sanitized}`;
+  }
+  return sanitized;
+}
+
+/**
  * Initialize LLM metrics with dynamic agent label keys
  * @param labelKeys Array of agent label keys to include as metric labels
  */
 export function initializeMetrics(labelKeys: string[]): void {
   // Prometheus labels have naming restrictions. Dashes are not allowed, for example.
-  const nextLabelKeys = labelKeys
-    .map((key) => key.replace(sanitizeRegexp, "_"))
-    .sort();
+  const nextLabelKeys = labelKeys.map(sanitizeLabelKey).sort();
   // Check if label keys have changed
   const labelKeysChanged =
     JSON.stringify(nextLabelKeys) !== JSON.stringify(currentLabelKeys);
@@ -176,7 +189,7 @@ function buildMetricLabels(
   for (const labelKey of currentLabelKeys) {
     // Find the label value for this key from the agent's labels
     const agentLabel = profile.labels?.find(
-      (l) => l.key.replace(sanitizeRegexp, "_") === labelKey,
+      (l) => sanitizeLabelKey(l.key) === labelKey,
     );
     labels[labelKey] = agentLabel?.value ?? "";
   }
@@ -448,6 +461,17 @@ export function getObservableFetch(
           );
         } else if (provider === "anthropic") {
           const { input, output } = utils.adapters.anthropic.getUsageTokens(
+            data.usage,
+          );
+          reportLLMTokens(
+            provider,
+            profile,
+            { input, output },
+            model,
+            externalAgentId,
+          );
+        } else if (provider === "cohere") {
+          const { input, output } = utils.adapters.cohere.getUsageTokens(
             data.usage,
           );
           reportLLMTokens(

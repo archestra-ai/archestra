@@ -16,6 +16,8 @@ RUN chmod +x /usr/local/bin/uv
 # Create virtual environment and install Python MCP dependencies
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+# CVE-2026-24049: Path Traversal vulnerability in wheel <= 0.46.1
+RUN uv pip install --upgrade wheel>=0.46.2
 RUN uv pip install --no-cache-dir \
    mcp[cli]>=1.2.0 \
    httpx \

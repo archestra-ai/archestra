@@ -1,4 +1,22 @@
+import { createQuerySerializer } from "./client/utils.gen";
 import type { CreateClientConfig } from "./client.gen";
+
+/**
+ * Custom query serializer that uses comma-separated arrays instead of repeated params.
+ * Backend expects: agentTypes=llm_proxy,profile
+ * NOT: agentTypes=llm_proxy&agentTypes=profile
+ */
+const querySerializer = createQuerySerializer({
+  allowReserved: false,
+  array: {
+    explode: false, // Use comma-separated format: name=a,b,c
+    style: "form",
+  },
+  object: {
+    explode: true,
+    style: "deepObject",
+  },
+});
 
 /**
  * All requests go through Next.js rewrites (both local and production).
@@ -18,5 +36,6 @@ export const createClientConfig: CreateClientConfig = (config) => {
     // Set to false to let React Query handle errors gracefully instead of throwing exceptions
     // that crash the app (especially important for 403 errors during auth checks)
     throwOnError: false,
+    querySerializer,
   };
 };

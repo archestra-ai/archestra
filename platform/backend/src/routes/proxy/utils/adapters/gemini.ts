@@ -230,6 +230,7 @@ export function restToSdkGenerateContentParams(
       "topP",
       "topK",
       "stopSequences",
+      "responseModalities",
     ];
     for (const k of configKeys) {
       const val = (body as Record<string, unknown>)[k];

@@ -1,0 +1,45 @@
+{
+    "request": {
+        "method": "POST",
+        "urlPath": "/cohere/v2/chat",
+        "headers": {
+            "Authorization": {
+                "contains": "cohere-model-optimization-short"
+            }
+        },
+        "bodyPatterns": [
+            {
+                "contains": "e2e-test-cohere-optimized"
+            }
+        ]
+    },
+    "response": {
+        "status": 200,
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "jsonBody": {
+            "id": "chatcmpl-cohere-model-opt-short",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "This is a short response for model optimization test."
+                    }
+                ]
+            },
+            "finish_reason": "COMPLETE",
+            "usage": {
+                "billed_units": {
+                    "input_tokens": 1500,
+                    "output_tokens": 15
+                },
+                "tokens": {
+                    "input_tokens": 1500,
+                    "output_tokens": 15
+                }
+            }
+        }
+    }
+}

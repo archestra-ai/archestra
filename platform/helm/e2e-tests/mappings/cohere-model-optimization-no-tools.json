@@ -1,0 +1,45 @@
+{
+    "request": {
+        "method": "POST",
+        "urlPath": "/cohere/v2/chat",
+        "headers": {
+            "Authorization": {
+                "contains": "cohere-model-optimization-no-tools"
+            }
+        },
+        "bodyPatterns": [
+            {
+                "contains": "e2e-test-cohere-baseline"
+            }
+        ]
+    },
+    "response": {
+        "status": 200,
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "jsonBody": {
+            "id": "chatcmpl-cohere-model-opt-no-tools",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Model optimization no tools test response."
+                    }
+                ]
+            },
+            "finish_reason": "COMPLETE",
+            "usage": {
+                "billed_units": {
+                    "input_tokens": 1200,
+                    "output_tokens": 10
+                },
+                "tokens": {
+                    "input_tokens": 1200,
+                    "output_tokens": 10
+                }
+            }
+        }
+    }
+}

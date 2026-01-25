@@ -360,9 +360,13 @@ test("Verify tool calling using different static credentials", async ({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  // Select admin static credential
+  // Select admin static credential from dropdown
   await adminPage.getByRole("option", { name: "admin@example.com" }).click();
-  await adminPage.getByText("Assign to 1 profile").click();
+  // Close the popover by pressing Escape
+  await adminPage.keyboard.press("Escape");
+  await adminPage.waitForTimeout(200);
+  // Click Save button at the bottom of the McpAssignmentsDialog
+  await clickButton({ page: adminPage, options: { name: "Save" } });
   await adminPage.waitForLoadState("networkidle");
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
@@ -378,9 +382,13 @@ test("Verify tool calling using different static credentials", async ({
     page: editorPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  // Select editor static credential
+  // Select editor static credential from dropdown
   await editorPage.getByRole("option", { name: "editor@example.com" }).click();
-  await editorPage.getByText("Assign to 1 profile").click();
+  // Close the popover by pressing Escape
+  await editorPage.keyboard.press("Escape");
+  await editorPage.waitForTimeout(200);
+  // Click Save button at the bottom of the McpAssignmentsDialog
+  await clickButton({ page: editorPage, options: { name: "Save" } });
   await editorPage.waitForLoadState("networkidle");
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({

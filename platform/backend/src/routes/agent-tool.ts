@@ -550,7 +550,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentDelegations,
         description:
-          "Get all delegation targets for an internal agent. Only applicable to internal agents.",
+          "Get all delegation targets for an agent. Not applicable to LLM proxies.",
         tags: ["Agent Delegations"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -578,11 +578,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      if (agent.agentType !== "agent") {
-        throw new ApiError(
-          400,
-          "Delegations only apply to internal agents (agents with prompts)",
-        );
+      // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
+      if (agent.agentType === "llm_proxy") {
+        throw new ApiError(400, "LLM proxies cannot have subagents");
       }
 
       const delegations = await AgentToolModel.getDelegationTargets(agentId);
@@ -591,7 +589,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Sync delegation targets for an internal agent (replace all with new list)
+   * Sync delegation targets for an agent (replace all with new list)
    */
   fastify.post(
     "/api/agents/:agentId/delegations",
@@ -599,7 +597,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.SyncAgentDelegations,
         description:
-          "Sync delegation targets for an internal agent. Replaces all existing delegations with the new list.",
+          "Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.",
         tags: ["Agent Delegations"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -627,14 +625,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      if (agent.agentType !== "agent") {
-        throw new ApiError(
-          400,
-          "Delegations only apply to internal agents (agents with prompts)",
-        );
+      // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
+      if (agent.agentType === "llm_proxy") {
+        throw new ApiError(400, "LLM proxies cannot have subagents");
       }
 
-      // Validate all target agents exist and are internal
+      // Validate all target agents exist and are internal agents
       for (const targetAgentId of body.targetAgentIds) {
         const targetAgent = await AgentModel.findById(targetAgentId);
         if (!targetAgent) {
@@ -672,7 +668,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteAgentDelegation,
-        description: "Remove a specific delegation from an internal agent.",
+        description:
+          "Remove a specific delegation from an agent. Not applicable to LLM proxies.",
         tags: ["Agent Delegations"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -693,11 +690,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      if (agent.agentType !== "agent") {
-        throw new ApiError(
-          400,
-          "Delegations only apply to internal agents (agents with prompts)",
-        );
+      // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
+      if (agent.agentType === "llm_proxy") {
+        throw new ApiError(400, "LLM proxies cannot have subagents");
       }
 
       const success = await AgentToolModel.removeDelegation(
@@ -742,7 +737,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.object({
                 id: z.string().uuid(),
                 name: z.string(),
-                agentType: z.enum(["mcp_gateway", "agent"]),
+                agentType: z.enum([
+                  "profile",
+                  "mcp_gateway",
+                  "llm_proxy",
+                  "agent",
+                ]),
               }),
             ),
           }),

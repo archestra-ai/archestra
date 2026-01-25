@@ -72,26 +72,20 @@ export function ProxyConnectionInstructions({
         >
           Cerebras
         </Button>
+        <Button
+          variant={selectedProvider === "claude-code" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedProvider("claude-code")}
+        >
+          Claude Code
+        </Button>
         <Popover>
           <PopoverTrigger asChild>
-            <Button
-              variant={
-                selectedProvider === "claude-code" ? "default" : "outline"
-              }
-              size="sm"
-            >
+            <Button variant="outline" size="sm">
               <ChevronDown className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start"
-              onClick={() => setSelectedProvider("claude-code")}
-            >
-              Claude Code
-            </Button>
             <p className="text-xs text-muted-foreground px-2 py-1">
               More providers coming soon
             </p>

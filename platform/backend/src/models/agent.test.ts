@@ -947,8 +947,8 @@ describe("AgentModel", () => {
     });
   });
 
-  describe("Archestra Tools Exclusion", () => {
-    test("findAllPaginated excludes Archestra MCP tools from tools array", async ({
+  describe("Archestra Tools Inclusion", () => {
+    test("findAllPaginated includes Archestra MCP tools in tools array", async ({
       makeAdmin,
       makeTool,
       makeAgentTool,
@@ -971,7 +971,7 @@ describe("AgentModel", () => {
         await makeAgentTool(agent.id, tool.id);
       }
 
-      // Add some Archestra MCP tools (these should be excluded)
+      // Add some Archestra MCP tools (these should be included)
       for (let i = 0; i < 5; i++) {
         const tool = await makeTool({
           name: `archestra__archestra_tool_${i}`,
@@ -994,24 +994,18 @@ describe("AgentModel", () => {
       const testAgent = result.data.find((a) => a.name === "Test Agent");
       expect(testAgent).toBeDefined();
 
-      // Should only include the 3 regular tools, not the 5 Archestra tools
-      expect(testAgent?.tools).toHaveLength(3);
+      // Should include all 8 tools (3 regular + 5 Archestra)
+      expect(testAgent?.tools).toHaveLength(8);
 
-      // Verify all tools in the array are regular tools (not Archestra)
-      for (const tool of testAgent?.tools ?? []) {
-        expect(tool.name).not.toMatch(/^archestra__/);
-      }
-
-      // Verify the regular tools are there
-      const toolNames = testAgent?.tools.map((t) => t.name).sort();
-      expect(toolNames).toEqual([
-        "regular_tool_0",
-        "regular_tool_1",
-        "regular_tool_2",
-      ]);
+      // Verify both regular and Archestra tools are present
+      const toolNames = testAgent?.tools.map((t) => t.name).sort() ?? [];
+      expect(toolNames).toContain("regular_tool_0");
+      expect(toolNames).toContain("regular_tool_1");
+      expect(toolNames).toContain("regular_tool_2");
+      expect(toolNames).toContain("archestra__archestra_tool_0");
     });
 
-    test("sorting by toolsCount excludes Archestra tools from count", async ({
+    test("sorting by toolsCount includes Archestra tools in count", async ({
       makeAdmin,
       makeTool,
       makeAgentTool,
@@ -1087,11 +1081,11 @@ describe("AgentModel", () => {
       expect(testAgent1).toBeDefined();
       expect(testAgent2).toBeDefined();
 
-      // Verify the tools count excludes Archestra tools
-      expect(testAgent1?.tools).toHaveLength(5); // Only regular tools
-      expect(testAgent2?.tools).toHaveLength(2); // Only regular tools
+      // Verify the tools count includes all tools (regular + Archestra)
+      expect(testAgent1?.tools).toHaveLength(15); // 5 regular + 10 Archestra
+      expect(testAgent2?.tools).toHaveLength(22); // 2 regular + 20 Archestra
 
-      // Verify sorting order based on regular tools count (not total tools including Archestra)
+      // Verify sorting order based on total tools count (including Archestra)
       const agent1Index = result.data.findIndex(
         (a) => a.name === "Agent with 5 regular tools",
       );
@@ -1099,11 +1093,11 @@ describe("AgentModel", () => {
         (a) => a.name === "Agent with 2 regular tools",
       );
 
-      // agent1 should come before agent2 when sorted by toolsCount desc
-      expect(agent1Index).toBeLessThan(agent2Index);
+      // agent2 should come before agent1 when sorted by toolsCount desc (22 > 15)
+      expect(agent2Index).toBeLessThan(agent1Index);
     });
 
-    test("agents with only Archestra tools show 0 tools", async ({
+    test("agents with only Archestra tools show all Archestra tools", async ({
       makeAdmin,
       makeTool,
       makeAgentTool,
@@ -1141,11 +1135,11 @@ describe("AgentModel", () => {
       );
       expect(testAgent).toBeDefined();
 
-      // Should show 0 tools since all were Archestra tools
-      expect(testAgent?.tools).toHaveLength(0);
+      // Should show all 3 Archestra tools
+      expect(testAgent?.tools).toHaveLength(3);
     });
 
-    test("exclusion pattern only matches double underscore prefix", async ({
+    test("all tool patterns are included", async ({
       makeAdmin,
       makeTool,
       makeAgentTool,
@@ -1158,14 +1152,14 @@ describe("AgentModel", () => {
         teams: [],
       });
 
-      // Create tools with double underscore (should be excluded)
+      // Create tools with double underscore
       const doubleUnderscoreTool = await makeTool({
         name: "archestra__pattern_test_tool",
         description: "Archestra tool",
         parameters: {},
       });
 
-      // Create tools with similar names that should NOT be excluded
+      // Create tools with similar names
       const singleUnderscoreTool = await makeTool({
         name: "archestra_pattern_single",
         description: "Single underscore tool",
@@ -1202,17 +1196,17 @@ describe("AgentModel", () => {
       );
       expect(testAgent).toBeDefined();
 
-      // Should have 3 tools (excludes only archestra__pattern_test_tool)
-      expect(testAgent?.tools).toHaveLength(3);
+      // Should have all 4 tools (no exclusion)
+      expect(testAgent?.tools).toHaveLength(4);
 
       const toolNames = testAgent?.tools.map((t) => t.name) ?? [];
       expect(toolNames).toContain("archestra_pattern_single");
       expect(toolNames).toContain("archestrapatterntest");
       expect(toolNames).toContain("regular_pattern_tool");
-      expect(toolNames).not.toContain("archestra__pattern_test_tool");
+      expect(toolNames).toContain("archestra__pattern_test_tool");
     });
 
-    test("sortBy toolsCount correctly excludes only double underscore prefix", async ({
+    test("sortBy toolsCount includes all tools", async ({
       makeAdmin,
       makeTool,
       makeAgentTool,
@@ -1230,7 +1224,7 @@ describe("AgentModel", () => {
         teams: [],
       });
 
-      // Give agent1: 1 regular + 5 archestra__ tools = 1 counted
+      // Give agent1: 1 regular + 5 archestra__ tools = 6 total
       const regularTool = await makeTool({
         name: "toolscount_regular_tool",
         description: "Regular tool",
@@ -1247,7 +1241,7 @@ describe("AgentModel", () => {
         await makeAgentTool(agent1.id, tool.id);
       }
 
-      // Give agent2: 3 archestra_ (single underscore) tools = 3 counted
+      // Give agent2: 3 archestra_ (single underscore) tools = 3 total
       for (let i = 0; i < 3; i++) {
         const tool = await makeTool({
           name: `archestra_single_${i}`,
@@ -1276,13 +1270,13 @@ describe("AgentModel", () => {
       expect(agent1Result).toBeDefined();
       expect(agent2Result).toBeDefined();
 
-      // agent1 should have 1 tool counted (archestra__ excluded)
-      expect(agent1Result?.tools).toHaveLength(1);
+      // agent1 should have 6 tools (1 regular + 5 archestra__)
+      expect(agent1Result?.tools).toHaveLength(6);
 
-      // agent2 should have 3 tools counted (archestra_ NOT excluded)
+      // agent2 should have 3 tools
       expect(agent2Result?.tools).toHaveLength(3);
 
-      // agent2 should come before agent1 in sort order (3 > 1)
+      // agent1 should come before agent2 in sort order (6 > 3)
       const agent1Index = result.data.findIndex(
         (a) => a.name === "Agent with mixed tools",
       );
@@ -1290,7 +1284,7 @@ describe("AgentModel", () => {
         (a) => a.name === "Agent with single underscore",
       );
 
-      expect(agent2Index).toBeLessThan(agent1Index);
+      expect(agent1Index).toBeLessThan(agent2Index);
     });
   });
 
@@ -1340,7 +1334,7 @@ describe("AgentModel", () => {
       ]);
     });
 
-    test("findById excludes Archestra MCP tools", async ({
+    test("findById includes Archestra MCP tools", async ({
       makeTool,
       makeAgentTool,
     }) => {
@@ -1362,7 +1356,7 @@ describe("AgentModel", () => {
         parameters: {},
       });
 
-      // Add Archestra tools (should be excluded)
+      // Add Archestra tools
       const archestraTool1 = await makeTool({
         name: "archestra__findbyid_tool_1",
         description: "Archestra tool 1",
@@ -1383,16 +1377,13 @@ describe("AgentModel", () => {
       const foundAgent = await AgentModel.findById(agent.id);
 
       expect(foundAgent).not.toBeNull();
-      // Should only include 2 regular tools, not the Archestra tools
-      expect(foundAgent?.tools).toHaveLength(2);
-
-      // Verify all returned tools are regular tools
-      for (const tool of foundAgent?.tools ?? []) {
-        expect(tool.name).not.toMatch(/^archestra__/);
-      }
+      // Should include all 4 tools (2 regular + 2 Archestra)
+      expect(foundAgent?.tools).toHaveLength(4);
 
       const toolNames = foundAgent?.tools.map((t) => t.name).sort();
       expect(toolNames).toEqual([
+        "archestra__findbyid_tool_1",
+        "archestra__findbyid_tool_2",
         "findbyid_regular_tool_1",
         "findbyid_regular_tool_2",
       ]);
@@ -1411,7 +1402,7 @@ describe("AgentModel", () => {
       expect(foundAgent?.tools).toHaveLength(0);
     });
 
-    test("findById returns empty tools array when agent has only Archestra tools", async ({
+    test("findById returns Archestra tools when agent has only Archestra tools", async ({
       makeTool,
       makeAgentTool,
     }) => {
@@ -1432,7 +1423,8 @@ describe("AgentModel", () => {
       const foundAgent = await AgentModel.findById(agent.id);
 
       expect(foundAgent).not.toBeNull();
-      expect(foundAgent?.tools).toHaveLength(0);
+      expect(foundAgent?.tools).toHaveLength(1);
+      expect(foundAgent?.tools[0].name).toBe("archestra__some_tool");
     });
   });
 
@@ -1521,7 +1513,7 @@ describe("AgentModel", () => {
       expect(toolNames).toContain("default_agent_tool_2");
     });
 
-    test("getAgentOrCreateDefault excludes Archestra MCP tools", async ({
+    test("getAgentOrCreateDefault includes Archestra MCP tools", async ({
       makeTool,
       makeAgentTool,
     }) => {
@@ -1535,7 +1527,7 @@ describe("AgentModel", () => {
         parameters: {},
       });
 
-      // Add Archestra tools (should be excluded)
+      // Add Archestra tools
       const archestraTool = await makeTool({
         name: "archestra__default_tool",
         description: "Archestra tool",
@@ -1548,14 +1540,10 @@ describe("AgentModel", () => {
       // Get the default agent again
       const foundAgent = await AgentModel.getAgentOrCreateDefault();
 
-      // Verify Archestra tools are excluded
-      for (const tool of foundAgent.tools) {
-        expect(tool.name).not.toMatch(/^archestra__/);
-      }
-
-      // Verify regular tool is included
+      // Verify both regular and Archestra tools are included
       const toolNames = foundAgent.tools.map((t) => t.name);
       expect(toolNames).toContain("default_regular_tool");
+      expect(toolNames).toContain("archestra__default_tool");
     });
   });
 });

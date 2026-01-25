@@ -2,11 +2,11 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import { getKnowledgeGraphProviderInfo } from "@/knowledge-graph";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
 import { KnowledgeGraphProviderTypeSchema } from "@/types/knowledge-graph";
@@ -53,6 +53,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
               provider: KnowledgeGraphProviderTypeSchema.optional(),
               displayName: z.string().optional(),
             }),
+            /** MCP server base Docker image (shown in UI for reference) */
+            mcpServerBaseImage: z.string(),
           }),
         },
       },
@@ -74,6 +76,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         globalToolPolicy,
         incomingEmail: getEmailProviderInfo(),
         knowledgeGraph: getKnowledgeGraphProviderInfo(),
+        mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
       });
     },
   );

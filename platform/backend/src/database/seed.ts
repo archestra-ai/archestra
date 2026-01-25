@@ -4,6 +4,7 @@ import {
   type PredefinedRoleName,
   testMcpServerCommand,
 } from "@shared";
+import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth/better-auth";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -130,32 +131,38 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
 }
 
 /**
- * Seeds default Chat Assistant internal agent using onConflictDoNothing to prevent race conditions
+ * Seeds default Chat Assistant internal agent
  */
 async function seedChatAssistantAgent(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
 
+  // Check if Chat Assistant already exists
+  const existing = await db
+    .select({ id: schema.agentsTable.id })
+    .from(schema.agentsTable)
+    .where(
+      and(
+        eq(schema.agentsTable.organizationId, org.id),
+        eq(schema.agentsTable.name, "Chat Assistant"),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    logger.info("Chat Assistant internal agent already exists, skipping");
+    return;
+  }
+
   const systemPrompt = `You are a helpful AI assistant. You can help users with various tasks using the tools available to you.`;
 
-  // Use onConflictDoNothing to prevent race conditions when multiple instances seed simultaneously
-  const result = await db
-    .insert(schema.agentsTable)
-    .values({
-      organizationId: org.id,
-      name: "Chat Assistant",
-      agentType: "agent",
-      systemPrompt,
-    })
-    .onConflictDoNothing({
-      target: [schema.agentsTable.organizationId, schema.agentsTable.name],
-    })
-    .returning();
+  await db.insert(schema.agentsTable).values({
+    organizationId: org.id,
+    name: "Chat Assistant",
+    agentType: "agent",
+    systemPrompt,
+  });
 
-  if (result.length > 0) {
-    logger.info("Seeded Chat Assistant internal agent");
-  } else {
-    logger.info("Chat Assistant internal agent already exists, skipping");
-  }
+  logger.info("Seeded Chat Assistant internal agent");
 }
 
 /**

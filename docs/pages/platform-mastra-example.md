@@ -30,13 +30,13 @@ In this demonstration, we'll show how a Mastra agent connected to GitHub can be 
 
 ### 0. Running Mastra and Archestra Platform
 
-We've prepared a docker-compose with local Mastra and Archestra. Make sure you have `OPENAI_API_KEY` and `GITHUB_TOKEN` environment variables set in `./platform/.env`.
+We've prepared a docker-compose with local Mastra and Archestra.
 
 ```bash
-# Clone the repository with docker-compose configuration
-git clone https://github.com/archestra-ai/archestra
-cd platform
-cp .example.env .env
+# Clone the examples repository
+git clone https://github.com/archestra-ai/examples
+cd examples/mastra-ai
+cp .env.example .env
 
 # Fill in OPENAI_API_KEY and GITHUB_TOKEN in .env
 # before starting the application.
@@ -48,7 +48,7 @@ docker-compose -f docker-compose-mastra.yml up
 # Archestra Platform UI runs at http://localhost:3000
 ```
 
-This launches the [example of a Mastra application with a GitHub agent](http://github.com/archestra-ai/archestra/tree/main/platform/examples/mastra-ai).
+This launches the [example of a Mastra application with a GitHub agent](https://github.com/archestra-ai/examples/tree/main/mastra-ai).
 
 ### 1. Create a malicious GitHub issue and resolve it
 
@@ -86,15 +86,15 @@ docker-compose -f docker-compose-mastra.yml down
 Then restart the application with Archestra platform proxy by setting the `OPENAI_PROXY_URL` environment variable:
 
 ```bash
-OPENAI_PROXY_URL=http://platform-archestra-1:9000/v1/openai docker-compose -f docker-compose-mastra.yml up
+OPENAI_PROXY_URL=http://mastra-ai-archestra-1:9000/v1/openai docker-compose -f docker-compose-mastra.yml up
 
-# platform-archestra-1 is an in-docker DNS name for Archestra platform
+# mastra-ai-archestra-1 is an in-docker DNS name for Archestra platform
 # launched by docker-compose
 ```
 
 This configures the Mastra agent to route all OpenAI API calls through Archestra platform proxy, which monitors and controls the requests based on content trustworthiness.
 
-Optionally, you can verify the proxy is being used by looking for the message "Using Archestra proxy: http://platform-archestra-1:9000/v1/openai" in logs.
+Optionally, you can verify the proxy is being used by looking for the message "Using Archestra proxy: http://mastra-ai-archestra-1:9000/v1/openai" in logs.
 
 4. Try the same attack again by asking the agent to resolve the malicious issue:
 

@@ -1744,6 +1744,113 @@ export type CerebrasChatCompletionResponseInput = {
     };
 };
 
+export type CohereChatRequestInput = {
+    model: string;
+    messages: Array<{
+        role: string;
+        content: string | Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+    } | {
+        role: string;
+        content?: string | Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: {
+                name: string;
+                arguments: string;
+            };
+        }>;
+    } | {
+        role: string;
+        content: string;
+    } | {
+        role: string;
+        tool_call_id: string;
+        content: string;
+    }>;
+    stream?: boolean;
+    temperature?: number;
+    max_tokens?: number;
+    tools?: Array<{
+        type: string;
+        function: {
+            name: string;
+            description?: string;
+            parameters?: {
+                type: string;
+                description?: string;
+                required?: Array<string>;
+                properties?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+    }>;
+    tool_choice?: 'REQUIRED' | 'NONE';
+    safety_mode?: 'CONTEXTUAL' | 'STRICT' | 'OFF';
+    response_format?: {
+        type: 'json_object' | 'text';
+        json_schema?: {
+            [key: string]: unknown;
+        };
+    };
+    frequency_penalty?: number;
+    presence_penalty?: number;
+    k?: number;
+    p?: number;
+    seed?: number;
+    stop_sequences?: Array<string>;
+    logprobs?: boolean;
+};
+
+export type CohereChatResponseInput = {
+    id: string;
+    message: {
+        role: string;
+        content?: Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: {
+                name: string;
+                arguments: string;
+            };
+        }>;
+    };
+    finish_reason: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALL' | 'ERROR';
+    usage?: {
+        billed_units?: {
+            input_tokens?: number;
+            output_tokens?: number;
+        };
+        tokens?: {
+            input_tokens?: number;
+            output_tokens?: number;
+        };
+    };
+};
+
 export type VllmChatCompletionRequestInput = {
     model: string;
     /**
@@ -4368,6 +4475,113 @@ export type CerebrasChatCompletionResponse = {
     };
 };
 
+export type CohereChatRequest = {
+    model: string;
+    messages: Array<{
+        role: string;
+        content: string | Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+    } | {
+        role: string;
+        content?: string | Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: {
+                name: string;
+                arguments: string;
+            };
+        }>;
+    } | {
+        role: string;
+        content: string;
+    } | {
+        role: string;
+        tool_call_id: string;
+        content: string;
+    }>;
+    stream?: boolean;
+    temperature?: number;
+    max_tokens?: number;
+    tools?: Array<{
+        type: string;
+        function: {
+            name: string;
+            description?: string;
+            parameters?: {
+                type: string;
+                description?: string;
+                required?: Array<string>;
+                properties?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+    }>;
+    tool_choice?: 'REQUIRED' | 'NONE';
+    safety_mode?: 'CONTEXTUAL' | 'STRICT' | 'OFF';
+    response_format?: {
+        type: 'json_object' | 'text';
+        json_schema?: {
+            [key: string]: unknown;
+        };
+    };
+    frequency_penalty?: number;
+    presence_penalty?: number;
+    k?: number;
+    p?: number;
+    seed?: number;
+    stop_sequences?: Array<string>;
+    logprobs?: boolean;
+};
+
+export type CohereChatResponse = {
+    id: string;
+    message: {
+        role: string;
+        content?: Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: {
+                name: string;
+                arguments: string;
+            };
+        }>;
+    };
+    finish_reason: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALL' | 'ERROR';
+    usage?: {
+        billed_units?: {
+            input_tokens?: number;
+            output_tokens?: number;
+        };
+        tokens?: {
+            input_tokens?: number;
+            output_tokens?: number;
+        };
+    };
+};
+
 export type VllmChatCompletionRequest = {
     model: string;
     /**
@@ -5369,9 +5583,13 @@ export type GetAgentsData = {
          */
         name?: string;
         /**
-         * Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.
+         * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.
          */
-        agentType?: 'mcp_gateway' | 'agent';
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        /**
+         * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
+         */
+        agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
@@ -5451,7 +5669,7 @@ export type GetAgentsResponses = {
             isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
             userPrompt: string | null;
             promptVersion: number | null;
@@ -5526,7 +5744,7 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
-        agentType?: 'mcp_gateway' | 'agent';
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
         userPrompt?: string | null;
         allowedChatops?: string | number | boolean | null | {
@@ -5618,7 +5836,7 @@ export type CreateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -5682,9 +5900,13 @@ export type GetAllAgentsData = {
     path?: never;
     query?: {
         /**
-         * Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.
+         * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.
          */
-        agentType?: 'mcp_gateway' | 'agent';
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        /**
+         * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
+         */
+        agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
     };
     url: '/api/agents/all';
 };
@@ -5759,7 +5981,7 @@ export type GetAllAgentsResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -5895,7 +6117,7 @@ export type GetDefaultAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -6112,7 +6334,7 @@ export type GetAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -6178,7 +6400,7 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
-        agentType?: 'mcp_gateway' | 'agent';
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
         userPrompt?: string | null;
         allowedChatops?: string | number | boolean | null | {
@@ -6272,7 +6494,7 @@ export type UpdateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -6411,7 +6633,7 @@ export type GetAgentVersionsResponses = {
             isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
             userPrompt: string | null;
             promptVersion: number | null;
@@ -6561,7 +6783,7 @@ export type RollbackAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        agentType: 'mcp_gateway' | 'agent';
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
         userPrompt: string | null;
         promptVersion: number | null;
@@ -7790,7 +8012,7 @@ export type GetAllDelegationConnectionsResponses = {
         agents: Array<{
             id: string;
             name: string;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         }>;
     };
 };
@@ -9440,7 +9662,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9460,7 +9682,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -9539,7 +9761,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9555,7 +9777,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -9627,7 +9849,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9799,7 +10021,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9899,7 +10121,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9915,7 +10137,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat/models';
 };
@@ -9986,7 +10208,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         createdAt?: string;
     }>;
 };
@@ -10220,7 +10442,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10233,7 +10455,7 @@ export type GetChatConversationsResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     }>;
@@ -10246,7 +10468,7 @@ export type CreateChatConversationData = {
         agentId: string;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -10325,7 +10547,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10338,7 +10560,7 @@ export type CreateChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10505,7 +10727,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10518,7 +10740,7 @@ export type GetChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10530,7 +10752,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -10613,7 +10835,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10626,7 +10848,7 @@ export type UpdateChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10802,7 +11024,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10815,7 +11037,7 @@ export type GenerateChatConversationTitleResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10907,7 +11129,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10920,7 +11142,7 @@ export type UpdateChatMessageResponses = {
             name: string;
             systemPrompt: string | null;
             userPrompt: string | null;
-            agentType: 'mcp_gateway' | 'agent';
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -11455,6 +11677,178 @@ export type DeleteChatOpsBindingResponses = {
 };
 
 export type DeleteChatOpsBindingResponse = DeleteChatOpsBindingResponses[keyof DeleteChatOpsBindingResponses];
+
+export type CohereChatWithDefaultAgentData = {
+    body?: CohereChatRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for API auth
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/cohere/chat';
+};
+
+export type CohereChatWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CohereChatWithDefaultAgentError = CohereChatWithDefaultAgentErrors[keyof CohereChatWithDefaultAgentErrors];
+
+export type CohereChatWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: CohereChatResponse;
+};
+
+export type CohereChatWithDefaultAgentResponse = CohereChatWithDefaultAgentResponses[keyof CohereChatWithDefaultAgentResponses];
+
+export type CohereChatWithAgentData = {
+    body?: CohereChatRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for API auth
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/cohere/{agentId}/chat';
+};
+
+export type CohereChatWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CohereChatWithAgentError = CohereChatWithAgentErrors[keyof CohereChatWithAgentErrors];
+
+export type CohereChatWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: CohereChatResponse;
+};
+
+export type CohereChatWithAgentResponse = CohereChatWithAgentResponses[keyof CohereChatWithAgentResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -12174,6 +12568,7 @@ export type GetFeaturesResponses = {
             provider?: 'lightrag';
             displayName?: string;
         };
+        mcpServerBaseImage: string;
     };
 };
 
@@ -13219,6 +13614,30 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            request: CohereChatRequest;
+            processedRequest?: CohereChatRequest | null;
+            response: CohereChatResponse;
+            type: 'cohere:chat';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason: string | null;
+            createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: ZhipuaiChatCompletionRequest;
             processedRequest?: ZhipuaiChatCompletionRequest | null;
             response: ZhipuaiChatCompletionResponse;
@@ -13234,6 +13653,8 @@ export type GetInteractionsResponses = {
             toonCostSavings: string | null;
             toonSkipReason: string | null;
             createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -13458,7 +13879,10 @@ export type GetUniqueExternalAgentIdsResponses = {
     /**
      * Default Response
      */
-    200: Array<string>;
+    200: Array<{
+        id: string;
+        displayName: string;
+    }>;
 };
 
 export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
@@ -13760,6 +14184,30 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        request: CohereChatRequest;
+        processedRequest?: CohereChatRequest | null;
+        response: CohereChatResponse;
+        type: 'cohere:chat';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason: string | null;
+        createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: ZhipuaiChatCompletionRequest;
         processedRequest?: ZhipuaiChatCompletionRequest | null;
         response: ZhipuaiChatCompletionResponse;
@@ -13775,6 +14223,8 @@ export type GetInteractionResponses = {
         toonCostSavings: string | null;
         toonSkipReason: string | null;
         createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     };
 };
 
@@ -18413,7 +18863,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -18433,7 +18883,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -18516,7 +18966,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -18615,7 +19065,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -18700,7 +19150,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -21377,7 +21827,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21390,7 +21840,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21465,7 +21915,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21629,7 +22079,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21642,7 +22092,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -21719,7 +22169,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

@@ -1,5 +1,6 @@
 "use client";
 
+import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, Plus, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -159,6 +160,12 @@ export function InternalMCPCatalog({
               queryClient.invalidateQueries({
                 queryKey: ["tools", "unassigned"],
               });
+              // Invalidate catalog tools so the manage-tools dialog shows discovered tools
+              if (server.catalogId) {
+                queryClient.invalidateQueries({
+                  queryKey: ["mcp-catalog", server.catalogId, "tools"],
+                });
+              }
             } else if (server.localInstallationStatus === "error") {
               toast.error(`Failed to install ${server.name}`);
             }
@@ -464,7 +471,7 @@ export function InternalMCPCatalog({
 
   const filteredCatalogItems = sortInstalledFirst(
     filterCatalogItems(catalogItems || [], searchQueryFromUrl),
-  );
+  ).filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID);
 
   const getInstalledServerInfo = (item: CatalogItem) => {
     const installedServer = getAggregatedInstallation(item.id);

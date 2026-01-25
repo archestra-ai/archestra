@@ -115,7 +115,7 @@ export function TokenSelect({
                   <div className="flex gap-1 flex-wrap text-xs">
                     {server.teamDetails
                       ? server.teamDetails.name
-                      : server.ownerEmail || "Unknown"}
+                      : server.ownerEmail || "Deleted user"}
                   </div>
                 </div>
               </SelectItem>

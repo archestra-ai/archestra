@@ -330,12 +330,11 @@ class AgentModel {
    */
   static async findByAllowedChatopsProvider(
     provider: ChatOpsProviderType,
-  ): Promise<Pick<Agent, "id" | "name" | "agentId">[]> {
+  ): Promise<Pick<Agent, "id" | "name">[]> {
     const agents = await db
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
-        agentId: schema.agentsTable.id,
       })
       .from(schema.agentsTable)
       .where(

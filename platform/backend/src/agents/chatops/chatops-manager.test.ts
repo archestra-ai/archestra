@@ -209,8 +209,7 @@ describe("ChatOpsManager security validation", () => {
     makeOrganization,
     makeTeam,
     makeTeamMember,
-    makeAgent,
-    makePrompt,
+    makeInternalAgent,
   }) => {
     mockA2AExecutor();
 
@@ -219,13 +218,12 @@ describe("ChatOpsManager security validation", () => {
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
     await makeTeamMember(team.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-    const prompt = await makePrompt({
+    const agent = await makeInternalAgent({
       organizationId: org.id,
-      agentId: agent.id,
-      overrides: { allowedChatops: ["ms-teams"] },
+      teams: [team.id],
+      allowedChatops: ["ms-teams"],
     });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create channel binding
     await ChatOpsChannelBindingModel.create({
@@ -233,7 +231,7 @@ describe("ChatOpsManager security validation", () => {
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
-      promptId: prompt.id,
+      agentId: agent.id,
     });
 
     // Create mock provider that returns the user's email
@@ -270,8 +268,7 @@ describe("ChatOpsManager security validation", () => {
     makeOrganization,
     makeTeam,
     makeTeamMember,
-    makeAgent,
-    makePrompt,
+    makeInternalAgent,
   }) => {
     mockA2AExecutor();
 
@@ -280,20 +277,19 @@ describe("ChatOpsManager security validation", () => {
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
     await makeTeamMember(team.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-    const prompt = await makePrompt({
+    const agent = await makeInternalAgent({
       organizationId: org.id,
-      agentId: agent.id,
-      overrides: { allowedChatops: ["ms-teams"] },
+      teams: [team.id],
+      allowedChatops: ["ms-teams"],
     });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
-      promptId: prompt.id,
+      agentId: agent.id,
     });
 
     // Provider returns null for getUserEmail (simulating missing Graph permission)
@@ -329,8 +325,7 @@ describe("ChatOpsManager security validation", () => {
     makeUser,
     makeTeam,
     makeTeamMember,
-    makeAgent,
-    makePrompt,
+    makeInternalAgent,
   }) => {
     mockA2AExecutor();
 
@@ -339,20 +334,19 @@ describe("ChatOpsManager security validation", () => {
     const org = await makeOrganization();
     const team = await makeTeam(org.id, adminUser.id);
     await makeTeamMember(team.id, adminUser.id);
-    const agent = await makeAgent({ teams: [team.id] });
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-    const prompt = await makePrompt({
+    const agent = await makeInternalAgent({
       organizationId: org.id,
-      agentId: agent.id,
-      overrides: { allowedChatops: ["ms-teams"] },
+      teams: [team.id],
+      allowedChatops: ["ms-teams"],
     });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
-      promptId: prompt.id,
+      agentId: agent.id,
     });
 
     // Provider returns an email that doesn't exist in Archestra
@@ -387,8 +381,7 @@ describe("ChatOpsManager security validation", () => {
     makeUser,
     makeOrganization,
     makeTeam,
-    makeAgent,
-    makePrompt,
+    makeInternalAgent,
     makeMember,
   }) => {
     mockA2AExecutor();
@@ -399,20 +392,20 @@ describe("ChatOpsManager security validation", () => {
     await makeMember(user.id, org.id); // User is org member but not in agent's team
     const adminUser = await makeUser({ email: "admin@example.com" });
     const team = await makeTeam(org.id, adminUser.id);
-    const agent = await makeAgent({ teams: [team.id] });
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-    const prompt = await makePrompt({
+    const agent = await makeInternalAgent({
       organizationId: org.id,
-      agentId: agent.id,
-      overrides: { allowedChatops: ["ms-teams"], name: "Sales Agent" },
+      name: "Sales Agent",
+      teams: [team.id],
+      allowedChatops: ["ms-teams"],
     });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
-      promptId: prompt.id,
+      agentId: agent.id,
     });
 
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
@@ -447,8 +440,7 @@ describe("ChatOpsManager security validation", () => {
     makeOrganization,
     makeTeam,
     makeTeamMember,
-    makeAgent,
-    makePrompt,
+    makeInternalAgent,
   }) => {
     const executorSpy = mockA2AExecutor();
 
@@ -457,20 +449,19 @@ describe("ChatOpsManager security validation", () => {
     const org = await makeOrganization();
     const team = await makeTeam(org.id, user.id);
     await makeTeamMember(team.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-    const prompt = await makePrompt({
+    const agent = await makeInternalAgent({
       organizationId: org.id,
-      agentId: agent.id,
-      overrides: { allowedChatops: ["ms-teams"] },
+      teams: [team.id],
+      allowedChatops: ["ms-teams"],
     });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "ms-teams",
       channelId: "test-channel-id",
       workspaceId: "test-workspace-id",
-      promptId: prompt.id,
+      agentId: agent.id,
     });
 
     const mockProvider = createMockProvider({

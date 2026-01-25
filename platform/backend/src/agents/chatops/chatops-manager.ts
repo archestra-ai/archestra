@@ -177,7 +177,7 @@ export class ChatOpsManager {
     // Security: Validate user has access to the agent
     logger.debug(
       {
-        agentId: agentToUse.agentId,
+        agentId: agentToUse.id,
         agentName: agentToUse.name,
         organizationId: agent.organizationId,
         senderId: message.senderId,
@@ -188,7 +188,7 @@ export class ChatOpsManager {
     const authResult = await this.validateUserAccess({
       message,
       provider,
-      agentId: agentToUse.agentId,
+      agentId: agentToUse.id,
       agentName: agentToUse.name,
       organizationId: agent.organizationId,
     });
@@ -256,10 +256,10 @@ export class ChatOpsManager {
    */
   private async resolveInlineAgentMention(params: {
     messageText: string;
-    defaultAgent: { id: string; name: string; agentId: string };
+    defaultAgent: { id: string; name: string };
     provider: ChatOpsProvider;
   }): Promise<{
-    agentToUse: { id: string; name: string; agentId: string };
+    agentToUse: { id: string; name: string };
     cleanedMessageText: string;
     fallbackMessage?: string;
   }> {
@@ -473,7 +473,7 @@ export class ChatOpsManager {
   }
 
   private async executeAndReply(params: {
-    agent: { id: string; name: string; agentId: string };
+    agent: { id: string; name: string };
     binding: { organizationId: string };
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
@@ -489,7 +489,6 @@ export class ChatOpsManager {
       provider,
       fullMessage,
       sendReply,
-      fallbackMessage,
       userId,
     } = params;
 

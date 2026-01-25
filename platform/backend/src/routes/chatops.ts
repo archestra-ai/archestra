@@ -638,8 +638,8 @@ async function handleAgentSelection(
       channelId: channelId || message.channelId,
       workspaceId: workspaceId || message.workspaceId,
       workspaceIdType: typeof (workspaceId || message.workspaceId),
-      promptId,
-      promptName: prompt.name,
+      agentId,
+      agentName: agent.name,
       originalMessageText,
     },
     "[ChatOps] handleAgentSelection: about to upsert binding",
@@ -702,7 +702,7 @@ async function handleAgentSelection(
       if (result.success && result.agentResponse) {
         // Send agent response via turn context (ensures correct thread)
         await context.sendActivity(
-          `${result.agentResponse}\n\n---\n_Via ${prompt.name}_`,
+          `${result.agentResponse}\n\n---\n_Via ${agent.name}_`,
         );
       } else if (!result.success && result.error) {
         // Send error message via turn context (ensures correct thread)

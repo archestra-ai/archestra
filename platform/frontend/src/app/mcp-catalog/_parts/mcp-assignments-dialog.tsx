@@ -565,13 +565,13 @@ function ProfileAssignmentPill({
           variant="outline"
           size="sm"
           className={cn(
-            "h-8 px-3 gap-1.5 text-xs",
+            "h-8 px-3 gap-1.5 text-xs max-w-[250px]",
             hasNoAssignments && "border-dashed",
             hasChanges && "border-primary",
           )}
         >
-          <span className="font-medium">{profile.name}</span>
-          <span className="text-muted-foreground">
+          <span className="font-medium truncate">{profile.name}</span>
+          <span className="text-muted-foreground shrink-0">
             ({toolCount}/{totalTools})
           </span>
         </Button>
@@ -584,8 +584,8 @@ function ProfileAssignmentPill({
         avoidCollisions
       >
         <div className="p-4 border-b flex items-start justify-between gap-2">
-          <div>
-            <h4 className="font-semibold">{profile.name}</h4>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold truncate">{profile.name}</h4>
             <p className="text-sm text-muted-foreground mt-1">
               Configure tool assignments for this profile
             </p>

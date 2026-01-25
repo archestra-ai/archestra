@@ -106,6 +106,7 @@ export const RouteId = {
   GetOrganizationMembers: "getOrganizationMembers",
   GetOrganizationMember: "getOrganizationMember",
   UpdateMemberRole: "updateMemberRole",
+  ResetMemberRole: "resetMemberRole",
 
   // User Lookup Routes
   GetUserById: "getUserById",

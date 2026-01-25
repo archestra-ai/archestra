@@ -1,4 +1,4 @@
-import { AnyRoleNameSchema, MEMBER_ROLE_NAME, RouteId } from "@shared";
+import { MEMBER_ROLE_NAME, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { MemberModel, OrganizationRoleModel, UserModel } from "@/models";
@@ -114,9 +114,12 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: z.string().describe("User ID"),
         }),
         body: z.object({
-          role: AnyRoleNameSchema.describe(
-            "Role identifier (predefined role name like 'admin', 'editor', 'member' or custom role identifier)",
-          ),
+          role: z
+            .string()
+            .min(1)
+            .describe(
+              "Role identifier (predefined role name like 'admin', 'editor', 'member' or custom role identifier)",
+            ),
         }),
         response: constructResponseSchema(MemberSchema),
       },
@@ -173,7 +176,7 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/members/:userId/role",
     {
       schema: {
-        operationId: RouteId.UpdateMemberRole,
+        operationId: RouteId.ResetMemberRole,
         description:
           "Reset a member's role to the default 'member' role. This effectively unassigns any custom or elevated role.",
         tags: ["Members"],

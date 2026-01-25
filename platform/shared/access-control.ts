@@ -441,6 +441,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateMemberRole]: {
     member: ["update"],
   },
+  [RouteId.ResetMemberRole]: {
+    member: ["update"],
+  },
   // User Lookup Routes
   [RouteId.GetUserById]: {
     member: ["read"],

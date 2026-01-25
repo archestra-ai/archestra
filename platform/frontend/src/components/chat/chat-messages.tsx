@@ -246,9 +246,12 @@ export function ChatMessages({
     window.addEventListener("resize", updateArrowDimensions);
 
     // Use ResizeObserver to detect when the parent container changes size
-    // This will trigger when the artifact panel opens/closes
-    const resizeObserver = new ResizeObserver(() => {
-      updateArrowDimensions();
+    // This will trigger when the artifact panel opens/closes or height changes
+    const resizeObserver = new ResizeObserver((entries) => {
+      // Check if height actually changed (not just width)
+      for (const _entry of entries) {
+        updateArrowDimensions();
+      }
     });
 
     // Find the main content area that actually resizes when artifact panel toggles
@@ -260,6 +263,12 @@ export function ChatMessages({
       resizeObserver.observe(parentContainer);
     }
 
+    // Also observe the direct parent for vertical size changes
+    const directParent = textMarkerRef.current?.closest(".overflow-y-auto");
+    if (directParent) {
+      resizeObserver.observe(directParent);
+    }
+
     // Also add a small delay and retry to ensure element is found
     const retryTimer = setTimeout(() => {
       if (!parentContainer && textMarkerRef.current) {
@@ -268,6 +277,10 @@ export function ChatMessages({
             ?.parentElement;
         if (container) {
           resizeObserver.observe(container);
+        }
+        const direct = textMarkerRef.current.closest(".overflow-y-auto");
+        if (direct) {
+          resizeObserver.observe(direct);
         }
       }
     }, 500);
@@ -279,6 +292,15 @@ export function ChatMessages({
       resizeObserver.disconnect();
     };
   }, [updateArrowDimensions]);
+
+  // Recalculate arrow when agent name changes
+  useEffect(() => {
+    if (agentName) {
+      // Small delay to ensure DOM has updated with new agent name
+      const timer = setTimeout(updateArrowDimensions, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [agentName, updateArrowDimensions]);
 
   if (messages.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
@@ -340,7 +362,9 @@ export function ChatMessages({
                 aria-hidden="true"
               />
               Chat with{" "}
-              <span className="font-medium text-foreground">{agentName}</span>{" "}
+              <span className="font-medium text-foreground truncate inline-block max-w-sm align-bottom">
+                {agentName}
+              </span>{" "}
               agent,
               <br />
               or{" "}

@@ -102,6 +102,43 @@ export default function IncomingEmailSettingsPage() {
 
   return (
     <div className="space-y-6">
+      {/* How It Works Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>How It Works</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-2">
+          <p>
+            Incoming email allows external users to invoke agents by sending
+            emails to auto-generated addresses. Each prompt gets a unique email
+            address using plus-addressing.
+          </p>
+          <p>
+            Microsoft Graph subscriptions expire after 3 days. The system
+            automatically renews subscriptions 24 hours before expiration. You
+            can also manually renew or delete subscriptions from this page.
+          </p>
+          <p>
+            Alternatively, set{" "}
+            <code className="bg-muted px-1 py-0.5 rounded">
+              ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL
+            </code>{" "}
+            to automatically create a subscription on server startup.
+          </p>
+          <p className="mt-2">
+            <Link
+              href="https://archestra.ai/docs/platform-agents#incoming-email"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              Learn more in our documentation
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Provider Info Card */}
       <Card>
         <CardHeader>
@@ -248,43 +285,6 @@ export default function IncomingEmailSettingsPage() {
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Info Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>How It Works</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground space-y-2">
-          <p>
-            Incoming email allows external users to invoke agents by sending
-            emails to auto-generated addresses. Each prompt gets a unique email
-            address using plus-addressing.
-          </p>
-          <p>
-            Microsoft Graph subscriptions expire after 3 days. The system
-            automatically renews subscriptions 24 hours before expiration. You
-            can also manually renew or delete subscriptions from this page.
-          </p>
-          <p>
-            Alternatively, set{" "}
-            <code className="bg-muted px-1 py-0.5 rounded">
-              ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL
-            </code>{" "}
-            to automatically create a subscription on server startup.
-          </p>
-          <p className="mt-2">
-            <Link
-              href="https://archestra.ai/docs/platform-agents#incoming-email"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              Learn more in our documentation
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          </p>
         </CardContent>
       </Card>
     </div>

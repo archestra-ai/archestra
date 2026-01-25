@@ -18487,8 +18487,99 @@ export type GetOrganizationMemberResponses = {
 
 export type GetOrganizationMemberResponse = GetOrganizationMemberResponses[keyof GetOrganizationMemberResponses];
 
-export type UpdateMemberRoleData = {
+export type ResetMemberRoleData = {
     body?: never;
+    path: {
+        /**
+         * User ID
+         */
+        userId: string;
+    };
+    query?: never;
+    url: '/api/members/{userId}/role';
+};
+
+export type ResetMemberRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ResetMemberRoleError = ResetMemberRoleErrors[keyof ResetMemberRoleErrors];
+
+export type ResetMemberRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        userId: string;
+        role: string;
+        createdAt: string;
+    };
+};
+
+export type ResetMemberRoleResponse = ResetMemberRoleResponses[keyof ResetMemberRoleResponses];
+
+export type UpdateMemberRoleData = {
+    body: {
+        /**
+         * Role identifier (predefined role name like 'admin', 'editor', 'member' or custom role identifier)
+         */
+        role: string;
+    };
     path: {
         /**
          * User ID
@@ -18572,97 +18663,6 @@ export type UpdateMemberRoleResponses = {
 };
 
 export type UpdateMemberRoleResponse = UpdateMemberRoleResponses[keyof UpdateMemberRoleResponses];
-
-export type UpdateMemberRole2Data = {
-    body: {
-        /**
-         * Role identifier (predefined role name like 'admin', 'editor', 'member' or custom role identifier)
-         */
-        role: 'admin' | 'editor' | 'member' | string;
-    };
-    path: {
-        /**
-         * User ID
-         */
-        userId: string;
-    };
-    query?: never;
-    url: '/api/members/{userId}/role';
-};
-
-export type UpdateMemberRole2Errors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateMemberRole2Error = UpdateMemberRole2Errors[keyof UpdateMemberRole2Errors];
-
-export type UpdateMemberRole2Responses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        userId: string;
-        role: string;
-        createdAt: string;
-    };
-};
-
-export type UpdateMemberRole2Response = UpdateMemberRole2Responses[keyof UpdateMemberRole2Responses];
 
 export type GetUserByIdData = {
     body?: never;

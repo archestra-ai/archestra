@@ -230,6 +230,14 @@ export function createDirectLLMModel(params: {
     return client(modelName);
   }
 
+  if (provider === "cohere") {
+    const client = createCohere({
+      apiKey,
+      baseURL: config.chat.cohere.baseUrl,
+    });
+    return client(modelName);
+  }
+
   if (provider === "vllm") {
     // vLLM uses OpenAI-compatible API
     const client = createOpenAI({

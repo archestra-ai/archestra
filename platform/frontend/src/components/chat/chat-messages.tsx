@@ -189,10 +189,16 @@ export function ChatMessages({
   const updateArrowDimensions = useCallback(() => {
     if (!textMarkerRef.current) return;
 
-    const viewportWidth = window.innerWidth;
+    // Get the parent container dimensions (changes when artifact panel opens/closes)
+    const parentContainer = textMarkerRef.current.closest('.flex-1');
+    if (!parentContainer) return;
+    
+    const containerRect = parentContainer.getBoundingClientRect();
+    const containerWidth = containerRect.width;
     const viewportHeight = window.innerHeight;
-    // Only show arrow on large screens with sufficient height
-    const isVisible = viewportWidth >= 1280 && viewportHeight >= 600;
+    
+    // Only show arrow if container has sufficient width and viewport has height
+    const isVisible = containerWidth >= 768 && viewportHeight >= 600;
 
     if (!isVisible) {
       setArrowDimensions((prev) => ({ ...prev, visible: false }));
@@ -236,12 +242,25 @@ export function ChatMessages({
     // Initial calculation after mount
     const timer = setTimeout(updateArrowDimensions, 100);
 
-    // Update on resize
+    // Update on window resize
     window.addEventListener("resize", updateArrowDimensions);
+
+    // Use ResizeObserver to detect when the parent container changes size
+    // This will trigger when the artifact panel opens/closes
+    const resizeObserver = new ResizeObserver(() => {
+      updateArrowDimensions();
+    });
+
+    // Find the parent container that changes size when artifact panel toggles
+    const parentContainer = textMarkerRef.current?.closest('.flex-1');
+    if (parentContainer) {
+      resizeObserver.observe(parentContainer);
+    }
 
     return () => {
       clearTimeout(timer);
       window.removeEventListener("resize", updateArrowDimensions);
+      resizeObserver.disconnect();
     };
   }, [updateArrowDimensions]);
 

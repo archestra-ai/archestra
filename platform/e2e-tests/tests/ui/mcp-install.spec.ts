@@ -66,7 +66,7 @@ test.describe("MCP Install", () => {
 
     // Check that tools are discovered
     await serverCard
-      .getByText("out of 2")
+      .getByText("/2")
       .waitFor({ state: "visible", timeout: 30_000 });
 
     // cleanup
@@ -127,7 +127,7 @@ test.describe("MCP Install", () => {
       // Check that tools are discovered
       await adminPage
         .getByTestId(`mcp-server-card-${HF_CATALOG_ITEM_NAME}`)
-        .getByText("out of 9")
+        .getByText("/9")
         .waitFor({ state: "visible" });
 
       // cleanup

@@ -1,4 +1,12 @@
+import { vi } from "vitest";
 import { describe, expect, it } from "@/test";
+
+// Mock the gemini-client module before importing llm-client
+const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
+vi.mock("@/clients/gemini-client", () => ({
+  isVertexAiEnabled: mockIsVertexAiEnabled,
+}));
+
 import { createDirectLLMModel, detectProviderFromModel } from "./llm-client";
 
 describe("detectProviderFromModel", () => {
@@ -135,5 +143,17 @@ describe("createDirectLLMModel", () => {
         modelName: "some-model",
       }),
     ).toThrow("Unsupported provider: unsupported");
+  });
+
+  it("throws descriptive error for gemini provider without API key and Vertex AI disabled", () => {
+    expect(() =>
+      createDirectLLMModel({
+        provider: "gemini",
+        apiKey: undefined,
+        modelName: "gemini-1.5-flash",
+      }),
+    ).toThrow(
+      "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
+    );
   });
 });

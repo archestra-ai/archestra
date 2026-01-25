@@ -215,9 +215,14 @@ export function createDirectLLMModel(params: {
       });
       return client(modelName);
     }
-    // Standard Gemini API with API key
+    // Standard Gemini API requires an API key when Vertex AI is not enabled
+    if (!apiKey) {
+      throw new Error(
+        "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
+      );
+    }
     const client = createGoogleGenerativeAI({
-      apiKey: apiKey || "vertex-ai-mode",
+      apiKey,
     });
     return client(modelName);
   }

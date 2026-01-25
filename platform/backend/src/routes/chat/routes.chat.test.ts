@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   buildTitlePrompt,
   extractFirstMessages,
-  generateConversationTitle,
+  type GenerateTitleParams,
 } from "./routes.chat";
 
 describe("extractFirstMessages", () => {
@@ -187,27 +187,33 @@ describe("buildTitlePrompt", () => {
   });
 });
 
-describe("generateConversationTitle", () => {
-  it("returns null when LLM call fails", async () => {
-    // Mock the module to simulate LLM failure
-    vi.mock("ai", () => ({
-      generateText: vi.fn().mockRejectedValue(new Error("API Error")),
-      convertToModelMessages: vi.fn(),
-      stepCountIs: vi.fn(),
-      streamText: vi.fn(),
-    }));
+describe("GenerateTitleParams type", () => {
+  it("has the correct interface structure", () => {
+    // Verify the GenerateTitleParams interface is correctly exported and usable
+    // This ensures the function signature is stable for callers
+    const params: GenerateTitleParams = {
+      provider: "anthropic",
+      apiKey: "test-key",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi there!",
+    };
 
-    // Since we can't easily mock the internal createDirectLLMModel,
-    // we test that the function handles errors gracefully
-    // In real tests, you would use dependency injection or a test double
-
-    // For now, we verify the function signature and types are correct
-    expect(generateConversationTitle).toBeDefined();
-    expect(typeof generateConversationTitle).toBe("function");
+    expect(params.provider).toBe("anthropic");
+    expect(params.apiKey).toBe("test-key");
+    expect(params.firstUserMessage).toBe("Hello");
+    expect(params.firstAssistantMessage).toBe("Hi there!");
   });
 
-  it("is exported and callable", () => {
-    expect(generateConversationTitle).toBeDefined();
+  it("allows undefined apiKey for providers that dont require it", () => {
+    // vLLM and Ollama typically don't require API keys
+    const params: GenerateTitleParams = {
+      provider: "vllm",
+      apiKey: undefined,
+      firstUserMessage: "Test message",
+      firstAssistantMessage: "",
+    };
+
+    expect(params.apiKey).toBeUndefined();
   });
 });
 

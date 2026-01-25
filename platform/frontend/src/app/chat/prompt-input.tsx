@@ -196,6 +196,7 @@ const PromptInputContent = ({
                     <a
                       href="/settings/security"
                       className="underline hover:no-underline"
+                      aria-label="Enable file uploads in security settings"
                     >
                       Enable in settings
                     </a>

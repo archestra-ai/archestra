@@ -124,6 +124,17 @@ vi.mock("@/lib/chat.query", () => ({
   }),
 }));
 
+// Mock for useHasPermissions - default to non-admin
+const mockUseHasPermissions = vi.fn().mockReturnValue({
+  data: false,
+  isPending: false,
+  isLoading: false,
+});
+
+vi.mock("@/lib/auth.query", () => ({
+  useHasPermissions: () => mockUseHasPermissions(),
+}));
+
 // Import the component after mocks are set up
 import ArchestraPromptInput from "./prompt-input";
 
@@ -171,6 +182,53 @@ describe("ArchestraPromptInput", () => {
       expect(
         screen.queryByTestId(E2eTestId.ChatFileUploadButton),
       ).not.toBeInTheDocument();
+    });
+
+    it("should show settings link in tooltip for admins when file uploads disabled", () => {
+      // Mock admin user with organization update permission
+      mockUseHasPermissions.mockReturnValue({
+        data: true,
+        isPending: false,
+        isLoading: false,
+      });
+
+      render(
+        <ArchestraPromptInput {...defaultProps} allowFileUploads={false} />,
+      );
+
+      // Tooltip should show "Enable in settings" link for admins
+      const tooltip = screen.getByTestId("tooltip-content");
+      expect(tooltip).toHaveTextContent("File uploads are disabled.");
+      expect(tooltip).toHaveTextContent("Enable in settings");
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/settings/security",
+      );
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "aria-label",
+        "Enable file uploads in security settings",
+      );
+    });
+
+    it("should show admin message in tooltip for non-admins when file uploads disabled", () => {
+      // Mock non-admin user without organization update permission
+      mockUseHasPermissions.mockReturnValue({
+        data: false,
+        isPending: false,
+        isLoading: false,
+      });
+
+      render(
+        <ArchestraPromptInput {...defaultProps} allowFileUploads={false} />,
+      );
+
+      // Tooltip should show message about admin for non-admins
+      const tooltip = screen.getByTestId("tooltip-content");
+      expect(tooltip).toHaveTextContent(
+        "File uploads are disabled by your administrator",
+      );
+      // Should not have a settings link
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
   });
 

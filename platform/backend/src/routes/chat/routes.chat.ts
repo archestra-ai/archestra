@@ -294,20 +294,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // For Gemini image generation models, enable image output via responseModalities
-      // Models like gemini-2.5-flash-preview-image-generation require this to return images
+      // Known image-capable model patterns:
+      // - gemini-2.0-flash-exp-image-generation
+      // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
+      // - Any model with "image-generation" in the name
+      const modelLower = conversation.selectedModel.toLowerCase();
       const isGeminiImageModel =
         provider === "gemini" &&
-        conversation.selectedModel.toLowerCase().includes("image");
+        (modelLower.includes("image-generation") ||
+          modelLower.includes("native-audio-dialog") ||
+          modelLower === "gemini-2.5-flash-image");
       if (isGeminiImageModel) {
         streamTextConfig.providerOptions = {
           google: {
             responseModalities: ["TEXT", "IMAGE"],
           },
         };
-        logger.info(
-          { model: conversation.selectedModel },
-          "Enabled image generation for Gemini model",
-        );
       }
 
       const result = streamText(streamTextConfig);

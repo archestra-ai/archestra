@@ -1932,6 +1932,7 @@ describe("InteractionModel", () => {
             {
               content: { role: "model", parts: [{ text: "Hello!" }] },
               finishReason: "STOP",
+              index: 0,
             },
           ],
           modelVersion: "gemini-2.5-pro",

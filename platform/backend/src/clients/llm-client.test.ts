@@ -121,6 +121,15 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
+  it("creates a model for cohere provider", () => {
+    const model = createDirectLLMModel({
+      provider: "cohere",
+      apiKey: "test-key",
+      modelName: "command-light",
+    });
+    expect(model).toBeDefined();
+  });
+
   it("creates a model for vllm provider without API key", () => {
     const model = createDirectLLMModel({
       provider: "vllm",

@@ -1169,6 +1169,23 @@ class ToolModel {
   }
 
   /**
+   * Find all agent IDs that have delegation tools pointing to the target agent.
+   * Used to invalidate caches when target agent is renamed.
+   */
+  static async getParentAgentIds(targetAgentId: string): Promise<string[]> {
+    const results = await db
+      .selectDistinct({ agentId: schema.agentToolsTable.agentId })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId));
+
+    return results.map((r) => r.agentId);
+  }
+
+  /**
    * Find all tools with their profile assignments.
    * Returns one entry per tool (grouped by tool), with all assignments embedded.
    * Only returns tools that have at least one assignment.

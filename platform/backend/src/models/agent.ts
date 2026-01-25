@@ -11,6 +11,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
 import type { AgentHistoryEntry } from "@/database/schemas/agent";
 import {
@@ -693,6 +694,16 @@ class AgentModel {
   ): Promise<Agent | null> {
     let updatedAgent: Omit<Agent, "tools" | "teams" | "labels"> | undefined;
 
+    // Fetch existing agent to check for name changes (needed for delegation tool sync)
+    const [existingAgent] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, id));
+
+    if (!existingAgent) {
+      return null;
+    }
+
     // If setting isDefault to true, unset all other agents' isDefault first
     if (agent.isDefault === true) {
       await db
@@ -712,17 +723,18 @@ class AgentModel {
       if (!updatedAgent) {
         return null;
       }
-    } else {
-      // If only updating teams, fetch the existing agent
-      const [existingAgent] = await db
-        .select()
-        .from(schema.agentsTable)
-        .where(eq(schema.agentsTable.id, id));
 
-      if (!existingAgent) {
-        return null;
+      // If name changed, sync delegation tool names and invalidate parent caches
+      if (agent.name && agent.name !== existingAgent.name) {
+        await ToolModel.syncDelegationToolNames(id, agent.name);
+
+        // Invalidate tool cache for all parent agents so they pick up the new tool name
+        const parentAgentIds = await ToolModel.getParentAgentIds(id);
+        for (const parentAgentId of parentAgentIds) {
+          clearChatMcpClient(parentAgentId);
+        }
       }
-
+    } else {
       updatedAgent = existingAgent;
     }
 
@@ -797,6 +809,12 @@ class AgentModel {
     // Sync tool names if name changed
     if (input.name && input.name !== agent.name) {
       await ToolModel.syncDelegationToolNames(id, input.name);
+
+      // Invalidate tool cache for all parent agents so they pick up the new tool name
+      const parentAgentIds = await ToolModel.getParentAgentIds(id);
+      for (const parentAgentId of parentAgentIds) {
+        clearChatMcpClient(parentAgentId);
+      }
     }
 
     return AgentModel.findById(id);

@@ -251,14 +251,26 @@ export function ChatMessages({
       updateArrowDimensions();
     });
 
-    // Find the parent container that changes size when artifact panel toggles
-    const parentContainer = textMarkerRef.current?.closest('.flex-1');
+    // Find the main content area that actually resizes when artifact panel toggles
+    // Look for the parent that contains the overflow-y-auto class
+    const parentContainer = textMarkerRef.current?.closest('.overflow-y-auto')?.parentElement?.parentElement;
     if (parentContainer) {
       resizeObserver.observe(parentContainer);
     }
 
+    // Also add a small delay and retry to ensure element is found
+    const retryTimer = setTimeout(() => {
+      if (!parentContainer && textMarkerRef.current) {
+        const container = textMarkerRef.current.closest('.overflow-y-auto')?.parentElement?.parentElement;
+        if (container) {
+          resizeObserver.observe(container);
+        }
+      }
+    }, 500);
+
     return () => {
       clearTimeout(timer);
+      clearTimeout(retryTimer);
       window.removeEventListener("resize", updateArrowDimensions);
       resizeObserver.disconnect();
     };

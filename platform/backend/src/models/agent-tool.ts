@@ -6,10 +6,12 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNotNull,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -26,8 +28,223 @@ import type {
   UpdateAgentTool,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
+import McpServerUserModel from "./mcp-server-user";
 
 class AgentToolModel {
+  // ============================================================================
+  // DELEGATION METHODS
+  // ============================================================================
+
+  /**
+   * Assign a delegation to a target agent.
+   * Creates the delegation tool if it doesn't exist, then creates the agent_tool assignment.
+   */
+  static async assignDelegation(
+    agentId: string,
+    targetAgentId: string,
+  ): Promise<void> {
+    // Dynamically import to avoid circular dependency
+    const { default: ToolModel } = await import("./tool");
+
+    // Find or create the delegation tool for the target agent
+    const tool = await ToolModel.findOrCreateDelegationTool(targetAgentId);
+
+    // Assign the tool to the source agent
+    await AgentToolModel.createIfNotExists(agentId, tool.id);
+  }
+
+  /**
+   * Remove a delegation to a target agent.
+   */
+  static async removeDelegation(
+    agentId: string,
+    targetAgentId: string,
+  ): Promise<boolean> {
+    // Dynamically import to avoid circular dependency
+    const { default: ToolModel } = await import("./tool");
+
+    const tool = await ToolModel.findDelegationTool(targetAgentId);
+    if (!tool) {
+      return false;
+    }
+
+    return AgentToolModel.delete(agentId, tool.id);
+  }
+
+  /**
+   * Get all agents that this agent can delegate to.
+   */
+  static async getDelegationTargets(agentId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      systemPrompt: string | null;
+    }>
+  > {
+    const results = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        systemPrompt: schema.agentsTable.systemPrompt,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.toolsTable.delegateToAgentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          isNotNull(schema.toolsTable.delegateToAgentId),
+        ),
+      );
+
+    return results;
+  }
+
+  /**
+   * Sync delegations for an agent - replaces all existing delegations with the new set.
+   */
+  static async syncDelegations(
+    agentId: string,
+    targetAgentIds: string[],
+  ): Promise<{ added: string[]; removed: string[] }> {
+    // Get current delegation targets
+    const currentTargets = await AgentToolModel.getDelegationTargets(agentId);
+    const currentTargetIds = new Set(currentTargets.map((t) => t.id));
+    const newTargetIds = new Set(targetAgentIds);
+
+    // Find what to add and remove
+    const toRemove = currentTargets.filter((t) => !newTargetIds.has(t.id));
+    const toAdd = targetAgentIds.filter((id) => !currentTargetIds.has(id));
+
+    // Remove old delegations
+    for (const target of toRemove) {
+      await AgentToolModel.removeDelegation(agentId, target.id);
+    }
+
+    // Add new delegations
+    for (const targetId of toAdd) {
+      await AgentToolModel.assignDelegation(agentId, targetId);
+    }
+
+    return {
+      added: toAdd,
+      removed: toRemove.map((t) => t.id),
+    };
+  }
+
+  /**
+   * Get all delegation connections for an organization (for canvas visualization).
+   */
+  static async getAllDelegationConnections(
+    organizationId: string,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<
+    Array<{
+      sourceAgentId: string;
+      sourceAgentName: string;
+      targetAgentId: string;
+      targetAgentName: string;
+      toolId: string;
+    }>
+  > {
+    const targetAgentsAlias = alias(schema.agentsTable, "targetAgent");
+
+    let query = db
+      .select({
+        sourceAgentId: schema.agentToolsTable.agentId,
+        sourceAgentName: schema.agentsTable.name,
+        targetAgentId: schema.toolsTable.delegateToAgentId,
+        targetAgentName: targetAgentsAlias.name,
+        toolId: schema.agentToolsTable.toolId,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        targetAgentsAlias,
+        eq(schema.toolsTable.delegateToAgentId, targetAgentsAlias.id),
+      )
+      .where(
+        and(
+          isNotNull(schema.toolsTable.delegateToAgentId),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .$dynamic();
+
+    // Apply access control filtering for non-agent admins
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return [];
+      }
+
+      query = query.where(
+        inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
+      );
+    }
+
+    const results = await query;
+
+    // Filter out null targetAgentIds (shouldn't happen but TypeScript needs this)
+    return results.filter(
+      (r): r is typeof r & { targetAgentId: string } =>
+        r.targetAgentId !== null,
+    );
+  }
+
+  // ============================================================================
+  // ACCESS CONTROL HELPERS
+  // ============================================================================
+
+  /**
+   * Get all MCP server IDs that a user has access to (through team membership or personal access).
+   * Used for filtering agent_tools to only show assignments with accessible credentials.
+   */
+  private static async getUserAccessibleMcpServerIds(
+    userId: string,
+  ): Promise<string[]> {
+    // Get MCP servers accessible through team membership
+    const teamAccessibleServers = await db
+      .select({ mcpServerId: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
+      )
+      .where(eq(schema.teamMembersTable.userId, userId));
+
+    const teamAccessibleIds = teamAccessibleServers.map((s) => s.mcpServerId);
+
+    // Get personal MCP servers
+    const personalIds =
+      await McpServerUserModel.getUserPersonalMcpServerIds(userId);
+
+    // Combine and deduplicate
+    return [...new Set([...teamAccessibleIds, ...personalIds])];
+  }
+
+  // ============================================================================
+  // STANDARD CRUD METHODS
+  // ============================================================================
+
   static async create(
     agentId: string,
     toolId: string,
@@ -412,6 +629,7 @@ class AgentToolModel {
 
     // Apply access control filtering for users that are not agent admins
     if (userId && !isAgentAdmin) {
+      // Filter by accessible agents (profiles)
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
@@ -424,6 +642,45 @@ class AgentToolModel {
       whereConditions.push(
         inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
       );
+
+      // Filter by accessible credentials (MCP servers)
+      // Only show agent_tools where the user has access to the credential/execution source
+      const accessibleMcpServerIds =
+        await AgentToolModel.getUserAccessibleMcpServerIds(userId);
+
+      // Build credential access condition:
+      // - No credential required (both null), OR
+      // - Uses dynamic team credential, OR
+      // - Credential source is accessible, OR
+      // - Execution source is accessible
+      const credentialAccessConditions: SQL[] = [
+        // No credential required (both null)
+        and(
+          sql`${schema.agentToolsTable.credentialSourceMcpServerId} IS NULL`,
+          sql`${schema.agentToolsTable.executionSourceMcpServerId} IS NULL`,
+        ) as SQL,
+        // Uses dynamic team credential
+        eq(schema.agentToolsTable.useDynamicTeamCredential, true),
+      ];
+
+      // Add accessible credential/execution sources if user has any
+      if (accessibleMcpServerIds.length > 0) {
+        credentialAccessConditions.push(
+          inArray(
+            schema.agentToolsTable.credentialSourceMcpServerId,
+            accessibleMcpServerIds,
+          ),
+          inArray(
+            schema.agentToolsTable.executionSourceMcpServerId,
+            accessibleMcpServerIds,
+          ),
+        );
+      }
+
+      const credentialAccessCondition = or(...credentialAccessConditions);
+      if (credentialAccessCondition) {
+        whereConditions.push(credentialAccessCondition);
+      }
     }
 
     // Filter by search query (tool name)

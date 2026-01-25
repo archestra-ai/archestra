@@ -50,7 +50,8 @@ export function EditSsoProviderDialog({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const form = useForm<SsoProviderFormValues>({
-    resolver: zodResolver(SsoProviderFormSchema),
+    // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
+    resolver: zodResolver(SsoProviderFormSchema as any),
     defaultValues: {
       providerId: "",
       issuer: "",

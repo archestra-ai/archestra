@@ -7,9 +7,10 @@ import {
   type OutlookEmailProvider,
   processIncomingEmail,
 } from "@/agents/incoming-email";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { isRateLimited } from "@/agents/utils";
+import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
-import { PromptModel } from "@/models";
+import { AgentModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -25,45 +26,10 @@ import {
  * Rate limit configuration for webhook endpoint
  * Limits requests per IP address to prevent abuse
  */
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per IP
-
-interface RateLimitEntry {
-  count: number;
-  windowStart: number;
-}
-
-/**
- * Check if an IP is rate limited using the shared CacheManager
- * Returns true if the IP has exceeded the rate limit
- */
-async function isRateLimited(ip: string): Promise<boolean> {
-  const now = Date.now();
-  const cacheKey = `${CacheKey.WebhookRateLimit}-${ip}` as const;
-  const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
-
-  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-    // Start new window
-    await cacheManager.set(
-      cacheKey,
-      { count: 1, windowStart: now },
-      RATE_LIMIT_WINDOW_MS * 2,
-    );
-    return false;
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return true;
-  }
-
-  // Increment count
-  await cacheManager.set(
-    cacheKey,
-    { count: entry.count + 1, windowStart: entry.windowStart },
-    RATE_LIMIT_WINDOW_MS * 2,
-  );
-  return false;
-}
+const RATE_LIMIT_CONFIG = {
+  windowMs: 60 * 1000, // 1 minute
+  maxRequests: 60, // 60 requests per minute per IP
+};
 
 /**
  * Schema for setup response
@@ -152,7 +118,9 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Apply rate limiting to actual webhook notifications (not validation challenges)
       const clientIp = request.ip || "unknown";
-      if (await isRateLimited(clientIp)) {
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-${clientIp}` as AllowedCacheKey;
+      if (await isRateLimited(rateLimitKey, RATE_LIMIT_CONFIG)) {
         logger.warn(
           { ip: clientIp },
           "[IncomingEmail] Rate limit exceeded for webhook",
@@ -229,18 +197,18 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Endpoint to get the agent email address for a prompt
+   * Endpoint to get the agent email address for an agent
    * Used by the frontend to display the email address for an agent
    */
   fastify.get(
-    "/api/prompts/:promptId/email-address",
+    "/api/agents/:agentId/email-address",
     {
       schema: {
-        operationId: RouteId.GetPromptEmailAddress,
+        operationId: RouteId.GetAgentEmailAddress,
         description: "Get the email address for invoking an agent",
-        tags: ["Prompts"],
+        tags: ["Agents"],
         params: z.object({
-          promptId: z.string().uuid(),
+          agentId: z.string().uuid(),
         }),
         /**
          * Schema for email address response
@@ -260,12 +228,12 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { promptId } = request.params;
+      const { agentId } = request.params;
 
-      // Get prompt's incoming email settings
-      const prompt = await PromptModel.findById(promptId);
-      if (!prompt) {
-        throw new ApiError(404, "Prompt not found");
+      // Verify agent exists
+      const agent = await AgentModel.findById(agentId);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
       }
 
       const provider = getEmailProvider();
@@ -274,20 +242,20 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send({
           providerEnabled: false,
           emailAddress: null,
-          agentIncomingEmailEnabled: prompt.incomingEmailEnabled,
-          agentSecurityMode: prompt.incomingEmailSecurityMode,
-          agentAllowedDomain: prompt.incomingEmailAllowedDomain,
+          agentIncomingEmailEnabled: agent.incomingEmailEnabled,
+          agentSecurityMode: agent.incomingEmailSecurityMode,
+          agentAllowedDomain: agent.incomingEmailAllowedDomain,
         });
       }
 
-      const emailAddress = provider.generateEmailAddress(promptId);
+      const emailAddress = provider.generateEmailAddress(agentId);
 
       return reply.send({
         providerEnabled: true,
         emailAddress,
-        agentIncomingEmailEnabled: prompt.incomingEmailEnabled,
-        agentSecurityMode: prompt.incomingEmailSecurityMode,
-        agentAllowedDomain: prompt.incomingEmailAllowedDomain,
+        agentIncomingEmailEnabled: agent.incomingEmailEnabled,
+        agentSecurityMode: agent.incomingEmailSecurityMode,
+        agentAllowedDomain: agent.incomingEmailAllowedDomain,
       });
     },
   );

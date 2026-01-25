@@ -1,6 +1,5 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
 import { ChevronDown, ChevronRight, Layers, User } from "lucide-react";
 import { useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
@@ -52,11 +51,12 @@ export function ToolDetailsDialog({
   );
 
   // Check if this is a built-in Archestra tool (no credentials required)
-  const isBuiltinArchestraTool = tool.catalogId === ARCHESTRA_MCP_CATALOG_ID;
-
   // Helper to get credential display text
   // Backend returns null for emails when user doesn't have access to the credential's MCP server
-  const getCredentialDisplay = (assignment: (typeof tool.assignments)[0]) => {
+  // Returns null when there's no credential to display
+  const getCredentialDisplay = (
+    assignment: (typeof tool.assignments)[0],
+  ): string | null => {
     if (assignment.useDynamicTeamCredential) {
       return "Resolve at call time";
     }
@@ -66,9 +66,9 @@ export function ToolDetailsDialog({
       assignment.credentialSourceMcpServerId ||
       assignment.executionSourceMcpServerId;
 
-    // If no credential server, check if it's a built-in tool
+    // If no credential server, don't show anything
     if (!credentialServerId) {
-      return isBuiltinArchestraTool ? "Not required" : "—";
+      return null;
     }
 
     // Backend returns email if user has access, null if not
@@ -159,7 +159,7 @@ export function ToolDetailsDialog({
           <div className="space-y-6">
             <ToolReadonlyDetails tool={tool} />
 
-            {/* Profile Assignments Section */}
+            {/* Assignments Section */}
             <Collapsible
               open={assignmentsOpen}
               onOpenChange={setAssignmentsOpen}
@@ -172,9 +172,7 @@ export function ToolDetailsDialog({
                   >
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4" />
-                      <span className="font-semibold text-sm">
-                        Profile Assignments
-                      </span>
+                      <span className="font-semibold text-sm">Assignments</span>
                       <Badge variant="secondary" className="ml-2">
                         {tool.assignmentCount}
                       </Badge>
@@ -194,42 +192,52 @@ export function ToolDetailsDialog({
                       </div>
                     ) : (
                       <div className="divide-y divide-border">
-                        {tool.assignments.map((assignment) => (
-                          <div
-                            key={assignment.agentToolId}
-                            className="p-4 space-y-3"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <Badge variant="secondary" className="gap-1">
-                                  <Layers className="h-3 w-3" />
-                                  {assignment.agent.name}
-                                </Badge>
-                                <span className="text-muted-foreground">→</span>
-                                <span className="text-sm text-muted-foreground">
-                                  {getCredentialDisplay(assignment)}
-                                </span>
-                              </div>
-                            </div>
-                            {assignment.responseModifierTemplate && (
-                              <div className="text-xs text-muted-foreground">
-                                <span className="font-medium">
-                                  Response Modifier:{" "}
-                                </span>
-                                <code className="bg-muted px-1 py-0.5 rounded">
-                                  {assignment.responseModifierTemplate.slice(
-                                    0,
-                                    50,
+                        {tool.assignments.map((assignment) => {
+                          const credentialDisplay =
+                            getCredentialDisplay(assignment);
+                          return (
+                            <div
+                              key={assignment.agentToolId}
+                              className="p-4 space-y-3"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <Badge variant="secondary" className="gap-1">
+                                    <Layers className="h-3 w-3" />
+                                    {assignment.agent.name}
+                                  </Badge>
+                                  {credentialDisplay && (
+                                    <>
+                                      <span className="text-muted-foreground">
+                                        →
+                                      </span>
+                                      <span className="text-sm text-muted-foreground">
+                                        {credentialDisplay}
+                                      </span>
+                                    </>
                                   )}
-                                  {assignment.responseModifierTemplate.length >
-                                  50
-                                    ? "..."
-                                    : ""}
-                                </code>
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        ))}
+                              {assignment.responseModifierTemplate && (
+                                <div className="text-xs text-muted-foreground">
+                                  <span className="font-medium">
+                                    Response Modifier:{" "}
+                                  </span>
+                                  <code className="bg-muted px-1 py-0.5 rounded">
+                                    {assignment.responseModifierTemplate.slice(
+                                      0,
+                                      50,
+                                    )}
+                                    {assignment.responseModifierTemplate
+                                      .length > 50
+                                      ? "..."
+                                      : ""}
+                                  </code>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

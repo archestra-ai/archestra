@@ -1,0 +1,50 @@
+{
+    "request": {
+        "method": "POST",
+        "urlPath": "/cohere/v2/chat",
+        "headers": {
+            "Authorization": {
+                "contains": "cohere-blocks-tool-untrusted-data"
+            }
+        }
+    },
+    "response": {
+        "status": 200,
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "jsonBody": {
+            "id": "chatcmpl-cohere-blocks-tool-untrusted",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "I'll read the file for you."
+                    }
+                ],
+                "tool_calls": [
+                    {
+                        "id": "call_789",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": "{\"file_path\": \"/etc/passwd\"}"
+                        }
+                    }
+                ]
+            },
+            "finish_reason": "TOOL_CALL",
+            "usage": {
+                "billed_units": {
+                    "input_tokens": 100,
+                    "output_tokens": 20
+                },
+                "tokens": {
+                    "input_tokens": 100,
+                    "output_tokens": 20
+                }
+            }
+        }
+    }
+}

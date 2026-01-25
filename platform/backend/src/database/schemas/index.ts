@@ -1,5 +1,8 @@
 export { default as accountsTable } from "./account";
-export { default as agentsTable } from "./agent";
+export {
+  type AgentHistoryEntry,
+  default as agentsTable,
+} from "./agent";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
@@ -32,8 +35,6 @@ export { default as optimizationRulesTable } from "./optimization-rule";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as processedEmailsTable } from "./processed-email";
-export { default as promptsTable } from "./prompt";
-export { default as promptAgentsTable } from "./prompt-agent";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
 export { default as ssoProvidersTable } from "./sso-provider";

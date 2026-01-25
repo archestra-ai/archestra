@@ -264,7 +264,7 @@ class SsoProviderModel {
                 ssoProvider.teamSyncConfig,
               );
               if (groups.length > 0) {
-                cacheSsoGroups(
+                await cacheSsoGroups(
                   provider.providerId,
                   user.email,
                   ssoProvider.organizationId,
@@ -349,7 +349,7 @@ class SsoProviderModel {
             ssoProvider.teamSyncConfig,
           );
           if (groups.length > 0) {
-            cacheSsoGroups(
+            await cacheSsoGroups(
               provider.providerId,
               user.email,
               ssoProvider.organizationId,
@@ -370,7 +370,7 @@ class SsoProviderModel {
           ssoProvider.teamSyncConfig,
         );
         if (groups.length > 0) {
-          cacheSsoGroups(
+          await cacheSsoGroups(
             provider.providerId,
             user.email,
             ssoProvider.organizationId,

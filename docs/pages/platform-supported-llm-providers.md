@@ -144,6 +144,31 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - Usage of the llama models in the chat ⚠️ Not yet supported ([GitHub Issue #2058](https://github.com/archestra-ai/archestra/issues/2058)) 
 
+## Cohere
+
+[Cohere](https://www.cohere.ai/) provides enterprise-grade LLMs designed for safe, controllable, and efficient AI applications. The platform offers features like safety guardrails, function calling, and both synchronous and streaming APIs.
+
+### Supported Cohere APIs
+
+- **Chat API** (`/chat`) - ✅ Fully supported
+- **Streaming**: ✅ Fully supported
+
+### Cohere Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/cohere/{profile-id}`
+- **Authentication**: Pass your Cohere API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                        | Required | Description                                                                    |
+| ------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_COHERE_BASE_URL`     | No       | Cohere API base URL (default: `https://api.cohere.ai`)                         |
+| `ARCHESTRA_CHAT_COHERE_API_KEY` | No       | Default API key for Cohere (can be overridden per conversation/team/org)       |
+
+### Important Notes
+
+- **API Key format**: Obtain your API key from the [Cohere Dashboard](https://dashboard.cohere.ai/)
+
 ## vLLM
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.

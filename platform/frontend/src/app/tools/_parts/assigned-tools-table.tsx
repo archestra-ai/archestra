@@ -520,12 +520,12 @@ export function AssignedToolsTable({
       },
       {
         id: "assignmentCount",
-        header: "Profiles",
+        header: "Assignments",
         cell: ({ row }) => {
           const count = row.original.assignmentCount;
           return (
             <Badge variant="outline" className="text-xs">
-              {count} {count === 1 ? "profile" : "profiles"}
+              {count} {count === 1 ? "assignment" : "assignments"}
             </Badge>
           );
         },

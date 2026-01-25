@@ -1,6 +1,8 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createCerebras } from "@ai-sdk/cerebras";
+import { createCohere } from "@ai-sdk/cohere";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createVertex } from "@ai-sdk/google-vertex";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
   EXTERNAL_AGENT_ID_HEADER,
@@ -8,10 +10,10 @@ import {
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { secretManager } from "@/secrets-manager";
 import { ApiError, type SupportedChatProvider } from "@/types";
 
@@ -53,6 +55,9 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "openai";
   }
 
+  if (lowerModel.includes("command")) {
+    return "cohere";
+  }
   if (lowerModel.includes("glm") || lowerModel.includes("chatglm")) {
     return "zhipuai";
   }
@@ -97,7 +102,8 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.anthropicApiKey ??
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
-      secret?.secret?.zhipuaiApiKey;
+      secret?.secret?.zhipuaiApiKey ??
+      secret?.secret?.cohereApiKey;
     if (secretValue) {
       providerApiKey = secretValue as string;
       apiKeySource = resolvedApiKey.scope;
@@ -117,6 +123,9 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "gemini" && config.chat.gemini.apiKey) {
       providerApiKey = config.chat.gemini.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "cohere" && config.chat.cohere.apiKey) {
+      providerApiKey = config.chat.cohere.apiKey;
       apiKeySource = "environment";
     } else if (provider === "vllm" && config.chat.vllm.apiKey) {
       providerApiKey = config.chat.vllm.apiKey;
@@ -145,6 +154,154 @@ export function isApiKeyRequired(
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
   return !apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama;
+}
+
+/**
+ * Fast models for each provider, used for title generation and other quick operations.
+ * These are optimized for speed and cost rather than capability.
+ */
+export const FAST_MODELS: Record<SupportedChatProvider, string> = {
+  anthropic: "claude-3-5-haiku-20241022",
+  openai: "gpt-4o-mini",
+  gemini: "gemini-2.0-flash-001",
+  cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
+  cohere: "command-light", // Cohere's fast model
+  vllm: "default", // vLLM uses whatever model is deployed
+  ollama: "llama3.2", // Common fast model for Ollama
+  zhipuai: "glm-4-flash", // Zhipu's fast model
+};
+
+/**
+ * Create an LLM model that calls the provider API directly (not through LLM Proxy).
+ * Use this for meta operations like title generation that don't need proxy features.
+ */
+export function createDirectLLMModel(params: {
+  provider: SupportedChatProvider;
+  apiKey: string | undefined;
+  modelName: string;
+}): LLMModel {
+  const { provider, apiKey, modelName } = params;
+
+  if (provider === "anthropic") {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
+      );
+    }
+    const client = createAnthropic({
+      apiKey,
+      // Use standard Anthropic base URL (config.llm.anthropic.baseUrl has the proxy URL)
+    });
+    return client(modelName);
+  }
+
+  if (provider === "openai") {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "OpenAI API key is required. Please configure OPENAI_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      // Use standard OpenAI base URL (config.llm.openai.baseUrl has the proxy URL)
+    });
+    return client(modelName);
+  }
+
+  if (provider === "gemini") {
+    // Check if Vertex AI mode is enabled
+    if (isVertexAiEnabled()) {
+      // Use Vertex AI with ADC authentication
+      const { vertexAi } = config.llm.gemini;
+      const client = createVertex({
+        project: vertexAi.project,
+        location: vertexAi.location,
+        googleAuthOptions: {
+          projectId: vertexAi.project,
+          ...(vertexAi.credentialsFile && {
+            keyFilename: vertexAi.credentialsFile,
+          }),
+        },
+      });
+      return client(modelName);
+    }
+    // Standard Gemini API requires an API key when Vertex AI is not enabled
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
+      );
+    }
+    const client = createGoogleGenerativeAI({
+      apiKey,
+    });
+    return client(modelName);
+  }
+
+  if (provider === "cerebras") {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Cerebras API key is required. Please configure CEREBRAS_API_KEY.",
+      );
+    }
+    const client = createCerebras({
+      apiKey,
+      baseURL: config.chat.cerebras.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  if (provider === "cohere") {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Cohere API key is required. Please configure COHERE_API_KEY.",
+      );
+    }
+    const client = createCohere({
+      apiKey,
+      baseURL: config.chat.cohere.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  if (provider === "vllm") {
+    // vLLM uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey: apiKey || "EMPTY",
+      baseURL: config.llm.vllm.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  if (provider === "ollama") {
+    // Ollama uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey: apiKey || "EMPTY",
+      baseURL: config.llm.ollama.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  if (provider === "zhipuai") {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
+      );
+    }
+    // Zhipu AI uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.chat.zhipuai.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  throw new ApiError(400, `Unsupported provider: ${provider}`);
 }
 
 /**
@@ -218,6 +375,17 @@ export function createLLMModel(params: {
     return client.chat(modelName);
   }
 
+  if (provider === "cohere") {
+    // URL format: /v1/cohere/:agentId (SDK appends /chat)
+    // We use the native Cohere provider which uses the V2 API
+    const client = createCohere({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/cohere/${agentId}`,
+      headers,
+    });
+    return client(modelName);
+  }
+
   if (provider === "cerebras") {
     // URL format: /v1/cerebras/:agentId (SDK appends /chat/completions)
     const client = createCerebras({
@@ -263,7 +431,7 @@ export function createLLMModel(params: {
     return client.chat(modelName);
   }
 
-  throw new Error(`Unsupported provider: ${provider}`);
+  throw new ApiError(400, `Unsupported provider: ${provider}`);
 }
 
 /**

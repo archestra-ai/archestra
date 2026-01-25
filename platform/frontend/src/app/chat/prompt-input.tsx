@@ -1,18 +1,16 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import type { ChatStatus } from "ai";
-import { PaperclipIcon } from "lucide-react";
+import { PaperclipIcon, Plus } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useRef } from "react";
 import {
   PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
+  PromptInputButton,
   PromptInputFooter,
   PromptInputHeader,
   type PromptInputMessage,
@@ -21,13 +19,23 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
+  usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
-import { ProfileSelector } from "@/components/chat/profile-selector";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useAgentDelegations } from "@/lib/agent-tools.query";
+import { useHasPermissions } from "@/lib/auth.query";
+import { useProfileToolsWithIds } from "@/lib/chat.query";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -41,8 +49,6 @@ interface ArchestraPromptInputProps {
   messageCount?: number;
   // Tools integration props
   agentId: string;
-  /** Prompt ID for tool state management */
-  promptId?: string | null;
   /** Optional - if not provided, it's initial chat mode (no conversation yet) */
   conversationId?: string;
   // API key selector props
@@ -54,12 +60,12 @@ interface ArchestraPromptInputProps {
   onApiKeyChange?: (apiKeyId: string) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
-  /** Callback for profile change in initial chat mode (no conversation) */
-  onProfileChange?: (agentId: string) => void;
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
   /** Whether models are still loading - passed to API key selector */
   isModelsLoading?: boolean;
+  /** Callback to open edit agent dialog */
+  onEditAgent?: () => void;
 }
 
 // Inner component that has access to the controller context
@@ -70,22 +76,31 @@ const PromptInputContent = ({
   onModelChange,
   messageCount,
   agentId,
-  promptId,
   conversationId,
   currentConversationChatApiKeyId,
   currentProvider,
   initialApiKeyId,
   onApiKeyChange,
   textareaRef: externalTextareaRef,
-  onProfileChange,
   allowFileUploads = false,
   isModelsLoading = false,
+  onEditAgent,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
+  const attachments = usePromptInputAttachments();
+
+  // Check if agent has tools or delegations
+  const { data: tools = [] } = useProfileToolsWithIds(agentId);
+  const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
+
+  // Check if user can update organization settings (to show settings link in tooltip)
+  const { data: canUpdateOrganization } = useHasPermissions({
+    organization: ["update"],
+  });
 
   // Handle speech transcription by updating controller state
   const handleTranscriptionChange = useCallback(
@@ -95,24 +110,46 @@ const PromptInputContent = ({
     [controller.textInput],
   );
 
+  // Check if there are tools or delegated agents
+  const hasTools = tools.length > 0;
+  const hasDelegatedAgents = delegatedAgents.length > 0;
+  const hasContent = hasTools || hasDelegatedAgents;
+
   return (
     <PromptInput globalDrop multiple onSubmit={onSubmit}>
-      <PromptInputHeader className="pt-3">
-        {agentId && (
-          <div className="flex flex-wrap items-center gap-2">
-            <ProfileSelector
-              currentAgentId={agentId}
-              conversationId={conversationId}
-              onProfileChange={onProfileChange}
-            />
-            <ChatToolsDisplay
-              agentId={agentId}
-              promptId={promptId}
-              conversationId={conversationId}
-            />
-          </div>
-        )}
-      </PromptInputHeader>
+      {agentId && (
+        <PromptInputHeader>
+          {hasContent ? (
+            <>
+              {hasTools && (
+                <ChatToolsDisplay
+                  agentId={agentId}
+                  conversationId={conversationId}
+                />
+              )}
+              {hasDelegatedAgents && (
+                <AgentToolsDisplay
+                  agentId={agentId}
+                  conversationId={conversationId}
+                  addAgentsButton={null}
+                />
+              )}
+            </>
+          ) : (
+            <div className="flex items-start">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 gap-1.5 text-xs border-dashed"
+                onClick={onEditAgent}
+              >
+                <Plus className="h-3 w-3" />
+                <span>Add tools & sub-agents</span>
+              </Button>
+            </div>
+          )}
+        </PromptInputHeader>
+      )}
       {/* File attachments display - shown inline above textarea */}
       <PromptInputAttachments className="px-3 pt-2 pb-0">
         {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -127,16 +164,48 @@ const PromptInputContent = ({
       </PromptInputBody>
       <PromptInputFooter>
         <PromptInputTools>
-          {/* File attachment button - only shown when file uploads are enabled */}
-          {allowFileUploads && (
-            <PromptInputActionMenu>
-              <PromptInputActionMenuTrigger>
-                <PaperclipIcon className="size-4" />
-              </PromptInputActionMenuTrigger>
-              <PromptInputActionMenuContent>
-                <PromptInputActionAddAttachments label="Attach files" />
-              </PromptInputActionMenuContent>
-            </PromptInputActionMenu>
+          {/* File attachment button - direct click opens file browser, shows tooltip when disabled */}
+          {allowFileUploads ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              onClick={() => attachments.openFileDialog()}
+              data-testid={E2eTestId.ChatFileUploadButton}
+            >
+              <PaperclipIcon className="size-4" />
+              <span className="sr-only">Attach files</span>
+            </Button>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex cursor-pointer"
+                  data-testid={E2eTestId.ChatDisabledFileUploadButton}
+                >
+                  <PromptInputButton disabled>
+                    <PaperclipIcon className="size-4" />
+                  </PromptInputButton>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={4}>
+                {canUpdateOrganization ? (
+                  <span>
+                    File uploads are disabled.{" "}
+                    <a
+                      href="/settings/security"
+                      className="underline hover:no-underline"
+                      aria-label="Enable file uploads in security settings"
+                    >
+                      Enable in settings
+                    </a>
+                  </span>
+                ) : (
+                  "File uploads are disabled by your administrator"
+                )}
+              </TooltipContent>
+            </Tooltip>
           )}
           <ModelSelector
             selectedModel={selectedModel}
@@ -193,16 +262,15 @@ const ArchestraPromptInput = ({
   onModelChange,
   messageCount = 0,
   agentId,
-  promptId,
   conversationId,
   currentConversationChatApiKeyId,
   currentProvider,
   initialApiKeyId,
   onApiKeyChange,
   textareaRef,
-  onProfileChange,
   allowFileUploads = false,
   isModelsLoading = false,
+  onEditAgent,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -214,16 +282,15 @@ const ArchestraPromptInput = ({
           onModelChange={onModelChange}
           messageCount={messageCount}
           agentId={agentId}
-          promptId={promptId}
           conversationId={conversationId}
           currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}
           initialApiKeyId={initialApiKeyId}
           onApiKeyChange={onApiKeyChange}
           textareaRef={textareaRef}
-          onProfileChange={onProfileChange}
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
+          onEditAgent={onEditAgent}
         />
       </PromptInputProvider>
     </div>

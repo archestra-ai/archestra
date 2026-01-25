@@ -4,6 +4,7 @@ import geminiProxyRoutesV1 from "./proxy/gemini";
 import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
+import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
@@ -28,7 +29,7 @@ export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";
 export { default as limitsRoutes } from "./limits";
-export { legacyMcpGatewayRoutes, newMcpGatewayRoutes } from "./mcp-gateway";
+export { mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-installation-requests";
 export { default as mcpToolCallRoutes } from "./mcp-tool-call";
@@ -37,8 +38,6 @@ export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
-export { default as promptAgentRoutes } from "./prompt-agents";
-export { default as promptRoutes } from "./prompts";
 // Anthropic proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
 export const anthropicProxyRoutes = config.llm.anthropic.useV2Routes
   ? anthropicProxyRoutesV2
@@ -53,6 +52,8 @@ export const geminiProxyRoutes = config.llm.gemini.useV2Routes
 export const openAiProxyRoutes = config.llm.openai.useV2Routes
   ? openAiProxyRoutesV2
   : openAiProxyRoutesV1;
+// Cohere proxy routes - V2 only for now
+export const cohereProxyRoutes = cohereProxyRoutesV2;
 // vLLM proxy routes - V2 only (unified handler, OpenAI-compatible)
 export const vllmProxyRoutes = config.llm.vllm.useV2Routes
   ? vllmProxyRoutesV2

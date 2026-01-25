@@ -92,7 +92,8 @@ export function Savings({
                   <div>Estimated Cost: {formatCost(baselineCostNum)}</div>
                   <div>Actual Cost: {formatCost(actualCost)}</div>
                   <div className="font-semibold">
-                    Savings: {formatCost(totalSavings)} (-{savingsPercent}%)
+                    Savings: {formatCost(totalSavings)}
+                    {savingsPercentNum >= 0.05 && ` (-${savingsPercent}%)`}
                   </div>
                 </>
               ) : (
@@ -100,40 +101,43 @@ export function Savings({
               )}
             </div>
 
-            <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
-              {costOptimizationSavings > 0 ? (
-                <div>
-                  Model optimization: -{formatCost(costOptimizationSavings)}
-                  {baselineModel && actualModel && baselineModel !== actualModel
-                    ? ` (${baselineModel} \u2192 ${actualModel})`
-                    : ""}
-                </div>
-              ) : (
-                <div>Model optimization: No matching rule</div>
-              )}
+            {isSession ? (
+              <div className="border-t border-border pt-1 mt-1 text-muted-foreground">
+                Check session logs to see the cost and savings breakdown.
+              </div>
+            ) : (
+              <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
+                {costOptimizationSavings > 0 ? (
+                  <div>
+                    Model optimization: -{formatCost(costOptimizationSavings)}
+                    {baselineModel &&
+                    actualModel &&
+                    baselineModel !== actualModel
+                      ? ` (${baselineModel} \u2192 ${actualModel})`
+                      : ""}
+                  </div>
+                ) : (
+                  <div>Model optimization: No matching rule</div>
+                )}
 
-              {toonCostSavingsNum > 0 ? (
-                <div>
-                  Tool result compression: -{formatCost(toonCostSavingsNum)}
-                  {toonTokensSaved
-                    ? ` (${toonTokensSaved.toLocaleString()} tokens saved)`
-                    : ""}
-                </div>
-              ) : isSession ? (
-                <div>
-                  Tool result compression: Not applied. See individual logs for
-                  details.
-                </div>
-              ) : toonSkipReason === "not_enabled" ? (
-                <div>Tool result compression: Not enabled</div>
-              ) : toonSkipReason === "not_effective" ? (
-                <div>Tool result compression: Skipped (no token savings)</div>
-              ) : toonSkipReason === "no_tool_results" ? (
-                <div>Tool result compression: No tool results</div>
-              ) : (
-                <div>Tool result compression: Not applied</div>
-              )}
-            </div>
+                {toonCostSavingsNum > 0 ? (
+                  <div>
+                    Tool result compression: -{formatCost(toonCostSavingsNum)}
+                    {toonTokensSaved
+                      ? ` (${toonTokensSaved.toLocaleString()} tokens saved)`
+                      : ""}
+                  </div>
+                ) : toonSkipReason === "not_enabled" ? (
+                  <div>Tool result compression: Not enabled</div>
+                ) : toonSkipReason === "not_effective" ? (
+                  <div>Tool result compression: Skipped (no token savings)</div>
+                ) : toonSkipReason === "no_tool_results" ? (
+                  <div>Tool result compression: No tool results</div>
+                ) : (
+                  <div>Tool result compression: Not applied</div>
+                )}
+              </div>
+            )}
           </div>
         </TooltipContent>
       </Tooltip>

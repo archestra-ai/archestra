@@ -1,0 +1,40 @@
+{
+    "request": {
+        "method": "POST",
+        "urlPath": "/cohere/v2/chat",
+        "headers": {
+            "Authorization": {
+                "contains": "cohere-token-cost-limit-test"
+            }
+        }
+    },
+    "response": {
+        "status": 200,
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "jsonBody": {
+            "id": "chatcmpl-cohere-token-limit-test",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Hello! I'm here to help."
+                    }
+                ]
+            },
+            "finish_reason": "COMPLETE",
+            "usage": {
+                "billed_units": {
+                    "input_tokens": 100,
+                    "output_tokens": 20
+                },
+                "tokens": {
+                    "input_tokens": 100,
+                    "output_tokens": 20
+                }
+            }
+        }
+    }
+}

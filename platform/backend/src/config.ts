@@ -442,6 +442,10 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    cohere: {
+      enabled: Boolean(process.env.ARCHESTRA_COHERE_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.ai",
+    },
     cerebras: {
       baseUrl:
         process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
@@ -485,6 +489,11 @@ export default {
     ollama: {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
     },
+    cohere: {
+      apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_COHERE_BASE_URL || "https://api.cohere.ai",
+    },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
       baseUrl:
@@ -527,9 +536,11 @@ export default {
    */
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
+    // The MCP server base image version is automatically updated by release-please during releases.
+    // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.33", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,

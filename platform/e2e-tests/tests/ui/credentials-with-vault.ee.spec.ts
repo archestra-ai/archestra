@@ -222,18 +222,21 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
 
     await adminPage.waitForLoadState("networkidle");
 
-    // Assign tool to profiles using admin static credential
+    // Assign tool to profiles using default team credential
     await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
       page: adminPage,
       catalogItemName: newCatalogItem.name,
     });
-
-    // Select default team credential
+    // Select default team credential from dropdown
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-    await adminPage.getByText("Assign to 1 profile").click();
+    // Close the popover by pressing Escape
+    await adminPage.keyboard.press("Escape");
+    await adminPage.waitForTimeout(200);
+    // Click Save button at the bottom of the McpAssignmentsDialog
+    await clickButton({ page: adminPage, options: { name: "Save" } });
     await adminPage.waitForLoadState("networkidle");
 
-    // Verify tool call result using admin static credential
+    // Verify tool call result using default team credential
     await verifyToolCallResultViaApi({
       request: adminPage.request,
       expectedResult: secretValue,
@@ -297,18 +300,21 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await clickButton({ page: adminPage, options: { name: "Install" } });
     await adminPage.waitForLoadState("networkidle");
 
-    // Assign tool to profiles using admin static credential
+    // Assign tool to profiles using default team credential
     await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
       page: adminPage,
       catalogItemName: newCatalogItem.name,
     });
-
-    // Select default team credential
+    // Select default team credential from dropdown
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
-    await adminPage.getByText("Assign to 1 profile").click();
+    // Close the popover by pressing Escape
+    await adminPage.keyboard.press("Escape");
+    await adminPage.waitForTimeout(200);
+    // Click Save button at the bottom of the McpAssignmentsDialog
+    await clickButton({ page: adminPage, options: { name: "Save" } });
     await adminPage.waitForLoadState("networkidle");
 
-    // Verify tool call result using admin static credential
+    // Verify tool call result using default team credential
     await verifyToolCallResultViaApi({
       request: adminPage.request,
       expectedResult: secretValue,

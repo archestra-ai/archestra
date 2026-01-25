@@ -135,7 +135,7 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("throws error for unsupported provider", () => {
+  it("throws ApiError for unsupported provider", () => {
     expect(() =>
       createDirectLLMModel({
         provider: "unsupported" as never,

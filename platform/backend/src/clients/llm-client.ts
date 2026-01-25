@@ -184,7 +184,8 @@ export function createDirectLLMModel(params: {
 
   if (provider === "anthropic") {
     if (!apiKey) {
-      throw new Error(
+      throw new ApiError(
+        400,
         "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
       );
     }
@@ -197,7 +198,8 @@ export function createDirectLLMModel(params: {
 
   if (provider === "openai") {
     if (!apiKey) {
-      throw new Error(
+      throw new ApiError(
+        400,
         "OpenAI API key is required. Please configure OPENAI_API_KEY.",
       );
     }
@@ -227,7 +229,8 @@ export function createDirectLLMModel(params: {
     }
     // Standard Gemini API requires an API key when Vertex AI is not enabled
     if (!apiKey) {
-      throw new Error(
+      throw new ApiError(
+        400,
         "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
       );
     }
@@ -239,7 +242,8 @@ export function createDirectLLMModel(params: {
 
   if (provider === "cerebras") {
     if (!apiKey) {
-      throw new Error(
+      throw new ApiError(
+        400,
         "Cerebras API key is required. Please configure CEREBRAS_API_KEY.",
       );
     }
@@ -252,7 +256,8 @@ export function createDirectLLMModel(params: {
 
   if (provider === "cohere") {
     if (!apiKey) {
-      throw new Error(
+      throw new ApiError(
+        400,
         "Cohere API key is required. Please configure COHERE_API_KEY.",
       );
     }
@@ -283,7 +288,8 @@ export function createDirectLLMModel(params: {
 
   if (provider === "zhipuai") {
     if (!apiKey) {
-      throw new Error(
+      throw new ApiError(
+        400,
         "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
       );
     }
@@ -295,7 +301,7 @@ export function createDirectLLMModel(params: {
     return client(modelName);
   }
 
-  throw new Error(`Unsupported provider: ${provider}`);
+  throw new ApiError(400, `Unsupported provider: ${provider}`);
 }
 
 /**
@@ -425,7 +431,7 @@ export function createLLMModel(params: {
     return client.chat(modelName);
   }
 
-  throw new Error(`Unsupported provider: ${provider}`);
+  throw new ApiError(400, `Unsupported provider: ${provider}`);
 }
 
 /**

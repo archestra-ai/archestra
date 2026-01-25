@@ -2,6 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createCerebras } from "@ai-sdk/cerebras";
 import { createCohere } from "@ai-sdk/cohere";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createVertex } from "@ai-sdk/google-vertex";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
   EXTERNAL_AGENT_ID_HEADER,
@@ -162,7 +163,7 @@ export function isApiKeyRequired(
 export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   anthropic: "claude-3-5-haiku-20241022",
   openai: "gpt-4o-mini",
-  gemini: "gemini-1.5-flash",
+  gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   cohere: "command-light", // Cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
@@ -198,10 +199,25 @@ export function createDirectLLMModel(params: {
   }
 
   if (provider === "gemini") {
-    // For Vertex AI mode, pass a placeholder - uses ADC for auth
+    // Check if Vertex AI mode is enabled
+    if (isVertexAiEnabled()) {
+      // Use Vertex AI with ADC authentication
+      const { vertexAi } = config.llm.gemini;
+      const client = createVertex({
+        project: vertexAi.project,
+        location: vertexAi.location,
+        googleAuthOptions: {
+          projectId: vertexAi.project,
+          ...(vertexAi.credentialsFile && {
+            keyFilename: vertexAi.credentialsFile,
+          }),
+        },
+      });
+      return client(modelName);
+    }
+    // Standard Gemini API with API key
     const client = createGoogleGenerativeAI({
       apiKey: apiKey || "vertex-ai-mode",
-      // Use standard Gemini base URL (config.llm.gemini.baseUrl has the proxy URL)
     });
     return client(modelName);
   }

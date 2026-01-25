@@ -190,13 +190,13 @@ export function ChatMessages({
     if (!textMarkerRef.current) return;
 
     // Get the parent container dimensions (changes when artifact panel opens/closes)
-    const parentContainer = textMarkerRef.current.closest('.flex-1');
+    const parentContainer = textMarkerRef.current.closest(".flex-1");
     if (!parentContainer) return;
-    
+
     const containerRect = parentContainer.getBoundingClientRect();
     const containerWidth = containerRect.width;
     const viewportHeight = window.innerHeight;
-    
+
     // Only show arrow if container has sufficient width and viewport has height
     const isVisible = containerWidth >= 768 && viewportHeight >= 600;
 
@@ -253,7 +253,9 @@ export function ChatMessages({
 
     // Find the main content area that actually resizes when artifact panel toggles
     // Look for the parent that contains the overflow-y-auto class
-    const parentContainer = textMarkerRef.current?.closest('.overflow-y-auto')?.parentElement?.parentElement;
+    const parentContainer =
+      textMarkerRef.current?.closest(".overflow-y-auto")?.parentElement
+        ?.parentElement;
     if (parentContainer) {
       resizeObserver.observe(parentContainer);
     }
@@ -261,7 +263,9 @@ export function ChatMessages({
     // Also add a small delay and retry to ensure element is found
     const retryTimer = setTimeout(() => {
       if (!parentContainer && textMarkerRef.current) {
-        const container = textMarkerRef.current.closest('.overflow-y-auto')?.parentElement?.parentElement;
+        const container =
+          textMarkerRef.current.closest(".overflow-y-auto")?.parentElement
+            ?.parentElement;
         if (container) {
           resizeObserver.observe(container);
         }

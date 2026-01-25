@@ -305,7 +305,19 @@ export class ChatOpsManager {
     message: IncomingChatMessage,
     provider: ChatOpsProvider,
   ): Promise<string[]> {
+    logger.debug(
+      {
+        messageId: message.messageId,
+        threadId: message.threadId,
+        channelId: message.channelId,
+        workspaceId: message.workspaceId,
+        isThreadReply: message.isThreadReply,
+      },
+      "[ChatOps] fetchThreadHistory called",
+    );
+
     if (!message.threadId) {
+      logger.debug("[ChatOps] No threadId, skipping thread history fetch");
       return [];
     }
 
@@ -316,6 +328,11 @@ export class ChatOpsManager {
         threadId: message.threadId,
         excludeMessageId: message.messageId,
       });
+
+      logger.debug(
+        { historyCount: history.length },
+        "[ChatOps] Thread history fetched",
+      );
 
       return history.map((msg) => {
         const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;

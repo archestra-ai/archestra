@@ -4,7 +4,7 @@ category: Archestra Platform
 subcategory: Concepts
 order: 1
 description: Agent invocation methods including A2A, incoming email, and ChatOps
-lastUpdated: 2026-01-20
+lastUpdated: 2026-01-25
 ---
 
 Agents in Archestra are invoked through Prompts. While the primary method is via the [Chat](/docs/platform-chat) interface or [API](/docs/platform-api-reference), agents can also be triggered through alternative channels like A2A (Agent-to-Agent), incoming email, and ChatOps integrations.
@@ -195,19 +195,26 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 9. Set **Messaging endpoint** to `https://your-archestra-domain/api/webhooks/chatops/ms-teams`
 10. Go to **Channels** → add **Microsoft Teams**
 
-#### Graph API Permissions (Required)
+#### Graph API Permissions
 
-The MS Teams integration requires Graph API permissions to verify user identity and enable thread history:
+The MS Teams integration requires Graph API permissions for security and optional thread history:
 
 1. In Azure Portal, go to **App registrations** → find your bot's app
 2. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions**
 3. Add the following permissions:
-   - `User.ReadBasic.All` — **Required** for user identity verification (security). This permission allows reading basic profile info (name, email) which is sufficient for verifying user identity.
-   - `ChannelMessage.Read.All` — Required for team channel message history
-   - `Chat.Read.All` — Required for group chat message history
-4. Click **Grant admin consent** for all permissions
 
-> **Important:** Without `User.ReadBasic.All` permission, the bot cannot verify user identity and will reject all messages. This permission is required for security—it ensures only registered Archestra users with proper team access can invoke agents.
+**Required:**
+- `User.ReadBasic.All` — **Required** for user identity verification. Without this permission, the bot cannot verify user identity and will reject all messages.
+
+**Optional (for thread history):**
+- `Team.ReadBasic.All` — For listing teams (resolves team ID from channel)
+- `Channel.ReadBasic.All` — For listing channels in teams (matches messages to teams)
+- `ChannelMessage.Read.All` — For reading team channel message history
+- `Chat.Read.All` — For reading group chat message history
+
+4. Click **Grant admin consent** for all permissions you add
+
+> **Note:** Without the optional thread history permissions, the bot still works but won't have conversation context from previous messages in the thread.
 
 #### Configure Archestra
 
@@ -354,6 +361,6 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 
 **No thread history**
 - Ensure Graph API credentials are configured
-- For **team channels**: Verify `ChannelMessage.Read.All` permission is granted
-- For **group chats**: Verify `Chat.Read.All` permission is granted
-- Admin consent must be granted for both permissions
+- For **team channels**: Add `Team.ReadBasic.All`, `Channel.ReadBasic.All`, and `ChannelMessage.Read.All` permissions
+- For **group chats**: Add `Chat.Read.All` permission
+- Admin consent must be granted for all added permissions

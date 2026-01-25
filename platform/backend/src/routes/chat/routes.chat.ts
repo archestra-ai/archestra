@@ -777,34 +777,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Extract first user message and first assistant message text
-      const messages = conversation.messages || [];
-      let firstUserMessage = "";
-      let firstAssistantMessage = "";
-
-      for (const msg of messages) {
-        // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
-        const msgContent = msg as any;
-        if (!firstUserMessage && msgContent.role === "user") {
-          // Extract text from parts
-          for (const part of msgContent.parts || []) {
-            if (part.type === "text" && part.text) {
-              firstUserMessage = part.text;
-              break;
-            }
-          }
-        }
-        if (!firstAssistantMessage && msgContent.role === "assistant") {
-          // Extract text from parts (skip tool calls)
-          for (const part of msgContent.parts || []) {
-            if (part.type === "text" && part.text) {
-              firstAssistantMessage = part.text;
-              break;
-            }
-          }
-        }
-        if (firstUserMessage && firstAssistantMessage) break;
-      }
+      // Extract first user and assistant messages
+      const { firstUserMessage, firstAssistantMessage } = extractFirstMessages(
+        conversation.messages || [],
+      );
 
       // Need at least user message to generate title
       if (!firstUserMessage) {
@@ -837,59 +813,37 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Create model for title generation (direct call, not through LLM Proxy)
-      const model = createDirectLLMModel({
+      // Generate title using the extracted function
+      const generatedTitle = await generateConversationTitle({
         provider,
         apiKey,
-        modelName: FAST_MODELS[provider],
+        firstUserMessage,
+        firstAssistantMessage,
       });
 
-      // Build prompt for title generation
-      const contextMessages = firstAssistantMessage
-        ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
-        : `User: ${firstUserMessage}`;
-
-      const titlePrompt = `Generate a short, concise title (3-6 words) for a chat conversation that includes the following messages:
-
-${contextMessages}
-
-The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
-
-      try {
-        // Generate title using a fast model for the configured provider
-        const result = await generateText({
-          model,
-          prompt: titlePrompt,
-        });
-
-        const generatedTitle = result.text.trim();
-
-        logger.info(
-          { conversationId: id, generatedTitle },
-          "Generated conversation title",
-        );
-
-        // Update conversation with generated title
-        const updatedConversation = await ConversationModel.update(
-          id,
-          user.id,
-          organizationId,
-          { title: generatedTitle },
-        );
-
-        if (!updatedConversation) {
-          throw new ApiError(500, "Failed to update conversation with title");
-        }
-
-        return reply.send(updatedConversation);
-      } catch (error) {
-        logger.error(
-          { conversationId: id, error },
-          "Failed to generate conversation title",
-        );
+      if (!generatedTitle) {
         // Return the conversation without title update on error
         return reply.send(conversation);
       }
+
+      logger.info(
+        { conversationId: id, generatedTitle },
+        "Generated conversation title",
+      );
+
+      // Update conversation with generated title
+      const updatedConversation = await ConversationModel.update(
+        id,
+        user.id,
+        organizationId,
+        { title: generatedTitle },
+      );
+
+      if (!updatedConversation) {
+        throw new ApiError(500, "Failed to update conversation with title");
+      }
+
+      return reply.send(updatedConversation);
     },
   );
 
@@ -1079,6 +1033,128 @@ The title should capture the main topic or theme of the conversation. Respond wi
     },
   );
 };
+
+// ============================================================================
+// Title Generation Functions (extracted for testability)
+// ============================================================================
+
+/**
+ * Message structure from AI SDK UIMessage
+ */
+interface MessagePart {
+  type: string;
+  text?: string;
+}
+
+interface Message {
+  role: string;
+  parts?: MessagePart[];
+}
+
+/**
+ * Result of extracting first messages from a conversation
+ */
+export interface ExtractedMessages {
+  firstUserMessage: string;
+  firstAssistantMessage: string;
+}
+
+/**
+ * Extracts the first user message and first assistant message text from conversation messages.
+ * Used for generating conversation titles.
+ */
+export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
+  let firstUserMessage = "";
+  let firstAssistantMessage = "";
+
+  for (const msg of messages) {
+    const msgContent = msg as Message;
+    if (!firstUserMessage && msgContent.role === "user") {
+      // Extract text from parts
+      for (const part of msgContent.parts || []) {
+        if (part.type === "text" && part.text) {
+          firstUserMessage = part.text;
+          break;
+        }
+      }
+    }
+    if (!firstAssistantMessage && msgContent.role === "assistant") {
+      // Extract text from parts (skip tool calls)
+      for (const part of msgContent.parts || []) {
+        if (part.type === "text" && part.text) {
+          firstAssistantMessage = part.text;
+          break;
+        }
+      }
+    }
+    if (firstUserMessage && firstAssistantMessage) break;
+  }
+
+  return { firstUserMessage, firstAssistantMessage };
+}
+
+/**
+ * Builds the prompt for title generation based on extracted messages.
+ */
+export function buildTitlePrompt(
+  firstUserMessage: string,
+  firstAssistantMessage: string,
+): string {
+  const contextMessages = firstAssistantMessage
+    ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
+    : `User: ${firstUserMessage}`;
+
+  return `Generate a short, concise title (3-6 words) for a chat conversation that includes the following messages:
+
+${contextMessages}
+
+The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
+}
+
+/**
+ * Parameters for generating a conversation title
+ */
+export interface GenerateTitleParams {
+  provider: SupportedChatProvider;
+  apiKey: string | undefined;
+  firstUserMessage: string;
+  firstAssistantMessage: string;
+}
+
+/**
+ * Generates a conversation title using the specified provider.
+ * Returns the generated title or null if generation fails.
+ */
+export async function generateConversationTitle(
+  params: GenerateTitleParams,
+): Promise<string | null> {
+  const { provider, apiKey, firstUserMessage, firstAssistantMessage } = params;
+
+  // Create model for title generation (direct call, not through LLM Proxy)
+  const model = createDirectLLMModel({
+    provider,
+    apiKey,
+    modelName: FAST_MODELS[provider],
+  });
+
+  const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
+
+  try {
+    const result = await generateText({
+      model,
+      prompt: titlePrompt,
+    });
+
+    return result.text.trim();
+  } catch (error) {
+    logger.error({ error, provider }, "Failed to generate conversation title");
+    return null;
+  }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
 
 /**
  * Validates that a chat API key exists, belongs to the organization,

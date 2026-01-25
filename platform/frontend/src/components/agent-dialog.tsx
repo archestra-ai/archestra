@@ -115,11 +115,13 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
         <Button
           variant="outline"
           size="sm"
-          className={`h-8 px-3 gap-1.5 text-xs ${!isSelected ? "border-dashed opacity-50" : ""}`}
+          className={`h-8 px-3 gap-1.5 text-xs max-w-[200px] ${!isSelected ? "border-dashed opacity-50" : ""}`}
         >
-          {isSelected && <span className="h-2 w-2 rounded-full bg-green-500" />}
-          <Bot className="h-3 w-3" />
-          <span className="font-medium">{agent.name}</span>
+          {isSelected && (
+            <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+          )}
+          <Bot className="h-3 w-3 shrink-0" />
+          <span className="font-medium truncate">{agent.name}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -130,8 +132,8 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
         avoidCollisions
       >
         <div className="p-4 border-b flex items-start justify-between gap-2">
-          <div className="flex-1">
-            <h4 className="font-semibold">{agent.name}</h4>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold truncate">{agent.name}</h4>
             {agent.systemPrompt && (
               <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                 {agent.systemPrompt}

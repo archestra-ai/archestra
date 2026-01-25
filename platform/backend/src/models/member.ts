@@ -196,6 +196,41 @@ class MemberModel {
     );
     return deleted[0];
   }
+
+  /**
+   * Get all members in an organization with user details
+   */
+  static async getAllByOrganization(organizationId: string) {
+    logger.debug(
+      { organizationId },
+      "MemberModel.getAllByOrganization: fetching members",
+    );
+    const members = await db
+      .select({
+        id: schema.membersTable.id,
+        organizationId: schema.membersTable.organizationId,
+        userId: schema.membersTable.userId,
+        role: schema.membersTable.role,
+        createdAt: schema.membersTable.createdAt,
+        user: {
+          id: schema.usersTable.id,
+          name: schema.usersTable.name,
+          email: schema.usersTable.email,
+          image: schema.usersTable.image,
+        },
+      })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(eq(schema.membersTable.organizationId, organizationId));
+    logger.debug(
+      { organizationId, count: members.length },
+      "MemberModel.getAllByOrganization: completed",
+    );
+    return members;
+  }
 }
 
 export default MemberModel;

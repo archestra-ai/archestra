@@ -22,16 +22,65 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetRoles,
-        description: "Get all roles in the organization",
+        description:
+          "Get all roles in the organization. Optionally filter by name.",
         tags: ["Roles"],
+        querystring: z.object({
+          name: z
+            .string()
+            .optional()
+            .describe("Filter roles by name (exact match)"),
+        }),
         response: constructResponseSchema(
           z.array(SelectOrganizationRoleSchema),
         ),
       },
     },
-    async ({ organizationId }, reply) => {
+    async ({ organizationId, query }, reply) => {
       // Get all roles including predefined ones
-      return reply.send(await OrganizationRoleModel.getAll(organizationId));
+      const allRoles = await OrganizationRoleModel.getAll(organizationId);
+
+      // If name filter provided, filter results
+      if (query.name) {
+        const filtered = allRoles.filter(
+          (role) => role.name === query.name || role.role === query.name,
+        );
+        return reply.send(filtered);
+      }
+
+      return reply.send(allRoles);
+    },
+  );
+
+  /**
+   * Lookup a role by its name/identifier
+   * Returns 404 if not found (useful for Terraform data sources)
+   */
+  fastify.get(
+    "/api/roles/by-name/:name",
+    {
+      schema: {
+        operationId: RouteId.GetRoleByName,
+        description:
+          "Get a role by its name or identifier. Returns 404 if not found.",
+        tags: ["Roles"],
+        params: z.object({
+          name: z.string().min(1).describe("Role name or identifier"),
+        }),
+        response: constructResponseSchema(SelectOrganizationRoleSchema),
+      },
+    },
+    async ({ params: { name }, organizationId }, reply) => {
+      const result = await OrganizationRoleModel.getByIdentifier(
+        name,
+        organizationId,
+      );
+
+      if (!result) {
+        throw new ApiError(404, `Role with name '${name}' not found`);
+      }
+
+      return reply.send(result);
     },
   );
 

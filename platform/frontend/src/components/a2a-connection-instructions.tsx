@@ -23,6 +23,7 @@ import { useFeatures } from "@/lib/features.query";
 import { useAgentEmailAddress } from "@/lib/incoming-email.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
+import { EmailNotConfiguredMessage } from "./email-not-configured-message";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
 

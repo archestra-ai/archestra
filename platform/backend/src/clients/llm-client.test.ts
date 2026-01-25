@@ -1,9 +1,5 @@
 import { describe, expect, it } from "@/test";
-import {
-  createDirectLLMModel,
-  detectProviderFromModel,
-  FAST_MODELS,
-} from "./llm-client";
+import { createDirectLLMModel, detectProviderFromModel } from "./llm-client";
 
 describe("detectProviderFromModel", () => {
   describe("anthropic models", () => {

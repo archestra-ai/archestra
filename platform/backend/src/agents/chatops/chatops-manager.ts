@@ -506,7 +506,7 @@ export class ChatOpsManager {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: `Routed to ${agent.name}. Use @Archestra /select-agent to change.`,
+          footer: `Via ${agent.name}`,
           conversationReference: message.metadata?.conversationReference,
         });
       }

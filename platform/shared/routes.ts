@@ -98,8 +98,18 @@ export const RouteId = {
   GetRoles: "getRoles",
   CreateRole: "createRole",
   GetRole: "getRole",
+  GetRoleByName: "getRoleByName",
   UpdateRole: "updateRole",
   DeleteRole: "deleteRole",
+
+  // Member Routes (organization members)
+  GetOrganizationMembers: "getOrganizationMembers",
+  GetOrganizationMember: "getOrganizationMember",
+  UpdateMemberRole: "updateMemberRole",
+
+  // User Lookup Routes
+  GetUserById: "getUserById",
+  GetUserByEmail: "getUserByEmail",
 
   // Tool Routes
   GetTools: "getTools",

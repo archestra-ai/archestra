@@ -11,5 +11,5 @@ export const PredefinedRoleNameSchema = z.enum([
 
 export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;
 
-const AnyRoleName = PredefinedRoleNameSchema.or(z.string());
-export type AnyRoleName = z.infer<typeof AnyRoleName>;
+export const AnyRoleNameSchema = PredefinedRoleNameSchema.or(z.string());
+export type AnyRoleName = z.infer<typeof AnyRoleNameSchema>;

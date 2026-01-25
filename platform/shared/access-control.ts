@@ -24,7 +24,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   interaction: ["create", "read", "update", "delete"],
   organization: ["read", "update", "delete"],
   ssoProvider: ["create", "read", "update", "delete"],
-  member: ["create", "update", "delete"],
+  member: ["create", "read", "update", "delete"],
   invitation: ["create", "cancel"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete", "admin"],
@@ -422,11 +422,31 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetRole]: {
     organization: ["read"],
   },
+  [RouteId.GetRoleByName]: {
+    organization: ["read"],
+  },
   [RouteId.UpdateRole]: {
     organization: ["update"],
   },
   [RouteId.DeleteRole]: {
     organization: ["update"],
+  },
+  // Member Routes (organization members)
+  [RouteId.GetOrganizationMembers]: {
+    member: ["read"],
+  },
+  [RouteId.GetOrganizationMember]: {
+    member: ["read"],
+  },
+  [RouteId.UpdateMemberRole]: {
+    member: ["update"],
+  },
+  // User Lookup Routes
+  [RouteId.GetUserById]: {
+    member: ["read"],
+  },
+  [RouteId.GetUserByEmail]: {
+    member: ["read"],
   },
   [RouteId.GetMcpToolCalls]: {
     mcpToolCall: ["read"],

@@ -36230,7 +36230,17 @@
                       },
                       "selectedProvider": {
                         "nullable": true,
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                          "anthropic",
+                          "cerebras",
+                          "gemini",
+                          "cohere",
+                          "openai",
+                          "vllm",
+                          "ollama",
+                          "zhipuai"
+                        ]
                       },
                       "hasCustomToolSelection": {
                         "type": "boolean"
@@ -36581,7 +36591,6 @@
                     "type": "string"
                   },
                   "selectedProvider": {
-                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "anthropic",
@@ -36648,7 +36657,17 @@
                     },
                     "selectedProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "anthropic",
+                        "cerebras",
+                        "gemini",
+                        "cohere",
+                        "openai",
+                        "vllm",
+                        "ollama",
+                        "zhipuai"
+                      ]
                     },
                     "hasCustomToolSelection": {
                       "type": "boolean"
@@ -37032,7 +37051,17 @@
                     },
                     "selectedProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "anthropic",
+                        "cerebras",
+                        "gemini",
+                        "cohere",
+                        "openai",
+                        "vllm",
+                        "ollama",
+                        "zhipuai"
+                      ]
                     },
                     "hasCustomToolSelection": {
                       "type": "boolean"
@@ -37377,7 +37406,6 @@
                     "type": "string"
                   },
                   "selectedProvider": {
-                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "anthropic",
@@ -37461,7 +37489,17 @@
                     },
                     "selectedProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "anthropic",
+                        "cerebras",
+                        "gemini",
+                        "cohere",
+                        "openai",
+                        "vllm",
+                        "ollama",
+                        "zhipuai"
+                      ]
                     },
                     "hasCustomToolSelection": {
                       "type": "boolean"
@@ -38375,7 +38413,17 @@
                     },
                     "selectedProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "anthropic",
+                        "cerebras",
+                        "gemini",
+                        "cohere",
+                        "openai",
+                        "vllm",
+                        "ollama",
+                        "zhipuai"
+                      ]
                     },
                     "hasCustomToolSelection": {
                       "type": "boolean"
@@ -38787,7 +38835,17 @@
                     },
                     "selectedProvider": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "anthropic",
+                        "cerebras",
+                        "gemini",
+                        "cohere",
+                        "openai",
+                        "vllm",
+                        "ollama",
+                        "zhipuai"
+                      ]
                     },
                     "hasCustomToolSelection": {
                       "type": "boolean"

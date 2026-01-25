@@ -10442,7 +10442,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10547,7 +10547,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10727,7 +10727,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10835,7 +10835,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -11024,7 +11024,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -11129,7 +11129,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;

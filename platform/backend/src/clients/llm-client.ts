@@ -183,6 +183,11 @@ export function createDirectLLMModel(params: {
   const { provider, apiKey, modelName } = params;
 
   if (provider === "anthropic") {
+    if (!apiKey) {
+      throw new Error(
+        "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
+      );
+    }
     const client = createAnthropic({
       apiKey,
       // Use standard Anthropic base URL (config.llm.anthropic.baseUrl has the proxy URL)
@@ -191,6 +196,11 @@ export function createDirectLLMModel(params: {
   }
 
   if (provider === "openai") {
+    if (!apiKey) {
+      throw new Error(
+        "OpenAI API key is required. Please configure OPENAI_API_KEY.",
+      );
+    }
     const client = createOpenAI({
       apiKey,
       // Use standard OpenAI base URL (config.llm.openai.baseUrl has the proxy URL)
@@ -228,6 +238,11 @@ export function createDirectLLMModel(params: {
   }
 
   if (provider === "cerebras") {
+    if (!apiKey) {
+      throw new Error(
+        "Cerebras API key is required. Please configure CEREBRAS_API_KEY.",
+      );
+    }
     const client = createCerebras({
       apiKey,
       baseURL: config.chat.cerebras.baseUrl,
@@ -236,6 +251,11 @@ export function createDirectLLMModel(params: {
   }
 
   if (provider === "cohere") {
+    if (!apiKey) {
+      throw new Error(
+        "Cohere API key is required. Please configure COHERE_API_KEY.",
+      );
+    }
     const client = createCohere({
       apiKey,
       baseURL: config.chat.cohere.baseUrl,
@@ -262,6 +282,11 @@ export function createDirectLLMModel(params: {
   }
 
   if (provider === "zhipuai") {
+    if (!apiKey) {
+      throw new Error(
+        "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
+      );
+    }
     // Zhipu AI uses OpenAI-compatible API
     const client = createOpenAI({
       apiKey,

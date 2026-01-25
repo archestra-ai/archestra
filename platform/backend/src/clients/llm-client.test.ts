@@ -156,4 +156,60 @@ describe("createDirectLLMModel", () => {
       "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
     );
   });
+
+  it("throws descriptive error for anthropic provider without API key", () => {
+    expect(() =>
+      createDirectLLMModel({
+        provider: "anthropic",
+        apiKey: undefined,
+        modelName: "claude-3-5-haiku-20241022",
+      }),
+    ).toThrow(
+      "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
+    );
+  });
+
+  it("throws descriptive error for openai provider without API key", () => {
+    expect(() =>
+      createDirectLLMModel({
+        provider: "openai",
+        apiKey: undefined,
+        modelName: "gpt-4o-mini",
+      }),
+    ).toThrow("OpenAI API key is required. Please configure OPENAI_API_KEY.");
+  });
+
+  it("throws descriptive error for cerebras provider without API key", () => {
+    expect(() =>
+      createDirectLLMModel({
+        provider: "cerebras",
+        apiKey: undefined,
+        modelName: "llama-3.3-70b",
+      }),
+    ).toThrow(
+      "Cerebras API key is required. Please configure CEREBRAS_API_KEY.",
+    );
+  });
+
+  it("throws descriptive error for cohere provider without API key", () => {
+    expect(() =>
+      createDirectLLMModel({
+        provider: "cohere",
+        apiKey: undefined,
+        modelName: "command-light",
+      }),
+    ).toThrow("Cohere API key is required. Please configure COHERE_API_KEY.");
+  });
+
+  it("throws descriptive error for zhipuai provider without API key", () => {
+    expect(() =>
+      createDirectLLMModel({
+        provider: "zhipuai",
+        apiKey: undefined,
+        modelName: "glm-4-flash",
+      }),
+    ).toThrow(
+      "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
+    );
+  });
 });

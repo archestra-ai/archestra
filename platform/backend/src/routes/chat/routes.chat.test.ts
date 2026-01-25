@@ -1,8 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Mock the ai module before importing routes.chat
+const mockGenerateText = vi.hoisted(() => vi.fn());
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
+  return {
+    ...actual,
+    generateText: mockGenerateText,
+  };
+});
+
+// Mock createDirectLLMModel to avoid actual API calls
+vi.mock("@/clients/llm-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/clients/llm-client")>();
+  return {
+    ...actual,
+    createDirectLLMModel: vi.fn(() => "mocked-model"),
+  };
+});
+
 import {
   buildTitlePrompt,
   extractFirstMessages,
-  type GenerateTitleParams,
+  generateConversationTitle,
 } from "./routes.chat";
 
 describe("extractFirstMessages", () => {
@@ -187,33 +207,54 @@ describe("buildTitlePrompt", () => {
   });
 });
 
-describe("GenerateTitleParams type", () => {
-  it("has the correct interface structure", () => {
-    // Verify the GenerateTitleParams interface is correctly exported and usable
-    // This ensures the function signature is stable for callers
-    const params: GenerateTitleParams = {
+describe("generateConversationTitle", () => {
+  it("returns generated title on success", async () => {
+    mockGenerateText.mockResolvedValueOnce({
+      text: "  Debug React Error  ",
+    });
+
+    const result = await generateConversationTitle({
+      provider: "anthropic",
+      apiKey: "test-key",
+      firstUserMessage: "Help me debug this React error",
+      firstAssistantMessage: "I can help with that.",
+    });
+
+    expect(result).toBe("Debug React Error");
+    expect(mockGenerateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "mocked-model",
+        prompt: expect.stringContaining("Help me debug this React error"),
+      }),
+    );
+  });
+
+  it("returns null when LLM call fails", async () => {
+    mockGenerateText.mockRejectedValueOnce(new Error("API Error"));
+
+    const result = await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi there!",
-    };
+    });
 
-    expect(params.provider).toBe("anthropic");
-    expect(params.apiKey).toBe("test-key");
-    expect(params.firstUserMessage).toBe("Hello");
-    expect(params.firstAssistantMessage).toBe("Hi there!");
+    expect(result).toBeNull();
   });
 
-  it("allows undefined apiKey for providers that dont require it", () => {
-    // vLLM and Ollama typically don't require API keys
-    const params: GenerateTitleParams = {
-      provider: "vllm",
-      apiKey: undefined,
-      firstUserMessage: "Test message",
-      firstAssistantMessage: "",
-    };
+  it("trims whitespace from generated title", async () => {
+    mockGenerateText.mockResolvedValueOnce({
+      text: "\n  Title With Whitespace  \n",
+    });
 
-    expect(params.apiKey).toBeUndefined();
+    const result = await generateConversationTitle({
+      provider: "openai",
+      apiKey: "test-key",
+      firstUserMessage: "Test",
+      firstAssistantMessage: "",
+    });
+
+    expect(result).toBe("Title With Whitespace");
   });
 });
 

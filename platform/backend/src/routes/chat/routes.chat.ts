@@ -39,6 +39,7 @@ import {
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
   InsertConversationSchema,
+  isSupportedChatProvider,
   SelectConversationSchema,
   type SupportedChatProvider,
   UpdateConversationSchema,
@@ -222,9 +223,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use stored provider if available, otherwise detect from model name for backward compatibility
       // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
       // so we can safely use detectProviderFromModel for them.
-      const provider =
-        (conversation.selectedProvider as SupportedChatProvider | null) ??
-        detectProviderFromModel(conversation.selectedModel);
+      const provider = isSupportedChatProvider(conversation.selectedProvider)
+        ? conversation.selectedProvider
+        : detectProviderFromModel(conversation.selectedModel);
 
       logger.info(
         {
@@ -813,9 +814,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use the conversation's selected provider for title generation
       // This ensures the title is generated using the same provider as the chat
       // Fall back to detecting from model name for backward compatibility
-      const provider =
-        (conversation.selectedProvider as SupportedChatProvider | null) ??
-        detectProviderFromModel(conversation.selectedModel);
+      const provider = isSupportedChatProvider(conversation.selectedProvider)
+        ? conversation.selectedProvider
+        : detectProviderFromModel(conversation.selectedModel);
 
       // Resolve API key using the centralized function (handles all providers)
       const { apiKey } = await resolveProviderApiKey({

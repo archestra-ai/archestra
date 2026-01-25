@@ -31,8 +31,8 @@ def get_frontend_env():
 
   # Sync ARCHESTRA_* to NEXT_PUBLIC_ARCHESTRA_* if not already set
   sync_vars = [
+    'ARCHESTRA_INTERNAL_API_BASE_URL',
     'ARCHESTRA_API_BASE_URL',
-    'ARCHESTRA_API_EXTERNAL_BASE_URL',
     'ARCHESTRA_SENTRY_ENVIRONMENT',
     'ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED',
     'ARCHESTRA_AUTH_DISABLE_BASIC_AUTH',
@@ -71,20 +71,30 @@ if is_prod:
     serve_cmd='pnpm start',
     labels=['dev'],
     resource_deps=['db-migrate'],
-    deps=['../.env'],
     env=frontend_env_vars,
     serve_env=frontend_env_vars
   )
 else:
+  # Backend dev server
   local_resource(
-    dev_resource_name,
+    dev_resource_name + '-backend',
     # Trap ensures all child processes are killed when Tilt stops, preventing orphaned processes from blocking port 3000
     # Uses pkill -P to kill by parent PID since child processes may have their own process groups on macOS
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug pnpm dev & wait $!',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug pnpm dev --filter @backend & wait $!',
     # On Windows, pnpm dev runs directly; cmd.exe handles process termination when Tilt stops
-    serve_cmd_bat='set ARCHESTRA_LOGGING_LEVEL=debug && pnpm dev',
+    serve_cmd_bat='set ARCHESTRA_LOGGING_LEVEL=debug && pnpm dev --filter @backend',
     labels=['dev'],
     resource_deps=['db-migrate'],
+    deps=['../.env'],
+  )
+
+  # Frontend dev server - waits for backend to be ready
+  local_resource(
+    dev_resource_name + '-frontend',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; pnpm dev --filter @frontend & wait $!',
+    serve_cmd_bat='pnpm dev --filter @frontend',
+    labels=['dev'],
+    resource_deps=[dev_resource_name + '-backend'],
     deps=['../.env'],
     serve_env=frontend_env_vars
   )
@@ -109,11 +119,13 @@ local_resource(
   auto_init=False,
 )
 
+# Codegen depends on backend being up (for API schema generation)                                                    
+codegen_backend_dep = dev_resource_name if is_prod else dev_resource_name + '-backend' 
 local_resource(
   'codegen',
   cmd='pnpm codegen',
   labels=['dev'],
-  resource_deps=['pnpm-install', dev_resource_name],
+  resource_deps=['pnpm-install', codegen_backend_dep],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
 )

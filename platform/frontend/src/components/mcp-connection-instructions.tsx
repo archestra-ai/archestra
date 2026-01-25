@@ -15,7 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import { ConnectionBaseUrl } from "@/components/connection-base-url";
+import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -560,7 +560,7 @@ export function McpConnectionInstructions({
         </Select>
       </div>
 
-      <ConnectionBaseUrl
+      <ConnectionBaseUrlSelect
         value={connectionUrl}
         onChange={setConnectionUrl}
         idPrefix="mcp"

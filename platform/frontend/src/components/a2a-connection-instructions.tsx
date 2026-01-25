@@ -6,7 +6,7 @@ import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import { ConnectionBaseUrl } from "@/components/connection-base-url";
+import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -266,7 +266,7 @@ curl -X GET "${agentCardUrl}" \\
 
   return (
     <div className="space-y-6">
-      <ConnectionBaseUrl
+      <ConnectionBaseUrlSelect
         value={connectionUrl}
         onChange={setConnectionUrl}
         idPrefix="a2a"

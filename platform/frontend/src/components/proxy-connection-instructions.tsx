@@ -5,7 +5,7 @@ import { Check, ChevronDown, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import { ConnectionBaseUrl } from "@/components/connection-base-url";
+import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -93,7 +93,7 @@ export function ProxyConnectionInstructions({
         </Popover>
       </ButtonGroup>
 
-      <ConnectionBaseUrl
+      <ConnectionBaseUrlSelect
         value={connectionUrl}
         onChange={setConnectionUrl}
         idPrefix="llm"

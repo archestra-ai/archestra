@@ -118,11 +118,14 @@ test.describe("Agents API CRUD", () => {
     expect(getResponse.status()).toBe(404);
   });
 
-  test("should get default agent", async ({ request, makeApiRequest }) => {
+  test("should get default MCP gateway", async ({
+    request,
+    makeApiRequest,
+  }) => {
     const response = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/agents/default",
+      urlSuffix: "/api/mcp-gateways/default",
     });
     const agent = await response.json();
 

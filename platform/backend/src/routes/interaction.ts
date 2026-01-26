@@ -287,9 +287,16 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetUniqueExternalAgentIds,
         description:
-          "Get all unique external agent IDs for filtering (from X-Archestra-Agent-Id header)",
+          "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)",
         tags: ["Interaction"],
-        response: constructResponseSchema(z.array(z.string())),
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string(),
+              displayName: z.string(),
+            }),
+          ),
+        ),
       },
     },
     async ({ user, headers }, reply) => {

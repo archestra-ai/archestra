@@ -74,7 +74,7 @@ export default function SecuritySettingsPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-blue-500" />
-            <CardTitle>Agentic Security</CardTitle>
+            <CardTitle>Agentic Security Engine</CardTitle>
           </div>
           <CardDescription>
             Configure the default security policy for tool execution and result
@@ -100,8 +100,10 @@ export default function SecuritySettingsPage() {
               {organization?.globalToolPolicy === "restrictive" ? (
                 <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400">
                   <ShieldCheck className="h-4 w-4" />
-                  Policies apply to agents' tools. By default, only the first
-                  tool call in session is allowed and its results are untrusted.
+                  Policies apply to agents' tools.
+                  <Link href="/tools" className="text-primary hover:underline">
+                    Click here to configure policies
+                  </Link>
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400">

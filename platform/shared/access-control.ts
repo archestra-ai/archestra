@@ -156,7 +156,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgent]: {
     profile: ["read"],
   },
-  [RouteId.GetDefaultAgent]: {
+  [RouteId.GetDefaultMcpGateway]: {
+    profile: ["read"],
+  },
+  [RouteId.GetDefaultLlmProxy]: {
     profile: ["read"],
   },
   [RouteId.CreateAgent]: {
@@ -742,7 +745,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     conversation: ["read"],
   },
 
-  "/profiles": {
+  "/mcp-gateways": {
+    profile: ["read"],
+  },
+  "/llm-proxies": {
+    profile: ["read"],
+  },
+  "/agents": {
     profile: ["read"],
   },
 

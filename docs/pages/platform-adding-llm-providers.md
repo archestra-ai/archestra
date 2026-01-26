@@ -157,10 +157,10 @@ The function must:
 
 Dual LLM pattern uses a secondary LLM for Q&A verification of tool invocations. Each provider needs its own client implementation.
 
-| File                                                | Description                                                                                                                |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `backend/src/routes/proxy/utils/dual-llm-client.ts` | Create `{Provider}DualLlmClient` class implementing `DualLlmClient` interface with `chat()` and `chatWithSchema()` methods |
-| `backend/src/routes/proxy/utils/dual-llm-client.ts` | Add case to `createDualLlmClient()` factory switch                                                                         |
+| File                                     | Description                                                                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `backend/src/clients/dual-llm-client.ts` | Create `{Provider}DualLlmClient` class implementing `DualLlmClient` interface with `chat()` and `chatWithSchema()` methods |
+| `backend/src/clients/dual-llm-client.ts` | Add case to `createDualLlmClient()` factory switch                                                                         |
 
 ### Metrics
 
@@ -170,11 +170,11 @@ Prometheus metrics for request duration, token usage, and costs. Requires instru
 
 For example: OpenAI and Anthropic SDKs accept a custom `fetch` function, so we inject an instrumented fetch via `getObservableFetch()`. Gemini SDK doesn't expose fetch, so we wrap the SDK instance directly via `getObservableGenAI()`.
 
-| File                                                    | Description                                                                          |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `backend/src/llm-metrics.ts`                            | Implement instrumented API calls for the SDK                                         |
-| `backend/src/routes/proxy/utils/adapters/{provider}.ts` | Legacy adapter with `getUsageTokens()` function for metrics token extraction         |
-| `backend/src/routes/proxy/utils/adapters/index.ts`      | Export the legacy adapter (e.g., `export * as {provider} from "./{provider}"`)       |
+| File                                                    | Description                                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `backend/src/llm-metrics.ts`                            | Implement instrumented API calls for the SDK                                   |
+| `backend/src/routes/proxy/utils/adapters/{provider}.ts` | Legacy adapter with `getUsageTokens()` function for metrics token extraction   |
+| `backend/src/routes/proxy/utils/adapters/index.ts`      | Export the legacy adapter (e.g., `export * as {provider} from "./{provider}"`) |
 
 ### Frontend: Logs UI
 
@@ -223,20 +223,20 @@ Allows users to select this provider's models in the Chat UI.
 
 Each provider has a different API for listing available models.
 
-| File                                         | Description                                                            |
-| -------------------------------------------- | ---------------------------------------------------------------------- |
-| `backend/src/routes/chat/routes.models.ts`   | Add `fetch{Provider}Models()` function and register in `modelFetchers` |
-| `backend/src/routes/chat/routes.models.ts`   | Add case to `getProviderApiKey()` switch                               |
+| File                                       | Description                                                            |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| `backend/src/routes/chat/routes.models.ts` | Add `fetch{Provider}Models()` function and register in `modelFetchers` |
+| `backend/src/routes/chat/routes.models.ts` | Add case to `getProviderApiKey()` switch                               |
 
 ### LLM Client
 
 Chat uses Vercel AI SDK which requires provider-specific model creation.
 
-| File                                 | Description                                                                                      |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `backend/src/clients/llm-client.ts`  | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
-| `backend/src/clients/llm-client.ts`  | Add case to `resolveProviderApiKey()` switch                                                     |
-| `backend/src/clients/llm-client.ts`  | Add case to `createLLMModel()` - AI SDK requires provider-specific initialization                |
+| File                                | Description                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `backend/src/clients/llm-client.ts` | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
+| `backend/src/clients/llm-client.ts` | Add case to `resolveProviderApiKey()` switch                                                     |
+| `backend/src/clients/llm-client.ts` | Add case to `createLLMModel()` - AI SDK requires provider-specific initialization                |
 
 ### Error Handling
 
@@ -266,6 +266,7 @@ Existing provider implementations for reference:
 
 - OpenAI: `backend/src/routes/proxy/routesv2/openai.ts`, `backend/src/routes/proxy/adapterV2/openai.ts`
 - Anthropic: `backend/src/routes/proxy/routesv2/anthropic.ts`, `backend/src/routes/proxy/adapterV2/anthropic.ts`
+- Cohere: `backend/src/routes/proxy/routesv2/cohere.ts`, `backend/src/routes/proxy/adapterV2/cohere.ts`
 - Gemini: `backend/src/routes/proxy/routesv2/gemini.ts`, `backend/src/routes/proxy/adapterV2/gemini.ts`
 
 **OpenAI-compatible implementations** (reuse OpenAI types/adapters with minor modifications):

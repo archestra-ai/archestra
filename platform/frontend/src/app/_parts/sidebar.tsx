@@ -9,13 +9,14 @@ import {
   Cable,
   DollarSign,
   Github,
-  Layers,
   LogIn,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
+  Network,
   Router,
   Settings,
+  Shield,
   Slack,
   Star,
   Wrench,
@@ -26,12 +27,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { SecurityEngineWarning } from "@/components/security-engine-warning";
 import { Badge } from "@/components/ui/badge";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Sidebar,
   SidebarContent,
@@ -43,9 +40,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { usePermissionMap } from "@/lib/auth.query";
@@ -66,7 +60,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   }
   return [
     {
-      title: "Chats",
+      title: "Chat",
       url: "/chat",
       icon: MessageCircle,
       customIsActive: (pathname: string, searchParams: URLSearchParams) =>
@@ -78,9 +72,14 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       icon: Bot,
     },
     {
-      title: "Profiles",
-      url: "/profiles",
-      icon: Layers,
+      title: "MCP Gateways",
+      url: "/mcp-gateways",
+      icon: Shield,
+    },
+    {
+      title: "LLM Proxies",
+      url: "/llm-proxies",
+      icon: Network,
     },
     {
       title: "Logs",
@@ -263,6 +262,7 @@ const MainSideBarSection = ({
 
 const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
   <SidebarFooter>
+    <SecurityEngineWarning />
     <DefaultCredentialsWarning />
     <SignedIn>
       <SidebarGroup className="mt-auto">

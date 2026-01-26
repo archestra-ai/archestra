@@ -20,27 +20,24 @@ import { useInternalAgents } from "@/lib/agent.query";
 import { cn } from "@/lib/utils";
 
 interface InitialAgentSelectorProps {
-  currentPromptId: string | null;
-  onPromptChange: (promptId: string | null, agentId: string) => void;
-  defaultAgentId: string;
+  currentAgentId: string | null;
+  onAgentChange: (agentId: string) => void;
 }
 
 export function InitialAgentSelector({
-  currentPromptId,
-  onPromptChange,
-  defaultAgentId,
+  currentAgentId,
+  onAgentChange,
 }: InitialAgentSelectorProps) {
   const { data: agents = [] } = useInternalAgents();
   const [open, setOpen] = useState(false);
 
   const currentAgent = useMemo(
-    () => agents.find((a) => a.id === currentPromptId) ?? agents[0] ?? null,
-    [agents, currentPromptId],
+    () => agents.find((a) => a.id === currentAgentId) ?? agents[0] ?? null,
+    [agents, currentAgentId],
   );
 
-  const handleAgentSelect = (agentId: string | null) => {
-    // For internal agents, the agent ID is both the "prompt ID" and agent ID
-    onPromptChange(agentId, agentId ?? defaultAgentId);
+  const handleAgentSelect = (agentId: string) => {
+    onAgentChange(agentId);
     setOpen(false);
   };
 
@@ -51,10 +48,10 @@ export function InitialAgentSelector({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-8 justify-between"
+          className="h-8 justify-between max-w-[300px] min-w-0"
         >
           <Bot className="h-3 w-3 shrink-0 opacity-70" />
-          <span className="text-xs font-medium">
+          <span className="text-xs font-medium truncate flex-1 text-left">
             {currentAgent?.name ?? "Select agent"}
           </span>
           {open ? (
@@ -80,9 +77,7 @@ export function InitialAgentSelector({
                   <Check
                     className={cn(
                       "ml-auto h-4 w-4",
-                      currentPromptId === agent.id
-                        ? "opacity-100"
-                        : "opacity-0",
+                      currentAgentId === agent.id ? "opacity-100" : "opacity-0",
                     )}
                   />
                 </CommandItem>

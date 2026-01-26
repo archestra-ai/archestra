@@ -228,7 +228,7 @@ function ChatSettingsContent() {
             className="flex items-center gap-2"
             data-testid={`${E2eTestId.ChatApiKeyRow}-${row.original.name}`}
           >
-            <span className="font-medium">{row.original.name}</span>
+            <span className="font-medium break-all">{row.original.name}</span>
           </div>
         ),
       },

@@ -1,7 +1,6 @@
 "use client";
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
-import { Link } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
@@ -65,8 +64,14 @@ export function DefaultCredentialsWarning({
             rel="noopener noreferrer"
             className="inline-flex items-center underline"
           >
-            <Link className="mr-1 flex-shrink-0" size={12} />
-            Change if not running locally!
+            Set ENV
+          </a>{" "}
+          or{" "}
+          <a
+            href="/settings/account"
+            className="inline-flex items-center underline"
+          >
+            Change
           </a>
         </p>
       </AlertDescription>
@@ -79,5 +84,5 @@ export function DefaultCredentialsWarning({
   }
 
   // For sidebar, keep the padding
-  return <div className="px-2 pb-2">{alertContent}</div>;
+  return <div className="px-2 pb-1">{alertContent}</div>;
 }

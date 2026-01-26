@@ -17,6 +17,7 @@ import type {
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableGenAI,
@@ -34,7 +35,6 @@ import {
   LimitValidationService,
   TokenPriceModel,
 } from "@/models";
-
 import {
   type Agent,
   ApiError,
@@ -45,7 +45,6 @@ import {
 } from "@/types";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import * as utils from "./utils";
-import { createGoogleGenAIClient } from "./utils/gemini-client";
 import type { SessionSource } from "./utils/session-id";
 
 /**
@@ -145,14 +144,17 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       resolvedAgent = agent;
     } else {
-      // Otherwise get or create default agent
-      logger.debug(
-        { userAgent: headers["user-agent"] },
-        "[GeminiProxy] Resolving default agent by user-agent",
-      );
-      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
-        headers["user-agent"],
-      );
+      // Get default profile (legacy behavior - no auto-create)
+      logger.debug("[GeminiProxy] Resolving default profile");
+      const defaultProfile = await AgentModel.getDefaultProfile();
+      if (!defaultProfile) {
+        logger.debug("[GeminiProxy] No default profile found");
+        throw new ApiError(
+          400,
+          "Please specify an LLMProxy ID in the URL path.",
+        );
+      }
+      resolvedAgent = defaultProfile;
     }
 
     const resolvedAgentId = resolvedAgent.id;

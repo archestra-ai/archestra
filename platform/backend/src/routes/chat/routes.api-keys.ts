@@ -5,9 +5,9 @@ import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { ChatApiKeyModel, TeamModel } from "@/models";
 import { testProviderApiKey } from "@/routes/chat/routes.models";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import {
   assertByosEnabled,
   isByosEnabled,

@@ -44,13 +44,13 @@ const mockKeyv = {
 /**
  * Helper to ensure keyv_cache table exists for SQL-based tests.
  * This table is normally created by @keyv/postgres but we mock that.
+ * Note: Keyv stores expiration INSIDE the JSON value, not as a separate column.
  */
 async function ensureKeyvCacheTable() {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS keyv_cache (
       key TEXT PRIMARY KEY,
-      value TEXT,
-      expires BIGINT
+      value TEXT
     )
   `);
 }
@@ -58,6 +58,7 @@ async function ensureKeyvCacheTable() {
 /**
  * Helper to insert a value directly into keyv_cache for testing.
  * Mimics how Keyv stores data with the "keyv:" prefix.
+ * Keyv wraps values as: {"value": <actual-value>, "expires": <timestamp>}
  */
 async function insertKeyvEntry(
   key: string,
@@ -65,10 +66,15 @@ async function insertKeyvEntry(
   expiresAt?: number,
 ) {
   const keyvKey = `keyv:${key}`;
-  const jsonValue = JSON.stringify(value);
+  // Keyv wraps the value with expiration inside the JSON
+  const keyvPayload = {
+    value,
+    ...(expiresAt !== undefined && { expires: expiresAt }),
+  };
+  const jsonValue = JSON.stringify(keyvPayload);
   await db.execute(
-    sql`INSERT INTO keyv_cache (key, value, expires) VALUES (${keyvKey}, ${jsonValue}, ${expiresAt ?? null})
-        ON CONFLICT (key) DO UPDATE SET value = ${jsonValue}, expires = ${expiresAt ?? null}`,
+    sql`INSERT INTO keyv_cache (key, value) VALUES (${keyvKey}, ${jsonValue})
+        ON CONFLICT (key) DO UPDATE SET value = ${jsonValue}`,
   );
 }
 

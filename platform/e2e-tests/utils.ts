@@ -1,10 +1,9 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
 import { type APIRequestContext, expect, type Page } from "@playwright/test";
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, DEFAULT_MCP_GATEWAY_NAME } from "@shared";
 import { testMcpServerCommand } from "@shared/test-mcp-server";
 import {
   API_BASE_URL,
-  DEFAULT_PROFILE_NAME,
   DEFAULT_TEAM_NAME,
   E2eTestId,
   ENGINEERING_TEAM_NAME,
@@ -16,7 +15,6 @@ import {
   callMcpTool,
   getOrgTokenForProfile,
   getTeamTokenForProfile,
-  initializeMcpSession,
 } from "./tests/api/mcp-gateway-utils";
 
 export async function addCustomSelfHostedCatalogItem({
@@ -87,7 +85,17 @@ export async function addCustomSelfHostedCatalogItem({
   }
   await page.getByRole("button", { name: "Add Server" }).click();
   await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1_000);
+
+  // After adding a server, the install dialog opens automatically.
+  // Close it so the calling test can control when to open it.
+  // Wait for the install dialog to appear and then close it by pressing Escape.
+  await page
+    .getByRole("dialog")
+    .filter({ hasText: /Install -/ })
+    .waitFor({ state: "visible", timeout: 10000 });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+
   const catalogItems = await archestraApiSdk.getInternalMcpCatalog({
     headers: { Cookie: cookieHeaders },
   });
@@ -155,12 +163,28 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 
   await manageToolsButton.click();
-  await page
-    .getByRole("button", { name: "Assign Tool to Profiles" })
-    .first()
-    .click();
-  await page.getByRole("checkbox").first().click();
+
+  // Wait for dialog to open
   await page.waitForLoadState("networkidle");
+
+  // The new McpAssignmentsDialog shows profile pills - click on "Default MCP Gateway" to open popover
+  const profilePill = page.getByRole("button", {
+    name: new RegExp(`${DEFAULT_MCP_GATEWAY_NAME}.*\\(\\d+/\\d+\\)`),
+  });
+  await profilePill.waitFor({ state: "visible", timeout: 10_000 });
+  await profilePill.click();
+
+  // Wait for the popover to open - it contains the credential selector and tool checkboxes
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(500);
+
+  // Click the first tool checkbox to select a tool
+  // The checkbox is inside the popover, wait for it to be visible
+  const checkbox = page.getByRole("checkbox").first();
+  await checkbox.waitFor({ state: "visible", timeout: 5_000 });
+  await checkbox.click();
+
+  // The combobox (credential selector) is now in the popover
   const combobox = page.getByRole("combobox");
   await combobox.waitFor({ state: "visible" });
   await combobox.click();
@@ -193,20 +217,20 @@ export async function verifyToolCallResultViaApi({
   toolName: string;
   cookieHeaders: string;
 }) {
-  const defaultAgentResponse = await archestraApiSdk.getDefaultAgent({
+  const defaultMcpGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
     headers: { Cookie: cookieHeaders },
   });
-  if (defaultAgentResponse.error) {
+  if (defaultMcpGatewayResponse.error) {
     throw new Error(
-      `Failed to get default agent: ${JSON.stringify(defaultAgentResponse.error)}`,
+      `Failed to get default MCP gateway: ${JSON.stringify(defaultMcpGatewayResponse.error)}`,
     );
   }
-  if (!defaultAgentResponse.data) {
+  if (!defaultMcpGatewayResponse.data) {
     throw new Error(
-      `No default agent returned from API. Response: ${JSON.stringify(defaultAgentResponse)}`,
+      `No default MCP gateway returned from API. Response: ${JSON.stringify(defaultMcpGatewayResponse)}`,
     );
   }
-  const defaultProfile = defaultAgentResponse.data;
+  const defaultProfile = defaultMcpGatewayResponse.data;
 
   let token: string;
   if (tokenToUse === "default-team") {
@@ -222,11 +246,6 @@ export async function verifyToolCallResultViaApi({
   let toolResult: Awaited<ReturnType<typeof callMcpTool>>;
 
   try {
-    await initializeMcpSession(request, {
-      profileId: defaultProfile.id,
-      token,
-    });
-
     toolResult = await callMcpTool(request, {
       profileId: defaultProfile.id,
       token,
@@ -339,32 +358,24 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
     );
   }
 
-  // 2. Get all profiles and find Default Agent
-  const agentsResponse = await archestraApiSdk.getAgents({
+  // 2. Get the default MCP Gateway profile
+  const defaultMcpGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
     headers: { Cookie: cookieHeaders },
   });
 
   // Check for API errors
-  if (agentsResponse.error) {
+  if (defaultMcpGatewayResponse.error) {
     throw new Error(
-      `Failed to get agents: ${JSON.stringify(agentsResponse.error)}`,
+      `Failed to get default MCP gateway: ${JSON.stringify(defaultMcpGatewayResponse.error)}`,
     );
   }
-  if (!agentsResponse.data?.data || agentsResponse.data.data.length === 0) {
+  if (!defaultMcpGatewayResponse.data) {
     throw new Error(
-      `No agents returned from API. Response: ${JSON.stringify(agentsResponse)}`,
+      `No default MCP gateway returned from API. Response: ${JSON.stringify(defaultMcpGatewayResponse)}`,
     );
   }
 
-  const defaultProfile = agentsResponse.data.data.find(
-    (agent) => agent.name === DEFAULT_PROFILE_NAME,
-  );
-  if (!defaultProfile) {
-    const profileNames = agentsResponse.data.data.map((a) => a.name).join(", ");
-    throw new Error(
-      `Profile "${DEFAULT_PROFILE_NAME}" not found. Available profiles: [${profileNames}]`,
-    );
-  }
+  const defaultProfile = defaultMcpGatewayResponse.data;
 
   // 3. Assign BOTH Default Team and Engineering Team to the profile
   const updateResponse = await archestraApiSdk.updateAgent({

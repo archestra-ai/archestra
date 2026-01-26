@@ -8,7 +8,7 @@ jobs:
   assign-reviewers:
     if: |
       github.event.pull_request.draft == false &&
-      !contains(fromJson('["ashlkv", "iskhakov", "Konstantinov-Innokentii", "joeyorlando", "brojd"]'), github.event.pull_request.user.login)
+      !contains(fromJson('["iskhakov", "Konstantinov-Innokentii", "joeyorlando", "brojd"]'), github.event.pull_request.user.login)
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -17,7 +17,7 @@ jobs:
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
-            const coreTeam = ['ashlkv', 'iskhakov', 'Konstantinov-Innokentii', 'joeyorlando', 'brojd'];
+            const coreTeam = ['iskhakov', 'Konstantinov-Innokentii', 'joeyorlando', 'brojd'];
             const prAuthor = context.payload.pull_request.user.login;
             
             // Filter out the PR author if they're somehow in the core team (extra safety)

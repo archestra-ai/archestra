@@ -30,7 +30,7 @@ jobs:
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           # Add users here as they configure their OAuth tokens
-          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" ]]; then
+          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" || "$AUTHOR" == "brojd" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
@@ -62,3 +62,16 @@ jobs:
       pr_number: ${{ github.event.pull_request.number }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}
+
+  dominik-pr-review:
+    needs: determine-token
+    if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'brojd'
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    uses: ./.github/workflows/claude-pr-review-impl.yml
+    with:
+      pr_number: ${{ github.event.pull_request.number }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.DOMINIK_CLAUDE_CODE_OAUTH_TOKEN }}

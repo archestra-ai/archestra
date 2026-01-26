@@ -38,6 +38,9 @@ import { TransportBadges } from "./transport-badges";
 
 type ServerType = "all" | "remote" | "local";
 
+type CatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
 export function ArchestraCatalogTab({
   catalogItems: initialCatalogItems,
   onClose,
@@ -45,7 +48,7 @@ export function ArchestraCatalogTab({
 }: {
   catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (createdItem: CatalogItem) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
@@ -290,7 +293,7 @@ export function ArchestraCatalogTab({
       }
     }
 
-    await createMutation.mutateAsync({
+    const createdItem = await createMutation.mutateAsync({
       name: server.name,
       version: undefined, // No version in archestra catalog
       instructions: server.instructions,
@@ -308,7 +311,9 @@ export function ArchestraCatalogTab({
 
     // Close the dialog after adding
     onClose();
-    onSuccess?.();
+    if (createdItem) {
+      onSuccess?.(createdItem);
+    }
   };
 
   const handleRequestInstallation = async (

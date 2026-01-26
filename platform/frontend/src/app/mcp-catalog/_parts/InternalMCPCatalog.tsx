@@ -594,6 +594,15 @@ export function InternalMCPCatalog({
       <CreateCatalogDialog
         isOpen={isDialogOpened("create")}
         onClose={() => closeDialog("create")}
+        onSuccess={(createdItem) => {
+          // Auto-open the appropriate install dialog based on server type
+          if (createdItem.serverType === "local") {
+            handleInstallLocalServer(createdItem);
+          } else if (createdItem.serverType === "remote") {
+            handleInstallRemoteServer(createdItem, false);
+          }
+          // For builtin servers, no connect dialog is needed
+        }}
       />
 
       <CustomServerRequestDialog

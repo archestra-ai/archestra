@@ -226,7 +226,9 @@ export function ConnectionOptions({
                       {selectedLlmProxy && (
                         <div className="flex items-center gap-2 min-w-0">
                           <Network className="h-4 w-4 shrink-0" />
-                          <span className="truncate">{selectedLlmProxy.name}</span>
+                          <span className="truncate">
+                            {selectedLlmProxy.name}
+                          </span>
                         </div>
                       )}
                     </SelectValue>
@@ -245,7 +247,9 @@ export function ConnectionOptions({
               </div>
 
               {/* Connection Instructions */}
-              <ProxyConnectionInstructions agentId={effectiveLlmProxyId ?? undefined} />
+              <ProxyConnectionInstructions
+                agentId={effectiveLlmProxyId ?? undefined}
+              />
             </div>
           </div>
         )}

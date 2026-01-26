@@ -13,7 +13,7 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
 import {
   WithoutPermissions,
@@ -77,6 +77,10 @@ export type McpServerCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onCancelInstallation?: (serverId: string) => void;
+  /** When true, auto-opens the assignments dialog */
+  autoOpenAssignmentsDialog?: boolean;
+  /** Called when the auto-opened assignments dialog is closed */
+  onAssignmentsDialogClose?: () => void;
 };
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
@@ -99,6 +103,8 @@ export function McpServerCard({
   onEdit,
   onDelete,
   onCancelInstallation,
+  autoOpenAssignmentsDialog,
+  onAssignmentsDialogClose,
 }: McpServerCardBaseProps) {
   const isBuiltin = variant === "builtin";
 
@@ -162,6 +168,22 @@ export function McpServerCard({
     id: string;
     name: string;
   } | null>(null);
+
+  // Auto-open assignments dialog when requested by parent
+  useEffect(() => {
+    if (autoOpenAssignmentsDialog) {
+      setIsToolsDialogOpen(true);
+    }
+  }, [autoOpenAssignmentsDialog]);
+
+  // Handle assignments dialog close - notify parent if it was auto-opened
+  const handleToolsDialogOpenChange = (open: boolean) => {
+    setIsToolsDialogOpen(open);
+    if (!open && autoOpenAssignmentsDialog) {
+      onAssignmentsDialogClose?.();
+    }
+  };
+
   const mcpServerOfCurrentCatalogItem = allMcpServers?.filter(
     (s) => s.catalogId === item.id,
   );
@@ -598,7 +620,7 @@ export function McpServerCard({
     <>
       <McpAssignmentsDialog
         open={isToolsDialogOpen}
-        onOpenChange={setIsToolsDialogOpen}
+        onOpenChange={handleToolsDialogOpenChange}
         catalogId={item.id}
         serverName={item.label || item.name}
         isBuiltin={isBuiltin}

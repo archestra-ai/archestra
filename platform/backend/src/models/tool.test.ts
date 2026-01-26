@@ -1276,7 +1276,7 @@ describe("ToolModel", () => {
   });
 
   describe("assignDefaultArchestraToolsToAgent", () => {
-    test("assigns artifact_write and todo_write tools by default", async ({
+    test("assigns artifact_write and todo_write tools by default (without query_knowledge_graph when KG not configured)", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {

@@ -630,20 +630,20 @@ interface ToolChecklistProps {
   onSelectionChange: (selectedIds: Set<string>) => void;
 }
 
+function formatToolName(toolName: string) {
+  const lastSeparator = toolName.lastIndexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
+  if (lastSeparator !== -1) {
+    return toolName.substring(lastSeparator + 2);
+  }
+  return toolName;
+}
+
 function ToolChecklist({
   tools,
   selectedToolIds,
   onSelectionChange,
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
-
-  const formatToolName = (toolName: string) => {
-    const lastSeparator = toolName.lastIndexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    if (lastSeparator !== -1) {
-      return toolName.substring(lastSeparator + 2);
-    }
-    return toolName;
-  };
 
   const filteredTools = useMemo(() => {
     if (!searchQuery.trim()) return tools;
@@ -653,8 +653,12 @@ function ToolChecklist({
     );
   }, [tools, searchQuery]);
 
-  const allSelected = filteredTools.every((tool) => selectedToolIds.has(tool.id));
-  const noneSelected = filteredTools.every((tool) => !selectedToolIds.has(tool.id));
+  const allSelected = filteredTools.every((tool) =>
+    selectedToolIds.has(tool.id),
+  );
+  const noneSelected = filteredTools.every(
+    (tool) => !selectedToolIds.has(tool.id),
+  );
   const selectedCount = tools.filter((t) => selectedToolIds.has(t.id)).length;
 
   const handleToggle = (toolId: string) => {

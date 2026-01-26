@@ -39,6 +39,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   vllm: "vllm",
   ollama: "ollama",
   zhipuai: "zhipuai",
+  groq: "groq",
 };
 
 /**

@@ -145,6 +145,12 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
   });
+  z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
+    id: "GroqChatCompletionRequest",
+  });
+  z.globalRegistry.add(OpenAi.API.ChatCompletionResponseSchema, {
+    id: "GroqChatCompletionResponse",
+  });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",
   });

@@ -10,6 +10,7 @@ import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
 import zhipuaiProxyRoutesV2 from "./proxy/routesv2/zhipuai";
+import groqProxyRoutesV2 from "./proxy/routesv2/groq";
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -64,6 +65,8 @@ export const ollamaProxyRoutes = config.llm.ollama.useV2Routes
   : ollamaProxyRoutesV2; // Ollama only has V2 since it was added after the unified handler
 // Zhipu AI proxy routes - V2 only (new provider, no legacy v1)
 export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
+// Groq proxy routes - V2 only (new provider, no legacy v1)
+export const groqProxyRoutes = groqProxyRoutesV2;
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

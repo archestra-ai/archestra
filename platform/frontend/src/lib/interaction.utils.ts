@@ -9,6 +9,7 @@ import type {
   InteractionUtils,
 } from "./llmProviders/common";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
+import GroqChatCompletionInteraction from "./llmProviders/groq";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
@@ -134,6 +135,8 @@ export class DynamicInteraction implements InteractionUtils {
       return new CohereChatInteraction(interaction);
     } else if (type === "gemini:generateContent") {
       return new GeminiGenerateContentInteraction(interaction);
+    } else if (type === "groq:chatCompletions") {
+      return new GroqChatCompletionInteraction(interaction);
     }
     throw new Error(`Unsupported interaction type: ${type}`);
   }

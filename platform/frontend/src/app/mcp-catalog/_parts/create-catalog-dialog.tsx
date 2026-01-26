@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,10 +28,13 @@ import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
 
+type CatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
 interface CreateCatalogDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (createdItem: CatalogItem) => void;
 }
 
 type TabType = "archestra-catalog" | "remote" | "local";
@@ -52,9 +56,11 @@ export function CreateCatalogDialog({
 
   const onSubmit = async (values: McpCatalogFormValues) => {
     const apiData = transformFormToApiData(values);
-    await createMutation.mutateAsync(apiData);
+    const createdItem = await createMutation.mutateAsync(apiData);
     handleClose();
-    onSuccess?.();
+    if (createdItem) {
+      onSuccess?.(createdItem);
+    }
   };
 
   const footer = (

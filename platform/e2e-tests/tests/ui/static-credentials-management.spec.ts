@@ -20,7 +20,7 @@ import {
   verifyToolCallResultViaApi,
 } from "../../utils";
 
-const CONNECT_BUTTON_TIMEOUT = 25_000;
+const CONNECT_BUTTON_TIMEOUT = 30_000;
 
 test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
@@ -100,10 +100,27 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         ).not.toBeVisible();
       }
 
-      // Then click connect again
+      // After adding a server, the install dialog opens automatically.
+      // Close it so the calling test can control when to open it.
+      // Wait for the assignments dialog to appear and then close it by pressing Escape.
       await page
-        .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-        .click({ timeout: CONNECT_BUTTON_TIMEOUT });
+        .getByRole("dialog")
+        .filter({ hasText: /Assignments/ })
+        .waitFor({ state: "visible", timeout: 10000 });
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(500);
+
+      // Then click connect again
+      // Wait for the connect button to be visible and enabled before clicking
+      const connectButton = page.getByTestId(
+        `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
+      );
+      await connectButton.waitFor({
+        state: "visible",
+        timeout: CONNECT_BUTTON_TIMEOUT,
+      });
+      await expect(connectButton).toBeEnabled({ timeout: CONNECT_BUTTON_TIMEOUT });
+      await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
       // And this time team credential type should be selected by default for everyone
       await expect(
         page.getByTestId(E2eTestId.SelectCredentialTypeTeam),
@@ -254,7 +271,17 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       return;
     }
 
-    // Wait for dialog to close and button to be visible again
+    // After adding a server, the install dialog opens automatically.
+    // Close it so the calling test can control when to open it.
+    // Wait for the assignments dialog to appear and then close it by pressing Escape.
+    await page
+      .getByRole("dialog")
+      .filter({ hasText: /Assignments/ })
+      .waitFor({ state: "visible", timeout: 10000 });
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+
+    // Wait for dialog to close and button to be visible and enabled again
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
     );
@@ -262,6 +289,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       state: "visible",
       timeout: CONNECT_BUTTON_TIMEOUT,
     });
+    await expect(connectButton).toBeEnabled({ timeout: CONNECT_BUTTON_TIMEOUT });
     await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
     // And this time team credential type should be selected by default, install using team credential
     await clickButton({ page, options: { name: "Install" } });

@@ -111,9 +111,22 @@ function OAuthCallbackContent() {
             teamId: teamId || undefined,
           });
 
+          // Check if this was a first installation
+          const isFirstInstallation =
+            sessionStorage.getItem("oauth_is_first_installation") === "true";
+
           // Clean up the processing flag and teamId after successful installation
           sessionStorage.removeItem(processKey);
           sessionStorage.removeItem("oauth_team_id");
+          sessionStorage.removeItem("oauth_is_first_installation");
+
+          // Store flag to open assignments dialog after redirect (only for first installation)
+          if (isFirstInstallation) {
+            sessionStorage.setItem(
+              "oauth_installation_complete_catalog_id",
+              catalogId,
+            );
+          }
         }
 
         // Redirect back to MCP catalog immediately

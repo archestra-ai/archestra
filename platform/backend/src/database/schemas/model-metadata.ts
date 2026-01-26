@@ -12,6 +12,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type { ModelInputModality, ModelOutputModality } from "@/types";
+
 /**
  * Model metadata table - stores capability and pricing metadata fetched from OpenRouter API.
  *
@@ -38,11 +40,11 @@ const modelMetadataTable = pgTable(
     /** Maximum context window size in tokens */
     contextLength: integer("context_length"),
 
-    /** Supported input modalities: ["text", "image", "audio", "video", "file"] */
-    inputModalities: jsonb("input_modalities").$type<string[]>(),
+    /** Supported input modalities */
+    inputModalities: jsonb("input_modalities").$type<ModelInputModality[]>(),
 
-    /** Supported output modalities: ["text", "image", "audio"] */
-    outputModalities: jsonb("output_modalities").$type<string[]>(),
+    /** Supported output modalities */
+    outputModalities: jsonb("output_modalities").$type<ModelOutputModality[]>(),
 
     /** Whether the model supports function/tool calling */
     supportsToolCalling: boolean("supports_tool_calling"),

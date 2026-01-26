@@ -78,6 +78,7 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/pending-tool-state";
+import { useTokenEstimate } from "@/lib/token-estimate";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -295,6 +296,14 @@ export default function ChatPage() {
     return model?.provider as SupportedChatProvider | undefined;
   }, [conversation?.selectedModel, chatModels]);
 
+  // Get selected model's context length for the context indicator
+  const selectedModelContextLength = useMemo((): number | null => {
+    const modelId = conversation?.selectedModel ?? initialModel;
+    if (!modelId) return null;
+    const model = chatModels.find((m) => m.id === modelId);
+    return model?.capabilities?.contextLength ?? null;
+  }, [conversation?.selectedModel, initialModel, chatModels]);
+
   // Mutation for updating conversation model
   const updateConversationMutation = useUpdateConversation();
 
@@ -432,6 +441,9 @@ export default function ChatPage() {
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
+
+  // Estimate token usage from messages for context indicator
+  const estimatedTokens = useTokenEstimate(messages);
 
   useEffect(() => {
     if (
@@ -1130,6 +1142,8 @@ export default function ChatPage() {
                   allowFileUploads={organization?.allowChatFileUploads ?? false}
                   isModelsLoading={isModelsLoading}
                   onEditAgent={() => openDialog("edit-agent")}
+                  tokensUsed={estimatedTokens}
+                  maxContextLength={selectedModelContextLength}
                 />
                 <div className="text-center">
                   <Version inline />

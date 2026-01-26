@@ -10346,6 +10346,14 @@ export type GetChatModelsResponses = {
         displayName: string;
         provider: 'anthropic' | 'cerebras' | 'gemini' | 'cohere' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         createdAt?: string;
+        capabilities?: {
+            contextLength: number | null;
+            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'file'> | null;
+            outputModalities: Array<'text' | 'image' | 'audio'> | null;
+            supportsToolCalling: boolean | null;
+            pricePerMillionInput: string | null;
+            pricePerMillionOutput: string | null;
+        };
     }>;
 };
 

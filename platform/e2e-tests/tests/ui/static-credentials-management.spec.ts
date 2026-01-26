@@ -119,7 +119,9 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         state: "visible",
         timeout: CONNECT_BUTTON_TIMEOUT,
       });
-      await expect(connectButton).toBeEnabled({ timeout: CONNECT_BUTTON_TIMEOUT });
+      await expect(connectButton).toBeEnabled({
+        timeout: CONNECT_BUTTON_TIMEOUT,
+      });
       await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
       // And this time team credential type should be selected by default for everyone
       await expect(
@@ -289,7 +291,9 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       state: "visible",
       timeout: CONNECT_BUTTON_TIMEOUT,
     });
-    await expect(connectButton).toBeEnabled({ timeout: CONNECT_BUTTON_TIMEOUT });
+    await expect(connectButton).toBeEnabled({
+      timeout: CONNECT_BUTTON_TIMEOUT,
+    });
     await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
     // And this time team credential type should be selected by default, install using team credential
     await clickButton({ page, options: { name: "Install" } });

@@ -4,8 +4,8 @@ import logger from "@/logging";
 import { ModelMetadataModel, TokenPriceModel } from "@/models";
 import type {
   CreateModelMetadata,
-  InputModality,
-  OutputModality,
+  ModelInputModality,
+  ModelOutputModality,
 } from "@/types";
 
 /**
@@ -81,10 +81,10 @@ const OPENROUTER_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
 };
 
 /**
- * Maps OpenRouter input modality strings to our InputModality type.
+ * Maps OpenRouter input modality strings to our ModelInputModality type.
  */
-function mapInputModality(modality: string): InputModality | null {
-  const mapping: Record<string, InputModality> = {
+function mapModelInputModality(modality: string): ModelInputModality | null {
+  const mapping: Record<string, ModelInputModality> = {
     text: "text",
     image: "image",
     audio: "audio",
@@ -95,10 +95,10 @@ function mapInputModality(modality: string): InputModality | null {
 }
 
 /**
- * Maps OpenRouter output modality strings to our OutputModality type.
+ * Maps OpenRouter output modality strings to our ModelOutputModality type.
  */
-function mapOutputModality(modality: string): OutputModality | null {
-  const mapping: Record<string, OutputModality> = {
+function mapModelOutputModality(modality: string): ModelOutputModality | null {
+  const mapping: Record<string, ModelOutputModality> = {
     text: "text",
     image: "image",
     audio: "audio",
@@ -201,10 +201,10 @@ function convertToModelMetadata(
   const { provider, modelId } = parsed;
 
   // Map input modalities
-  const inputModalities: InputModality[] = [];
+  const inputModalities: ModelInputModality[] = [];
   if (model.architecture?.input_modalities) {
     for (const mod of model.architecture.input_modalities) {
-      const mapped = mapInputModality(mod);
+      const mapped = mapModelInputModality(mod);
       if (mapped) {
         inputModalities.push(mapped);
       }
@@ -216,10 +216,10 @@ function convertToModelMetadata(
   }
 
   // Map output modalities
-  const outputModalities: OutputModality[] = [];
+  const outputModalities: ModelOutputModality[] = [];
   if (model.architecture?.output_modalities) {
     for (const mod of model.architecture.output_modalities) {
-      const mapped = mapOutputModality(mod);
+      const mapped = mapModelOutputModality(mod);
       if (mapped) {
         outputModalities.push(mapped);
       }

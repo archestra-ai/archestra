@@ -1,7 +1,7 @@
 "use client";
 
 import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { CheckIcon, Eye, Loader2, Wrench } from "lucide-react";
+import { CheckIcon, ImageIcon, Loader2, Mic, Settings2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   ModelSelectorContent,
@@ -26,6 +26,7 @@ import {
   type ModelCapabilities,
   useModelsByProviderQuery,
 } from "@/lib/chat-models.query";
+import { cn } from "@/lib/utils";
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -51,21 +52,40 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
 };
 
 /**
- * Format context length for display (e.g., 128000 -> "128K")
+ * Capability icon component - matches Vercel AI Elements style.
+ * Small, compact icons that show model capabilities.
  */
-function formatContextLength(length: number | null): string | null {
-  if (!length) return null;
-  if (length >= 1_000_000) {
-    return `${(length / 1_000_000).toFixed(1)}M`;
-  }
-  if (length >= 1000) {
-    return `${Math.round(length / 1000)}K`;
-  }
-  return length.toString();
+function CapabilityIcon({
+  icon: Icon,
+  label,
+  className,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            "inline-flex items-center justify-center size-4 rounded-sm bg-muted/50",
+            className,
+          )}
+        >
+          <Icon className="size-2.5 text-muted-foreground" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /**
- * Displays capability icons for a model.
+ * Displays capability icons for a model in a compact row.
+ * Style inspired by Vercel AI Elements model selector.
  */
 function ModelCapabilityBadges({
   capabilities,
@@ -77,49 +97,23 @@ function ModelCapabilityBadges({
   }
 
   const hasVision = capabilities.inputModalities?.includes("image");
+  const hasAudio = capabilities.inputModalities?.includes("audio");
   const hasToolCalling = capabilities.supportsToolCalling;
-  const contextLength = formatContextLength(capabilities.contextLength);
 
   // Don't render if no capabilities to show
-  if (!hasVision && !hasToolCalling && !contextLength) {
+  if (!hasVision && !hasAudio && !hasToolCalling) {
     return null;
   }
 
   return (
-    <TooltipProvider>
-      <div className="flex items-center gap-1">
+    <TooltipProvider delayDuration={300}>
+      <div className="flex items-center gap-0.5">
         {hasVision && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Eye className="size-3 text-muted-foreground" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
-              Supports vision (image input)
-            </TooltipContent>
-          </Tooltip>
+          <CapabilityIcon icon={ImageIcon} label="Supports vision (images)" />
         )}
+        {hasAudio && <CapabilityIcon icon={Mic} label="Supports audio input" />}
         {hasToolCalling && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Wrench className="size-3 text-muted-foreground" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
-              Supports tool/function calling
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {contextLength && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-[10px] text-muted-foreground font-medium">
-                {contextLength}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
-              Context window: {capabilities.contextLength?.toLocaleString()}{" "}
-              tokens
-            </TooltipContent>
-          </Tooltip>
+          <CapabilityIcon icon={Settings2} label="Supports tool calling" />
         )}
       </div>
     </TooltipProvider>

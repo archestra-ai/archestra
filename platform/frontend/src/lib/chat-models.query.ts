@@ -1,31 +1,23 @@
-import { archestraApiSdk, type SupportedProvider } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type SupportedProvider,
+} from "@shared";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 const { getChatModels } = archestraApiSdk;
 
-export interface ModelCapabilities {
-  /** Maximum context window size in tokens */
-  contextLength: number | null;
-  /** Supported input modalities (text, image, audio, video, file) */
-  inputModalities: string[] | null;
-  /** Supported output modalities (text, image, audio) */
-  outputModalities: string[] | null;
-  /** Whether the model supports function/tool calling */
-  supportsToolCalling: boolean | null;
-  /** Price per million tokens for input */
-  pricePerMillionInput: string | null;
-  /** Price per million tokens for output */
-  pricePerMillionOutput: string | null;
-}
+/**
+ * Chat model type from the API response.
+ * Uses the generated API types for type safety.
+ */
+export type ChatModel = archestraApiTypes.GetChatModelsResponses["200"][number];
 
-export interface ChatModel {
-  id: string;
-  displayName: string;
-  provider: SupportedProvider;
-  createdAt?: string;
-  capabilities?: ModelCapabilities;
-}
+/**
+ * Model capabilities type extracted from ChatModel.
+ */
+export type ModelCapabilities = NonNullable<ChatModel["capabilities"]>;
 
 /**
  * Fetch available chat models from all configured providers.

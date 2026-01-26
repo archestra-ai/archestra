@@ -82,7 +82,9 @@ test("Verify tool calling using dynamic credentials", async ({
       state: "visible",
       timeout: CONNECT_BUTTON_TIMEOUT,
     });
-    await expect(connectButton).toBeEnabled({ timeout: CONNECT_BUTTON_TIMEOUT });
+    await expect(connectButton).toBeEnabled({
+      timeout: CONNECT_BUTTON_TIMEOUT,
+    });
     await connectButton.click();
     // Fill ARCHESTRA_TEST environment variable to mark team credential
     await page

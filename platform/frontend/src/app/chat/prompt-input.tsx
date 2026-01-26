@@ -25,6 +25,7 @@ import {
 import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
+import { ContextIndicator } from "@/components/chat/context-indicator";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,10 @@ interface ArchestraPromptInputProps {
   isModelsLoading?: boolean;
   /** Callback to open edit agent dialog */
   onEditAgent?: () => void;
+  /** Estimated tokens used in the conversation (for context indicator) */
+  tokensUsed?: number;
+  /** Maximum context length of the selected model (for context indicator) */
+  maxContextLength?: number | null;
 }
 
 // Inner component that has access to the controller context
@@ -85,6 +90,8 @@ const PromptInputContent = ({
   allowFileUploads = false,
   isModelsLoading = false,
   onEditAgent,
+  tokensUsed = 0,
+  maxContextLength,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -218,6 +225,13 @@ const PromptInputContent = ({
               }
             }}
           />
+          {tokensUsed > 0 && maxContextLength && (
+            <ContextIndicator
+              tokensUsed={tokensUsed}
+              maxTokens={maxContextLength}
+              size="sm"
+            />
+          )}
           {(conversationId || onApiKeyChange) && (
             <ChatApiKeySelector
               conversationId={conversationId}
@@ -271,6 +285,8 @@ const ArchestraPromptInput = ({
   allowFileUploads = false,
   isModelsLoading = false,
   onEditAgent,
+  tokensUsed = 0,
+  maxContextLength,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -291,6 +307,8 @@ const ArchestraPromptInput = ({
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
           onEditAgent={onEditAgent}
+          tokensUsed={tokensUsed}
+          maxContextLength={maxContextLength}
         />
       </PromptInputProvider>
     </div>

@@ -4,39 +4,34 @@ import { z } from "zod";
 import { schema } from "@/database";
 
 /**
- * Input modality types supported by models.
- * - text: Standard text input
- * - image: Image files (PNG, JPEG, etc.)
- * - audio: Audio files
- * - video: Video files
- * - file: Document files (PDF, etc.)
+ * Zod schema for input modalities.
+ * Matches the InputModality type from the database schema.
  */
-export const InputModalitySchema = z.enum([
+export const ModelInputModalitySchema = z.enum([
   "text",
   "image",
   "audio",
   "video",
   "file",
 ]);
-export type InputModality = z.infer<typeof InputModalitySchema>;
 
 /**
- * Output modality types supported by models.
- * - text: Standard text output
- * - image: Image generation
- * - audio: Audio generation
+ * Zod schema for output modalities.
+ * Matches the OutputModality type from the database schema.
  */
-export const OutputModalitySchema = z.enum(["text", "image", "audio"]);
-export type OutputModality = z.infer<typeof OutputModalitySchema>;
+export const ModelOutputModalitySchema = z.enum(["text", "image", "audio"]);
 
+/**
+ * Fields to extend for drizzle-zod schema generation.
+ */
 const fieldsToExtend = {
   provider: SupportedProvidersSchema,
+  inputModalities: z.array(ModelInputModalitySchema).nullable(),
+  outputModalities: z.array(ModelOutputModalitySchema).nullable(),
 };
 
 /**
- * Base database schema derived from Drizzle.
- * Note: inputModalities and outputModalities are typed as string[] in the DB layer.
- * Use InputModality[] and OutputModality[] types when working with these at the app layer.
+ * Base database schema derived from Drizzle with strongly typed modalities.
  */
 export const SelectModelMetadataSchema = createSelectSchema(
   schema.modelMetadataTable,
@@ -64,27 +59,27 @@ export const UpdateModelMetadataSchema = CreateModelMetadataSchema.partial();
 /**
  * Exported types
  */
+export type ModelInputModality = z.infer<typeof ModelInputModalitySchema>;
+export type ModelOutputModality = z.infer<typeof ModelOutputModalitySchema>;
+
 export type ModelMetadata = z.infer<typeof SelectModelMetadataSchema>;
 export type InsertModelMetadata = z.infer<typeof InsertModelMetadataSchema>;
 export type CreateModelMetadata = z.infer<typeof CreateModelMetadataSchema>;
 export type UpdateModelMetadata = z.infer<typeof UpdateModelMetadataSchema>;
 
 /**
- * Model capabilities summary for API responses.
- * This is a simplified view of model metadata for frontend consumption.
+ * Model capabilities for API responses.
+ * Derived from SelectModelMetadataSchema with computed price fields.
  */
-export const ModelCapabilitiesSchema = z.object({
-  /** Maximum context window size in tokens */
-  contextLength: z.number().nullable(),
-  /** Supported input modalities (text, image, audio, video, file) */
-  inputModalities: z.array(z.string()).nullable(),
-  /** Supported output modalities (text, image, audio) */
-  outputModalities: z.array(z.string()).nullable(),
-  /** Whether the model supports function/tool calling */
-  supportsToolCalling: z.boolean().nullable(),
-  /** Price per million tokens for input */
+export const ModelCapabilitiesSchema = SelectModelMetadataSchema.pick({
+  contextLength: true,
+  inputModalities: true,
+  outputModalities: true,
+  supportsToolCalling: true,
+}).extend({
+  /** Price per million tokens for input (computed from per-token price) */
   pricePerMillionInput: z.string().nullable(),
-  /** Price per million tokens for output */
+  /** Price per million tokens for output (computed from per-token price) */
   pricePerMillionOutput: z.string().nullable(),
 });
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;

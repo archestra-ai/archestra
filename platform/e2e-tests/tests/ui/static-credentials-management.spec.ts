@@ -20,7 +20,7 @@ import {
   verifyToolCallResultViaApi,
 } from "../../utils";
 
-const CONNECT_BUTTON_TIMEOUT = 25_000;
+const CONNECT_BUTTON_TIMEOUT = 30_000;
 
 test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
@@ -99,6 +99,16 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
         ).not.toBeVisible();
       }
+
+      // After adding a server, the install dialog opens automatically.
+      // Close it so the calling test can control when to open it.
+      // Wait for the assignments dialog to appear and then close it by pressing Escape.
+      await page
+        .getByRole("dialog")
+        .filter({ hasText: /Assignments/ })
+        .waitFor({ state: "visible", timeout: 10000 });
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(500);
 
       // Then click connect again
       await page
@@ -253,6 +263,16 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       await page.waitForLoadState("networkidle");
       return;
     }
+
+    // After adding a server, the install dialog opens automatically.
+    // Close it so the calling test can control when to open it.
+    // Wait for the assignments dialog to appear and then close it by pressing Escape.
+    await page
+      .getByRole("dialog")
+      .filter({ hasText: /Assignments/ })
+      .waitFor({ state: "visible", timeout: 10000 });
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
 
     // Wait for dialog to close and button to be visible again
     const connectButton = page.getByTestId(

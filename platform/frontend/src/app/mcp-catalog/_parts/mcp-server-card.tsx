@@ -170,9 +170,12 @@ export function McpServerCard({
   } | null>(null);
 
   // Auto-open assignments dialog when requested by parent
+  // Ensure other dialogs are closed when auto-opening
   useEffect(() => {
     if (autoOpenAssignmentsDialog) {
       setIsToolsDialogOpen(true);
+      setIsManageUsersDialogOpen(false);
+      setIsLogsDialogOpen(false);
     }
   }, [autoOpenAssignmentsDialog]);
 
@@ -642,7 +645,7 @@ export function McpServerCard({
 
       <ManageUsersDialog
         catalogId={item.id}
-        isOpen={isManageUsersDialogOpen}
+        isOpen={isManageUsersDialogOpen && !isInstalling}
         onClose={() => setIsManageUsersDialogOpen(false)}
         label={item.label || item.name}
       />

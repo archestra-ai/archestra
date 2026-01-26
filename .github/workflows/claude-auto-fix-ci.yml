@@ -50,7 +50,7 @@ jobs:
           AUTHOR: ${{ steps.get-pr-author.outputs.author }}
         run: |
           # Add users here as they configure their OAuth tokens
-          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" ]]; then
+          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" || "$AUTHOR" == "brojd" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
@@ -90,3 +90,20 @@ jobs:
       pr_number: ${{ github.event.workflow_run.pull_requests[0].number }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}
+
+  dominik-auto-fix:
+    needs: determine-token
+    if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'brojd'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      issues: write
+      id-token: write
+    uses: ./.github/workflows/claude-auto-fix-ci-impl.yml
+    with:
+      head_branch: ${{ github.event.workflow_run.head_branch }}
+      workflow_run_id: ${{ github.event.workflow_run.id }}
+      pr_number: ${{ github.event.workflow_run.pull_requests[0].number }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.DOMINIK_CLAUDE_CODE_OAUTH_TOKEN }}

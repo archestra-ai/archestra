@@ -1,5 +1,5 @@
 import type { SupportedProvider } from "@shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   CreateModelMetadata,
@@ -170,7 +170,10 @@ class ModelMetadataModel {
     modelId: string,
   ): Promise<boolean> {
     // First check if the record exists (PGLite doesn't return rowCount reliably)
-    const existing = await this.findByProviderAndModelId(provider, modelId);
+    const existing = await ModelMetadataModel.findByProviderAndModelId(
+      provider,
+      modelId,
+    );
     if (!existing) {
       return false;
     }
@@ -214,7 +217,9 @@ class ModelMetadataModel {
       ? (Number.parseFloat(metadata.promptPricePerToken) * 1_000_000).toFixed(2)
       : null;
     const completionPricePerMillion = metadata.completionPricePerToken
-      ? (Number.parseFloat(metadata.completionPricePerToken) * 1_000_000).toFixed(2)
+      ? (
+          Number.parseFloat(metadata.completionPricePerToken) * 1_000_000
+        ).toFixed(2)
       : null;
 
     return {

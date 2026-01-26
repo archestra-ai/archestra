@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { openRouterModelRegistry } from "./openrouter-model-registry";
 import { ModelMetadataModel } from "@/models";
+import { openRouterModelRegistry } from "./openrouter-model-registry";
 
 // Mock fetch globally
 const mockFetch = vi.fn();

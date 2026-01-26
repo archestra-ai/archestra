@@ -1,8 +1,4 @@
-import {
-  TimeInMs,
-  type SupportedProvider,
-  SupportedProviders,
-} from "@shared";
+import { type SupportedProvider, TimeInMs } from "@shared";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ModelMetadataModel, TokenPriceModel } from "@/models";
@@ -329,7 +325,9 @@ class OpenRouterModelRegistry {
   async syncModelMetadata(force = false): Promise<number> {
     // Check if we need to sync
     if (!force && !(await this.shouldSync())) {
-      logger.debug("OpenRouter model metadata sync skipped (cache still valid)");
+      logger.debug(
+        "OpenRouter model metadata sync skipped (cache still valid)",
+      );
       return 0;
     }
 

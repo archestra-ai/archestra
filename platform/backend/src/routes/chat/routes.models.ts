@@ -21,11 +21,9 @@ import {
   type Anthropic,
   constructResponseSchema,
   type Gemini,
-  InputModalitySchema,
   type ModelCapabilities,
   ModelCapabilitiesSchema,
   type OpenAi,
-  OutputModalitySchema,
   SupportedChatProviderSchema,
 } from "@/types";
 

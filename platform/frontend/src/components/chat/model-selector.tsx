@@ -23,7 +23,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  type ChatModel,
   type ModelCapabilities,
   useModelsByProviderQuery,
 } from "@/lib/chat-models.query";
@@ -279,7 +278,9 @@ export function ModelSelector({
                     />
                     <ModelSelectorName>{model.displayName}</ModelSelectorName>
                     <div className="ml-auto flex items-center gap-2">
-                      <ModelCapabilityBadges capabilities={model.capabilities} />
+                      <ModelCapabilityBadges
+                        capabilities={model.capabilities}
+                      />
                       {selectedModel === model.id ? (
                         <CheckIcon className="size-4" />
                       ) : (

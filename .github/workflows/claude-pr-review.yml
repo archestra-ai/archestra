@@ -30,7 +30,7 @@ jobs:
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           # Add users here as they configure their OAuth tokens
-          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" ]]; then
+          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" || "$AUTHOR" == "brojd" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"

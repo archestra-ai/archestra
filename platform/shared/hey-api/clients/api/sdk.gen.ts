@@ -65,7 +65,7 @@ export const getAllAgents = <ThrowOnError extends boolean = false>(options?: Opt
 export const getDefaultMcpGateway = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultMcpGatewayData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultMcpGatewayResponses, GetDefaultMcpGatewayErrors, ThrowOnError>({ url: '/api/mcp-gateways/default', ...options });
 
 /**
- * Get the default LLM Proxy profile. Returns 404 if no default profile is configured.
+ * Get or create default LLM Proxy
  */
 export const getDefaultLlmProxy = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultLlmProxyData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultLlmProxyResponses, GetDefaultLlmProxyErrors, ThrowOnError>({ url: '/api/llm-proxy/default', ...options });
 

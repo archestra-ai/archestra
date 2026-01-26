@@ -21612,7 +21612,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Get the default LLM Proxy profile. Returns 404 if no default profile is configured.",
+        "description": "Get or create default LLM Proxy",
         "responses": {
           "200": {
             "description": "Default Response",

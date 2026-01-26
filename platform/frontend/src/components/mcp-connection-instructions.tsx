@@ -62,7 +62,9 @@ export function McpConnectionInstructions({
   agentId,
   hideProfileSelector = false,
 }: McpConnectionInstructionsProps) {
-  const { data: profiles } = useProfiles();
+  const { data: profiles } = useProfiles({
+    filters: { agentTypes: ["profile", "mcp_gateway"] },
+  });
   const { data: mcpServers } = useMcpServers();
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: userToken } = useUserToken();
@@ -394,7 +396,7 @@ export function McpConnectionInstructions({
       {/* Profile Selector - hidden when opened from a specific profile's dialog */}
       {!hideProfileSelector && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Select Profile</Label>
+          <Label className="text-sm font-medium">Select MCP Gateway</Label>
           <Select
             value={selectedProfileId}
             onValueChange={setSelectedProfileId}

@@ -158,9 +158,17 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       resolvedAgent = agent;
     } else {
-      // Otherwise get or create default LLM proxy agent
-      logger.debug("[OpenAIProxy] Resolving default LLM proxy agent");
-      resolvedAgent = await AgentModel.getLLMProxyOrCreateDefault();
+      // Get default profile (legacy behavior - no auto-create)
+      logger.debug("[OpenAIProxy] Resolving default profile");
+      const defaultProfile = await AgentModel.getDefaultProfile();
+      if (!defaultProfile) {
+        logger.debug("[OpenAIProxy] No default profile found");
+        throw new ApiError(
+          400,
+          "Please specify an LLMProxy ID in the URL path.",
+        );
+      }
+      resolvedAgent = defaultProfile;
     }
 
     const resolvedAgentId = resolvedAgent.id;

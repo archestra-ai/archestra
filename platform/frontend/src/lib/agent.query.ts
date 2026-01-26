@@ -17,6 +17,7 @@ const {
   getAgents,
   getAllAgents,
   getDefaultMcpGateway,
+  getDefaultLlmProxy,
   getAgent,
   updateAgent,
   getLabelKeys,
@@ -117,6 +118,19 @@ export function useDefaultMcpGateway(params?: {
   return useQuery({
     queryKey: ["mcp-gateways", "default"],
     queryFn: async () => (await getDefaultMcpGateway()).data ?? null,
+    initialData: params?.initialData,
+  });
+}
+
+export function useDefaultLlmProxy(params?: {
+  initialData?: archestraApiTypes.GetDefaultLlmProxyResponses["200"];
+}) {
+  return useQuery({
+    queryKey: ["llm-proxy", "default"],
+    queryFn: async () => {
+      const response = await getDefaultLlmProxy();
+      return response.data ?? null;
+    },
     initialData: params?.initialData,
   });
 }

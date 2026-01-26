@@ -155,6 +155,22 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/llm-proxy/default",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultLlmProxy,
+        description:
+          "Get the default LLM Proxy profile. Returns 404 if no default profile is configured.",
+        tags: ["LLM Proxy"],
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(await AgentModel.getLLMProxyOrCreateDefault());
+    },
+  );
+
   fastify.post(
     "/api/agents",
     {

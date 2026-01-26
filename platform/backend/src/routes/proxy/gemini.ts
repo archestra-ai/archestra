@@ -144,9 +144,17 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       resolvedAgent = agent;
     } else {
-      // Otherwise get or create default LLM proxy agent
-      logger.debug("[GeminiProxy] Resolving default LLM proxy agent");
-      resolvedAgent = await AgentModel.getLLMProxyOrCreateDefault();
+      // Get default profile (legacy behavior - no auto-create)
+      logger.debug("[GeminiProxy] Resolving default profile");
+      const defaultProfile = await AgentModel.getDefaultProfile();
+      if (!defaultProfile) {
+        logger.debug("[GeminiProxy] No default profile found");
+        throw new ApiError(
+          400,
+          "Please specify an LLMProxy ID in the URL path.",
+        );
+      }
+      resolvedAgent = defaultProfile;
     }
 
     const resolvedAgentId = resolvedAgent.id;

@@ -655,6 +655,47 @@ class AgentModel {
     );
   }
 
+  /**
+   * Get the default profile (agentType: "profile" with isDefault: true).
+   * Returns null if no default profile exists.
+   * It's needed for backward compatibility with default profile which allowed llm proxy on without a uuid specified in the url.
+   */
+  static async getDefaultProfile(): Promise<Agent | null> {
+    const rows = await db
+      .select()
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.agentToolsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .leftJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.isDefault, true),
+          eq(schema.agentsTable.agentType, "profile"),
+        ),
+      );
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const agent = rows[0].agents;
+    const tools = rows
+      .map((row) => row.tools)
+      .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
+
+    return {
+      ...agent,
+      tools,
+      teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
+      labels: await AgentLabelModel.getLabelsForAgent(agent.id),
+    };
+  }
+
   private static async getOrCreateDefaultByType(
     agentType: "mcp_gateway" | "llm_proxy",
     defaultName: string,

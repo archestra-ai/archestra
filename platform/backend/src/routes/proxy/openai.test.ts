@@ -22,10 +22,16 @@ describe("OpenAI proxy streaming", () => {
     await app.register(openAiProxyRoutes);
     config.benchmark.mockMode = true;
 
-    // Make a streaming request to the route
+    // Create a test agent (profile ID required since no default profile)
+    const agent = await AgentModel.create({
+      name: "Test Streaming Profile",
+      teams: [],
+    });
+
+    // Make a streaming request to the route with profile ID
     response = await app.inject({
       method: "POST",
-      url: "/v1/openai/chat/completions",
+      url: `/v1/openai/${agent.id}/chat/completions`,
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",

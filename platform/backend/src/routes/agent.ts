@@ -150,8 +150,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async (_request, reply) => {
-      return reply.send(await AgentModel.getMCPGatewayOrCreateDefault());
+    async (request, reply) => {
+      return reply.send(
+        await AgentModel.getMCPGatewayOrCreateDefault(request.organizationId),
+      );
     },
   );
 
@@ -165,8 +167,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async (_request, reply) => {
-      return reply.send(await AgentModel.getLLMProxyOrCreateDefault());
+    async (request, reply) => {
+      return reply.send(
+        await AgentModel.getLLMProxyOrCreateDefault(request.organizationId),
+      );
     },
   );
 

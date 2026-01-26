@@ -252,7 +252,9 @@ export function ConnectionOptions({
         {activeTab === "mcp" && (
           <div className="animate-in fade-in-0 slide-in-from-right-2 duration-300">
             <div className="p-4 rounded-lg border bg-card">
-              <McpConnectionInstructions agentId={mcpGatewayId} />
+              {mcpGatewayId && (
+                <McpConnectionInstructions agentId={mcpGatewayId} />
+              )}
             </div>
           </div>
         )}

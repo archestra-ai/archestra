@@ -1,8 +1,4 @@
-import {
-  DEFAULT_LLM_PROXY_NAME,
-  DEFAULT_MCP_GATEWAY_NAME,
-  DEFAULT_PROFILE_NAME,
-} from "@shared";
+import { DEFAULT_LLM_PROXY_NAME, DEFAULT_MCP_GATEWAY_NAME } from "@shared";
 import {
   and,
   asc,
@@ -659,20 +655,6 @@ class AgentModel {
     );
   }
 
-  /**
-   * @deprecated Use getMCPGatewayOrCreateDefault or getLLMProxyOrCreateDefault instead
-   */
-  static async getAgentOrCreateDefault(
-    name?: string,
-    organizationId?: string,
-  ): Promise<Agent> {
-    return AgentModel.getOrCreateDefaultByType(
-      "mcp_gateway",
-      name || DEFAULT_PROFILE_NAME,
-      organizationId,
-    );
-  }
-
   private static async getOrCreateDefaultByType(
     agentType: "mcp_gateway" | "llm_proxy",
     defaultName: string,
@@ -749,12 +731,17 @@ class AgentModel {
       return null;
     }
 
-    // If setting isDefault to true, unset all other agents' isDefault first
+    // If setting isDefault to true, unset isDefault for other agents of the same type
     if (agent.isDefault === true) {
       await db
         .update(schema.agentsTable)
         .set({ isDefault: false })
-        .where(eq(schema.agentsTable.isDefault, true));
+        .where(
+          and(
+            eq(schema.agentsTable.isDefault, true),
+            eq(schema.agentsTable.agentType, existingAgent.agentType),
+          ),
+        );
     }
 
     // Only update agent table if there are fields to update

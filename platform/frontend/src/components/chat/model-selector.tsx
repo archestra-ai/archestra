@@ -1,7 +1,7 @@
 "use client";
 
 import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { CheckIcon, Loader2 } from "lucide-react";
+import { CheckIcon, Eye, Loader2, Wrench } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   ModelSelectorContent,
@@ -16,7 +16,17 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
-import { useModelsByProviderQuery } from "@/lib/chat-models.query";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  type ChatModel,
+  type ModelCapabilities,
+  useModelsByProviderQuery,
+} from "@/lib/chat-models.query";
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -40,6 +50,82 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   ollama: "ollama",
   zhipuai: "zhipuai",
 };
+
+/**
+ * Format context length for display (e.g., 128000 -> "128K")
+ */
+function formatContextLength(length: number | null): string | null {
+  if (!length) return null;
+  if (length >= 1_000_000) {
+    return `${(length / 1_000_000).toFixed(1)}M`;
+  }
+  if (length >= 1000) {
+    return `${Math.round(length / 1000)}K`;
+  }
+  return length.toString();
+}
+
+/**
+ * Displays capability icons for a model.
+ */
+function ModelCapabilityBadges({
+  capabilities,
+}: {
+  capabilities?: ModelCapabilities;
+}) {
+  if (!capabilities) {
+    return null;
+  }
+
+  const hasVision = capabilities.inputModalities?.includes("image");
+  const hasToolCalling = capabilities.supportsToolCalling;
+  const contextLength = formatContextLength(capabilities.contextLength);
+
+  // Don't render if no capabilities to show
+  if (!hasVision && !hasToolCalling && !contextLength) {
+    return null;
+  }
+
+  return (
+    <TooltipProvider>
+      <div className="flex items-center gap-1">
+        {hasVision && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Eye className="size-3 text-muted-foreground" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Supports vision (image input)
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {hasToolCalling && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Wrench className="size-3 text-muted-foreground" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Supports tool/function calling
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {contextLength && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-[10px] text-muted-foreground font-medium">
+                {contextLength}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Context window: {capabilities.contextLength?.toLocaleString()}{" "}
+              tokens
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
+  );
+}
 
 /**
  * Model selector dialog with:
@@ -192,11 +278,14 @@ export function ModelSelector({
                       provider={providerToLogoProvider[provider]}
                     />
                     <ModelSelectorName>{model.displayName}</ModelSelectorName>
-                    {selectedModel === model.id ? (
-                      <CheckIcon className="ml-auto size-4" />
-                    ) : (
-                      <div className="ml-auto size-4" />
-                    )}
+                    <div className="ml-auto flex items-center gap-2">
+                      <ModelCapabilityBadges capabilities={model.capabilities} />
+                      {selectedModel === model.id ? (
+                        <CheckIcon className="size-4" />
+                      ) : (
+                        <div className="size-4" />
+                      )}
+                    </div>
                   </ModelSelectorItem>
                 ))}
               </ModelSelectorGroup>

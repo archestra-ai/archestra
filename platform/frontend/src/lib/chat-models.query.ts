@@ -4,11 +4,27 @@ import { useMemo } from "react";
 
 const { getChatModels } = archestraApiSdk;
 
+export interface ModelCapabilities {
+  /** Maximum context window size in tokens */
+  contextLength: number | null;
+  /** Supported input modalities (text, image, audio, video, file) */
+  inputModalities: string[] | null;
+  /** Supported output modalities (text, image, audio) */
+  outputModalities: string[] | null;
+  /** Whether the model supports function/tool calling */
+  supportsToolCalling: boolean | null;
+  /** Price per million tokens for input */
+  pricePerMillionInput: string | null;
+  /** Price per million tokens for output */
+  pricePerMillionOutput: string | null;
+}
+
 export interface ChatModel {
   id: string;
   displayName: string;
   provider: SupportedProvider;
   createdAt?: string;
+  capabilities?: ModelCapabilities;
 }
 
 /**

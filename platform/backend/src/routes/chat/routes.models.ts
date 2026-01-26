@@ -14,13 +14,18 @@ import {
 } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatApiKeyModel, TeamModel } from "@/models";
+import { ChatApiKeyModel, ModelMetadataModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { openRouterModelRegistry } from "@/services/openrouter-model-registry";
 import {
   type Anthropic,
   constructResponseSchema,
   type Gemini,
+  InputModalitySchema,
+  type ModelCapabilities,
+  ModelCapabilitiesSchema,
   type OpenAi,
+  OutputModalitySchema,
   SupportedChatProviderSchema,
 } from "@/types";
 
@@ -30,6 +35,7 @@ const ChatModelSchema = z.object({
   displayName: z.string(),
   provider: SupportedChatProviderSchema,
   createdAt: z.string().optional(),
+  capabilities: ModelCapabilitiesSchema.optional(),
 });
 
 export interface ModelInfo {
@@ -37,6 +43,7 @@ export interface ModelInfo {
   displayName: string;
   provider: SupportedProvider;
   createdAt?: string;
+  capabilities?: ModelCapabilities;
 }
 
 /**
@@ -720,7 +727,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatModels,
         description:
-          "Get available LLM models from all configured providers. Models are fetched directly from provider APIs.",
+          "Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.",
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedChatProviderSchema.optional(),
@@ -731,6 +738,9 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ query, organizationId, user }, reply) => {
       const { provider } = query;
       const providersToFetch = provider ? [provider] : SupportedProviders;
+
+      // Trigger OpenRouter metadata sync in background if needed
+      openRouterModelRegistry.syncIfNeeded();
 
       // Cache key includes user ID since API keys can be personal, team, or org-wide
       const cacheKey =
@@ -760,7 +770,28 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Fetched chat models from providers",
           );
 
-          return uniqBy(flatModels, (model) => `${model.provider}:${model.id}`);
+          const uniqueModels = uniqBy(
+            flatModels,
+            (model) => `${model.provider}:${model.id}`,
+          );
+
+          // Fetch metadata for all models
+          const metadataKeys = uniqueModels.map((m) => ({
+            provider: m.provider,
+            modelId: m.id,
+          }));
+          const metadataMap =
+            await ModelMetadataModel.findByProviderModelIds(metadataKeys);
+
+          // Attach capabilities to each model
+          return uniqueModels.map((model) => {
+            const key = `${model.provider}:${model.id}`;
+            const metadata = metadataMap.get(key);
+            return {
+              ...model,
+              capabilities: ModelMetadataModel.toCapabilities(metadata ?? null),
+            };
+          });
         },
         { ttl: 5 * TimeInMs.Minute },
       );

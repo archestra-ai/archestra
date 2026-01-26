@@ -1,0 +1,67 @@
+name: Load MCP Server Base Image
+description: |
+  Loads the MCP server base Docker image from either GHCR (for non-fork PRs) or from artifact (for fork PRs).
+  Handles authentication, downloading, and loading the image.
+
+inputs:
+  is-fork-pr:
+    description: "Whether this is a fork PR (loads from artifact instead of GHCR)"
+    required: true
+  github-token:
+    description: "GitHub token for GHCR authentication"
+    required: true
+
+outputs:
+  image-tag:
+    description: "The resolved MCP server base image tag"
+    value: ${{ steps.resolve-tag.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    # Non-fork PRs: Pull from GHCR
+    - name: Login to GHCR
+      if: ${{ inputs.is-fork-pr != 'true' }}
+      uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github-token }}
+
+    - name: Pull MCP server base image from GHCR
+      if: ${{ inputs.is-fork-pr != 'true' }}
+      shell: bash
+      env:
+        GITHUB_REPO: ${{ github.repository }}
+        GIT_SHA: ${{ github.sha }}
+      run: |
+        docker pull "ghcr.io/${GITHUB_REPO}/mcp-server-base:${GIT_SHA}"
+
+    # Fork PRs: Download artifact and load
+    - name: Download MCP server base image artifact
+      if: ${{ inputs.is-fork-pr == 'true' }}
+      uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+      with:
+        name: mcp-server-base-docker-image
+        path: /tmp
+
+    - name: Load MCP server base Docker image
+      if: ${{ inputs.is-fork-pr == 'true' }}
+      shell: bash
+      run: |
+        gunzip -c /tmp/mcp-server-base-image.tar.gz | docker load
+        docker images
+
+    - name: Resolve MCP server base image tag
+      id: resolve-tag
+      shell: bash
+      env:
+        IS_FORK_PR: ${{ inputs.is-fork-pr }}
+        GIT_SHA: ${{ github.sha }}
+        GITHUB_REPO: ${{ github.repository }}
+      run: |
+        if [ "${IS_FORK_PR}" == "true" ]; then
+          echo "tag=mcp-server-base:${GIT_SHA}" >> "$GITHUB_OUTPUT"
+        else
+          echo "tag=ghcr.io/${GITHUB_REPO}/mcp-server-base:${GIT_SHA}" >> "$GITHUB_OUTPUT"
+        fi

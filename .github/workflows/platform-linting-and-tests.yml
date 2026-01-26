@@ -177,18 +177,38 @@ jobs:
 
           echo "✅ All validation checks passed"
 
-  # Build platform Docker image once for all e2e tests
+  # Build Docker images for e2e tests (platform and MCP server base)
   # Non-fork PRs: Push to GHCR (faster)
   # Fork PRs: Upload as artifact (no package write permissions needed)
   platform-e2e-build:
-    name: Build Platform Image
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    name: Build ${{ matrix.name }} Image
+    runs-on: ${{ matrix.runner }}
     if: ${{ inputs.should-skip-running-and-always-succeed != true }}
     permissions:
       contents: read
       packages: write
-    outputs:
-      image-source: ${{ inputs.is-fork-pr && 'artifact' || 'ghcr' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Platform
+            runner: blacksmith-16vcpu-ubuntu-2404
+            context: ./platform
+            dockerfile: ""
+            image-name: platform
+            artifact-name: platform-docker-image
+            tarball-name: platform-image.tar.gz
+            local-tag-prefix: archestra-platform
+            use-build-action: true
+          - name: MCP Server Base
+            runner: blacksmith-4vcpu-ubuntu-2404
+            context: ./platform/mcp_server_docker_image
+            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
+            image-name: mcp-server-base
+            artifact-name: mcp-server-base-docker-image
+            tarball-name: mcp-server-base-image.tar.gz
+            local-tag-prefix: mcp-server-base
+            use-build-action: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -196,6 +216,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup environment
+        if: ${{ matrix.use-build-action }}
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
@@ -208,43 +229,72 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Non-fork PRs: Build and push to GHCR
-      - name: Build and push Docker image to GHCR
-        if: ${{ !inputs.is-fork-pr }}
+      # Non-fork PRs: Build and push to GHCR (Platform image using custom action)
+      - name: Build and push Platform image to GHCR
+        if: ${{ !inputs.is-fork-pr && matrix.use-build-action }}
         uses: ./.github/actions/build-platform-docker-image
         with:
-          context: ./platform
+          context: ${{ matrix.context }}
           push: "true"
-          tags: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      # Fork PRs: Build locally and export as artifact
-      - name: Build Docker image locally
-        if: ${{ inputs.is-fork-pr }}
+      # Non-fork PRs: Build and push to GHCR (MCP server base using docker/build-push-action)
+      - name: Setup Blacksmith Builder
+        if: ${{ !matrix.use-build-action }}
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+
+      - name: Build and push MCP server base image to GHCR
+        if: ${{ !inputs.is-fork-pr && !matrix.use-build-action }}
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
+
+      # Fork PRs: Build locally and export as artifact (Platform image)
+      - name: Build Platform image locally
+        if: ${{ inputs.is-fork-pr && matrix.use-build-action }}
         uses: ./.github/actions/build-platform-docker-image
         with:
-          context: ./platform
+          context: ${{ matrix.context }}
           push: "false"
           load: "true"
-          tags: archestra-platform:${{ github.sha }}
+          tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      # Fork PRs: Build locally and export as artifact (MCP server base)
+      - name: Build MCP server base image locally
+        if: ${{ inputs.is-fork-pr && !matrix.use-build-action }}
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
 
       - name: Export Docker image as tarball
         if: ${{ inputs.is-fork-pr }}
         env:
           GIT_SHA: ${{ github.sha }}
+          LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
+          TARBALL_NAME: ${{ matrix.tarball-name }}
         run: |
-          docker save "archestra-platform:${GIT_SHA}" | gzip > /tmp/platform-image.tar.gz
-          ls -lh /tmp/platform-image.tar.gz
+          docker save "${LOCAL_TAG_PREFIX}:${GIT_SHA}" | gzip > "/tmp/${TARBALL_NAME}"
+          ls -lh "/tmp/${TARBALL_NAME}"
 
       - name: Upload Docker image artifact
         if: ${{ inputs.is-fork-pr }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: platform-docker-image
-          path: /tmp/platform-image.tar.gz
+          name: ${{ matrix.artifact-name }}
+          path: /tmp/${{ matrix.tarball-name }}
           retention-days: 1
           compression-level: 0 # Already gzipped
 
@@ -317,9 +367,17 @@ jobs:
           working-directory: ./platform
 
       - name: Load platform image
-        id: load-image
+        id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
+        with:
+          is-fork-pr: ${{ inputs.is-fork-pr }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load MCP server base image
+        id: load-mcp-server-base-image
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/load-mcp-server-base-image
         with:
           is-fork-pr: ${{ inputs.is-fork-pr }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -333,8 +391,9 @@ jobs:
           helm-values-path: .github/values-ci.yaml
           deploy-e2e-dependencies: "true"
           build-platform-image: "false"
-          platform-image-tag: ${{ steps.load-image.outputs.image-tag }}
+          platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
           platform-context: ./platform
+          mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
 
       - name: Run E2E tests
         id: e2e
@@ -401,9 +460,17 @@ jobs:
           working-directory: ./platform
 
       - name: Load platform image
-        id: load-image
+        id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
+        with:
+          is-fork-pr: ${{ inputs.is-fork-pr }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load MCP server base image
+        id: load-mcp-server-base-image
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/load-mcp-server-base-image
         with:
           is-fork-pr: ${{ inputs.is-fork-pr }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -411,7 +478,8 @@ jobs:
       - name: Start platform in quickstart mode
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         env:
-          PLATFORM_IMAGE_TAG: ${{ steps.load-image.outputs.image-tag }}
+          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
+          MCP_SERVER_BASE_IMAGE_TAG: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
         run: |
           echo "Starting Archestra platform in quickstart mode..."
 
@@ -422,12 +490,15 @@ jobs:
           # Start the platform container
           # Note: ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS allows e2e tests to use 127.0.0.1
           # while the default ARCHESTRA_FRONTEND_URL=http://localhost:3000 stays unchanged
+          # Note: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE uses the CI-built image
+          # to test the MCP server base image from the current branch
           docker run -d \
             --name archestra-quickstart \
             -p 9000:9000 \
             -p 3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
             -e ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3000 \
+            -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG} \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v archestra-ci-postgres-data:/var/lib/postgresql/data \
             -v archestra-ci-app-data:/app/data \

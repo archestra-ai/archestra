@@ -102,13 +102,7 @@ export default function ChatPage() {
     }
     return false;
   });
-  const [isArtifactOpen, setIsArtifactOpen] = useState(() => {
-    // Initialize artifact panel state from localStorage
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("archestra-chat-artifact-open") === "true";
-    }
-    return false;
-  });
+  const [isArtifactOpen, setIsArtifactOpen] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const pendingFilesRef = useRef<
@@ -286,6 +280,32 @@ export default function ChatPage() {
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
 
+  // Initialize artifact panel state when conversation loads or changes
+  useEffect(() => {
+    // If no conversation (new chat), close the artifact panel
+    if (!conversationId) {
+      setIsArtifactOpen(false);
+      return;
+    }
+
+    if (isLoadingConversation) return;
+
+    // Check for conversation-specific preference
+    const storageKey = `archestra-chat-artifact-open-${conversationId}`;
+    const storedState = localStorage.getItem(storageKey);
+    if (storedState !== null) {
+      // User has explicitly set a preference for this conversation
+      setIsArtifactOpen(storedState === "true");
+    } else if (conversation?.artifact) {
+      // First time viewing this conversation with an artifact - auto-open
+      setIsArtifactOpen(true);
+      localStorage.setItem(storageKey, "true");
+    } else {
+      // No artifact or no stored preference - keep closed
+      setIsArtifactOpen(false);
+    }
+  }, [conversationId, conversation?.artifact, isLoadingConversation]);
+
   // Derive current provider from selected model
   const currentProvider = useMemo((): SupportedChatProvider | undefined => {
     if (!conversation?.selectedModel) return undefined;
@@ -395,29 +415,38 @@ export default function ChatPage() {
   const toggleArtifactPanel = useCallback(() => {
     const newValue = !isArtifactOpen;
     setIsArtifactOpen(newValue);
-    localStorage.setItem("archestra-chat-artifact-open", String(newValue));
-  }, [isArtifactOpen]);
+    // Only persist state for active conversations
+    if (conversationId) {
+      const storageKey = `archestra-chat-artifact-open-${conversationId}`;
+      localStorage.setItem(storageKey, String(newValue));
+    }
+  }, [isArtifactOpen, conversationId]);
 
-  // Auto-open artifact panel when artifact is updated
+  // Auto-open artifact panel when artifact is updated during conversation
   const previousArtifactRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     // Only auto-open if:
     // 1. We have a conversation with an artifact
     // 2. The artifact has changed (not just initial load)
     // 3. The panel is currently closed
+    // 4. This is an update to an existing conversation (not initial load)
     if (
+      conversationId &&
       conversation?.artifact &&
       previousArtifactRef.current !== undefined && // Not the initial render
       previousArtifactRef.current !== conversation.artifact &&
+      conversation.artifact !== previousArtifactRef.current && // Artifact actually changed
       !isArtifactOpen
     ) {
       setIsArtifactOpen(true);
-      localStorage.setItem("archestra-chat-artifact-open", "true");
+      // Save the preference for this conversation
+      const storageKey = `archestra-chat-artifact-open-${conversationId}`;
+      localStorage.setItem(storageKey, "true");
     }
 
     // Update the ref for next comparison
     previousArtifactRef.current = conversation?.artifact;
-  }, [conversation?.artifact, isArtifactOpen]);
+  }, [conversation?.artifact, isArtifactOpen, conversationId]);
 
   // Extract chat session properties (or use defaults if session not ready)
   const messages = chatSession?.messages ?? [];

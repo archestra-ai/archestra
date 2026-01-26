@@ -93,15 +93,13 @@ test("Verify tool calling using dynamic credentials", async ({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  // Wait for dropdown option to be visible and stable before clicking
-  const resolveAtCallTimeOption = adminPage.getByRole("option", {
-    name: "Resolve at call time",
-  });
-  await resolveAtCallTimeOption.waitFor({ state: "visible" });
-  // Additional wait to ensure option is stable (not animating)
+  // Select "Resolve at call time" (dynamic credential) from dropdown
+  await adminPage.getByRole("option", { name: "Resolve at call time" }).click();
+  // Close the popover by pressing Escape
+  await adminPage.keyboard.press("Escape");
   await adminPage.waitForTimeout(200);
-  await resolveAtCallTimeOption.click();
-  await adminPage.getByText("Assign to 1 profile").click();
+  // Click Save button at the bottom of the McpAssignmentsDialog
+  await clickButton({ page: adminPage, options: { name: "Save" } });
   await adminPage.waitForLoadState("networkidle");
 
   /**

@@ -387,8 +387,9 @@ class ToolModel {
       return [];
     }
 
-    // Return tools that are assigned via junction table AND have catalogId set
-    // This includes both regular MCP server tools and Archestra builtin tools
+    // Return tools that are assigned via junction table AND are either:
+    // - MCP tools (have catalogId set) - includes regular MCP server tools and Archestra builtin tools
+    // - Delegation tools (have delegateToAgentId set)
     // Excludes proxy-discovered tools which have agentId set and catalogId null
     const tools = await db
       .select()
@@ -396,7 +397,10 @@ class ToolModel {
       .where(
         and(
           inArray(schema.toolsTable.id, assignedToolIds),
-          isNotNull(schema.toolsTable.catalogId),
+          or(
+            isNotNull(schema.toolsTable.catalogId),
+            isNotNull(schema.toolsTable.delegateToAgentId),
+          ),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -1166,6 +1170,23 @@ class ToolModel {
         description: `Delegate task to agent: ${newName}`,
       })
       .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId));
+  }
+
+  /**
+   * Find all agent IDs that have delegation tools pointing to the target agent.
+   * Used to invalidate caches when target agent is renamed.
+   */
+  static async getParentAgentIds(targetAgentId: string): Promise<string[]> {
+    const results = await db
+      .selectDistinct({ agentId: schema.agentToolsTable.agentId })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId));
+
+    return results.map((r) => r.agentId);
   }
 
   /**

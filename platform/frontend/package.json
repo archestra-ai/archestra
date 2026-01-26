@@ -55,7 +55,7 @@
     "date-fns": "^4.1.0",
     "elkjs": "^0.11.0",
     "import-in-the-middle": "2.0.4",
-    "lodash-es": "^4.17.21",
+    "lodash-es": "^4.17.23",
     "lucide-react": "^0.562.0",
     "mermaid": "^11.12.2",
     "nanoid": "^5.1.6",

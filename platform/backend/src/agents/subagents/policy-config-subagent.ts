@@ -82,7 +82,7 @@ Examples:
     isDemo: false,
     isDefault: false,
     considerContextUntrusted: false,
-    agentType: "mcp_gateway",
+    agentType: "profile",
     systemPrompt: null,
     userPrompt: null,
     promptVersion: 1,

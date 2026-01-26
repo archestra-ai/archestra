@@ -367,6 +367,12 @@ export function useSyncAgentDelegations() {
         path: { agentId },
         body: { targetAgentIds },
       });
+      if (response.error) {
+        throw new Error(
+          (response.error as { error?: { message?: string } })?.error
+            ?.message || "Failed to sync delegations",
+        );
+      }
       return response.data;
     },
     onSuccess: (_, variables) => {
@@ -385,12 +391,14 @@ export function useSyncAgentDelegations() {
       queryClient.invalidateQueries({
         queryKey: ["agents", variables.agentId, "tools"],
       });
+      // Invalidate agents list to update subagents count in table
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }
 
 /**
- * Remove a specific delegation from an internal agent.
+ * Remove a specific delegation from an agent.
  */
 export function useRemoveAgentDelegation() {
   const queryClient = useQueryClient();
@@ -405,6 +413,12 @@ export function useRemoveAgentDelegation() {
       const response = await deleteAgentDelegation({
         path: { agentId, targetAgentId },
       });
+      if (response.error) {
+        throw new Error(
+          (response.error as { error?: { message?: string } })?.error
+            ?.message || "Failed to remove delegation",
+        );
+      }
       return response.data;
     },
     onSuccess: (_, variables) => {
@@ -423,6 +437,8 @@ export function useRemoveAgentDelegation() {
       queryClient.invalidateQueries({
         queryKey: ["agents", variables.agentId, "tools"],
       });
+      // Invalidate agents list to update subagents count in table
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

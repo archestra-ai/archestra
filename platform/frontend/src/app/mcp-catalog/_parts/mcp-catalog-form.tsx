@@ -60,7 +60,8 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeatureValue("mcpServerBaseImage") ?? "";
 
   const form = useForm<McpCatalogFormValues>({
-    resolver: zodResolver(formSchema),
+    // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
+    resolver: zodResolver(formSchema as any),
     defaultValues: initialValues
       ? transformCatalogItemToFormValues(initialValues, undefined)
       : {

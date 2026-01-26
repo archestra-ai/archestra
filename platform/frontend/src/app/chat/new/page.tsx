@@ -9,7 +9,7 @@ import { useEffect } from "react";
  * URL format:
  *   /chat/new?agent_id=<prompt_uuid>&user_prompt=<message>
  *
- * Note: agent_id refers to the Prompt ID (maps to promptId internally)
+ * Note: agent_id maps to agentId URL parameter
  */
 export default function ChatNewPage() {
   const router = useRouter();
@@ -20,7 +20,7 @@ export default function ChatNewPage() {
     const userPrompt = searchParams.get("user_prompt");
 
     const params = new URLSearchParams();
-    if (agentId) params.set("promptId", agentId);
+    if (agentId) params.set("agentId", agentId);
     if (userPrompt) params.set("user_prompt", userPrompt);
 
     router.replace(`/chat?${params.toString()}`);

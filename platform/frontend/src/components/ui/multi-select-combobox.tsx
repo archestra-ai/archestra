@@ -162,14 +162,15 @@ export function MultiSelectCombobox({
                       value={option.value}
                       onSelect={() => handleSelect(option.value)}
                       onMouseDown={(e) => e.preventDefault()}
+                      className="justify-between"
                     >
+                      {option.label}
                       <Check
                         className={cn(
-                          "mr-2 h-4 w-4",
+                          "h-4 w-4",
                           isSelected ? "opacity-100" : "opacity-0",
                         )}
                       />
-                      {option.label}
                     </CommandItem>
                   );
                 })}

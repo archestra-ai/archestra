@@ -10,44 +10,32 @@ const DEFAULT_BACKEND_URL = "http://localhost:9000";
  * Returns the configured URL or defaults to localhost:9000 for development.
  *
  * Priority:
- * 1. NEXT_PUBLIC_ARCHESTRA_API_BASE_URL (runtime env var for client/server)
- * 2. ARCHESTRA_API_BASE_URL (server-side only, for SSR/API routes)
+ * 1. NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL (runtime env var for client/server)
+ * 2. ARCHESTRA_INTERNAL_API_BASE_URL (server-side only, for SSR/API routes)
  * 3. Default: http://localhost:9000
  */
 export const getBackendBaseUrl = (): string => {
   // Try runtime env var first (works in both client and server)
-  const publicUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
+  const publicUrl = env("NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL");
   if (publicUrl) {
     return publicUrl;
   }
 
   // Server-side only: try non-public env var (for API routes and SSR)
-  if (typeof window === "undefined" && process.env.ARCHESTRA_API_BASE_URL) {
-    return process.env.ARCHESTRA_API_BASE_URL;
+  if (
+    typeof window === "undefined" &&
+    process.env.ARCHESTRA_INTERNAL_API_BASE_URL
+  ) {
+    return process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
   }
 
   return DEFAULT_BACKEND_URL;
 };
 
 /**
- * Priority:
- * 1. NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL (explicit external URL)
- * 2. Falls back to getBackendBaseUrl() for backwards compatibility
- *
- * Exported for testing purposes.
- */
-export const _getExternalBaseUrl = (): string => {
-  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL");
-  if (externalUrl) {
-    return externalUrl;
-  }
-  return getBackendBaseUrl();
-};
-
-/**
  * Get the internal proxy URL for in-cluster communication.
  * This is the URL that agents inside the cluster should use to connect to Archestra.
- * Uses getBackendBaseUrl() which reads from ARCHESTRA_API_BASE_URL.
+ * Uses getBackendBaseUrl() which reads from ARCHESTRA_INTERNAL_API_BASE_URL.
  */
 export const getInternalProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
@@ -62,12 +50,10 @@ export const getInternalProxyUrl = (): string => {
 };
 
 /**
- * Get the display proxy URL for showing to users.
+ * Helper to append /v1 suffix to a base URL.
  */
-export const getExternalProxyUrl = (): string => {
+const appendProxySuffix = (baseUrl: string): string => {
   const proxyUrlSuffix = "/v1";
-  const baseUrl = _getExternalBaseUrl();
-
   if (baseUrl.endsWith(proxyUrlSuffix)) {
     return baseUrl;
   } else if (baseUrl.endsWith("/")) {
@@ -77,12 +63,29 @@ export const getExternalProxyUrl = (): string => {
 };
 
 /**
+ * Get all configured external proxy URLs (with /v1 suffix).
+ * Supports comma-separated list in NEXT_PUBLIC_ARCHESTRA_API_BASE_URL.
+ * Returns array of URLs for UI display when multiple URLs are configured.
+ */
+export const getExternalProxyUrls = (): string[] => {
+  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
+  if (!externalUrl) {
+    return [];
+  }
+  return externalUrl
+    .split(",")
+    .map((url) => url.trim())
+    .filter((url) => url.length > 0)
+    .map(appendProxySuffix);
+};
+
+/**
  * Get the WebSocket URL for general communication.
  *
  * Client-side: Uses relative URL that goes through Next.js rewrite (see next.config.ts).
  * This ensures WebSocket works in all deployment scenarios without extra env vars.
  *
- * Server-side: Uses absolute URL derived from ARCHESTRA_API_BASE_URL.
+ * Server-side: Uses absolute URL derived from ARCHESTRA_INTERNAL_API_BASE_URL.
  */
 export const getWebSocketUrl = (): string => {
   // Client-side: use relative URL (goes through Next.js rewrite)
@@ -110,10 +113,11 @@ export const getWebSocketUrl = (): string => {
 export default {
   api: {
     /**
-     * Display URL for showing to users (absolute URL for external agents).
+     * All configured external proxy URLs for displaying connection options.
+     * Returns array of URLs when multiple URLs are configured via comma-separated list.
      */
-    get externalProxyUrl() {
-      return getExternalProxyUrl();
+    get externalProxyUrls() {
+      return getExternalProxyUrls();
     },
     /**
      * Internal URL for in-cluster communication.

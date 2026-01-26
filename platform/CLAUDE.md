@@ -96,8 +96,9 @@ kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_passw
 # Common queries: \dt (list tables), \d table_name (describe table), SELECT COUNT(*) FROM drizzle.__drizzle_migrations;
 
 # Logs
-tilt logs pnpm-dev                   # Get logs for frontend + backend
-tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
+tilt logs pnpm-dev-backend           # Get backend logs
+tilt logs pnpm-dev-frontend          # Get frontend logs
+tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an update for the specified resource
 
 # E2E setup
 Runs wiremock and seeds test data to database. Note that in development e2e use your development database. This means some of your local data may cause e2e to fail locally.

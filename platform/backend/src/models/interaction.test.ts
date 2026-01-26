@@ -1870,13 +1870,13 @@ describe("InteractionModel", () => {
       expect(sessions.data[0].claudeCodeTitle).toBeNull();
     });
 
-    test("returns null for lastInteractionRequest when all messages are too short", async ({
+    test("returns lastInteractionRequest even for short messages", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
       const agent = await AgentModel.create({ name: "Agent", teams: [] });
 
-      // Short utility message (< 20 chars)
+      // Short message - should still be returned
       await InteractionModel.create({
         profileId: agent.id,
         sessionId: "short-session",
@@ -1902,7 +1902,56 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].lastInteractionRequest).toBeNull();
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+    });
+
+    test("returns lastInteractionRequest for Gemini format (contents[].parts[].text)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Gemini format uses contents[] with parts[] instead of messages[]
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "gemini-session",
+        request: {
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: "123" }],
+            },
+          ],
+          systemInstruction: {
+            parts: [{ text: "You are a helpful AI assistant." }],
+          },
+          generationConfig: {},
+        },
+        response: {
+          candidates: [
+            {
+              content: { role: "model", parts: [{ text: "Hello!" }] },
+              finishReason: "STOP",
+              index: 0,
+            },
+          ],
+          modelVersion: "gemini-2.5-pro",
+        },
+        type: "gemini:generateContent",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "gemini-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].lastInteractionType).toBe(
+        "gemini:generateContent",
+      );
     });
 
     test("handles single interactions without sessionId (null session)", async ({

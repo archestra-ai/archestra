@@ -251,9 +251,12 @@ export function ChatApiKeySelector({
     <>
       <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
-          <PromptInputButton disabled={disabled}>
-            <Key className="h-3.5 w-3.5" />
-            <span className="truncate max-w-[120px]">
+          <PromptInputButton
+            disabled={disabled}
+            className="max-w-[220px] min-w-0"
+          >
+            <Key className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate flex-1 text-left">
               {currentConversationChatApiKey
                 ? getKeyDisplayName(currentConversationChatApiKey)
                 : isLoading

@@ -14,7 +14,7 @@ import type { ChatOpsProviderType } from "@/types/chatops";
 
 /**
  * Represents a historical version of an agent's prompt stored in the prompt_history JSONB array.
- * Only used when agent_type = 'agent'.
+ * Only used when agent_type is 'agent'.
  */
 export interface AgentHistoryEntry {
   version: number;
@@ -25,20 +25,33 @@ export interface AgentHistoryEntry {
 
 /**
  * Agent type enum:
- * - mcp_gateway: External profiles for API gateway routing
+ * - profile: External profiles for API gateway routing
+ * - mcp_gateway: MCP gateway specific configuration
+ * - llm_proxy: LLM proxy specific configuration
  * - agent: Internal agents with prompts for chat
  */
-export const agentTypeEnum = pgEnum("agent_type", ["mcp_gateway", "agent"]);
+export const agentTypeEnum = pgEnum("agent_type", [
+  "profile",
+  "mcp_gateway",
+  "llm_proxy",
+  "agent",
+]);
 
 export type AgentType = (typeof agentTypeEnum.enumValues)[number];
 
 /**
  * Unified agents table supporting both external profiles and internal agents.
  *
- * External profiles (agent_type = 'mcp_gateway'):
+ * External profiles (agent_type = 'profile'):
  *   - API gateway profiles for routing LLM traffic
  *   - Used for tool assignment and policy enforcement
  *   - Prompt fields are null
+ *
+ * MCP Gateway (agent_type = 'mcp_gateway'):
+ *   - MCP gateway specific configuration
+ *
+ * LLM Proxy (agent_type = 'llm_proxy'):
+ *   - LLM proxy specific configuration
  *
  * Internal agents (agent_type = 'agent'):
  *   - Chat agents with system/user prompts
@@ -58,7 +71,7 @@ const agentsTable = pgTable(
       .notNull()
       .default(false),
 
-    // Agent type: 'mcp_gateway' (external profile) or 'agent' (internal agent)
+    // Agent type: 'profile' (external profile), 'mcp_gateway', 'llm_proxy', or 'agent' (internal agent)
     agentType: agentTypeEnum("agent_type").notNull().default("mcp_gateway"),
 
     // Prompt fields (only used when agentType = 'agent')

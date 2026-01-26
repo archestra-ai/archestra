@@ -8,7 +8,7 @@ NC='\033[0m' # No Color
 
 # URLs with defaults
 FRONTEND_URL="${ARCHESTRA_FRONTEND_URL:-http://localhost:3000}"
-BACKEND_URL="${ARCHESTRA_API_BASE_URL:-http://localhost:9000}"
+BACKEND_URL="${ARCHESTRA_INTERNAL_API_BASE_URL:-http://localhost:9000}"
 
 echo ""
 printf "${GREEN}  Welcome to Archestra! <3 ${NC}\n"

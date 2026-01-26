@@ -533,6 +533,51 @@ describe("handleAfterHook", () => {
       // depending on test setup, but it shouldn't throw unhandled errors
       await expect(handleAfterHook(ctx)).resolves.not.toThrow();
     });
+
+    test("should auto-accept pending invitation with custom role", async ({
+      makeUser,
+      makeOrganization,
+      makeInvitation,
+      makeCustomRole,
+    }) => {
+      const inviter = await makeUser();
+      const user = await makeUser({ email: "custom-role-signin@example.com" });
+      const org = await makeOrganization();
+
+      // Create a custom role
+      const customRole = await makeCustomRole(org.id, {
+        role: "custom_signin_role",
+        name: "Custom Sign-in Role",
+        permission: { profile: ["read"] },
+      });
+
+      // Create invitation with the custom role
+      await makeInvitation(org.id, inviter.id, {
+        email: "custom-role-signin@example.com",
+        status: "pending",
+        role: customRole.role,
+      });
+
+      const ctx = createMockContext({
+        path: "/sign-in",
+        method: "POST",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: null },
+          },
+        },
+      });
+
+      // Should not throw
+      await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+
+      // Verify the member was created with the custom role
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member).toBeDefined();
+      expect(member?.role).toBe(customRole.role);
+    });
   });
 
   describe("SSO team sync", () => {

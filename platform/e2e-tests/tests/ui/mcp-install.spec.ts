@@ -46,6 +46,12 @@ test.describe("MCP Install", () => {
     await adminPage.waitForLoadState("networkidle");
 
     // Install dialog opens automatically after adding to registry
+    // Wait for the install dialog to be visible
+    await adminPage
+      .getByRole("dialog")
+      .filter({ hasText: /Install -/ })
+      .waitFor({ state: "visible", timeout: 30000 });
+
     // fill the api key (just fake value)
     await adminPage
       .getByRole("textbox", { name: "context7_api_key *" })
@@ -111,6 +117,12 @@ test.describe("MCP Install", () => {
       await clickButton({ page: adminPage, options: { name: "Add Server" } });
       await adminPage.waitForLoadState("networkidle");
 
+      // Wait for the install dialog to be visible (Remote server uses "Install Server" title)
+      await adminPage
+        .getByRole("dialog")
+        .filter({ hasText: /Install Server/ })
+        .waitFor({ state: "visible", timeout: 30000 });
+
       // install the server (install dialog already open)
       await clickButton({ page: adminPage, options: { name: "Install" } });
       await adminPage.waitForTimeout(2_000);
@@ -162,6 +174,12 @@ test.describe("MCP Install", () => {
       // add catalog item to the registry (install dialog opens automatically)
       await clickButton({ page: adminPage, options: { name: "Add Server" } });
       await adminPage.waitForLoadState("networkidle");
+
+      // Wait for the install dialog to be visible (Remote server uses "Install Server" title)
+      await adminPage
+        .getByRole("dialog")
+        .filter({ hasText: /Install Server/ })
+        .waitFor({ state: "visible", timeout: 30000 });
 
       // Install dialog already open - check that we have input for entering the token and fill it with fake value
       await adminPage

@@ -133,7 +133,8 @@ export default function ChatPage() {
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(false);
 
   // Fetch internal agents for dialog editing
-  const { data: internalAgents = [] } = useInternalAgents();
+  const { data: internalAgents = [], isPending: isLoadingAgents } =
+    useInternalAgents();
 
   // Fetch profiles and models for initial chat (no conversation)
   // Using non-suspense queries to avoid blocking page render
@@ -848,8 +849,12 @@ export default function ChatPage() {
     );
   }
 
-  // If no agents exist, show empty state
-  if (!isLoadingApiKeyCheck && internalAgents.length === 0) {
+  // If no agents exist, show empty state (only after agents have loaded)
+  if (
+    !isLoadingApiKeyCheck &&
+    !isLoadingAgents &&
+    internalAgents.length === 0
+  ) {
     return (
       <Empty className="h-full">
         <EmptyHeader>

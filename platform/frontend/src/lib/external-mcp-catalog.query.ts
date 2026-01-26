@@ -33,7 +33,6 @@ export function useMcpRegistryServersInfinite(
           limit,
           offset: pageParam,
           sortBy: "quality", // Sort by quality score (highest first)
-          worksInArchestra: true,
         },
       });
       if (!response.data) {

@@ -1,9 +1,10 @@
 import {
   AGENT_TOOL_PREFIX,
-  DEFAULT_ARCHESTRA_TOOL_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   slugify,
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import {
   and,
@@ -607,33 +608,29 @@ class ToolModel {
 
   /**
    * Assign default Archestra tools to an agent.
-   *
-   * Default tools are those listed in {@link DEFAULT_ARCHESTRA_TOOL_NAMES}:
+   * These tools are automatically assigned to new profiles:
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
-   * - query_knowledge_graph: for querying the knowledge graph (only if KG is configured)
-   *
-   * Only tools that have already been seeded (via {@link seedArchestraTools})
-   * will be assigned. If none of the default tools exist, this method skips assignment.
+   * - query_knowledge_graph: for querying the knowledge graph (only if configured)
    */
   static async assignDefaultArchestraToolsToAgent(
     agentId: string,
   ): Promise<void> {
-    // Create a copy to avoid mutating the shared constant
-    const assignedDefaultTools = [...DEFAULT_ARCHESTRA_TOOL_NAMES];
-    if (!getKnowledgeGraphProviderType()) {
-      const index = assignedDefaultTools.indexOf(
-        TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
-      );
-      if (index !== -1) {
-        assignedDefaultTools.splice(index, 1); // Remove query_knowledge_graph tool if knowledge graph is not configured
-      }
+    // Build the list of default tools
+    const defaultToolNames = [
+      TOOL_ARTIFACT_WRITE_FULL_NAME,
+      TOOL_TODO_WRITE_FULL_NAME,
+    ];
+
+    // Add query_knowledge_graph if knowledge graph provider is configured
+    if (getKnowledgeGraphProviderType()) {
+      defaultToolNames.push(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
     }
 
     const defaultTools = await db
       .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, assignedDefaultTools));
+      .where(inArray(schema.toolsTable.name, defaultToolNames));
 
     if (defaultTools.length === 0) {
       // Tools not yet seeded, skip assignment

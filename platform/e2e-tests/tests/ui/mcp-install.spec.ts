@@ -64,11 +64,10 @@ test.describe("MCP Install", () => {
     await clickButton({ page: adminPage, options: { name: "Install" } });
     await adminPage.waitForLoadState("networkidle");
 
-    // Check that tools are discovered (use longer timeout for quickstart mode
-    // where Docker-in-Docker adds startup latency)
+    // Check that tools are discovered
     await serverCard
       .getByText("/2")
-      .waitFor({ state: "visible", timeout: 60_000 });
+      .waitFor({ state: "visible", timeout: 30_000 });
 
     // cleanup
     await deleteCatalogItem(

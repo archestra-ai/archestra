@@ -86,6 +86,11 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
 
       // Install using personal credential
       await clickButton({ page, options: { name: "Install" } });
+      // Wait for dialog overlay to close completely before trying to click again
+      // This prevents "dialog-overlay intercepts pointer events" errors
+      await page
+        .locator('[data-slot="dialog-overlay"]')
+        .waitFor({ state: "hidden", timeout: CONNECT_BUTTON_TIMEOUT });
 
       // Credentials count should be 1 for Admin and Editor
       if (user === "Admin" || user === "Editor") {
@@ -254,6 +259,11 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       return;
     }
 
+    // Wait for dialog overlay to close completely before trying to click again
+    // This prevents "dialog-overlay intercepts pointer events" errors
+    await page
+      .locator('[data-slot="dialog-overlay"]')
+      .waitFor({ state: "hidden", timeout: CONNECT_BUTTON_TIMEOUT });
     // Wait for dialog to close and button to be visible again
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,

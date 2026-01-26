@@ -63,6 +63,11 @@ test("Verify tool calling using dynamic credentials", async ({
       .fill(`${user}-personal-credential`);
     // Install using personal credential
     await clickButton({ page, options: { name: "Install" } });
+    // Wait for dialog overlay to close completely before trying to click again
+    // This prevents "dialog-overlay intercepts pointer events" errors
+    await page
+      .locator('[data-slot="dialog-overlay"]')
+      .waitFor({ state: "hidden", timeout: CONNECT_BUTTON_TIMEOUT });
     // Wait for dialog to close and button to be visible again
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,

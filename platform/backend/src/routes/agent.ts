@@ -160,8 +160,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetDefaultLlmProxy,
-        description:
-          "Get the default LLM Proxy profile. Returns 404 if no default profile is configured.",
+        description: "Get or create default LLM Proxy",
         tags: ["LLM Proxy"],
         response: constructResponseSchema(SelectAgentSchema),
       },

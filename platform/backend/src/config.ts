@@ -469,7 +469,6 @@ export default {
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
-      useV2Routes: process.env.ARCHESTRA_BEDROCK_USE_V2_ROUTES !== "false",
       /** Prefix for cross-region inference profile models (e.g., "us." or "eu.") */
       inferenceProfilePrefix:
         process.env.ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX || "",

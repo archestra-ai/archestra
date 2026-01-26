@@ -255,3 +255,68 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **API Key format**: Obtain your API key from the [Zhipu AI Platform](https://z.ai/)
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
+
+## Amazon Bedrock
+
+### Supported Bedrock APIs
+
+- **Converse API** (`/converse`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html))
+- **Converse Stream API** (`/converse-stream`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html))
+- **InvokeModel API** (`/invoke`) - ⛔ Not supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html))
+- **OpenAI-compatible API (Mantle)** - ⛔ Not supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html))
+
+### Bedrock Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/bedrock/{profile-id}`
+- **Authentication**: Pass your Bedrock API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                                     | Required | Description                                                                                     |
+| -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_BEDROCK_BASE_URL`                 | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`)          |
+| `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX` | No       | Region prefix for cross-region inference profiles (e.g., `us` or `eu`)                          |
+| `ARCHESTRA_CHAT_BEDROCK_API_KEY`             | No       | Default API key for Bedrock (can be overridden per conversation/team/org)                       |
+
+### Understanding the Environment Variables
+
+#### `ARCHESTRA_BEDROCK_BASE_URL`
+
+This variable is **required** to enable the Bedrock provider. It specifies the regional endpoint for the Bedrock Runtime API. The URL format follows AWS regional endpoints:
+
+```
+https://bedrock-runtime.{region}.amazonaws.com
+```
+
+Examples:
+- US East (N. Virginia): `https://bedrock-runtime.us-east-1.amazonaws.com`
+- US West (Oregon): `https://bedrock-runtime.us-west-2.amazonaws.com`
+- EU (Frankfurt): `https://bedrock-runtime.eu-central-1.amazonaws.com`
+- EU (Stockholm): `https://bedrock-runtime.eu-north-1.amazonaws.com`
+
+The region in the URL determines which AWS region processes your requests and where your data resides. Choose a region based on:
+- **Latency**: Select a region geographically close to your users
+- **Model availability**: Not all models are available in all regions
+- **Data residency**: Compliance requirements may dictate specific regions
+
+#### `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX`
+
+Some models in Bedrock, such as Claude models from Anthropic, use [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html) that enable requests to be routed across multiple regions for better availability and throughput.
+
+When this variable is set, Archestra automatically prefixes model IDs for models that support inference profiles. For example:
+- Without prefix: `anthropic.claude-3-5-sonnet-20241022-v2:0`
+- With prefix `us`: `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
+- With prefix `eu`: `eu.anthropic.claude-3-5-sonnet-20241022-v2:0`
+
+Valid prefix values:
+- `us` - Routes to US regions (us-east-1, us-west-2)
+- `eu` - Routes to EU regions (eu-central-1, eu-west-1, eu-west-3)
+
+**When to use this variable:**
+- Set it when you want to use cross-region inference profiles for supported models (like Claude)
+- Models that only support on-demand inference (like Amazon Nova) work regardless of this setting
+- If not set, only models with on-demand inference support will be available
+
+### Authentication
+
+Archestra uses [Amazon Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) for authentication. Pass your Bedrock API key in the `Authorization` header as a Bearer token.

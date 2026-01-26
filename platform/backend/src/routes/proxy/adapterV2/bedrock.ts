@@ -99,7 +99,7 @@ function isNovaModel(modelId: string): boolean {
 }
 
 /**
- * Nova models fail with "Model produced invalid sequence as part of ToolUse" when
+ * Nova models faeil with "Model produced invalid sequence as part of ToolUse" when
  * tool names contain hyphens. We replace hyphens with underscores before sending
  * to Bedrock and use a name mapping to restore original names in responses.
  */

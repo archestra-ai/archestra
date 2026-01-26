@@ -11,6 +11,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -238,6 +239,73 @@ export const auth: any = betterAuth({
             }
           }
           return { data: session };
+        },
+      },
+    },
+    member: {
+      create: {
+        before: async (member: {
+          id: string;
+          userId: string;
+          organizationId: string;
+          role: string;
+          createdAt: Date;
+        }) => {
+          // When a member is created via invitation acceptance, ensure the role
+          // matches the invitation's custom role (not better-auth's default)
+          try {
+            // Get the user's email to find their pending invitation
+            const [user] = await db
+              .select({ email: schema.usersTable.email })
+              .from(schema.usersTable)
+              .where(eq(schema.usersTable.id, member.userId))
+              .limit(1);
+
+            if (!user?.email) {
+              return { data: member };
+            }
+
+            // Find pending invitation for this user in this organization
+            const [invitation] = await db
+              .select({ role: schema.invitationsTable.role })
+              .from(schema.invitationsTable)
+              .where(
+                and(
+                  eq(schema.invitationsTable.email, user.email.toLowerCase()),
+                  eq(
+                    schema.invitationsTable.organizationId,
+                    member.organizationId,
+                  ),
+                  eq(schema.invitationsTable.status, "pending"),
+                ),
+              )
+              .limit(1);
+
+            if (invitation?.role && invitation.role !== member.role) {
+              logger.info(
+                {
+                  userId: member.userId,
+                  organizationId: member.organizationId,
+                  originalRole: member.role,
+                  invitationRole: invitation.role,
+                },
+                "[databaseHooks:member] Overriding role with invitation's custom role",
+              );
+              return {
+                data: {
+                  ...member,
+                  role: invitation.role,
+                },
+              };
+            }
+          } catch (error) {
+            logger.error(
+              { err: error, userId: member.userId },
+              "[databaseHooks:member] Error checking invitation role",
+            );
+          }
+
+          return { data: member };
         },
       },
     },

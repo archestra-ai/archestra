@@ -33,6 +33,7 @@ import { ConversationArtifactPanel } from "@/components/chat/conversation-artifa
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -823,9 +824,13 @@ export default function ChatPage() {
   // Determine which agent ID to use for prompt input
   const activeAgentId = conversation?.agent?.id ?? initialAgentId;
 
+  // Show loading spinner while essential data is loading
+  if (isLoadingApiKeyCheck || isLoadingAgents) {
+    return <LoadingSpinner />;
+  }
+
   // If API key is not configured, show setup message
-  // Only show after loading completes to avoid flash of incorrect content
-  if (!isLoadingApiKeyCheck && !hasAnyApiKey) {
+  if (!hasAnyApiKey) {
     return (
       <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="max-w-md">
@@ -849,12 +854,8 @@ export default function ChatPage() {
     );
   }
 
-  // If no agents exist, show empty state (only after agents have loaded)
-  if (
-    !isLoadingApiKeyCheck &&
-    !isLoadingAgents &&
-    internalAgents.length === 0
-  ) {
+  // If no agents exist, show empty state
+  if (internalAgents.length === 0) {
     return (
       <Empty className="h-full">
         <EmptyHeader>

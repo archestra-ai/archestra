@@ -1,4 +1,8 @@
-import { DEFAULT_PROFILE_NAME } from "@shared";
+import {
+  DEFAULT_LLM_PROXY_NAME,
+  DEFAULT_MCP_GATEWAY_NAME,
+  DEFAULT_PROFILE_NAME,
+} from "@shared";
 import {
   and,
   asc,
@@ -635,11 +639,46 @@ class AgentModel {
     };
   }
 
+  static async getMCPGatewayOrCreateDefault(
+    organizationId?: string,
+  ): Promise<Agent> {
+    return AgentModel.getOrCreateDefaultByType(
+      "mcp_gateway",
+      DEFAULT_MCP_GATEWAY_NAME,
+      organizationId,
+    );
+  }
+
+  static async getLLMProxyOrCreateDefault(
+    organizationId?: string,
+  ): Promise<Agent> {
+    return AgentModel.getOrCreateDefaultByType(
+      "llm_proxy",
+      DEFAULT_LLM_PROXY_NAME,
+      organizationId,
+    );
+  }
+
+  /**
+   * @deprecated Use getMCPGatewayOrCreateDefault or getLLMProxyOrCreateDefault instead
+   */
   static async getAgentOrCreateDefault(
     name?: string,
     organizationId?: string,
   ): Promise<Agent> {
-    // First, try to find an agent with isDefault=true
+    return AgentModel.getOrCreateDefaultByType(
+      "mcp_gateway",
+      name || DEFAULT_PROFILE_NAME,
+      organizationId,
+    );
+  }
+
+  private static async getOrCreateDefaultByType(
+    agentType: "mcp_gateway" | "llm_proxy",
+    defaultName: string,
+    organizationId?: string,
+  ): Promise<Agent> {
+    // First, try to find an agent with isDefault=true and matching agentType
     const rows = await db
       .select()
       .from(schema.agentsTable)
@@ -651,7 +690,12 @@ class AgentModel {
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
-      .where(eq(schema.agentsTable.isDefault, true));
+      .where(
+        and(
+          eq(schema.agentsTable.isDefault, true),
+          eq(schema.agentsTable.agentType, agentType),
+        ),
+      );
 
     if (rows.length > 0) {
       // Default agent exists, return it
@@ -680,7 +724,8 @@ class AgentModel {
     }
 
     return AgentModel.create({
-      name: name || DEFAULT_PROFILE_NAME,
+      name: defaultName,
+      agentType,
       isDefault: true,
       organizationId: orgId || "",
       teams: [],

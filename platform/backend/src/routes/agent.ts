@@ -141,17 +141,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/agents/default",
+    "/api/mcp-gateways/default",
     {
       schema: {
-        operationId: RouteId.GetDefaultAgent,
-        description: "Get or create default agent",
-        tags: ["Agents"],
+        operationId: RouteId.GetDefaultMcpGateway,
+        description: "Get or create default MCP Gateway",
+        tags: ["MCP Gateways"],
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async (_request, reply) => {
-      return reply.send(await AgentModel.getAgentOrCreateDefault());
+      return reply.send(await AgentModel.getMCPGatewayOrCreateDefault());
     },
   );
 

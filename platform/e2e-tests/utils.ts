@@ -208,20 +208,20 @@ export async function verifyToolCallResultViaApi({
   toolName: string;
   cookieHeaders: string;
 }) {
-  const defaultAgentResponse = await archestraApiSdk.getDefaultAgent({
+  const defaultMcpGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
     headers: { Cookie: cookieHeaders },
   });
-  if (defaultAgentResponse.error) {
+  if (defaultMcpGatewayResponse.error) {
     throw new Error(
-      `Failed to get default agent: ${JSON.stringify(defaultAgentResponse.error)}`,
+      `Failed to get default MCP gateway: ${JSON.stringify(defaultMcpGatewayResponse.error)}`,
     );
   }
-  if (!defaultAgentResponse.data) {
+  if (!defaultMcpGatewayResponse.data) {
     throw new Error(
-      `No default agent returned from API. Response: ${JSON.stringify(defaultAgentResponse)}`,
+      `No default MCP gateway returned from API. Response: ${JSON.stringify(defaultMcpGatewayResponse)}`,
     );
   }
-  const defaultProfile = defaultAgentResponse.data;
+  const defaultProfile = defaultMcpGatewayResponse.data;
 
   let token: string;
   if (tokenToUse === "default-team") {

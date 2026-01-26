@@ -72,7 +72,9 @@ async function seedMockData() {
 
   // Step 2: Create agents
   logger.info("\nCreating agents...");
-  await AgentModel.getAgentOrCreateDefault(); // always recreate default agent
+  // Always recreate default agents
+  await AgentModel.getMCPGatewayOrCreateDefault();
+  await AgentModel.getLLMProxyOrCreateDefault();
   const agentData = generateMockAgents(org.id);
 
   await db.insert(schema.agentsTable).values(agentData);

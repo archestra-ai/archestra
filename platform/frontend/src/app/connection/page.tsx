@@ -6,10 +6,10 @@ import { ArchestraArchitectureDiagram } from "@/components/archestra-architectur
 import type { ArchitectureTabType } from "@/components/architecture-diagram/architecture-diagram";
 import { ConnectionOptions } from "@/components/connection-options";
 import { PageLayout } from "@/components/page-layout";
-import { useDefaultProfile } from "@/lib/agent.query";
+import { useDefaultMcpGateway } from "@/lib/agent.query";
 
 export default function ConnectionPage() {
-  const { data: defaultProfile } = useDefaultProfile();
+  const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
 
@@ -40,7 +40,7 @@ export default function ConnectionPage() {
             </div>
             <div>
               <ConnectionOptions
-                agentId={defaultProfile?.id}
+                agentId={defaultMcpGateway?.id}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
               />

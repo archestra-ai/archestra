@@ -6040,14 +6040,14 @@ export type GetAllAgentsResponses = {
 
 export type GetAllAgentsResponse = GetAllAgentsResponses[keyof GetAllAgentsResponses];
 
-export type GetDefaultAgentData = {
+export type GetDefaultMcpGatewayData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/agents/default';
+    url: '/api/mcp-gateways/default';
 };
 
-export type GetDefaultAgentErrors = {
+export type GetDefaultMcpGatewayErrors = {
     /**
      * Default Response
      */
@@ -6104,9 +6104,9 @@ export type GetDefaultAgentErrors = {
     };
 };
 
-export type GetDefaultAgentError = GetDefaultAgentErrors[keyof GetDefaultAgentErrors];
+export type GetDefaultMcpGatewayError = GetDefaultMcpGatewayErrors[keyof GetDefaultMcpGatewayErrors];
 
-export type GetDefaultAgentResponses = {
+export type GetDefaultMcpGatewayResponses = {
     /**
      * Default Response
      */
@@ -6174,7 +6174,7 @@ export type GetDefaultAgentResponses = {
     };
 };
 
-export type GetDefaultAgentResponse = GetDefaultAgentResponses[keyof GetDefaultAgentResponses];
+export type GetDefaultMcpGatewayResponse = GetDefaultMcpGatewayResponses[keyof GetDefaultMcpGatewayResponses];
 
 export type DeleteAgentData = {
     body?: never;

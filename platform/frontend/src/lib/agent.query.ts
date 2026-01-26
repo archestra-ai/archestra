@@ -16,7 +16,7 @@ const {
   deleteAgent,
   getAgents,
   getAllAgents,
-  getDefaultAgent,
+  getDefaultMcpGateway,
   getAgent,
   updateAgent,
   getLabelKeys,
@@ -111,12 +111,12 @@ export function useProfilesPaginated(params?: {
   });
 }
 
-export function useDefaultProfile(params?: {
-  initialData?: archestraApiTypes.GetDefaultAgentResponses["200"];
+export function useDefaultMcpGateway(params?: {
+  initialData?: archestraApiTypes.GetDefaultMcpGatewayResponses["200"];
 }) {
   return useQuery({
-    queryKey: ["agents", "default"],
-    queryFn: async () => (await getDefaultAgent()).data ?? null,
+    queryKey: ["mcp-gateways", "default"],
+    queryFn: async () => (await getDefaultMcpGateway()).data ?? null,
     initialData: params?.initialData,
   });
 }

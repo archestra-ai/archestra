@@ -129,13 +129,8 @@ export async function handleLLMProxy<
     }
     resolvedAgent = agent;
   } else {
-    logger.debug(
-      { userAgent: (headers as Record<string, unknown>)["user-agent"] },
-      `[${providerName}Proxy] Resolving default agent by user-agent`,
-    );
-    resolvedAgent = await AgentModel.getAgentOrCreateDefault(
-      (headers as Record<string, unknown>)["user-agent"] as string | undefined,
-    );
+    logger.debug(`[${providerName}Proxy] Resolving default LLM proxy agent`);
+    resolvedAgent = await AgentModel.getLLMProxyOrCreateDefault();
   }
 
   const resolvedAgentId = resolvedAgent.id;

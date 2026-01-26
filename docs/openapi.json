@@ -21080,13 +21080,13 @@
         }
       }
     },
-    "/api/agents/default": {
+    "/api/mcp-gateways/default": {
       "get": {
-        "operationId": "getDefaultAgent",
+        "operationId": "getDefaultMcpGateway",
         "tags": [
-          "Agents"
+          "MCP Gateways"
         ],
-        "description": "Get or create default agent",
+        "description": "Get or create default MCP Gateway",
         "responses": {
           "200": {
             "description": "Default Response",

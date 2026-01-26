@@ -178,14 +178,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       resolvedAgent = agent;
     } else {
-      // Otherwise get or create default agent
-      logger.debug(
-        { userAgent: headers["user-agent"] },
-        "[AnthropicProxy] Resolving default agent by user-agent",
-      );
-      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
-        headers["user-agent"],
-      );
+      // Otherwise get or create default LLM proxy agent
+      logger.debug("[AnthropicProxy] Resolving default LLM proxy agent");
+      resolvedAgent = await AgentModel.getLLMProxyOrCreateDefault();
     }
 
     const resolvedAgentId = resolvedAgent.id;

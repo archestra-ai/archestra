@@ -254,24 +254,18 @@ export const auth: any = betterAuth({
           // When a member is created via invitation acceptance, ensure the role
           // matches the invitation's custom role (not better-auth's default)
           try {
-            // Get the user's email to find their pending invitation
-            const [user] = await db
-              .select({ email: schema.usersTable.email })
+            // Use a single JOIN query to find pending invitation for this user
+            // This combines user email lookup and invitation lookup into one query
+            const [result] = await db
+              .select({ invitationRole: schema.invitationsTable.role })
               .from(schema.usersTable)
-              .where(eq(schema.usersTable.id, member.userId))
-              .limit(1);
-
-            if (!user?.email) {
-              return { data: member };
-            }
-
-            // Find pending invitation for this user in this organization
-            const [invitation] = await db
-              .select({ role: schema.invitationsTable.role })
-              .from(schema.invitationsTable)
-              .where(
+              .innerJoin(
+                schema.invitationsTable,
                 and(
-                  eq(schema.invitationsTable.email, user.email.toLowerCase()),
+                  eq(
+                    schema.invitationsTable.email,
+                    schema.usersTable.email, // Emails are stored lowercase in both tables
+                  ),
                   eq(
                     schema.invitationsTable.organizationId,
                     member.organizationId,
@@ -279,22 +273,31 @@ export const auth: any = betterAuth({
                   eq(schema.invitationsTable.status, "pending"),
                 ),
               )
+              .where(eq(schema.usersTable.id, member.userId))
               .limit(1);
 
-            if (invitation?.role && invitation.role !== member.role) {
+            // No pending invitation found - skip role override
+            if (!result) {
+              return { data: member };
+            }
+
+            if (
+              result.invitationRole &&
+              result.invitationRole !== member.role
+            ) {
               logger.info(
                 {
                   userId: member.userId,
                   organizationId: member.organizationId,
                   originalRole: member.role,
-                  invitationRole: invitation.role,
+                  invitationRole: result.invitationRole,
                 },
                 "[databaseHooks:member] Overriding role with invitation's custom role",
               );
               return {
                 data: {
                   ...member,
-                  role: invitation.role,
+                  role: result.invitationRole,
                 },
               };
             }

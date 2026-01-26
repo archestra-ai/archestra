@@ -175,8 +175,8 @@ test.describe("Invitation Custom Role Assignment", () => {
     });
     const customRole = await roleResponse.json();
 
-    let customInvitation: { id: string };
-    let editorInvitation: { id: string };
+    let customInvitation: { id: string } | undefined;
+    let editorInvitation: { id: string } | undefined;
 
     try {
       // Create invitation with custom role

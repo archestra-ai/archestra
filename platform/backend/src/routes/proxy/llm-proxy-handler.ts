@@ -129,13 +129,13 @@ export async function handleLLMProxy<
     }
     resolvedAgent = agent;
   } else {
-    logger.debug(
-      { userAgent: (headers as Record<string, unknown>)["user-agent"] },
-      `[${providerName}Proxy] Resolving default agent by user-agent`,
-    );
-    resolvedAgent = await AgentModel.getAgentOrCreateDefault(
-      (headers as Record<string, unknown>)["user-agent"] as string | undefined,
-    );
+    logger.debug(`[${providerName}Proxy] Resolving default profile`);
+    const defaultProfile = await AgentModel.getDefaultProfile();
+    if (!defaultProfile) {
+      logger.debug(`[${providerName}Proxy] No default profile found`);
+      throw new ApiError(400, "Please specify an LLMProxy ID in the URL path.");
+    }
+    resolvedAgent = defaultProfile;
   }
 
   const resolvedAgentId = resolvedAgent.id;

@@ -126,7 +126,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgent]: {
     profile: ["read"],
   },
-  [RouteId.GetDefaultAgent]: {
+  [RouteId.GetDefaultMcpGateway]: {
+    profile: ["read"],
+  },
+  [RouteId.GetDefaultLlmProxy]: {
     profile: ["read"],
   },
   [RouteId.CreateAgent]: {

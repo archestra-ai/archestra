@@ -118,6 +118,9 @@ importers:
       '@microsoft/msgraph-sdk-teams':
         specifier: 1.0.0-preview.77
         version: 1.0.0-preview.77
+      '@microsoft/msgraph-sdk-users':
+        specifier: 1.0.0-preview.77
+        version: 1.0.0-preview.77
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
         version: 1.25.2(hono@4.11.4)(zod@4.3.5)
@@ -1823,6 +1826,9 @@ packages:
 
   '@microsoft/msgraph-sdk-teams@1.0.0-preview.77':
     resolution: {integrity: sha512-NNNvZt5D7e8zG4ZYUhHgNsZ8Pi2N57KBYlvjPVFStUOUAvEhdEGb5hFrd9bEPAa6yS+Yudb9CsR4dBtTJtl0/Q==}
+
+  '@microsoft/msgraph-sdk-users@1.0.0-preview.77':
+    resolution: {integrity: sha512-87S1udXhvzAnb/5vV3wlEI4cjOxHTE1W9ig0XxPBfdPplTsXgjToPfNR6Ac59uhrUav0KFAdGrTnIGtvAO5kkQ==}
 
   '@microsoft/msgraph-sdk@1.0.0-preview.77':
     resolution: {integrity: sha512-Yt2shpGa7+GFbj0tKTZcdV7dHb861fBaTAK5flbmHNaHcEbYOD7blSMBl+6s7rKJ6bfNxmFXwPZTM+xfeZnTWA==}
@@ -10356,6 +10362,13 @@ snapshots:
       - supports-color
 
   '@microsoft/msgraph-sdk-teams@1.0.0-preview.77':
+    dependencies:
+      '@microsoft/msgraph-sdk': 1.0.0-preview.77
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@microsoft/msgraph-sdk-users@1.0.0-preview.77':
     dependencies:
       '@microsoft/msgraph-sdk': 1.0.0-preview.77
       tslib: 2.8.1

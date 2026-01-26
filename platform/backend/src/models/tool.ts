@@ -1,10 +1,9 @@
 import {
   AGENT_TOOL_PREFIX,
+  DEFAULT_ARCHESTRA_TOOL_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   slugify,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
-  TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import {
   and,
@@ -387,8 +386,9 @@ class ToolModel {
       return [];
     }
 
-    // Return tools that are assigned via junction table AND have catalogId set
-    // This includes both regular MCP server tools and Archestra builtin tools
+    // Return tools that are assigned via junction table AND are either:
+    // - MCP tools (have catalogId set) - includes regular MCP server tools and Archestra builtin tools
+    // - Delegation tools (have delegateToAgentId set)
     // Excludes proxy-discovered tools which have agentId set and catalogId null
     const tools = await db
       .select()
@@ -396,7 +396,10 @@ class ToolModel {
       .where(
         and(
           inArray(schema.toolsTable.id, assignedToolIds),
-          isNotNull(schema.toolsTable.catalogId),
+          or(
+            isNotNull(schema.toolsTable.catalogId),
+            isNotNull(schema.toolsTable.delegateToAgentId),
+          ),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -604,29 +607,33 @@ class ToolModel {
 
   /**
    * Assign default Archestra tools to an agent.
-   * These tools are automatically assigned to new profiles:
+   *
+   * Default tools are those listed in {@link DEFAULT_ARCHESTRA_TOOL_NAMES}:
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
-   * - query_knowledge_graph: for querying the knowledge graph (only if configured)
+   * - query_knowledge_graph: for querying the knowledge graph (only if KG is configured)
+   *
+   * Only tools that have already been seeded (via {@link seedArchestraTools})
+   * will be assigned. If none of the default tools exist, this method skips assignment.
    */
   static async assignDefaultArchestraToolsToAgent(
     agentId: string,
   ): Promise<void> {
-    // Build the list of default tools
-    const defaultToolNames = [
-      TOOL_ARTIFACT_WRITE_FULL_NAME,
-      TOOL_TODO_WRITE_FULL_NAME,
-    ];
-
-    // Add query_knowledge_graph if knowledge graph provider is configured
-    if (getKnowledgeGraphProviderType()) {
-      defaultToolNames.push(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+    // Create a copy to avoid mutating the shared constant
+    const assignedDefaultTools = [...DEFAULT_ARCHESTRA_TOOL_NAMES];
+    if (!getKnowledgeGraphProviderType()) {
+      const index = assignedDefaultTools.indexOf(
+        TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+      );
+      if (index !== -1) {
+        assignedDefaultTools.splice(index, 1); // Remove query_knowledge_graph tool if knowledge graph is not configured
+      }
     }
 
     const defaultTools = await db
       .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, defaultToolNames));
+      .where(inArray(schema.toolsTable.name, assignedDefaultTools));
 
     if (defaultTools.length === 0) {
       // Tools not yet seeded, skip assignment
@@ -1166,6 +1173,23 @@ class ToolModel {
         description: `Delegate task to agent: ${newName}`,
       })
       .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId));
+  }
+
+  /**
+   * Find all agent IDs that have delegation tools pointing to the target agent.
+   * Used to invalidate caches when target agent is renamed.
+   */
+  static async getParentAgentIds(targetAgentId: string): Promise<string[]> {
+    const results = await db
+      .selectDistinct({ agentId: schema.agentToolsTable.agentId })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId));
+
+    return results.map((r) => r.agentId);
   }
 
   /**

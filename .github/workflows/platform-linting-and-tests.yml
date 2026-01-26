@@ -35,30 +35,6 @@ on:
         required: false
 
 jobs:
-  paths-filter:
-    name: Detect changed paths
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      mcp-server-base-image: ${{ steps.filter.outputs.mcp-server-base-image }}
-    steps:
-      - name: Checkout repository
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-
-      - name: Filter paths
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        id: filter
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
-        with:
-          filters: |
-            mcp-server-base-image:
-              - 'platform/mcp_server_docker_image/**'
-              - '.github/workflows/build-base-mcp-server-docker-image.yml'
-
   platform-linting-and-tests:
     name: Platform Linting and Tests
     runs-on: ubuntu-latest
@@ -177,18 +153,38 @@ jobs:
 
           echo "✅ All validation checks passed"
 
-  # Build platform Docker image once for all e2e tests
+  # Build Docker images for e2e tests (platform and MCP server base)
   # Non-fork PRs: Push to GHCR (faster)
   # Fork PRs: Upload as artifact (no package write permissions needed)
   platform-e2e-build:
-    name: Build Platform Image
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    name: Build ${{ matrix.name }} Image
+    runs-on: ${{ matrix.runner }}
     if: ${{ inputs.should-skip-running-and-always-succeed != true }}
     permissions:
       contents: read
       packages: write
-    outputs:
-      image-source: ${{ inputs.is-fork-pr && 'artifact' || 'ghcr' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Platform
+            runner: blacksmith-16vcpu-ubuntu-2404
+            context: ./platform
+            dockerfile: ""
+            image-name: platform
+            artifact-name: platform-docker-image
+            tarball-name: platform-image.tar.gz
+            local-tag-prefix: archestra-platform
+            use-build-action: true
+          - name: MCP Server Base
+            runner: blacksmith-4vcpu-ubuntu-2404
+            context: ./platform/mcp_server_docker_image
+            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
+            image-name: mcp-server-base
+            artifact-name: mcp-server-base-docker-image
+            tarball-name: mcp-server-base-image.tar.gz
+            local-tag-prefix: mcp-server-base
+            use-build-action: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -196,6 +192,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup environment
+        if: ${{ matrix.use-build-action }}
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
@@ -208,41 +205,72 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Non-fork PRs: Build and push to GHCR
-      - name: Build and push Docker image to GHCR
-        if: ${{ !inputs.is-fork-pr }}
+      # Non-fork PRs: Build and push to GHCR (Platform image using custom action)
+      - name: Build and push Platform image to GHCR
+        if: ${{ !inputs.is-fork-pr && matrix.use-build-action }}
         uses: ./.github/actions/build-platform-docker-image
         with:
-          context: ./platform
+          context: ${{ matrix.context }}
           push: "true"
-          tags: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      # Fork PRs: Build locally and export as artifact
-      - name: Build Docker image locally
-        if: ${{ inputs.is-fork-pr }}
+      # Non-fork PRs: Build and push to GHCR (MCP server base using docker/build-push-action)
+      - name: Setup Blacksmith Builder
+        if: ${{ !matrix.use-build-action }}
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+
+      - name: Build and push MCP server base image to GHCR
+        if: ${{ !inputs.is-fork-pr && !matrix.use-build-action }}
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
+
+      # Fork PRs: Build locally and export as artifact (Platform image)
+      - name: Build Platform image locally
+        if: ${{ inputs.is-fork-pr && matrix.use-build-action }}
         uses: ./.github/actions/build-platform-docker-image
         with:
-          context: ./platform
+          context: ${{ matrix.context }}
           push: "false"
           load: "true"
-          tags: archestra-platform:${{ github.sha }}
+          tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      # Fork PRs: Build locally and export as artifact (MCP server base)
+      - name: Build MCP server base image locally
+        if: ${{ inputs.is-fork-pr && !matrix.use-build-action }}
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
 
       - name: Export Docker image as tarball
         if: ${{ inputs.is-fork-pr }}
+        env:
+          GIT_SHA: ${{ github.sha }}
+          LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
+          TARBALL_NAME: ${{ matrix.tarball-name }}
         run: |
-          docker save archestra-platform:${{ github.sha }} | gzip > /tmp/platform-image.tar.gz
-          ls -lh /tmp/platform-image.tar.gz
+          docker save "${LOCAL_TAG_PREFIX}:${GIT_SHA}" | gzip > "/tmp/${TARBALL_NAME}"
+          ls -lh "/tmp/${TARBALL_NAME}"
 
       - name: Upload Docker image artifact
         if: ${{ inputs.is-fork-pr }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: platform-docker-image
-          path: /tmp/platform-image.tar.gz
+          name: ${{ matrix.artifact-name }}
+          path: /tmp/${{ matrix.tarball-name }}
           retention-days: 1
           compression-level: 0 # Already gzipped
 
@@ -314,33 +342,21 @@ jobs:
         with:
           working-directory: ./platform
 
-      # Non-fork PRs: Pull from GHCR
-      - name: Login to GHCR
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && !inputs.is-fork-pr }}
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - name: Load platform image
+        id: load-platform-image
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/load-platform-image
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          is-fork-pr: ${{ inputs.is-fork-pr }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull platform image from GHCR
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && !inputs.is-fork-pr }}
-        run: |
-          docker pull ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
-
-      # Fork PRs: Download artifact and load
-      - name: Download platform image artifact
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-fork-pr }}
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+      - name: Load MCP server base image
+        id: load-mcp-server-base-image
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/load-mcp-server-base-image
         with:
-          name: platform-docker-image
-          path: /tmp
-
-      - name: Load platform Docker image
-        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-fork-pr }}
-        run: |
-          gunzip -c /tmp/platform-image.tar.gz | docker load
-          docker images
+          is-fork-pr: ${{ inputs.is-fork-pr }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -351,40 +367,18 @@ jobs:
           helm-values-path: .github/values-ci.yaml
           deploy-e2e-dependencies: "true"
           build-platform-image: "false"
-          platform-image-tag: ${{ inputs.is-fork-pr && format('archestra-platform:{0}', github.sha) || format('ghcr.io/{0}/platform:{1}', github.repository, github.sha) }}
+          platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
           platform-context: ./platform
-
-      - name: Resolve Playwright version
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          VERSION=$(cat platform/e2e-tests/package.json | jq -r '.devDependencies["@playwright/test"]' | sed 's/^[\^~]//')
-          echo "PLAYWRIGHT_VERSION=$VERSION" >> $GITHUB_ENV
+          mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
 
       - name: Run E2E tests
         id: e2e
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform
-        run: |
-          set -o pipefail
-          docker run --rm \
-            --network host \
-            --ipc=host \
-            -v "$GITHUB_WORKSPACE:/work" \
-            -w /work/platform \
-            -e CI=true \
-            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-            "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=${{ matrix.projects }} ${{ matrix.shard }} ${{ matrix.extra_args }}" \
-            2>&1 | tee playwright-output.txt
-
-      - name: Check for flaky tests
-        id: check-flaky
-        if: success()
-        run: |
-          if grep -qE "[0-9]+ flaky" platform/playwright-output.txt 2>/dev/null; then
-            echo "⚠️ Flaky tests detected"
-            echo "has_flaky_tests=true" >> $GITHUB_OUTPUT
-          fi
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: ${{ matrix.projects }}
+          shard: ${{ matrix.shard }}
+          extra_args: ${{ matrix.extra_args }}
 
       - name: Upload blob report
         if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
@@ -395,7 +389,7 @@ jobs:
           retention-days: 1
 
       - name: Show logs on failure or flaky tests
-        if: failure() || steps.check-flaky.outputs.has_flaky_tests == 'true'
+        if: failure() || steps.e2e.outputs.has_flaky_tests == 'true'
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide
@@ -418,10 +412,167 @@ jobs:
           echo "=== Vault Logs ==="
           kubectl logs -l app.kubernetes.io/name=vault --tail=200 2>/dev/null || true
 
+  # Quickstart E2E tests - validates docker run quickstart instructions work correctly
+  # Runs the mcp-install.spec.ts test against the platform started via docker run
+  platform-quickstart-e2e-tests:
+    name: Platform E2E Tests (Quickstart)
+    needs: [platform-e2e-build]
+    if: ${{ !cancelled() }}
+    runs-on: e2e-runner-16cpu
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout repository
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup environment
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Load platform image
+        id: load-platform-image
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/load-platform-image
+        with:
+          is-fork-pr: ${{ inputs.is-fork-pr }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
+      # The embedded Kind cluster inside the quickstart container cannot easily access images
+      # loaded on the host Docker daemon. The regular e2e tests (platform-e2e-tests) already
+      # validate the MCP server base image with proper Kind image loading.
+      # Quickstart tests use the default public MCP server base image.
+
+      - name: Start platform in quickstart mode
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        env:
+          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
+        run: |
+          echo "Starting Archestra platform in quickstart mode..."
+
+          # Create named volumes for data persistence
+          docker volume create archestra-ci-postgres-data || true
+          docker volume create archestra-ci-app-data || true
+
+          # Start the platform container
+          # Note: ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS allows e2e tests to use 127.0.0.1
+          # while the default ARCHESTRA_FRONTEND_URL=http://localhost:3000 stays unchanged
+          # Note: Uses the default public MCP server base image (not CI-built) because
+          # the embedded Kind cluster cannot access host Docker images without explicit loading
+          docker run -d \
+            --name archestra-quickstart \
+            -p 9000:9000 \
+            -p 3000:3000 \
+            -e ARCHESTRA_QUICKSTART=true \
+            -e ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3000 \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v archestra-ci-postgres-data:/var/lib/postgresql/data \
+            -v archestra-ci-app-data:/app/data \
+            "${PLATFORM_IMAGE_TAG}"
+
+          echo "Container started, waiting for platform to be ready..."
+
+      - name: Wait for platform to be healthy
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          echo "Waiting for platform services to be healthy..."
+
+          # Wait for backend health endpoint (max 3 minutes)
+          # Use 127.0.0.1 instead of localhost to avoid IPv6 issues with Docker port mapping
+          echo "Checking backend health..."
+          for i in {1..90}; do
+            if curl -sf http://127.0.0.1:9000/health > /dev/null 2>&1; then
+              echo "Backend is healthy!"
+              break
+            fi
+            echo "Waiting for backend... (attempt $i/90)"
+            sleep 2
+          done
+
+          # Verify backend is accessible
+          if ! curl -sf http://127.0.0.1:9000/health; then
+            echo "Backend health check failed after 3 minutes"
+            docker logs archestra-quickstart --tail=200
+            exit 1
+          fi
+
+          # Wait for frontend (max 1 minute - should be quick after backend is ready)
+          echo "Checking frontend health..."
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:3000/ > /dev/null 2>&1; then
+              echo "Frontend is healthy!"
+              break
+            fi
+            echo "Waiting for frontend... (attempt $i/30)"
+            sleep 2
+          done
+
+          # Verify frontend is accessible
+          if ! curl -sf http://127.0.0.1:3000/; then
+            echo "Frontend health check failed after 1 minute"
+            docker logs archestra-quickstart --tail=200
+            exit 1
+          fi
+
+          echo "All services are ready!"
+
+      - name: Create e2e test env file
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          # Use 127.0.0.1 instead of localhost to avoid IPv6 issues with Docker
+          echo "E2E_UI_BASE_URL=http://127.0.0.1:3000" > /tmp/quickstart-e2e.env
+          echo "E2E_API_BASE_URL=http://127.0.0.1:9000" >> /tmp/quickstart-e2e.env
+          cat /tmp/quickstart-e2e.env
+
+      - name: Run MCP Install E2E tests
+        id: e2e
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: chromium
+          # Run only the reliable "Self-hosted from catalog" test for quickstart validation
+          # Other tests have flakiness issues with parallel execution and retries
+          extra_args: "tests/ui/mcp-install.spec.ts --grep Self-hosted"
+          env_file: /tmp/quickstart-e2e.env
+
+      - name: Upload blob report
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: blob-report-quickstart
+          path: platform/e2e-tests/blob-report/
+          retention-days: 1
+
+      - name: Show platform logs on failure
+        if: failure()
+        run: |
+          echo "=== Archestra Quickstart Container Logs ==="
+          docker logs archestra-quickstart --tail=500 2>&1 || echo "Could not get container logs"
+
+          echo "=== Docker Container Status ==="
+          docker ps -a
+
+          echo "=== Docker Volumes ==="
+          docker volume ls
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop archestra-quickstart 2>/dev/null || true
+          docker rm archestra-quickstart 2>/dev/null || true
+          docker volume rm archestra-ci-postgres-data 2>/dev/null || true
+          docker volume rm archestra-ci-app-data 2>/dev/null || true
+
   # Merge all Playwright reports into a single HTML report
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
-    needs: [platform-e2e-tests]
+    needs: [platform-e2e-tests, platform-quickstart-e2e-tests]
     if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
     runs-on: ubuntu-latest
     permissions:
@@ -474,64 +625,87 @@ jobs:
           report-file: platform/e2e-tests/results.json
           job-summary: true
 
-  platform-docker-image-scanning:
-    name: Platform Docker Image Scanning
+  # Scan Docker images for CVEs using Docker Scout
+  # Runs on merge queue only (not on PRs) to reduce CI time
+  # NOTE: Skipped for fork PRs because GitHub doesn't expose repository secrets
+  docker-image-scanning:
+    name: Docker Image Scanning (${{ matrix.name }})
     needs: [platform-e2e-build]
     # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Platform
+            runner: ubuntu-latest
+            image-source: platform-e2e-build
+            context: ""
+            dockerfile: ""
+          - name: MCP Server Base
+            runner: blacksmith-4vcpu-ubuntu-2404
+            image-source: build
+            context: ./platform/mcp_server_docker_image
+            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
     permissions:
       contents: read
       packages: read
     steps:
-      # Non-fork PRs: Pull from GHCR
-      - name: Login to GHCR
-        if: ${{ github.event_name == 'merge_group' && !inputs.is-fork-pr }}
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - name: Checkout repository
+        if: ${{ github.event_name == 'merge_group' }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
-      - name: Pull platform image from GHCR
-        if: ${{ github.event_name == 'merge_group' && !inputs.is-fork-pr }}
+      # Platform image: Load from GHCR or artifact (already built by platform-e2e-build)
+      - name: Load platform image
+        id: load-platform-image
+        if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'platform-e2e-build' }}
+        uses: ./.github/actions/load-platform-image
+        with:
+          is-fork-pr: ${{ inputs.is-fork-pr }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Other images: Build locally for scanning (single arch, no push)
+      - name: Setup Blacksmith Builder
+        if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'build' }}
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+
+      - name: Build image for scanning
+        id: build-image
+        if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'build' }}
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: scan-target:${{ github.sha }}
+
+      # Determine the image tag to scan
+      - name: Set image tag
+        id: image-tag
+        if: ${{ github.event_name == 'merge_group' }}
+        env:
+          IMAGE_SOURCE: ${{ matrix.image-source }}
+          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
+          GIT_SHA: ${{ github.sha }}
         run: |
-          docker pull ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
+          if [ "${IMAGE_SOURCE}" == "platform-e2e-build" ]; then
+            echo "tag=${PLATFORM_IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=scan-target:${GIT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
 
-      # Fork PRs: Download artifact and load
-      - name: Download platform image artifact
-        if: ${{ github.event_name == 'merge_group' && inputs.is-fork-pr }}
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-        with:
-          name: platform-docker-image
-          path: /tmp
-
-      - name: Load platform Docker image
-        if: ${{ github.event_name == 'merge_group' && inputs.is-fork-pr }}
-        run: |
-          gunzip -c /tmp/platform-image.tar.gz | docker load
-          docker images
-
-      # Scan Docker image for CVEs using Docker Scout
-      # https://github.com/docker/scout-action
-      #
-      # Fails the CI check if any critical or high severity CVEs are found.
-      # Only checks for CVEs with available fixes (ignores unfixed vulnerabilities).
-      #
-      # NOTE: Skipped for fork PRs because GitHub doesn't expose repository secrets
-      # to workflows triggered by fork PRs. Docker Scout requires Docker Hub auth.
-      - name: Docker Scout CVE Check
+      - name: Scan image for CVEs
         if: ${{ github.event_name == 'merge_group' && !inputs.is-fork-pr }}
-        uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
+        uses: ./.github/actions/scan-docker-image
         with:
-          command: cves
-          image: ghcr.io/${{ github.repository }}/platform:${{ github.sha }}
+          image: ${{ steps.image-tag.outputs.tag }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          only-severities: critical,high
-          only-fixed: true
-          write-comment: false
-          exit-code: true
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
@@ -564,17 +738,3 @@ jobs:
         # and helm package explicitly checks this
         run: |
           helm package . --version v0.0.1 --app-version v0.0.1
-
-  # Test that the MCP server base Docker image builds successfully
-  # Only runs when relevant files are changed
-  mcp-server-base-image-build:
-    name: MCP Server Base Image Build
-    needs: paths-filter
-    if: ${{ needs.paths-filter.outputs.mcp-server-base-image == 'true' }}
-    permissions:
-      contents: read
-      id-token: write # Required for Workload Identity Federation
-    uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
-    with:
-      push_to_gcr: false
-      version: test

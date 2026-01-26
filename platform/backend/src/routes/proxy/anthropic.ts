@@ -178,14 +178,17 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       resolvedAgent = agent;
     } else {
-      // Otherwise get or create default agent
-      logger.debug(
-        { userAgent: headers["user-agent"] },
-        "[AnthropicProxy] Resolving default agent by user-agent",
-      );
-      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
-        headers["user-agent"],
-      );
+      // Get default profile (legacy behavior - no auto-create)
+      logger.debug("[AnthropicProxy] Resolving default profile");
+      const defaultProfile = await AgentModel.getDefaultProfile();
+      if (!defaultProfile) {
+        logger.debug("[AnthropicProxy] No default profile found");
+        throw new ApiError(
+          400,
+          "Please specify an LLMProxy ID in the URL path.",
+        );
+      }
+      resolvedAgent = defaultProfile;
     }
 
     const resolvedAgentId = resolvedAgent.id;

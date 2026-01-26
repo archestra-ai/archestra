@@ -1479,13 +1479,13 @@ describe("AgentModel", () => {
     });
   });
 
-  describe("getAgentOrCreateDefault Junction Table", () => {
-    test("getAgentOrCreateDefault returns tools from junction table", async ({
+  describe("getMCPGatewayOrCreateDefault Junction Table", () => {
+    test("getMCPGatewayOrCreateDefault returns tools from junction table", async ({
       makeTool,
       makeAgentTool,
     }) => {
-      // Get the default agent
-      const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+      // Get the default MCP gateway
+      const defaultAgent = await AgentModel.getMCPGatewayOrCreateDefault();
 
       // Add tools to the default agent via junction table
       const tool1 = await makeTool({
@@ -1502,8 +1502,8 @@ describe("AgentModel", () => {
       await makeAgentTool(defaultAgent.id, tool1.id);
       await makeAgentTool(defaultAgent.id, tool2.id);
 
-      // Get the default agent again - should include the tools
-      const foundAgent = await AgentModel.getAgentOrCreateDefault();
+      // Get the default MCP gateway again - should include the tools
+      const foundAgent = await AgentModel.getMCPGatewayOrCreateDefault();
 
       expect(foundAgent).not.toBeNull();
       expect(foundAgent.tools.length).toBeGreaterThanOrEqual(2);
@@ -1513,12 +1513,12 @@ describe("AgentModel", () => {
       expect(toolNames).toContain("default_agent_tool_2");
     });
 
-    test("getAgentOrCreateDefault includes Archestra MCP tools", async ({
+    test("getMCPGatewayOrCreateDefault includes Archestra MCP tools", async ({
       makeTool,
       makeAgentTool,
     }) => {
-      // Get the default agent
-      const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+      // Get the default MCP gateway
+      const defaultAgent = await AgentModel.getMCPGatewayOrCreateDefault();
 
       // Add regular tools
       const regularTool = await makeTool({
@@ -1537,8 +1537,8 @@ describe("AgentModel", () => {
       await makeAgentTool(defaultAgent.id, regularTool.id);
       await makeAgentTool(defaultAgent.id, archestraTool.id);
 
-      // Get the default agent again
-      const foundAgent = await AgentModel.getAgentOrCreateDefault();
+      // Get the default MCP gateway again
+      const foundAgent = await AgentModel.getMCPGatewayOrCreateDefault();
 
       // Verify both regular and Archestra tools are included
       const toolNames = foundAgent.tools.map((t) => t.name);

@@ -141,17 +141,36 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/agents/default",
+    "/api/mcp-gateways/default",
     {
       schema: {
-        operationId: RouteId.GetDefaultAgent,
-        description: "Get or create default agent",
-        tags: ["Agents"],
+        operationId: RouteId.GetDefaultMcpGateway,
+        description: "Get or create default MCP Gateway",
+        tags: ["MCP Gateways"],
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async (_request, reply) => {
-      return reply.send(await AgentModel.getAgentOrCreateDefault());
+    async (request, reply) => {
+      return reply.send(
+        await AgentModel.getMCPGatewayOrCreateDefault(request.organizationId),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/llm-proxy/default",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultLlmProxy,
+        description: "Get or create default LLM Proxy",
+        tags: ["LLM Proxy"],
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async (request, reply) => {
+      return reply.send(
+        await AgentModel.getLLMProxyOrCreateDefault(request.organizationId),
+      );
     },
   );
 

@@ -6075,14 +6075,14 @@ export type GetAllAgentsResponses = {
 
 export type GetAllAgentsResponse = GetAllAgentsResponses[keyof GetAllAgentsResponses];
 
-export type GetDefaultAgentData = {
+export type GetDefaultMcpGatewayData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/agents/default';
+    url: '/api/mcp-gateways/default';
 };
 
-export type GetDefaultAgentErrors = {
+export type GetDefaultMcpGatewayErrors = {
     /**
      * Default Response
      */
@@ -6139,9 +6139,9 @@ export type GetDefaultAgentErrors = {
     };
 };
 
-export type GetDefaultAgentError = GetDefaultAgentErrors[keyof GetDefaultAgentErrors];
+export type GetDefaultMcpGatewayError = GetDefaultMcpGatewayErrors[keyof GetDefaultMcpGatewayErrors];
 
-export type GetDefaultAgentResponses = {
+export type GetDefaultMcpGatewayResponses = {
     /**
      * Default Response
      */
@@ -6209,7 +6209,143 @@ export type GetDefaultAgentResponses = {
     };
 };
 
-export type GetDefaultAgentResponse = GetDefaultAgentResponses[keyof GetDefaultAgentResponses];
+export type GetDefaultMcpGatewayResponse = GetDefaultMcpGatewayResponses[keyof GetDefaultMcpGatewayResponses];
+
+export type GetDefaultLlmProxyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-proxy/default';
+};
+
+export type GetDefaultLlmProxyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetDefaultLlmProxyError = GetDefaultLlmProxyErrors[keyof GetDefaultLlmProxyErrors];
+
+export type GetDefaultLlmProxyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        isDemo: boolean;
+        isDefault: boolean;
+        considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            catalogId: string | null;
+            mcpServerId: string | null;
+            delegateToAgentId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+    };
+};
+
+export type GetDefaultLlmProxyResponse = GetDefaultLlmProxyResponses[keyof GetDefaultLlmProxyResponses];
 
 export type DeleteAgentData = {
     body?: never;

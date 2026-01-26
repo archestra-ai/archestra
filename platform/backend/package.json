@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.0.33",
+  "version": "1.0.34",
   "description": "",
   "author": "",
   "private": true,
@@ -56,6 +56,7 @@
     "@microsoft/msgraph-sdk": "1.0.0-preview.77",
     "@microsoft/msgraph-sdk-chats": "1.0.0-preview.77",
     "@microsoft/msgraph-sdk-teams": "1.0.0-preview.77",
+    "@microsoft/msgraph-sdk-users": "1.0.0-preview.77",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.68.0",

@@ -40,10 +40,6 @@ archestra:
     ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS: "http://e2e-tests-keycloak:8080,http://localhost:30081"
     # Secrets manager configuration for BYOS tests
     ARCHESTRA_SECRETS_MANAGER: "Vault"
-    # Pin MCP server base image to a known version for CI e2e tests.
-    # This avoids a chicken-and-egg problem during release-please PRs where the version
-    # in platform/backend/src/config.ts gets bumped but the new image isn't published yet.
-    ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE: "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.33"
     # Vault configuration for BYOS tests
     # Vault runs as a Kubernetes service in the cluster
     # Pods access via K8s service name, host/Playwright access via NodePort mapped to 8200

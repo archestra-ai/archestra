@@ -1,9 +1,12 @@
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsProcessedMessageModel,
+  UserModel,
 } from "@/models";
 import {
   type ChatOpsProcessingResult,
@@ -171,6 +174,29 @@ export class ChatOpsManager {
       provider,
     });
 
+    // Security: Validate user has access to the agent
+    logger.debug(
+      {
+        agentId: agentToUse.id,
+        agentName: agentToUse.name,
+        organizationId: agent.organizationId,
+        senderId: message.senderId,
+      },
+      "[ChatOps] About to validate user access",
+    );
+
+    const authResult = await this.validateUserAccess({
+      message,
+      provider,
+      agentId: agentToUse.id,
+      agentName: agentToUse.name,
+      organizationId: agent.organizationId,
+    });
+
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
+    }
+
     // Build context from thread history
     const contextMessages = await this.fetchThreadHistory(message, provider);
 
@@ -189,6 +215,7 @@ export class ChatOpsManager {
       fullMessage,
       sendReply,
       fallbackMessage,
+      userId: authResult.userId,
     });
   }
 
@@ -224,8 +251,8 @@ export class ChatOpsManager {
 
   /**
    * Resolve inline agent mention from message text.
-   * Pattern: ">AgentName message" switches to a different agent.
-   * Tolerant matching handles variations like ">AgentPeter", "> Agent Peter".
+   * Pattern: "AgentName > message" switches to a different agent.
+   * Tolerant matching handles variations like "Agent Peter > hello", "kid>how are you".
    */
   private async resolveInlineAgentMention(params: {
     messageText: string;
@@ -238,49 +265,59 @@ export class ChatOpsManager {
   }> {
     const { messageText, defaultAgent, provider } = params;
 
-    if (!messageText.startsWith(">")) {
+    // Look for ">" delimiter - pattern is "AgentName > message"
+    const delimiterIndex = messageText.indexOf(">");
+    if (delimiterIndex === -1) {
       return { agentToUse: defaultAgent, cleanedMessageText: messageText };
     }
 
-    const textAfterPrefix = messageText.slice(1).trimStart();
+    const potentialAgentName = messageText.slice(0, delimiterIndex).trim();
+    const messageAfterDelimiter = messageText.slice(delimiterIndex + 1).trim();
+
+    // If nothing before the delimiter, not a valid agent switch
+    if (!potentialAgentName) {
+      return { agentToUse: defaultAgent, cleanedMessageText: messageText };
+    }
+
     const availableAgents = await AgentModel.findByAllowedChatopsProvider(
       provider.providerId,
     );
 
-    // Sort by name length (longest first) to match "Agent Peter" before "Agent"
-    const sortedAgents = [...availableAgents].sort(
-      (a, b) => b.name.length - a.name.length,
-    );
-
-    for (const agent of sortedAgents) {
-      const matchLength = findTolerantMatchLength(textAfterPrefix, agent.name);
-      if (matchLength !== null) {
+    // Try to find a matching agent using tolerant matching
+    for (const agent of availableAgents) {
+      if (matchesAgentName(potentialAgentName, agent.name)) {
         return {
           agentToUse: agent,
-          cleanedMessageText: textAfterPrefix.slice(matchLength).trim(),
+          cleanedMessageText: messageAfterDelimiter,
         };
       }
     }
 
-    // No known agent matched - extract potential name for fallback message
-    const potentialName = textAfterPrefix.split(/\s{2,}|\n/)[0].trim();
-    if (potentialName) {
-      return {
-        agentToUse: defaultAgent,
-        cleanedMessageText:
-          textAfterPrefix.slice(potentialName.length).trim() || textAfterPrefix,
-        fallbackMessage: `${potentialName} not found, using ${defaultAgent.name}`,
-      };
-    }
-
-    return { agentToUse: defaultAgent, cleanedMessageText: messageText };
+    // No known agent matched - return fallback with the message after delimiter
+    return {
+      agentToUse: defaultAgent,
+      cleanedMessageText: messageAfterDelimiter || messageText,
+      fallbackMessage: `"${potentialAgentName}" not found, using ${defaultAgent.name}`,
+    };
   }
 
   private async fetchThreadHistory(
     message: IncomingChatMessage,
     provider: ChatOpsProvider,
   ): Promise<string[]> {
+    logger.debug(
+      {
+        messageId: message.messageId,
+        threadId: message.threadId,
+        channelId: message.channelId,
+        workspaceId: message.workspaceId,
+        isThreadReply: message.isThreadReply,
+      },
+      "[ChatOps] fetchThreadHistory called",
+    );
+
     if (!message.threadId) {
+      logger.debug("[ChatOps] No threadId, skipping thread history fetch");
       return [];
     }
 
@@ -291,6 +328,11 @@ export class ChatOpsManager {
         threadId: message.threadId,
         excludeMessageId: message.messageId,
       });
+
+      logger.debug(
+        { historyCount: history.length },
+        "[ChatOps] Thread history fetched",
+      );
 
       return history.map((msg) => {
         const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;
@@ -306,6 +348,147 @@ export class ChatOpsManager {
     }
   }
 
+  /**
+   * Validate that the MS Teams user has access to the agent.
+   * 1. Resolve user email from MS Teams (requires User.ReadBasic.All Graph permission)
+   * 2. Look up Archestra user by email
+   * 3. Check user has team-based access to the agent
+   */
+  private async validateUserAccess(params: {
+    message: IncomingChatMessage;
+    provider: ChatOpsProvider;
+    agentId: string;
+    agentName: string;
+    organizationId: string;
+  }): Promise<
+    { success: true; userId: string } | { success: false; error: string }
+  > {
+    const { message, provider, agentId, agentName, organizationId } = params;
+
+    // Resolve user's email from the chat provider
+    logger.debug(
+      { senderId: message.senderId },
+      "[ChatOps] Resolving user email from provider",
+    );
+    const userEmail = await provider.getUserEmail(message.senderId);
+    logger.debug(
+      { senderId: message.senderId, userEmail },
+      "[ChatOps] User email resolved",
+    );
+
+    if (!userEmail) {
+      logger.warn(
+        { senderId: message.senderId },
+        "[ChatOps] Could not resolve user email - Graph API User.ReadBasic.All permission may be missing",
+      );
+      await this.sendSecurityErrorReply(
+        provider,
+        message,
+        "Could not verify your identity. The bot requires the `User.ReadBasic.All` Microsoft Graph API permission to be configured. Please contact your administrator.",
+      );
+      return {
+        success: false,
+        error:
+          "Could not resolve user email for security validation - User.ReadBasic.All permission may be missing",
+      };
+    }
+
+    // Look up Archestra user by email
+    const user = await UserModel.findByEmail(userEmail.toLowerCase());
+
+    if (!user) {
+      logger.warn(
+        { senderEmail: userEmail },
+        "[ChatOps] User not registered in Archestra",
+      );
+      await this.sendSecurityErrorReply(
+        provider,
+        message,
+        `You (${userEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+      );
+      return {
+        success: false,
+        error: `Unauthorized: ${userEmail} is not a registered Archestra user`,
+      };
+    }
+
+    // Check if user has access to this specific agent (via team membership or admin)
+    const isProfileAdmin = await userHasPermission(
+      user.id,
+      organizationId,
+      "profile",
+      "admin",
+    );
+    const hasAccess = await AgentTeamModel.userHasAgentAccess(
+      user.id,
+      agentId,
+      isProfileAdmin,
+    );
+
+    if (!hasAccess) {
+      logger.warn(
+        {
+          userId: user.id,
+          userEmail,
+          agentId,
+          agentName,
+        },
+        "[ChatOps] User does not have access to agent",
+      );
+      await this.sendSecurityErrorReply(
+        provider,
+        message,
+        `You don't have access to the agent "${agentName}". Contact your administrator for access.`,
+      );
+      return {
+        success: false,
+        error: "Unauthorized: user does not have access to this agent",
+      };
+    }
+
+    logger.info(
+      {
+        userId: user.id,
+        userEmail,
+        agentId,
+        agentName,
+      },
+      "[ChatOps] User authorized to invoke agent",
+    );
+
+    return { success: true, userId: user.id };
+  }
+
+  /**
+   * Send a security error reply back to the user via the chat provider.
+   */
+  private async sendSecurityErrorReply(
+    provider: ChatOpsProvider,
+    message: IncomingChatMessage,
+    errorText: string,
+  ): Promise<void> {
+    logger.debug(
+      {
+        messageId: message.messageId,
+        hasConversationRef: Boolean(message.metadata?.conversationReference),
+      },
+      "[ChatOps] Sending security error reply",
+    );
+    try {
+      await provider.sendReply({
+        originalMessage: message,
+        text: `⚠️ **Access Denied**\n\n${errorText}`,
+        footer: "Security check failed",
+      });
+      logger.debug("[ChatOps] Security error reply sent successfully");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to send security error reply",
+      );
+    }
+  }
+
   private async executeAndReply(params: {
     agent: { id: string; name: string };
     binding: { organizationId: string };
@@ -314,16 +497,24 @@ export class ChatOpsManager {
     fullMessage: string;
     sendReply: boolean;
     fallbackMessage?: string;
+    userId: string;
   }): Promise<ChatOpsProcessingResult> {
-    const { agent, binding, message, provider, fullMessage, sendReply } =
-      params;
+    const {
+      agent,
+      binding,
+      message,
+      provider,
+      fullMessage,
+      sendReply,
+      userId,
+    } = params;
 
     try {
       const result = await executeA2AMessage({
         agentId: agent.id,
         organizationId: binding.organizationId,
         message: fullMessage,
-        userId: `chatops-${provider.providerId}-${message.senderId}`,
+        userId,
       });
 
       const agentResponse = result.text || "";
@@ -332,7 +523,7 @@ export class ChatOpsManager {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: `Routed to ${agent.name}. Use @Archestra /select-agent to change.`,
+          footer: `Via ${agent.name}`,
           conversationReference: message.metadata?.conversationReference,
         });
       }
@@ -368,7 +559,19 @@ export const chatOpsManager = new ChatOpsManager();
 // =============================================================================
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    return error.message;
+  }
+  // Handle objects that may not convert to string properly
+  try {
+    return String(error);
+  } catch {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown error (could not serialize)";
+    }
+  }
 }
 
 /**
@@ -387,7 +590,20 @@ function stripBotFooter(text: string): string {
 }
 
 /**
- * Find tolerant match length for an agent name at the start of text.
+ * Check if a given input string matches an agent name.
+ * Tolerant matching: case-insensitive, ignores spaces.
+ * E.g., "AgentPeter", "agent peter", "agentpeter" all match "Agent Peter".
+ *
+ * @internal Exported for testing
+ */
+export function matchesAgentName(input: string, agentName: string): boolean {
+  const normalizedInput = input.toLowerCase().replace(/\s+/g, "");
+  const normalizedName = agentName.toLowerCase().replace(/\s+/g, "");
+  return normalizedInput === normalizedName;
+}
+
+/**
+ * Find length of agent name match at start of text.
  * Handles "AgentPeter", "Agent Peter", "agent peter" for "Agent Peter".
  * Returns matched length or null if no match.
  *

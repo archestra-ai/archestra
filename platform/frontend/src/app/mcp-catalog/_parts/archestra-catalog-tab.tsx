@@ -38,6 +38,9 @@ import { TransportBadges } from "./transport-badges";
 
 type ServerType = "all" | "remote" | "local";
 
+type CatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
 export function ArchestraCatalogTab({
   catalogItems: initialCatalogItems,
   onClose,
@@ -45,7 +48,7 @@ export function ArchestraCatalogTab({
 }: {
   catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (createdItem: CatalogItem) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
@@ -290,7 +293,7 @@ export function ArchestraCatalogTab({
       }
     }
 
-    await createMutation.mutateAsync({
+    const createdItem = await createMutation.mutateAsync({
       name: server.name,
       version: undefined, // No version in archestra catalog
       instructions: server.instructions,
@@ -308,7 +311,9 @@ export function ArchestraCatalogTab({
 
     // Close the dialog after adding
     onClose();
-    onSuccess?.();
+    if (createdItem) {
+      onSuccess?.(createdItem);
+    }
   };
 
   const handleRequestInstallation = async (
@@ -346,7 +351,7 @@ export function ArchestraCatalogTab({
 
   return (
     <div className="w-full space-y-2 mt-4">
-      <div className="flex items-end gap-4">
+      <div className="flex items-end gap-4 ml-1">
         <div className="flex-1">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -355,6 +360,7 @@ export function ArchestraCatalogTab({
               initialValue={searchQuery}
               onChange={setSearchQuery}
               className="pl-9"
+              autoFocus
             />
           </div>
         </div>
@@ -438,7 +444,7 @@ export function ArchestraCatalogTab({
 
       {!isLoading && !error && filteredServers && (
         <>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between ml-1">
             <p className="text-sm text-muted-foreground">
               {filteredServers.length}{" "}
               {filteredServers.length === 1 ? "server" : "servers"} found
@@ -453,7 +459,7 @@ export function ArchestraCatalogTab({
             </div>
           ) : (
             <>
-              <div className="grid gap-4 md:grid-cols-2 overflow-y-auto pr-2">
+              <div className="grid gap-4 md:grid-cols-2 overflow-y-auto">
                 {filteredServers.map((server, index) => (
                   <ServerCard
                     key={`${server.name}-${index}`}

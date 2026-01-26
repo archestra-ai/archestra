@@ -17,7 +17,8 @@ RUN chmod +x /usr/local/bin/uv
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 # CVE-2026-24049: Path Traversal vulnerability in wheel <= 0.46.1
-RUN uv pip install --upgrade wheel>=0.46.2
+# CVE-2025-8869: Link Following vulnerability in pip <= 25.2
+RUN uv pip install --upgrade wheel>=0.46.2 pip>=25.3
 RUN uv pip install --no-cache-dir \
    mcp[cli]>=1.2.0 \
    httpx \
@@ -29,12 +30,16 @@ RUN uv pip install --no-cache-dir \
 # Node.js stage
 FROM node:20-alpine AS node-builder
 
-# Install Node.js MCP dependencies globally
-RUN npm install -g \
-   @modelcontextprotocol/sdk \
-   typescript@5 \
-   zod \
-   express
+WORKDIR /opt/node-deps
+
+# Copy package.json with dependencies and overrides to fix CVEs in transitive dependencies
+# CVE-2024-21538: ReDoS in cross-spawn < 7.0.5
+# CVE-2025-64756: OS Command Injection in glob < 11.1.0
+# CVE-2026-23745: Path Traversal in tar <= 7.5.2
+# CVE-2026-23950: Improper Unicode Handling in tar <= 7.5.3
+COPY package.json .
+
+RUN npm install
 
 # Final stage - minimal runtime image with Python 3.12
 FROM python:3.12-alpine
@@ -61,7 +66,20 @@ RUN apk add --no-cache \
    # Additional SSL/TLS libraries
    openssl-dev \
    # Go runtime for Go-based MCP servers
-   go
+   go && \
+   # CVE-2025-55130, CVE-2025-55131: Node.js vulnerabilities fixed in 24.13.0-r0
+   # CVE-2025-13878: BIND vulnerability fixed in 9.20.18-r0
+   apk upgrade --no-cache nodejs bind
+
+# Upgrade npm to get patched bundled dependencies (tar, glob)
+# CVE-2026-23950, CVE-2026-23745: tar vulnerabilities fixed in npm 11.8.0
+# CVE-2025-64756: glob vulnerability fixed in npm 11.8.0
+# Remove old Alpine npm after upgrading to avoid duplicate vulnerable packages
+RUN npm install -g npm@11.8.0 && \
+    rm -rf /usr/lib/node_modules/npm
+
+# Upgrade system pip to fix CVE-2025-8869 (Link Following vulnerability in pip <= 25.2)
+RUN pip install --upgrade pip>=25.3
 
 # Copy Python environment from builder
 COPY --from=python-builder /opt/venv /opt/venv
@@ -83,9 +101,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uvx /usr/local/bin/uvx
 # Make sure uv and uvx are executable
 RUN chmod +x /usr/local/bin/uv /usr/local/bin/uvx
 
-# Copy Node.js global modules from builder
-COPY --from=node-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
-COPY --from=node-builder /usr/local/bin /usr/local/bin
+# Copy Node.js modules from builder and set up NODE_PATH for module resolution
+COPY --from=node-builder /opt/node-deps/node_modules /opt/node-deps/node_modules
+ENV NODE_PATH=/opt/node-deps/node_modules
+
+# Set up TypeScript compiler binary
+RUN ln -s /opt/node-deps/node_modules/.bin/tsc /usr/local/bin/tsc && \
+    ln -s /opt/node-deps/node_modules/.bin/tsserver /usr/local/bin/tsserver
 
 # Create non-root user for running MCP servers
 RUN addgroup -g 1000 mcp && \

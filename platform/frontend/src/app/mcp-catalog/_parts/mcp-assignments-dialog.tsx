@@ -635,8 +635,26 @@ function ToolChecklist({
   selectedToolIds,
   onSelectionChange,
 }: ToolChecklistProps) {
-  const allSelected = tools.every((tool) => selectedToolIds.has(tool.id));
-  const noneSelected = tools.every((tool) => !selectedToolIds.has(tool.id));
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const formatToolName = (toolName: string) => {
+    const lastSeparator = toolName.lastIndexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
+    if (lastSeparator !== -1) {
+      return toolName.substring(lastSeparator + 2);
+    }
+    return toolName;
+  };
+
+  const filteredTools = useMemo(() => {
+    if (!searchQuery.trim()) return tools;
+    const query = searchQuery.toLowerCase();
+    return tools.filter((tool) =>
+      formatToolName(tool.name).toLowerCase().includes(query),
+    );
+  }, [tools, searchQuery]);
+
+  const allSelected = filteredTools.every((tool) => selectedToolIds.has(tool.id));
+  const noneSelected = filteredTools.every((tool) => !selectedToolIds.has(tool.id));
   const selectedCount = tools.filter((t) => selectedToolIds.has(t.id)).length;
 
   const handleToggle = (toolId: string) => {
@@ -650,19 +668,19 @@ function ToolChecklist({
   };
 
   const handleSelectAll = () => {
-    onSelectionChange(new Set(tools.map((t) => t.id)));
+    const newSet = new Set(selectedToolIds);
+    for (const tool of filteredTools) {
+      newSet.add(tool.id);
+    }
+    onSelectionChange(newSet);
   };
 
   const handleDeselectAll = () => {
-    onSelectionChange(new Set());
-  };
-
-  const formatToolName = (toolName: string) => {
-    const lastSeparator = toolName.lastIndexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    if (lastSeparator !== -1) {
-      return toolName.substring(lastSeparator + 2);
+    const newSet = new Set(selectedToolIds);
+    for (const tool of filteredTools) {
+      newSet.delete(tool.id);
     }
-    return toolName;
+    onSelectionChange(newSet);
   };
 
   return (
@@ -692,38 +710,57 @@ function ToolChecklist({
           </Button>
         </div>
       </div>
+      {tools.length > 5 && (
+        <div className="px-4 py-2 border-b">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            <Input
+              placeholder="Search tools..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-7 pl-7 text-xs"
+            />
+          </div>
+        </div>
+      )}
       <div className="max-h-[250px] overflow-y-auto">
         <div className="p-2 space-y-0.5">
-          {tools.map((tool) => {
-            const toolName = formatToolName(tool.name);
-            const isSelected = selectedToolIds.has(tool.id);
+          {filteredTools.length === 0 ? (
+            <div className="text-center py-4 text-sm text-muted-foreground">
+              No tools match your search
+            </div>
+          ) : (
+            filteredTools.map((tool) => {
+              const toolName = formatToolName(tool.name);
+              const isSelected = selectedToolIds.has(tool.id);
 
-            return (
-              <label
-                key={tool.id}
-                htmlFor={`tool-assign-${tool.id}`}
-                className={cn(
-                  "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
-                  isSelected ? "bg-primary/10" : "hover:bg-muted/50",
-                )}
-              >
-                <Checkbox
-                  id={`tool-assign-${tool.id}`}
-                  checked={isSelected}
-                  onCheckedChange={() => handleToggle(tool.id)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{toolName}</div>
-                  {tool.description && (
-                    <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                      {tool.description}
-                    </div>
+              return (
+                <label
+                  key={tool.id}
+                  htmlFor={`tool-assign-${tool.id}`}
+                  className={cn(
+                    "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
+                    isSelected ? "bg-primary/10" : "hover:bg-muted/50",
                   )}
-                </div>
-              </label>
-            );
-          })}
+                >
+                  <Checkbox
+                    id={`tool-assign-${tool.id}`}
+                    checked={isSelected}
+                    onCheckedChange={() => handleToggle(tool.id)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">{toolName}</div>
+                    {tool.description && (
+                      <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                        {tool.description}
+                      </div>
+                    )}
+                  </div>
+                </label>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

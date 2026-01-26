@@ -45,15 +45,12 @@ test.describe("MCP Install", () => {
     await adminPage.getByTestId(E2eTestId.AddCatalogItemButton).first().click();
     await adminPage.waitForLoadState("networkidle");
 
-    // Wait for the card to appear in the registry (more robust than waiting for button directly)
-    const serverCard = adminPage.getByTestId(
-      `${E2eTestId.McpServerCard}-${CONTEXT7_CATALOG_ITEM_NAME}`,
-    );
-    await serverCard.waitFor({ state: "visible", timeout: 30000 });
-
-    // Click the Connect button within the card
-    await serverCard.getByRole("button", { name: "Connect" }).click();
-    await adminPage.waitForTimeout(2_000);
+    // Install dialog opens automatically after adding to registry
+    // Wait for the install dialog to be visible
+    await adminPage
+      .getByRole("dialog")
+      .filter({ hasText: /Install -/ })
+      .waitFor({ state: "visible", timeout: 30000 });
 
     // fill the api key (just fake value)
     await adminPage
@@ -63,6 +60,12 @@ test.describe("MCP Install", () => {
     // install the server
     await clickButton({ page: adminPage, options: { name: "Install" } });
     await adminPage.waitForLoadState("networkidle");
+
+    // Wait for the card to appear in the registry after installation
+    const serverCard = adminPage.getByTestId(
+      `${E2eTestId.McpServerCard}-${CONTEXT7_CATALOG_ITEM_NAME}`,
+    );
+    await serverCard.waitFor({ state: "visible", timeout: 30000 });
 
     // Check that tools are discovered
     await serverCard
@@ -110,17 +113,17 @@ test.describe("MCP Install", () => {
         .getByRole("textbox", { name: "Server URL *" })
         .fill(HF_URL);
 
-      // add catalog item to the registry
+      // add catalog item to the registry (install dialog opens automatically)
       await clickButton({ page: adminPage, options: { name: "Add Server" } });
       await adminPage.waitForLoadState("networkidle");
 
-      // connect it
+      // Wait for the install dialog to be visible (Remote server uses "Install Server" title)
       await adminPage
-        .getByTestId(`mcp-server-card-${HF_CATALOG_ITEM_NAME}`)
-        .getByRole("button", { name: "Connect" })
-        .click();
+        .getByRole("dialog")
+        .filter({ hasText: /Install Server/ })
+        .waitFor({ state: "visible", timeout: 30000 });
 
-      // install the server
+      // install the server (install dialog already open)
       await clickButton({ page: adminPage, options: { name: "Install" } });
       await adminPage.waitForTimeout(2_000);
 
@@ -168,18 +171,17 @@ test.describe("MCP Install", () => {
         .getByRole("radio", { name: /"Authorization: Bearer/ })
         .click();
 
-      // add catalog item to the registry
+      // add catalog item to the registry (install dialog opens automatically)
       await clickButton({ page: adminPage, options: { name: "Add Server" } });
       await adminPage.waitForLoadState("networkidle");
 
-      // connect it
+      // Wait for the install dialog to be visible (Remote server uses "Install Server" title)
       await adminPage
-        .getByTestId(`mcp-server-card-${HF_CATALOG_ITEM_NAME}`)
-        .getByRole("button", { name: "Connect" })
-        .click();
-      await adminPage.waitForLoadState("networkidle");
+        .getByRole("dialog")
+        .filter({ hasText: /Install Server/ })
+        .waitFor({ state: "visible", timeout: 30000 });
 
-      // Check that we have input for entering the token and fill it with fake value
+      // Install dialog already open - check that we have input for entering the token and fill it with fake value
       await adminPage
         .getByRole("textbox", { name: "Access Token *" })
         .fill("fake-token");

@@ -48,6 +48,10 @@ inputs:
     description: "Turborepo remote caching token (only required when build-platform-image is true)"
     required: false
     default: ""
+  mcp-server-base-image-tag:
+    description: "Pre-built MCP server base image tag to load into Kind. If provided, skips building the image."
+    required: false
+    default: ""
 
 outputs:
   backend-url:
@@ -112,6 +116,17 @@ runs:
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
       run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
 
+    - name: Load MCP server base image into Kind
+      if: ${{ inputs.mcp-server-base-image-tag != '' }}
+      shell: bash
+      env:
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+      run: |
+        echo "Loading MCP server base image into Kind cluster..."
+        kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
+        echo "MCP server base image loaded into Kind"
+
     - name: Deploy e2e dependencies and platform in parallel
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       shell: bash
@@ -121,6 +136,7 @@ runs:
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
         HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
       run: |
         # Start e2e-tests Helm install in background
         echo "Starting e2e-tests Helm install in background..."
@@ -139,12 +155,19 @@ runs:
           VERSION_FLAG=""
         fi
 
+        # Build MCP server base image override flag if provided
+        MCP_SET_FLAG=""
+        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
+          MCP_SET_FLAG="--set archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}"
+        fi
+
         # Deploy platform (this takes longer, so e2e-tests will finish during this)
         echo "Deploying Archestra Platform..."
         helm install archestra-platform "${CHART_REF}" \
           ${VERSION_FLAG} \
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
+          ${MCP_SET_FLAG} \
           --atomic --timeout=4m
 
         # Wait for e2e-tests to complete (should already be done by now)
@@ -165,6 +188,7 @@ runs:
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
         HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
       run: |
         # Determine chart reference: use helm-chart-ref if set, otherwise use local path
         if [ -n "${HELM_CHART_REF}" ]; then
@@ -178,10 +202,17 @@ runs:
           VERSION_FLAG=""
         fi
 
+        # Build MCP server base image override flag if provided
+        MCP_SET_FLAG=""
+        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
+          MCP_SET_FLAG="--set archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}"
+        fi
+
         helm install archestra-platform "${CHART_REF}" \
           ${VERSION_FLAG} \
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
+          ${MCP_SET_FLAG} \
           --atomic --timeout=4m
 
     - name: Verify deployment

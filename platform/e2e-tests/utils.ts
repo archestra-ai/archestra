@@ -86,7 +86,17 @@ export async function addCustomSelfHostedCatalogItem({
   }
   await page.getByRole("button", { name: "Add Server" }).click();
   await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1_000);
+
+  // After adding a server, the install dialog opens automatically.
+  // Close it so the calling test can control when to open it.
+  // Wait for the install dialog to appear and then close it by pressing Escape.
+  await page
+    .getByRole("dialog")
+    .filter({ hasText: /Install -/ })
+    .waitFor({ state: "visible", timeout: 10000 });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+
   const catalogItems = await archestraApiSdk.getInternalMcpCatalog({
     headers: { Cookie: cookieHeaders },
   });

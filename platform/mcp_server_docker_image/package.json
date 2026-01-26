@@ -1,0 +1,16 @@
+{
+  "name": "mcp-server-deps",
+  "description": "Node.js dependencies for MCP server base image",
+  "private": true,
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "typescript": "5",
+    "zod": "latest",
+    "express": "latest"
+  },
+  "overrides": {
+    "cross-spawn": "^7.0.5",
+    "glob": "^11.1.0",
+    "tar": "^7.5.4"
+  }
+}

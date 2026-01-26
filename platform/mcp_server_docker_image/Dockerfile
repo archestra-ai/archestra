@@ -36,6 +36,14 @@ RUN npm install -g \
    zod \
    express
 
+# CVE-2024-21538: ReDoS in cross-spawn < 7.0.5
+# CVE-2025-64756: OS Command Injection in glob < 11.1.0
+# CVE-2026-23745: Path Traversal in tar <= 7.5.2
+# CVE-2026-23950: Improper Unicode Handling in tar <= 7.5.3
+RUN npm update -g && \
+    cd /usr/local/lib/node_modules && \
+    npm install cross-spawn@^7.0.5 glob@^11.1.0 tar@^7.5.4
+
 # Final stage - minimal runtime image with Python 3.12
 FROM python:3.12-alpine
 
@@ -61,7 +69,10 @@ RUN apk add --no-cache \
    # Additional SSL/TLS libraries
    openssl-dev \
    # Go runtime for Go-based MCP servers
-   go
+   go && \
+   # CVE-2025-55130, CVE-2025-55131: Node.js vulnerabilities fixed in 24.13.0-r0
+   # CVE-2025-13878: BIND vulnerability fixed in 9.20.18-r0
+   apk upgrade --no-cache nodejs bind
 
 # Copy Python environment from builder
 COPY --from=python-builder /opt/venv /opt/venv

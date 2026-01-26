@@ -443,19 +443,16 @@ jobs:
           is-fork-pr: ${{ inputs.is-fork-pr }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Load MCP server base image
-        id: load-mcp-server-base-image
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/load-mcp-server-base-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
+      # The embedded Kind cluster inside the quickstart container cannot easily access images
+      # loaded on the host Docker daemon. The regular e2e tests (platform-e2e-tests) already
+      # validate the MCP server base image with proper Kind image loading.
+      # Quickstart tests use the default public MCP server base image.
 
       - name: Start platform in quickstart mode
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         env:
           PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
-          MCP_SERVER_BASE_IMAGE_TAG: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
         run: |
           echo "Starting Archestra platform in quickstart mode..."
 
@@ -466,15 +463,14 @@ jobs:
           # Start the platform container
           # Note: ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS allows e2e tests to use 127.0.0.1
           # while the default ARCHESTRA_FRONTEND_URL=http://localhost:3000 stays unchanged
-          # Note: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE uses the CI-built image
-          # to test the MCP server base image from the current branch
+          # Note: Uses the default public MCP server base image (not CI-built) because
+          # the embedded Kind cluster cannot access host Docker images without explicit loading
           docker run -d \
             --name archestra-quickstart \
             -p 9000:9000 \
             -p 3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
             -e ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3000 \
-            -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG} \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v archestra-ci-postgres-data:/var/lib/postgresql/data \
             -v archestra-ci-app-data:/app/data \

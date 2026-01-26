@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@shared";
 import { ADMIN_EMAIL, E2eTestId, EDITOR_EMAIL } from "../../consts";
-import { goToPage, test } from "../../fixtures";
+import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   assignEngineeringTeamToDefaultProfileViaApi,
@@ -74,7 +74,7 @@ test("Verify tool calling using dynamic credentials", async ({
     await page.keyboard.press("Escape");
     await page.waitForTimeout(500);
 
-    // Wait for dialog to close and button to be visible again
+    // Wait for dialog to close and button to be visible and enabled again
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
     );
@@ -82,6 +82,7 @@ test("Verify tool calling using dynamic credentials", async ({
       state: "visible",
       timeout: CONNECT_BUTTON_TIMEOUT,
     });
+    await expect(connectButton).toBeEnabled({ timeout: CONNECT_BUTTON_TIMEOUT });
     await connectButton.click();
     // Fill ARCHESTRA_TEST environment variable to mark team credential
     await page

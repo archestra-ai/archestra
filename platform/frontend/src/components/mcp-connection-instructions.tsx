@@ -1,6 +1,10 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID, archestraApiSdk } from "@shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  archestraApiSdk,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import {
   Bot,
   Check,
@@ -152,7 +156,8 @@ export function McpConnectionInstructions({
 
       // Check if this is an Archestra built-in tool
       if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID) {
-        const toolName = tool.name.split("__").pop() ?? tool.name;
+        const toolName =
+          tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? tool.name;
         archestraToolsList.push({
           id: tool.id,
           name: toolName,
@@ -165,7 +170,8 @@ export function McpConnectionInstructions({
         const server = mcpServers.find((s) => s.id === tool.mcpServerId);
         if (server) {
           const existing = groups.get(tool.mcpServerId);
-          const toolName = tool.name.split("__").pop() ?? tool.name;
+          const toolName =
+            tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? tool.name;
           const toolData = {
             id: tool.id,
             name: toolName,

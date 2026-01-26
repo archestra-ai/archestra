@@ -102,25 +102,9 @@ beforeEach(async () => {
     await pgliteClient.exec(truncateSql);
   }
 
-  // Re-insert the default agent that tests expect to exist
-  // This matches what the migrations create (initially 'Default Agent', renamed to 'Default Profile')
-  const seedSql = `
-    INSERT INTO agents (id, name, is_demo, is_default, created_at, updated_at)
-    VALUES (
-      gen_random_uuid(),
-      'Default Profile',
-      false,
-      true,
-      NOW(),
-      NOW()
-    )
-    ON CONFLICT DO NOTHING;
-  `;
-  try {
-    await pgliteClient.exec(seedSql);
-  } catch {
-    // Ignore if default agent already exists or table doesn't have expected structure
-  }
+  // NOTE: We intentionally do NOT seed organization or default agent here.
+  // Tests that need them should use makeOrganization and makeAgent fixtures.
+  // This allows organization tests to test both with and without existing organizations.
 });
 
 /**

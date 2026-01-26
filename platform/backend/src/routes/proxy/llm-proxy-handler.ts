@@ -30,7 +30,8 @@ import {
   type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
-  type ToonCompressionResult,
+  type ToolCompressionStats,
+  type ToonSkipReason,
 } from "@/types";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/session-id";
@@ -316,17 +317,27 @@ export async function handleLLMProxy<
     );
 
     // Apply TOON compression if enabled
-    let toonStats: ToonCompressionResult = {
-      tokensBefore: null,
-      tokensAfter: null,
-      costSavings: null,
+    let toonStats: ToolCompressionStats = {
+      tokensBefore: 0,
+      tokensAfter: 0,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: false,
     };
+    let toonSkipReason: ToonSkipReason | null = null;
 
     const shouldApplyToonCompression =
       await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
 
     if (shouldApplyToonCompression) {
       toonStats = await requestAdapter.applyToonCompression(actualModel);
+      if (!toonStats.hadToolResults) {
+        toonSkipReason = "no_tool_results";
+      } else if (!toonStats.wasEffective) {
+        toonSkipReason = "not_effective";
+      }
+    } else {
+      toonSkipReason = "not_enabled";
     }
 
     logger.info(
@@ -335,6 +346,7 @@ export async function handleLLMProxy<
         toonTokensBefore: toonStats.tokensBefore,
         toonTokensAfter: toonStats.tokensAfter,
         toonCostSavings: toonStats.costSavings,
+        toonSkipReason,
       },
       `${providerName} proxy: tool results compression completed`,
     );
@@ -386,6 +398,7 @@ export async function handleLLMProxy<
         actualModel,
         requestAdapter.getOriginalRequest(),
         toonStats,
+        toonSkipReason,
         enabledToolNames,
         globalToolPolicy,
         externalAgentId,
@@ -406,6 +419,7 @@ export async function handleLLMProxy<
         actualModel,
         requestAdapter.getOriginalRequest(),
         toonStats,
+        toonSkipReason,
         enabledToolNames,
         globalToolPolicy,
         externalAgentId,
@@ -446,7 +460,8 @@ async function handleStreaming<
   baselineModel: string,
   actualModel: string,
   originalRequest: TRequest,
-  toonStats: ToonCompressionResult,
+  toonStats: ToolCompressionStats,
+  toonSkipReason: ToonSkipReason | null,
   enabledToolNames: Set<string>,
   globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
@@ -655,6 +670,7 @@ async function handleStreaming<
         response:
           streamAdapter.toProviderResponse() as unknown as InteractionResponse,
         model: actualModel,
+        baselineModel,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cost: actualCost?.toFixed(10) ?? null,
@@ -662,6 +678,7 @@ async function handleStreaming<
         toonTokensBefore: toonStats.tokensBefore,
         toonTokensAfter: toonStats.tokensAfter,
         toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+        toonSkipReason,
       });
     }
   }
@@ -687,7 +704,8 @@ async function handleNonStreaming<
   baselineModel: string,
   actualModel: string,
   originalRequest: TRequest,
-  toonStats: ToonCompressionResult,
+  toonStats: ToolCompressionStats,
+  toonSkipReason: ToonSkipReason | null,
   enabledToolNames: Set<string>,
   globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
@@ -799,6 +817,7 @@ async function handleNonStreaming<
         processedRequest: request as unknown as InteractionRequest,
         response: refusalResponse as unknown as InteractionResponse,
         model: actualModel,
+        baselineModel,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cost: actualCost?.toFixed(10) ?? null,
@@ -806,6 +825,7 @@ async function handleNonStreaming<
         toonTokensBefore: toonStats.tokensBefore,
         toonTokensAfter: toonStats.tokensAfter,
         toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+        toonSkipReason,
       });
 
       return reply.send(refusalResponse);
@@ -853,6 +873,7 @@ async function handleNonStreaming<
     response:
       responseAdapter.getOriginalResponse() as unknown as InteractionResponse,
     model: actualModel,
+    baselineModel,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     cost: actualCost?.toFixed(10) ?? null,
@@ -860,6 +881,7 @@ async function handleNonStreaming<
     toonTokensBefore: toonStats.tokensBefore,
     toonTokensAfter: toonStats.tokensAfter,
     toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+    toonSkipReason,
   });
 
   return reply.send(responseAdapter.getOriginalResponse());

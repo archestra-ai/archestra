@@ -17,6 +17,13 @@ import {
 /**
  * Session summary schema for the sessions endpoint
  */
+const ToonSkipReasonCountsSchema = z.object({
+  applied: z.number(),
+  notEnabled: z.number(),
+  notEffective: z.number(),
+  noToolResults: z.number(),
+});
+
 const SessionSummarySchema = z.object({
   sessionId: z.string().nullable(),
   sessionSource: z.string().nullable(),
@@ -26,6 +33,8 @@ const SessionSummarySchema = z.object({
   totalOutputTokens: z.number(),
   totalCost: z.string().nullable(),
   totalBaselineCost: z.string().nullable(),
+  totalToonCostSavings: z.string().nullable(),
+  toonSkipReasonCounts: ToonSkipReasonCountsSchema,
   firstRequestTime: z.date(),
   lastRequestTime: z.date(),
   models: z.array(z.string()),
@@ -278,9 +287,16 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetUniqueExternalAgentIds,
         description:
-          "Get all unique external agent IDs for filtering (from X-Archestra-Agent-Id header)",
+          "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)",
         tags: ["Interaction"],
-        response: constructResponseSchema(z.array(z.string())),
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string(),
+              displayName: z.string(),
+            }),
+          ),
+        ),
       },
     },
     async ({ user, headers }, reply) => {

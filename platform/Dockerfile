@@ -5,6 +5,26 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
+# Patch CVE-2026-23745: tar <=7.5.2 has path traversal vulnerability
+# Patch CVE-2026-23950: tar <=7.5.3 has Improper Handling of Unicode Encoding
+# tar is bundled in pnpm's corepack distribution and needs to be patched
+# Patch ALL pnpm versions in corepack cache to ensure comprehensive fix
+RUN corepack prepare pnpm@10.28.1 --activate && \
+    TAR_SHA256="0a9e6154532a0fa2f0f6fa261cede2f916da7d34df68917c6f71be82dd739dce" && \
+    PNPM_TAR_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/tar" -type d 2>/dev/null) && \
+    [ -n "$PNPM_TAR_PATHS" ] || { echo "WARNING: No tar directories found to patch"; exit 0; } && \
+    for PNPM_TAR_PATH in $PNPM_TAR_PATHS; do \
+        echo "Patching tar in $PNPM_TAR_PATH" && \
+        TMP_DIR=$(mktemp -d) && \
+        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.4.tgz && \
+        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
+        tar -tzf "$TMP_DIR/tar.tgz" >/dev/null 2>&1 || { echo "ERROR: Downloaded tarball is corrupt"; rm -rf "$TMP_DIR"; exit 1; } && \
+        rm -rf "$PNPM_TAR_PATH"/* && \
+        tar -xzf "$TMP_DIR/tar.tgz" -C "$PNPM_TAR_PATH" --strip-components=1 && \
+        rm -rf "$TMP_DIR"; \
+    done && \
+    echo "Patched tar to 7.5.4 in all pnpm corepack caches"
+
 # Dependencies stage
 FROM base AS deps
 WORKDIR /app
@@ -69,10 +89,9 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 ENV ARCHESTRA_VERSION=${VERSION}
-ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
-ENV ARCHESTRA_API_EXTERNAL_BASE_URL=""
+ENV ARCHESTRA_INTERNAL_API_BASE_URL="http://localhost:9000"
+ENV ARCHESTRA_API_BASE_URL=""
 ENV ARCHESTRA_ANALYTICS="enabled"
-ENV ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
 ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
 ENV ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="false"
 ENV ARCHESTRA_AUTH_DISABLE_INVITATIONS="false"
@@ -111,7 +130,14 @@ RUN apk add --no-cache docker-cli && \
 
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482
-RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
+RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main && \
+    # CVE-2026-24049: Path Traversal vulnerability in wheel <= 0.46.1
+    # Supervisor brings in Python/wheel as dependencies, upgrade wheel to fix CVE
+    # Install py3-pip (required for pip command) and upgrade wheel
+    apk add --no-cache py3-pip && \
+    pip install --upgrade "wheel>=0.46.2" --break-system-packages && \
+    # Also remove vendored vulnerable wheel from setuptools (py3-setuptools bundles wheel 0.45.1)
+    rm -rf /usr/lib/python3.12/site-packages/setuptools/_vendor/wheel /usr/lib/python3.12/site-packages/setuptools/_vendor/wheel-*.dist-info
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
@@ -186,7 +212,7 @@ priority=20
 # See: https://nextjs.org/docs/app/api-reference/config/next-config-js/output#automatically-copying-traced-files
 # NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
 # All other environment variables (NODE_ENV, etc.) are inherited automatically
-environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_API_EXTERNAL_BASE_URL="%(ENV_ARCHESTRA_API_EXTERNAL_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="%(ENV_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS="%(ENV_ARCHESTRA_AUTH_DISABLE_INVITATIONS)s"
+environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="%(ENV_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS="%(ENV_ARCHESTRA_AUTH_DISABLE_INVITATIONS)s"
 EOF
 
 # Create postgres program configuration (to be conditionally included)

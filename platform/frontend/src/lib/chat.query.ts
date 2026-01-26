@@ -18,7 +18,6 @@ const {
   updateConversationEnabledTools,
   deleteConversationEnabledTools,
   getAgentTools,
-  getPromptTools,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -47,14 +46,17 @@ export function useConversation(conversationId?: string) {
   });
 }
 
-type Conversation = NonNullable<
-  Awaited<ReturnType<typeof getChatConversation>>["data"]
->;
-
-export function useConversations(search?: string) {
+export function useConversations({
+  enabled = true,
+  search,
+}: {
+  enabled?: boolean;
+  search?: string;
+}) {
   return useQuery({
     queryKey: ["conversations", search],
     queryFn: async () => {
+      if (!enabled) return [];
       const trimmedSearch = search?.trim();
 
       const { data, error } = await getChatConversations({
@@ -64,7 +66,7 @@ export function useConversations(search?: string) {
       if (error) throw new Error("Failed to fetch conversations");
       return data;
     },
-    staleTime: search ? 0 : 5 * 60 * 1000, // No stale time for searches, 5 minutes otherwise
+    staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -76,13 +78,11 @@ export function useCreateConversation() {
   return useMutation({
     mutationFn: async ({
       agentId,
-      promptId,
       selectedModel,
       selectedProvider,
       chatApiKeyId,
     }: {
       agentId: string;
-      promptId?: string;
       selectedModel?: string;
       selectedProvider?: SupportedProvider;
       chatApiKeyId?: string | null;
@@ -90,7 +90,6 @@ export function useCreateConversation() {
       const { data, error } = await createChatConversation({
         body: {
           agentId,
-          promptId,
           selectedModel,
           selectedProvider,
           chatApiKeyId: chatApiKeyId ?? undefined,
@@ -317,21 +316,25 @@ export function useProfileToolsWithIds(agentId: string | undefined) {
 }
 
 /**
- * Get agent delegation tools for a prompt
- * Returns tools created from prompt agents with real database IDs
+ * Get delegation tools for an internal agent
+ * Returns delegation tools (tools that delegate to other agents) assigned to this agent
  */
-export function usePromptTools(promptId: string | undefined) {
+export function useAgentDelegationTools(agentId: string | undefined) {
   return useQuery({
-    queryKey: ["prompts", promptId, "tools"],
+    queryKey: ["agents", agentId, "delegation-tools"],
     queryFn: async () => {
-      if (!promptId) return [];
-      const { data, error } = await getPromptTools({
-        path: { id: promptId },
+      if (!agentId) return [];
+      const { data, error } = await getAgentTools({
+        path: { agentId },
+        query: { excludeLlmProxyOrigin: true },
       });
-      if (error) throw new Error("Failed to fetch prompt tools");
-      return data;
+      if (error) throw new Error("Failed to fetch agent tools");
+      // Filter for delegation tools (tools with name starting with "delegate_to_")
+      return (data ?? []).filter((tool) =>
+        tool.name.startsWith("delegate_to_"),
+      );
     },
-    enabled: !!promptId,
+    enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
   });

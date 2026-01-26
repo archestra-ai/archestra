@@ -2,6 +2,7 @@
 
 import { type archestraApiTypes, E2eTestId } from "@shared";
 import {
+  AlertTriangle,
   FileText,
   Info,
   MoreVertical,
@@ -13,7 +14,6 @@ import {
   Wrench,
 } from "lucide-react";
 import { useState } from "react";
-import { AssignProfileDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { LoadingSpinner } from "@/components/loading";
 import {
   WithoutPermissions,
@@ -42,10 +42,9 @@ import { useFeatureFlag } from "@/lib/features.hook";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
-import { BulkAssignProfileDialog } from "./bulk-assign-agent-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
+import { McpAssignmentsDialog } from "./mcp-assignments-dialog";
 import { McpLogsDialog } from "./mcp-logs-dialog";
-import { McpToolsDialog } from "./mcp-tools-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
@@ -58,24 +57,6 @@ export type CatalogItemWithOptionalLabel = CatalogItem & {
 
 export type InstalledServer =
   archestraApiTypes.GetMcpServersResponses["200"][number];
-
-type ToolForAssignment = {
-  id: string;
-  name: string;
-  description: string | null;
-  parameters: Record<string, unknown>;
-  createdAt: string;
-  mcpServerId: string | null;
-  mcpServerName: string | null;
-};
-
-type SimpleTool = {
-  id: string;
-  name: string;
-  description: string | null;
-  parameters: Record<string, unknown>;
-  createdAt: string;
-};
 
 export type McpServerCardProps = {
   item: CatalogItemWithOptionalLabel;
@@ -123,13 +104,12 @@ export function McpServerCard({
 
   // For builtin servers, fetch tools by catalog ID
   // For regular MCP servers, fetch by server ID
-  const { data: mcpServerTools, isLoading: isLoadingMcpTools } =
-    useMcpServerTools(!isBuiltin ? (installedServer?.id ?? null) : null);
-  const { data: catalogTools, isLoading: isLoadingCatalogTools } =
-    useCatalogTools(isBuiltin ? item.id : null);
+  const { data: mcpServerTools } = useMcpServerTools(
+    !isBuiltin ? (installedServer?.id ?? null) : null,
+  );
+  const { data: catalogTools } = useCatalogTools(isBuiltin ? item.id : null);
 
   const tools = isBuiltin ? catalogTools : mcpServerTools;
-  const isLoadingTools = isBuiltin ? isLoadingCatalogTools : isLoadingMcpTools;
 
   const isByosEnabled = useFeatureFlag("byosEnabled");
   const session = authClient.useSession();
@@ -178,9 +158,6 @@ export function McpServerCard({
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
-  const [selectedToolForAssignment, setSelectedToolForAssignment] =
-    useState<ToolForAssignment | null>(null);
-  const [bulkAssignTools, setBulkAssignTools] = useState<SimpleTool[]>([]);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
     name: string;
@@ -214,6 +191,13 @@ export function McpServerCard({
   const hasError = installedServer?.localInstallationStatus === "error";
   const errorMessage = installedServer?.localInstallationError;
   const mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
+
+  // Check for OAuth refresh errors on any credential the user can see
+  // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
+  const isOAuthServer = !!item.oauthConfig;
+  const hasOAuthRefreshError =
+    isOAuthServer &&
+    (mcpServerOfCurrentCatalogItem?.some((s) => s.oauthRefreshError) ?? false);
 
   const isInstalling = Boolean(
     installingItemId === item.id ||
@@ -331,6 +315,24 @@ export function McpServerCard({
           >
             {mcpServersCount}
           </span>
+          {hasOAuthRefreshError && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="font-medium mb-1">Authentication failed</p>
+                  <p className="text-xs text-muted-foreground">
+                    Some credentials need re-authentication.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Click Manage to fix.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </span>
       </div>
       {mcpServersCount > 0 && (
@@ -361,6 +363,24 @@ export function McpServerCard({
           </WithoutPermissions>
           :{" "}
           <span className="font-medium text-foreground">{mcpServersCount}</span>
+          {hasOAuthRefreshError && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="font-medium mb-1">Authentication failed</p>
+                  <p className="text-xs text-muted-foreground">
+                    Some credentials need re-authentication.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Click Manage to fix.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </span>
       </div>
       {mcpServersCount > 0 && (
@@ -376,15 +396,28 @@ export function McpServerCard({
     </>
   );
 
+  const assignedCount = getToolsAssignedCount();
+  const isZeroAssignments = assignedCount === 0 && toolsDiscoveredCount > 0;
+
   const toolsAssigned = (
     <>
-      <div className="flex items-center gap-2">
-        <Wrench className="h-4 w-4 text-muted-foreground" />
-        <span className="text-muted-foreground">
-          Assigned to profile:{" "}
-          <span className="font-medium text-foreground">
-            {getToolsAssignedCount()}{" "}
-            {toolsDiscoveredCount ? `(out of ${toolsDiscoveredCount})` : ""}
+      <div
+        className={`flex items-center gap-2 ${isZeroAssignments ? "text-red-500 animate-pulse" : ""}`}
+      >
+        <Wrench
+          className={`h-4 w-4 ${isZeroAssignments ? "text-red-500" : "text-muted-foreground"}`}
+        />
+        <span
+          className={
+            isZeroAssignments ? "text-red-500" : "text-muted-foreground"
+          }
+        >
+          Assignments:{" "}
+          <span
+            className={`font-medium ${isZeroAssignments ? "text-red-500" : "text-foreground"}`}
+          >
+            {assignedCount}
+            {toolsDiscoveredCount ? `/${toolsDiscoveredCount}` : ""}
           </span>
         </span>
       </div>
@@ -393,7 +426,7 @@ export function McpServerCard({
           onClick={() => setIsToolsDialogOpen(true)}
           size="sm"
           variant="link"
-          className="h-7 text-xs"
+          className={`h-7 text-xs ${isZeroAssignments ? "text-red-500 animate-pulse" : ""}`}
           data-testid={`${E2eTestId.ManageToolsButton}-${installedServer?.catalogName}`}
         >
           Manage
@@ -563,27 +596,12 @@ export function McpServerCard({
 
   const dialogs = (
     <>
-      <McpToolsDialog
+      <McpAssignmentsDialog
         open={isToolsDialogOpen}
-        onOpenChange={(open) => {
-          setIsToolsDialogOpen(open);
-          if (!open) {
-            setSelectedToolForAssignment(null);
-          }
-        }}
-        serverName={installedServer?.name ?? ""}
-        tools={tools ?? []}
-        isLoading={isLoadingTools}
-        onAssignTool={(tool) => {
-          setSelectedToolForAssignment({
-            ...tool,
-            mcpServerId: installedServer?.id ?? null,
-            mcpServerName: installedServer?.name ?? null,
-          });
-        }}
-        onBulkAssignTools={(tools) => {
-          setBulkAssignTools(tools);
-        }}
+        onOpenChange={setIsToolsDialogOpen}
+        catalogId={item.id}
+        serverName={item.label || item.name}
+        isBuiltin={isBuiltin}
       />
 
       <McpLogsDialog
@@ -591,50 +609,6 @@ export function McpServerCard({
         onOpenChange={setIsLogsDialogOpen}
         serverName={installedServer?.name ?? item.name}
         installs={localInstalls}
-      />
-
-      <BulkAssignProfileDialog
-        tools={bulkAssignTools.length > 0 ? bulkAssignTools : null}
-        open={bulkAssignTools.length > 0}
-        onOpenChange={(open) => {
-          if (!open) {
-            setBulkAssignTools([]);
-          }
-        }}
-        catalogId={item.id}
-      />
-
-      <AssignProfileDialog
-        tool={
-          selectedToolForAssignment
-            ? {
-                id: selectedToolForAssignment.id,
-                responseModifierTemplate: null,
-                credentialSourceMcpServerId: null,
-                executionSourceMcpServerId: null,
-                useDynamicTeamCredential: false,
-                tool: {
-                  id: selectedToolForAssignment.id,
-                  name: selectedToolForAssignment.name,
-                  description: selectedToolForAssignment.description,
-                  parameters: selectedToolForAssignment.parameters,
-                  createdAt: selectedToolForAssignment.createdAt,
-                  updatedAt: selectedToolForAssignment.createdAt,
-                  mcpServerId: selectedToolForAssignment.mcpServerId,
-                  mcpServerName: selectedToolForAssignment.mcpServerName,
-                  catalogId: item.id,
-                  mcpServerCatalogId: null,
-                },
-                agent: { id: "", name: "" },
-                createdAt: selectedToolForAssignment.createdAt,
-                updatedAt: selectedToolForAssignment.createdAt,
-              }
-            : null
-        }
-        open={!!selectedToolForAssignment}
-        onOpenChange={(open) => {
-          if (!open) setSelectedToolForAssignment(null);
-        }}
       />
 
       <ManageUsersDialog

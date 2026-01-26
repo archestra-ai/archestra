@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePrompts } from "@/lib/prompts.query";
+import { useInternalAgents } from "@/lib/agent.query";
 
 interface ConnectionOptionsProps {
   agentId?: string;
@@ -35,14 +35,17 @@ export function ConnectionOptions({
   activeTab,
   onTabChange,
 }: ConnectionOptionsProps) {
-  const { data: prompts } = usePrompts();
+  const { data: internalAgents } = useInternalAgents();
   const [selectedA2aAgentId, setSelectedA2aAgentId] = useState<string | null>(
     null,
   );
 
   // Get effective agent ID (selected or first available)
-  const effectiveA2aAgentId = selectedA2aAgentId ?? prompts?.[0]?.id ?? null;
-  const selectedA2aAgent = prompts?.find((p) => p.id === effectiveA2aAgentId);
+  const effectiveA2aAgentId =
+    selectedA2aAgentId ?? internalAgents?.[0]?.id ?? null;
+  const selectedA2aAgent = internalAgents?.find(
+    (a) => a.id === effectiveA2aAgentId,
+  );
 
   return (
     <div className="space-y-6">
@@ -62,7 +65,7 @@ export function ConnectionOptions({
                 }
               : {
                   backgroundColor: "hsl(var(--muted) / 0.3)",
-                  borderColor: "transparent",
+                  borderColor: "rgba(0, 0, 0, 0.08)",
                 }
           }
         >
@@ -114,7 +117,7 @@ export function ConnectionOptions({
                 }
               : {
                   backgroundColor: "hsl(var(--muted) / 0.3)",
-                  borderColor: "transparent",
+                  borderColor: "rgba(0, 0, 0, 0.08)",
                 }
           }
         >
@@ -159,7 +162,7 @@ export function ConnectionOptions({
                 }
               : {
                   backgroundColor: "hsl(var(--muted) / 0.3)",
-                  borderColor: "transparent",
+                  borderColor: "rgba(0, 0, 0, 0.08)",
                 }
           }
         >
@@ -220,19 +223,21 @@ export function ConnectionOptions({
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select an agent">
                       {selectedA2aAgent && (
-                        <div className="flex items-center gap-2">
-                          <Bot className="h-4 w-4" />
-                          <span>{selectedA2aAgent.name}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Bot className="h-4 w-4 shrink-0" />
+                          <span className="truncate">
+                            {selectedA2aAgent.name}
+                          </span>
                         </div>
                       )}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {prompts?.map((agent) => (
+                    {internalAgents?.map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
-                        <div className="flex items-center gap-2">
-                          <Bot className="h-4 w-4" />
-                          <span>{agent.name}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Bot className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{agent.name}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -242,7 +247,7 @@ export function ConnectionOptions({
 
               {/* Connection Instructions */}
               {selectedA2aAgent && (
-                <A2AConnectionInstructions prompt={selectedA2aAgent} />
+                <A2AConnectionInstructions agent={selectedA2aAgent} />
               )}
             </div>
           </div>

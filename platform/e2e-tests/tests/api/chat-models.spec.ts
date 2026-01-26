@@ -1,5 +1,108 @@
 import { expect, test } from "./fixtures";
 
+test.describe("Chat Models Cache Invalidation API", () => {
+  test("should invalidate chat models cache and return success", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat/models/invalidate-cache",
+    });
+
+    expect(response.ok()).toBe(true);
+    const result = await response.json();
+
+    expect(result).toEqual({ success: true });
+  });
+
+  test("should actually clear the cache so next request fetches fresh data", async ({
+    request,
+    makeApiRequest,
+    clearWiremockRequests,
+    getWiremockRequests,
+  }) => {
+    // This test requires WireMock to be running (tilt trigger e2e-test-dependencies)
+    // Skip if WireMock is not available
+    try {
+      await clearWiremockRequests(request);
+    } catch {
+      test.skip(
+        true,
+        "WireMock not available - run: tilt trigger e2e-test-dependencies",
+      );
+      return;
+    }
+
+    // Step 1: Invalidate any existing cache to start fresh
+    await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat/models/invalidate-cache",
+    });
+
+    // Step 2: Clear WireMock request journal
+    await clearWiremockRequests(request);
+
+    // Step 3: Fetch models - this should hit WireMock (cache miss)
+    const response1 = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/chat/models?provider=openai",
+    });
+    expect(response1.ok()).toBe(true);
+
+    // Step 4: Verify WireMock received a request to the models endpoint
+    const requests1 = await getWiremockRequests(request, {
+      urlPattern: "/openai/v1/models",
+    });
+    expect(requests1.length).toBeGreaterThan(0);
+
+    // Step 5: Clear WireMock requests again
+    await clearWiremockRequests(request);
+
+    // Step 6: Fetch models again - should use cache (no WireMock request)
+    const response2 = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/chat/models?provider=openai",
+    });
+    expect(response2.ok()).toBe(true);
+
+    // Step 7: Verify WireMock did NOT receive a new request (cache hit)
+    const requests2 = await getWiremockRequests(request, {
+      urlPattern: "/openai/v1/models",
+    });
+    expect(requests2.length).toBe(0);
+
+    // Step 8: Invalidate the cache
+    const invalidateResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat/models/invalidate-cache",
+    });
+    expect(invalidateResponse.ok()).toBe(true);
+
+    // Step 9: Clear WireMock requests
+    await clearWiremockRequests(request);
+
+    // Step 10: Fetch models again - should hit WireMock (cache was invalidated)
+    const response3 = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/chat/models?provider=openai",
+    });
+    expect(response3.ok()).toBe(true);
+
+    // Step 11: Verify WireMock received a request (cache was cleared)
+    const requests3 = await getWiremockRequests(request, {
+      urlPattern: "/openai/v1/models",
+    });
+    expect(requests3.length).toBeGreaterThan(0);
+  });
+});
+
 test.describe
   .skip("Chat Models API", () => {
     test.describe.configure({ mode: "serial" });

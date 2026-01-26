@@ -71,7 +71,8 @@ export function CustomServerRequestDialog({
   onClose: () => void;
 }) {
   const form = useForm<CustomServerRequestFormValues>({
-    resolver: zodResolver(customServerRequestSchema),
+    // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
+    resolver: zodResolver(customServerRequestSchema as any),
     defaultValues: {
       serverType: "remote",
       label: "",

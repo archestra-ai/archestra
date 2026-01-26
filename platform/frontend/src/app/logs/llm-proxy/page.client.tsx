@@ -242,22 +242,18 @@ function SessionRow({
         </div>
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
-        <div className="flex flex-col gap-0.5">
-          <span>
-            {session.totalInputTokens.toLocaleString()} /{" "}
-            {session.totalOutputTokens.toLocaleString()}
-          </span>
-          {session.totalCost && session.totalBaselineCost && (
-            <TooltipProvider>
-              <Savings
-                cost={session.totalCost}
-                baselineCost={session.totalBaselineCost}
-                format="percent"
-                tooltip="hover"
-              />
-            </TooltipProvider>
-          )}
-        </div>
+        {session.totalCost && session.totalBaselineCost && (
+          <TooltipProvider>
+            <Savings
+              cost={session.totalCost}
+              baselineCost={session.totalBaselineCost}
+              toonCostSavings={session.totalToonCostSavings}
+              format="percent"
+              tooltip="hover"
+              variant="session"
+            />
+          </TooltipProvider>
+        )}
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
         <div className="flex flex-col gap-0.5">
@@ -278,14 +274,20 @@ function SessionRow({
       </TableCell>
       <TableCell className="py-3">
         <div className="flex flex-wrap gap-1">
-          <Badge variant="secondary" className="text-xs">
-            <Layers className="h-3 w-3 mr-1" />
-            {agent?.name ?? session.profileName ?? "Unknown"}
+          <Badge variant="secondary" className="text-xs max-w-[200px]">
+            <Layers className="h-3 w-3 mr-1 shrink-0" />
+            <span className="truncate">
+              {agent?.name ?? session.profileName ?? "Unknown"}
+            </span>
           </Badge>
           {session.userNames.map((userName) => (
-            <Badge key={userName} variant="outline" className="text-xs">
-              <User className="h-3 w-3 mr-1" />
-              {userName}
+            <Badge
+              key={userName}
+              variant="outline"
+              className="text-xs max-w-[150px]"
+            >
+              <User className="h-3 w-3 mr-1 shrink-0" />
+              <span className="truncate">{userName}</span>
             </Badge>
           ))}
         </div>
@@ -530,7 +532,7 @@ function SessionsTable({
                 </TableHead>
                 <TableHead className="w-[200px]">Models</TableHead>
                 <TableHead className="w-[140px] whitespace-nowrap">
-                  Tokens / Savings
+                  Cost
                 </TableHead>
                 <TableHead className="w-[160px]">Time</TableHead>
                 <TableHead className="min-w-[100px]">Details</TableHead>

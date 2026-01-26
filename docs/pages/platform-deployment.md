@@ -111,7 +111,8 @@ The Helm chart provides extensive configuration options through values. For the 
 - `archestra.imageTag` - Image tag for the Archestra Platform. New Helm releases update this value to latest available image tag.
 - `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
 - `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
-- `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options)
+- `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options). Supports Kubernetes `$(VAR_NAME)` expansion syntax.
+- `archestra.envWithValueFrom` - Environment variables with `valueFrom` for Kubernetes downward API (`fieldRef`, `resourceFieldRef`) or other sources. Required for defining variables like `NODE_IP` that can be referenced via `$(NODE_IP)` in other env vars.
 - `archestra.envFromSecrets` - Environment variables from Kubernetes Secrets (inject sensitive data from secrets)
 - `archestra.envFrom` - Import all key-value pairs from Secrets or ConfigMaps as environment variables
 
@@ -123,7 +124,6 @@ helm upgrade archestra-platform \
   --install \
   --namespace archestra \
   --create-namespace \
-  --set archestra.env.ARCHESTRA_API_BASE_URL=https://api.example.com \
   --wait
 ```
 
@@ -460,13 +460,6 @@ provider "archestra" {
 
 **Obtaining an API Key**: See the [API Reference](/docs/platform-api-reference#authentication) documentation for instructions on creating an API key.
 
-**Configuring `base_url`**:
-
-The `base_url` should match your `ARCHESTRA_API_BASE_URL` environment variable — this is where your Archestra Platform API is accessible:
-
-- **Local development**: `http://localhost:9000` (default)
-- **Production**: Your externally-accessible API URL (e.g., `https://api.archestra.example.com`)
-
 You can also set these values via environment variables instead of hardcoding them:
 
 ```bash
@@ -478,7 +471,9 @@ For complete documentation, examples, and resource reference, visit the [Archest
 
 ## Environment Variables
 
-The following environment variables can be used to configure Archestra Platform:
+The following environment variables can be used to configure Archestra Platform.
+
+### Application & API Configuration
 
 - **`ARCHESTRA_DATABASE_URL`** - PostgreSQL connection string for the database.
 
@@ -486,18 +481,14 @@ The following environment variables can be used to configure Archestra Platform:
   - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
   - Required for production deployments with external database
 
-- **`ARCHESTRA_API_BASE_URL`** - Internal URL where the frontend connects to the backend API server.
+- **`ARCHESTRA_API_BASE_URL`** - Archestra API Base URL(s) for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway.
 
-  - Default: `http://localhost:9000`
-  - Example: `http://localhost:9001` or `https://api.internal.example.com`
-  - Note: The backend parses the port from this URL to determine its listening port. In Kubernetes deployments, this is typically the internal service URL (e.g., `http://archestra-backend:9000`). For external access URLs shown in the UI, use `ARCHESTRA_API_EXTERNAL_BASE_URL` instead.
+  This URL is displayed in the UI connection instructions to help users configure their agents. It doesn\'t affect internal routing (Archestra frontend communicates with backend via `http://localhost:9000`).
 
-- **`ARCHESTRA_API_EXTERNAL_BASE_URL`** - Public URL for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway from outside the Kubernetes cluster.
-
-  This URL is displayed in the UI connection instructions to help users configure their agents. It does not affect internal routing.
-
-  - Default: Falls back to `ARCHESTRA_API_BASE_URL`
-  - Example: `https://api.archestra.com`
+  - Default: Falls back to `http://localhost:9000`
+  - Supports multiple comma-separated URLs for different connection options (e.g., internal K8s URL and external ingress)
+  - Single URL example: `https://api.archestra.com`
+  - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`
   - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
@@ -511,11 +502,27 @@ The following environment variables can be used to configure Archestra Platform:
   - Example: `https://frontend.example.com`
   - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
 
-- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
+- **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
 
-  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
-  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
-  - Required when using different domains or subdomains for frontend and backend
+  - Default: `permissive`
+  - Values: `permissive` or `restrictive`
+  - `permissive`: Tools are allowed, unless a specific policy is set for them.
+  - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
+
+- **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
+
+  - Default: `enabled`
+  - Set to `disabled` to opt-out of analytics
+
+- **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
+
+  - Default: `info`
+  - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
+  - Please reach out to <sales@archestra.ai> to learn more about the license.
+
+### Authentication & Security
 
 - **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens and passwords.
 
@@ -530,6 +537,12 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Default: `password`
   - Note: Change this to a secure password for production deployments
+
+- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
+
+  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
+  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
+  - Required when using different domains or subdomains for frontend and backend
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
 
@@ -550,6 +563,25 @@ The following environment variables can be used to configure Archestra Platform:
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
   - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
   - Required when configuring SSO with external identity providers hosted on different domains
+
+- **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
+
+  - Default: `DB` (database storage)
+  - Options: `DB` or `Vault`
+  - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
+
+- **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
+
+  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
+  - Example: `http://localhost:8200`
+  - Note: System falls back to database storage if Vault is configured but credentials are missing
+
+- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
+
+  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
+  - Note: System falls back to database storage if Vault is configured but credentials are missing
+
+### LLM Provider Configuration
 
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 
@@ -579,13 +611,6 @@ The following environment variables can be used to configure Archestra Platform:
   - Example: `http://localhost:11434/v1` (default Ollama)
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
 
-- **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
-
-  - Default: `permissive`
-  - Values: `permissive` or `restrictive`
-  - `permissive`: Tools are allowed, unless a specific policy is set for them.
-  - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
-
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
 
   - Default: `false`
@@ -611,6 +636,21 @@ The following environment variables can be used to configure Archestra Platform:
   - When not set, uses [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials)
   - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
+- **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
+
+  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`, `ARCHESTRA_CHAT_VLLM_API_KEY`, `ARCHESTRA_CHAT_OLLAMA_API_KEY`
+  - These serve as fallback API keys when no organization default or profile-specific key is configured
+  - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
+  - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
+
+- **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Default LLM provider for Chat and A2A features.
+
+  - Default: `anthropic`
+  - Options: `anthropic`, `openai`, `gemini`
+  - Used when no profile-specific provider is configured
+
+### MCP Server Orchestrator
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
 
   - Default: `default`
@@ -626,77 +666,36 @@ The following environment variables can be used to configure Archestra Platform:
   - Default: `true`
   - Set to `false` when Archestra is deployed in the different cluster and specify the `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`.
 
-- **`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`** - Path to custom kubeconfig file. Mount the required kubeconfig as volume inside the
+- **`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`** - Path to the custom kubeconfig file to mount as a volume inside the container.
 
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
 
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
+### Observability & Metrics
+
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces.
 
   - Default: `http://localhost:4318/v1/traces`
 
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME`** - Username for OTEL basic authentication
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME`** - Username for OTEL basic authentication.
 
   - Optional: Only used if both username and password are provided
   - Example: `your-username`
 
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for OTEL basic authentication
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for OTEL basic authentication.
 
   - Optional: Only used if both username and password are provided
   - Example: `your-password`
 
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for OTEL authentication
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for OTEL authentication.
 
   - Optional: Takes precedence over basic authentication if provided
   - Example: `your-bearer-token`
 
-- **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
-
-  - Default: `enabled`
-  - Set to `disabled` to opt-out of analytics
-
-- **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
-
-  - Default: `info`
-  - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
-
-- **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access
+- **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
 
   - Default: `archestra-metrics-secret`
   - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`
-
-- **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
-
-  - Default: `DB` (database storage)
-  - Options: `DB` or `Vault`
-  - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
-
-- **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
-
-  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
-  - Example: `http://localhost:8200`
-  - Note: System falls back to database storage if Vault is configured but credentials are missing
-
-- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
-
-  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
-  - Note: System falls back to database storage if Vault is configured but credentials are missing
-
-- **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
-
-  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`, `ARCHESTRA_CHAT_VLLM_API_KEY`, `ARCHESTRA_CHAT_OLLAMA_API_KEY`
-  - These serve as fallback API keys when no organization default or profile-specific key is configured
-  - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
-  - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
-
-- **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Default LLM provider for Chat and A2A features.
-
-  - Default: `anthropic`
-  - Options: `anthropic`, `openai`, `gemini`
-  - Used when no profile-specific provider is configured
-
-- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
-  - Please reach out to <sales@archestra.ai> to learn more about the license.
 
 ### Incoming Email Configuration
 
@@ -711,12 +710,12 @@ These environment variables configure the Incoming Email feature, which allows e
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID`** - Azure AD tenant ID for Microsoft Graph API.
 
   - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
-  - Example: `e6ec2dea-2205-4e2f-afb6-f83e5f588f40`
+  - Example: `eeeee123-2205-4e2f-afb6-f83e5f588f40`
 
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID`** - Azure AD application (client) ID.
 
   - Required when: `ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook`
-  - Example: `8d184f86-d6a1-4fd6-8783-b2f4931be17b`
+  - Example: `88888dd-d6a1-4fd6-8783-b2f4931be17b`
 
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET`** - Azure AD application client secret.
 
@@ -739,6 +738,51 @@ These environment variables configure the Incoming Email feature, which allows e
   - Optional: If set, subscription is created automatically on server startup
   - Example: `https://api.yourcompany.com/api/webhooks/incoming-email`
   - If not set, configure the subscription manually via Settings > Incoming Email
+
+### ChatOps Configuration
+
+These environment variables configure the ChatOps feature, which allows users to interact with agents through messaging platforms like Microsoft Teams. See [Agents - ChatOps: Microsoft Teams](/docs/platform-agents#chatops-microsoft-teams) for setup instructions.
+
+#### Microsoft Teams
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED`** - Enable Microsoft Teams integration.
+
+  - Default: `false`
+  - Set to `true` to enable the MS Teams chatops provider
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`** - Azure Bot App ID (Client ID).
+
+  - Required when: `ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true`
+  - Example: `88888dd-d6a1-4fd6-8783-b2f4931be17b`
+  - This is the Application (client) ID from your Azure Bot registration
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD`** - Azure Bot App Password (Client Secret).
+
+  - Required when: `ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true`
+  - Note: Keep this value secure; do not commit to version control
+  - This is the client secret from your Azure Bot registration
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`** - Azure AD tenant ID for single-tenant bots.
+
+  - Optional: Leave empty for multi-tenant bots (default)
+  - Set to your Azure AD tenant ID if your Azure Bot is configured as single-tenant
+  - Example: `eeeee123-2205-4e2f-afb6-f83e5f588f40`
+  - Find in Azure Portal: Azure Bot → Configuration → Microsoft App ID (tenant) or Azure AD → Overview → Tenant ID
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Azure AD tenant ID for Microsoft Graph API (thread history).
+
+  - Optional: Only required if you want to fetch conversation history for context
+  - Example: `eeeee123-2205-4e2f-afb6-f83e5f588f40`
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Azure AD application (client) ID for Graph API.
+
+  - Optional: Only required if you want to fetch conversation history for context
+  - Can be the same as `ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID` if using the same app registration
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Azure AD application client secret for Graph API.
+
+  - Optional: Only required if you want to fetch conversation history for context
+  - Note: Keep this value secure; do not commit to version control
 
 ### Knowledge Graph Configuration
 

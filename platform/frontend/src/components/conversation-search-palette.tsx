@@ -13,6 +13,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useIsAuthenticated } from "@/lib/auth.hook";
 import { useConversations } from "@/lib/chat.query";
 
 /**
@@ -105,6 +106,7 @@ export function ConversationSearchPalette({
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const isAuthenticated = useIsAuthenticated();
 
   // Debounce search query to reduce API calls while typing
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -114,7 +116,10 @@ export function ConversationSearchPalette({
     data: conversations = [],
     isLoading,
     isFetching,
-  } = useConversations(debouncedSearch);
+  } = useConversations({
+    enabled: isAuthenticated,
+    search: debouncedSearch,
+  });
 
   // Show skeleton during typing or initial fetch
   const isSearching = searchQuery.trim().length > 0;

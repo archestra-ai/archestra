@@ -55,6 +55,7 @@ interface TestFixtures {
   makeTeam: typeof makeTeam;
   makeTeamMember: typeof makeTeamMember;
   makeAgent: typeof makeAgent;
+  makeInternalAgent: typeof makeInternalAgent;
   makeTool: typeof makeTool;
   makeAgentTool: typeof makeAgentTool;
   makeToolPolicy: typeof makeToolPolicy;
@@ -172,16 +173,39 @@ async function makeTeamMember(
 }
 
 /**
- * Creates a test agent using the Agent model
+ * Creates a test agent using the Agent model.
+ * Auto-creates an organization if not provided.
  */
 async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
+  // Auto-create organization if not provided
+  let organizationId = overrides.organizationId;
+  if (!organizationId) {
+    const org = await makeOrganization();
+    organizationId = org.id;
+  }
+
   const defaults: InsertAgent = {
     name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
+    organizationId,
     teams: [],
     labels: [],
   };
   return await AgentModel.create({
     ...defaults,
+    ...overrides,
+  });
+}
+
+/**
+ * Creates an internal test agent (with prompts/chat capabilities).
+ */
+async function makeInternalAgent(
+  overrides: Partial<InsertAgent> = {},
+): Promise<Agent> {
+  return await makeAgent({
+    agentType: "agent",
+    systemPrompt: "You are a test agent",
+    userPrompt: "{{message}}",
     ...overrides,
   });
 }
@@ -742,6 +766,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeAgent: async ({}, use) => {
     await use(makeAgent);
+  },
+  makeInternalAgent: async ({}, use) => {
+    await use(makeInternalAgent);
   },
   makeTool: async ({}, use) => {
     await use(makeTool);

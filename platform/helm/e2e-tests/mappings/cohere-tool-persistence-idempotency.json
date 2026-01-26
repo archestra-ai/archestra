@@ -1,0 +1,40 @@
+{
+    "request": {
+        "method": "POST",
+        "urlPath": "/cohere/v2/chat",
+        "headers": {
+            "Authorization": {
+                "contains": "cohere-tool-persistence-idempotency"
+            }
+        }
+    },
+    "response": {
+        "status": 200,
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "jsonBody": {
+            "id": "chatcmpl-cohere-tool-persistence-idempotency",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Tool persistence idempotency test response."
+                    }
+                ]
+            },
+            "finish_reason": "COMPLETE",
+            "usage": {
+                "billed_units": {
+                    "input_tokens": 50,
+                    "output_tokens": 10
+                },
+                "tokens": {
+                    "input_tokens": 50,
+                    "output_tokens": 10
+                }
+            }
+        }
+    }
+}

@@ -25,9 +25,19 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   }),
 }));
 
-vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
-  StreamableHTTPClientTransport: vi.fn(),
-}));
+vi.mock(
+  "@modelcontextprotocol/sdk/client/streamableHttp.js",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@modelcontextprotocol/sdk/client/streamableHttp.js")
+      >();
+    return {
+      ...actual,
+      StreamableHTTPClientTransport: vi.fn(),
+    };
+  },
+);
 
 // Mock McpServerRuntimeManager - use vi.hoisted to avoid initialization errors
 const {

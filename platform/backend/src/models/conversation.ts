@@ -33,18 +33,14 @@ class ConversationModel {
     // Get all tools assigned to the agent (profile tools)
     const agentTools = await ToolModel.getToolsByAgent(data.agentId);
 
-    // Get prompt-specific agent delegation tools if a prompt is selected
-    let promptTools: Awaited<
-      ReturnType<typeof ToolModel.getAgentDelegationToolsByPrompt>
-    > = [];
-    if (data.promptId) {
-      promptTools = await ToolModel.getAgentDelegationToolsByPrompt(
-        data.promptId,
-      );
-    }
+    // Get agent delegation tools
+    const delegationTools = await ToolModel.getDelegationToolsByAgent(
+      data.agentId,
+    );
+    const delegationToolIds = delegationTools.map((d) => d.tool);
 
-    // Combine profile tools and prompt-specific tools
-    const allTools = [...agentTools, ...promptTools];
+    // Combine profile tools and delegation tools
+    const allTools = [...agentTools, ...delegationToolIds];
 
     // Filter out Archestra tools, but keep default Archestra tools enabled
     // Agent delegation tools (agent__*) should be enabled by default
@@ -162,6 +158,9 @@ class ConversationModel {
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
+            systemPrompt: schema.agentsTable.systemPrompt,
+            userPrompt: schema.agentsTable.userPrompt,
+            agentType: schema.agentsTable.agentType,
           },
         })
         .from(schema.conversationsTable)
@@ -242,6 +241,9 @@ class ConversationModel {
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
+            systemPrompt: schema.agentsTable.systemPrompt,
+            userPrompt: schema.agentsTable.userPrompt,
+            agentType: schema.agentsTable.agentType,
           },
         })
         .from(schema.conversationsTable)
@@ -276,6 +278,9 @@ class ConversationModel {
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
+          systemPrompt: schema.agentsTable.systemPrompt,
+          userPrompt: schema.agentsTable.userPrompt,
+          agentType: schema.agentsTable.agentType,
         },
       })
       .from(schema.conversationsTable)

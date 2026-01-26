@@ -5,12 +5,14 @@ import { schema } from "@/database";
 import {
   Anthropic,
   Cerebras,
+  Cohere,
   Gemini,
   Ollama,
   OpenAi,
   Vllm,
   Zhipuai,
 } from "./llm-providers";
+import { ToonSkipReasonSchema } from "./tool-result-compression";
 
 export const UserInfoSchema = z.object({
   id: z.string(),
@@ -28,6 +30,7 @@ export const InteractionRequestSchema = z.union([
   Cerebras.API.ChatCompletionRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
+  Cohere.API.ChatRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
 ]);
 
@@ -38,6 +41,7 @@ export const InteractionResponseSchema = z.union([
   Cerebras.API.ChatCompletionResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
+  Cohere.API.ChatResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
 ]);
 
@@ -115,11 +119,23 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     response: Ollama.API.ChatCompletionResponseSchema,
   }),
   BaseSelectInteractionSchema.extend({
+    type: z.enum(["cohere:chat"]),
+    request: Cohere.API.ChatRequestSchema,
+    processedRequest: Cohere.API.ChatRequestSchema.nullable().optional(),
+    response: Cohere.API.ChatResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
     type: z.enum(["zhipuai:chatCompletions"]),
     request: Zhipuai.API.ChatCompletionRequestSchema,
     processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);
 
@@ -130,6 +146,7 @@ export const InsertInteractionSchema = createInsertSchema(
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),
     response: InteractionResponseSchema,
+    toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
   },
 );
 

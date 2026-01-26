@@ -31,6 +31,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   cleanupEmailProvider,
   cleanupOldProcessedEmails,
@@ -40,6 +41,7 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
+import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -56,6 +58,7 @@ import {
   Anthropic,
   ApiError,
   Cerebras,
+  Cohere,
   Gemini,
   Ollama,
   OpenAi,
@@ -117,6 +120,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Cerebras.API.ChatCompletionResponseSchema, {
     id: "CerebrasChatCompletionResponse",
+  });
+  z.globalRegistry.add(Cohere.API.ChatRequestSchema, {
+    id: "CohereChatRequest",
+  });
+  z.globalRegistry.add(Cohere.API.ChatResponseSchema, {
+    id: "CohereChatResponse",
   });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",
@@ -514,6 +523,9 @@ const start = async () => {
   try {
     await seedRequiredStartingData();
 
+    // Start cache manager's background cleanup interval
+    cacheManager.start();
+
     // Initialize metrics with keys of custom agent labels
     const labelKeys = await AgentLabelModel.getAllKeys();
     initializeMetrics(labelKeys);
@@ -530,6 +542,9 @@ const start = async () => {
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
     await initializeEmailProvider();
+
+    // Initialize chatops providers (MS Teams, Slack, etc.)
+    await chatOpsManager.initialize();
 
     // Initialize knowledge graph provider (if configured)
     // This enables automatic document ingestion from chat uploads
@@ -631,8 +646,13 @@ const start = async () => {
         clearInterval(processedEmailCleanupIntervalId);
         fastify.log.info("Email background job intervals cleared");
 
+        // Stop cache manager's background cleanup
+        cacheManager.shutdown();
+
         // Track which cleanup operations have completed
-        const completedCleanups = new Set<string>();
+        const completedCleanups = new Set<
+          "emailProvider" | "knowledgeGraph" | "chatOps"
+        >();
 
         // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
         const cleanupPromise = Promise.allSettled([
@@ -644,10 +664,18 @@ const start = async () => {
             completedCleanups.add("knowledgeGraph");
             fastify.log.info("Knowledge graph provider cleanup completed");
           }),
+          chatOpsManager.cleanup().then(() => {
+            completedCleanups.add("chatOps");
+            fastify.log.info("ChatOps provider cleanup completed");
+          }),
         ]).then(() => "completed" as const);
 
         // Wait for cleanup with timeout, then exit anyway
-        const allCleanupNames = ["emailProvider", "knowledgeGraph"];
+        const allCleanupNames = [
+          "emailProvider",
+          "knowledgeGraph",
+          "chatOps",
+        ] as const;
         const result = await Promise.race([
           cleanupPromise,
           new Promise<"timeout">((resolve) =>

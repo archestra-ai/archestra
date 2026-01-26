@@ -66,3 +66,6 @@ benchmark-config.env
 # Playwright
 /playwright/
 playwright-report/
+
+*.pyc
+__pycache__/

@@ -134,6 +134,11 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
       name: {{ .secretName }}
       key: {{ .secretKey }}
 {{- end }}
+{{- range .Values.archestra.envWithValueFrom }}
+- name: {{ .name }}
+  valueFrom:
+    {{- toYaml .valueFrom | nindent 4 }}
+{{- end }}
 {{- end }}
 
 {{/*

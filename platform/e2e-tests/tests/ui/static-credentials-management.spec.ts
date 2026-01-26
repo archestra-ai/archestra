@@ -232,12 +232,13 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     catalogItemName,
   });
   const MATRIX = [
-    { user: "Admin", page: adminPage },
-    { user: "Editor", page: editorPage },
-    { user: "Member", page: memberPage },
+    { user: "Admin", page: adminPage, canCreateTeamCredential: true },
+    { user: "Editor", page: editorPage, canCreateTeamCredential: true },
+    // Members lack mcpServer:update permission, so they can only create personal credentials
+    { user: "Member", page: memberPage, canCreateTeamCredential: false },
   ] as const;
 
-  const install = async (page: Page) => {
+  const install = async (page: Page, canCreateTeamCredential: boolean) => {
     // Go to MCP Registry page
     await goToPage(page, "/mcp-catalog/registry");
     await page.waitForLoadState("networkidle");
@@ -247,6 +248,12 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       .click({ timeout: CONNECT_BUTTON_TIMEOUT });
     // Install using personal credential
     await clickButton({ page, options: { name: "Install" } });
+
+    if (!canCreateTeamCredential) {
+      await page.waitForLoadState("networkidle");
+      return;
+    }
+
     // Wait for dialog to close and button to be visible again
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
@@ -256,13 +263,17 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       timeout: CONNECT_BUTTON_TIMEOUT,
     });
     await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
-    // And this time team credential type should be selected by default for everyone, install using team credential
+    // And this time team credential type should be selected by default, install using team credential
     await clickButton({ page, options: { name: "Install" } });
     await page.waitForLoadState("networkidle");
   };
 
-  // Each user adds personal and 1 team credential
-  await Promise.all(MATRIX.map(({ page }) => install(page)));
+  // Each user adds personal credential, Admin and Editor also add team credential
+  await Promise.all(
+    MATRIX.map(({ page, canCreateTeamCredential }) =>
+      install(page, canCreateTeamCredential),
+    ),
+  );
 
   // Check Credentials counter
   const checkCredentialsCount = async (
@@ -271,9 +282,11 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   ) => {
     await goToPage(page, "/mcp-catalog/registry");
     await page.waitForLoadState("networkidle");
+    // Members can't create team installations (they lack mcpServer:update permission)
+    // So only 5 credentials are created: 3 personal + 2 team (Admin's DEFAULT, Editor's ENGINEERING)
     const expectedCredentialsCount = {
-      Admin: 6, // admin sees all credentials
-      Editor: 3, // editor sees their own credentials + additional Marketing team credential added by member
+      Admin: 5, // admin sees all credentials (3 personal + 2 team)
+      Editor: 2, // editor sees their own credentials (personal + ENGINEERING team)
     };
     // Member cannot see credentials count
     if (user === "Member") {
@@ -347,9 +360,13 @@ test("Verify tool calling using different static credentials", async ({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  // Select admin static credential
+  // Select admin static credential from dropdown
   await adminPage.getByRole("option", { name: "admin@example.com" }).click();
-  await adminPage.getByText("Assign to 1 profile").click();
+  // Close the popover by pressing Escape
+  await adminPage.keyboard.press("Escape");
+  await adminPage.waitForTimeout(200);
+  // Click Save button at the bottom of the McpAssignmentsDialog
+  await clickButton({ page: adminPage, options: { name: "Save" } });
   await adminPage.waitForLoadState("networkidle");
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
@@ -365,9 +382,13 @@ test("Verify tool calling using different static credentials", async ({
     page: editorPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  // Select editor static credential
+  // Select editor static credential from dropdown
   await editorPage.getByRole("option", { name: "editor@example.com" }).click();
-  await editorPage.getByText("Assign to 1 profile").click();
+  // Close the popover by pressing Escape
+  await editorPage.keyboard.press("Escape");
+  await editorPage.waitForTimeout(200);
+  // Click Save button at the bottom of the McpAssignmentsDialog
+  await clickButton({ page: editorPage, options: { name: "Save" } });
   await editorPage.waitForLoadState("networkidle");
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({

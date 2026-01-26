@@ -168,6 +168,41 @@ const geminiConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.modelVersion,
 };
 
+const cohereConfig: ModelOptimizationTestConfig = {
+  providerName: "Cohere",
+  provider: "cohere",
+
+  endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-cohere-baseline",
+      messages: [{ role: "user", content: [{ type: "text", text: content }] }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-cohere-baseline",
+  optimizedModel: "e2e-test-cohere-optimized",
+
+  getModelFromResponse: (response) => response.message?.model ?? response.model,
+};
+
 const cerebrasConfig: ModelOptimizationTestConfig = {
   providerName: "Cerebras",
   provider: "cerebras",
@@ -336,6 +371,7 @@ const testConfigs: ModelOptimizationTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
+  cohereConfig,
   cerebrasConfig,
   vllmConfig,
   ollamaConfig,

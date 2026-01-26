@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     const backendUrl =
-      process.env.ARCHESTRA_API_BASE_URL || "http://localhost:9000";
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL || "http://localhost:9000";
     return [
       {
         source: "/api/archestra-catalog/:path*",
@@ -47,6 +47,10 @@ const nextConfig: NextConfig = {
       {
         source: "/health",
         destination: `${backendUrl}/health`,
+      },
+      {
+        source: "/ws",
+        destination: `${backendUrl}/ws`,
       },
     ];
   },

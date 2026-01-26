@@ -15,6 +15,7 @@
  * Note: vLLM uses openai adapters since it's OpenAI-compatible
  */
 export * as anthropic from "./anthropic";
+export * as cohere from "./cohere";
 export * as gemini from "./gemini";
 export * as openai from "./openai";
 // vLLM is OpenAI-compatible, so it uses the openai adapter

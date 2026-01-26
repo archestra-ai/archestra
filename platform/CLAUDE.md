@@ -17,6 +17,7 @@
 7. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
 8. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseLicenseActivated` checks instead to avoid bundling enterprise code into free builds
 9. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
+10. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 
 ## Docs
 
@@ -43,7 +44,7 @@ Check ./docs/docs_writer_prompt.md before changing docs files.
 - **Optimization Rules**: <http://localhost:3000/cost/optimization-rules> (Cost optimization policies)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
-- **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
+- **MCP Gateway**: <http://localhost:9000/v1/mcp/:profileId> (GET for discovery, POST for JSON-RPC stateless mode, requires Bearer archestra_token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
 - **MCP Logs**: <http://localhost:9000/api/mcp_server/:id/logs> (GET container logs, ?lines=N to limit, ?follow=true for streaming)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
@@ -77,6 +78,16 @@ pnpm db:studio       # Open Drizzle Studio
 pnpm db:generate     # Generate new migrations (CI checks for uncommitted migrations)
 drizzle-kit check    # Check consistency of generated SQL migrations history
 
+# Manual Migrations with Data Migration Logic
+# When creating migrations that include data migration (INSERT/UPDATE statements),
+# you must use the Drizzle-generated migration file name to ensure proper tracking:
+# 1. First, update the Drizzle schema files with your schema changes
+# 2. Run `pnpm db:generate` - this creates a migration with a random name (e.g., 0119_military_alice.sql)
+# 3. Add your data migration SQL to the generated file (INSERT, UPDATE statements, etc.)
+# 4. Run `drizzle-kit check` to verify consistency
+# IMPORTANT: Never create manually-named migration files - Drizzle tracks migrations
+# via the meta/_journal.json file which references the generated file names.
+
 # Database Connection
 # PostgreSQL is running in Kubernetes (managed by Tilt)
 # Connect to database:
@@ -85,8 +96,9 @@ kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_passw
 # Common queries: \dt (list tables), \d table_name (describe table), SELECT COUNT(*) FROM drizzle.__drizzle_migrations;
 
 # Logs
-tilt logs pnpm-dev                   # Get logs for frontend + backend
-tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
+tilt logs pnpm-dev-backend           # Get backend logs
+tilt logs pnpm-dev-frontend          # Get frontend logs
+tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an update for the specified resource
 
 # E2E setup
 Runs wiremock and seeds test data to database. Note that in development e2e use your development database. This means some of your local data may cause e2e to fail locally.
@@ -218,7 +230,7 @@ ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN
 **LLM Proxy** returns tool calls to clients for execution (standard OpenAI/Anthropic behavior). Clients implement the agentic loop:
 
 1. Call LLM proxy → receive tool_use/tool_calls
-2. Execute tools via MCP Gateway (`POST /v1/mcp` with `Bearer ${agentId}`)
+2. Execute tools via MCP Gateway (`POST /v1/mcp/${profileId}` with `Bearer ${archestraToken}`)
 3. Send tool results back to LLM proxy
 4. Receive final answer
 
@@ -259,6 +271,71 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 ## Coding Conventions
 
 **General**:
+
+- **Prefer Classes for Stateful Modules**: When encapsulating functionality that involves state (cached values, intervals, connections, etc.), prefer creating a class over standalone module functions. Export a singleton instance. This improves encapsulation, testability, and makes state management explicit.
+  ```typescript
+  // Good - class with singleton
+  class ChatOpsManager {
+    private provider: Provider | null = null;
+
+    initialize() { ... }
+    cleanup() { ... }
+  }
+  export const chatOpsManager = new ChatOpsManager();
+
+  // Avoid - module-level state with loose functions
+  let provider: Provider | null = null;
+  export function initialize() { ... }
+  export function cleanup() { ... }
+  ```
+
+- **Private Methods at Bottom**: In classes, mark methods as `private` if they are only used within the class. Place all private methods at the bottom of the class, after public methods. This keeps the "public interface" visible at the top.
+  ```typescript
+  class MyService {
+    // Public methods first
+    doSomething() {
+      this.helperA();
+    }
+
+    // Private methods at bottom
+    private helperA() { ... }
+    private helperB() { ... }
+  }
+  ```
+
+- **No Premature Exports**: Only export what is actually used outside the module. If a function, constant, or type is only used within the module, do NOT export it. This is critical for maintaining clean module boundaries.
+  ```typescript
+  // Good - only export what's needed externally
+  export const myService = new MyService();
+
+  // Bad - exporting internal helpers "just in case"
+  export function internalHelper() { ... }  // Not used outside!
+  export const INTERNAL_CONSTANT = 42;      // Not used outside!
+  ```
+
+- **Module Code Order**: Structure modules so the "public interface" appears at the top. Internal/private functions and constants should be placed at the bottom of the file. This makes it immediately clear what the module exposes.
+  ```typescript
+  // 1. Imports
+  import { something } from "somewhere";
+
+  // 2. Exported items (public interface) - at TOP
+  export function publicFunctionA() {
+    return helperB();
+  }
+
+  export const publicConstant = "value";
+
+  // 3. Internal helpers - at BOTTOM
+  function helperB() {
+    return helperC();
+  }
+
+  function helperC() {
+    return INTERNAL_CONFIG.value;
+  }
+
+  const INTERNAL_CONFIG = { value: 42 };
+  ```
 
 - **Function Parameters**: If a function accepts more than 2 parameters, use a single object parameter instead of multiple positional parameters. This improves readability, makes parameters self-documenting, and allows for easier future extension.
   ```typescript
@@ -307,13 +384,29 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Flat file structure, avoid barrel files
 - **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
 - Only export public APIs
+- **Module Code Order (CRITICAL)**: Always place exports at TOP of file, internal helpers at BOTTOM. Use section comments (`// ===`) to separate. Function declarations are hoisted, so helpers can be called before defined.
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
 - **API Response Standardization**: Use `constructResponseSchema` helper for all routes to ensure consistent error responses (400, 401, 403, 404, 500)
-- **Error Handling**: Throw `ApiError` instances with appropriate status codes - handled centrally by Fastify error handler
+- **Error Handling**: Always use `throw new ApiError(statusCode, message)` for error responses - never use manual `reply.status().send({ error: ... })`. The centralized Fastify error handler formats all errors consistently as `{ error: { message, type } }` and logs appropriately.
+- **Protected Routes & Authentication**: Routes under `/api/` are protected by the auth middleware which guarantees `request.user` and `request.organizationId` exist. Never add redundant null checks like `if (!request.organizationId) throw new ApiError(401, "Unauthorized")` - just use `request.organizationId` directly. The middleware handles authentication; routes handle authorization and business logic.
 - **Type Organization**: Keep database schemas in `database/schemas/`, extract business types to dedicated `types/` files
 - **Pagination**: Use `PaginationQuerySchema` and `createPaginatedResponseSchema` for consistent pagination across APIs
 - **Sorting**: Use `SortingQuerySchema` or `createSortingQuerySchema` for standardized sorting parameters
+- **Database Types via drizzle-zod**: Never manually define TypeScript interfaces for database entities. Use `drizzle-zod` to generate Zod schemas from Drizzle table definitions, then infer types with `z.infer<>`. This keeps types in sync with the schema automatically:
+  ```typescript
+  // In types/<entity>.ts
+  import { createSelectSchema, createInsertSchema, createUpdateSchema } from "drizzle-zod";
+  import { schema } from "@/database";
+
+  export const SelectEntitySchema = createSelectSchema(schema.entityTable);
+  export const InsertEntitySchema = createInsertSchema(schema.entityTable).omit({ id: true, createdAt: true, updatedAt: true });
+  export const UpdateEntitySchema = createUpdateSchema(schema.entityTable).pick({ fieldToUpdate: true });
+
+  export type Entity = z.infer<typeof SelectEntitySchema>;
+  export type InsertEntity = z.infer<typeof InsertEntitySchema>;
+  export type UpdateEntity = z.infer<typeof UpdateEntitySchema>;
+  ```
 
 **Team-based Access Control**:
 
@@ -412,7 +505,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - All profiles enabled for chat: All profiles are available in chat by default (the `use_in_chat` field is deprecated)
 - MCP tool integration: Chat automatically uses the profile's assigned MCP tools via MCP Gateway
 - LLM Proxy integration: Chat routes through LLM Proxy (`/v1/anthropic/${agentId}`) for security policies, dual LLM, and observability
-- Profile authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${agentId}`
+- Profile authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${archestraToken}` with profile ID in URL path
 - Database schema: Conversations table includes `agentId` foreign key to agents table
 - UI components: `AgentSelector` dropdown, `ChatSidebarSection` for conversation navigation in main sidebar
 - Conversation navigation: Recent chats shown as sub-items under "Chat" menu in main sidebar (ChatSidebarSection component)

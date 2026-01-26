@@ -28,8 +28,8 @@ describe("ConversationEnabledToolModel", () => {
       conversation.id,
     );
 
-    // Should have todo_write and artifact_write enabled by default
-    expect(enabledTools).toHaveLength(2);
+    // Should have default Archestra tools enabled by default
+    expect(enabledTools).toHaveLength(3);
   });
 
   test("hasCustomSelection returns true for new conversation (Archestra tools disabled by default)", async ({
@@ -326,9 +326,9 @@ describe("ConversationEnabledToolModel", () => {
       conversation2.id,
     ]);
 
-    // Should have todo_write and artifact_write enabled by default
-    expect(toolsMap.get(conversation1.id)).toHaveLength(2);
-    expect(toolsMap.get(conversation2.id)).toHaveLength(2);
+    // Should have default Archestra tools enabled by default
+    expect(toolsMap.get(conversation1.id)).toHaveLength(3);
+    expect(toolsMap.get(conversation2.id)).toHaveLength(3);
   });
 
   test("findByConversations returns empty map for empty input", async () => {
@@ -385,7 +385,7 @@ describe("ConversationEnabledToolModel", () => {
     const tools2 = await ConversationEnabledToolModel.findByConversation(
       conversation2.id,
     );
-    expect(tools2).toHaveLength(2); // todo_write and artifact_write
+    expect(tools2).toHaveLength(3); // default Archestra tools
 
     const hasCustom1 = await ConversationEnabledToolModel.hasCustomSelection(
       conversation1.id,

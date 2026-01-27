@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  E2eTestId,
   type ModelInputModality,
   providerDisplayNames,
   type SupportedProvider,
@@ -586,6 +587,7 @@ export function ModelSelector({
           <PromptInputButton
             disabled={disabled}
             className="max-w-[280px] min-w-0"
+            data-testid={E2eTestId.ChatModelSelectorTrigger}
           >
             {selectedModelLogo && (
               <ModelSelectorLogo

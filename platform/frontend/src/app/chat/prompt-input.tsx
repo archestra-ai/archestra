@@ -192,6 +192,7 @@ const PromptInputContent = ({
           ref={textareaRef}
           className="px-4"
           disableEnterSubmit={status !== "ready" && status !== "error"}
+          data-testid={E2eTestId.ChatPromptTextarea}
         />
       </PromptInputBody>
       <PromptInputFooter>

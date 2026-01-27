@@ -60,6 +60,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.zhipuai,
     originalUrl: "https://open.bigmodel.cn/api/",
   },
+  bedrock: {
+    label: providerDisplayNames.bedrock,
+    originalUrl: "https://bedrock-runtime.your-region.amazonaws.com/",
+  },
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 

@@ -23,8 +23,7 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentDialog } from "@/components/agent-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
-import { LoadingSpinner } from "@/components/loading";
-import { LoadingWrapper } from "@/components/loading-wrapper";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
@@ -427,7 +426,10 @@ function McpGateways({
   ];
 
   return (
-    <LoadingWrapper isPending={showLoading} skeleton={<LoadingSpinner />}>
+    <LoadingWrapper
+      isPending={showLoading}
+      loadingFallback={<LoadingSpinner />}
+    >
       <PageLayout
         title="MCP Gateways"
         description={

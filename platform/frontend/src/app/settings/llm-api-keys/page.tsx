@@ -15,7 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import Image from "next/image";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -26,6 +26,7 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
 import { GeminiVertexAiAlert } from "@/components/gemini-vertex-ai-alert";
+import { LoadingWrapper } from "@/components/loading";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,7 +74,7 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 };
 
 function ChatSettingsContent() {
-  const { data: apiKeys = [] } = useChatApiKeys();
+  const { data: apiKeys = [], isPending } = useChatApiKeys();
   const createMutation = useCreateChatApiKey();
   const updateMutation = useUpdateChatApiKey();
   const deleteMutation = useDeleteChatApiKey();
@@ -364,184 +365,183 @@ function ChatSettingsContent() {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-lg font-semibold">LLM Provider API Keys</h2>
-          <p className="text-sm text-muted-foreground">
-            Manage API keys for LLM providers used in the Archestra Chat
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => invalidateCacheMutation.mutate()}
-            disabled={invalidateCacheMutation.isPending}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${invalidateCacheMutation.isPending ? "animate-spin" : ""}`}
-            />
-            Refresh models
-          </Button>
-          <Button
-            onClick={() => setIsCreateDialogOpen(true)}
-            data-testid={E2eTestId.AddChatApiKeyButton}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add API Key
-          </Button>
-        </div>
-      </div>
-
-      {byosEnabled &&
-        apiKeys.some((key) => key.secretStorageType === "database") && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Database-stored API keys detected</AlertTitle>
-            <AlertDescription>
-              External Vault storage is enabled, but some of your API keys are
-              still stored in the database. To migrate them to the vault, delete
-              them and create new ones with vault references.
-            </AlertDescription>
-          </Alert>
-        )}
-
-      {geminiVertexAiEnabled && <GeminiVertexAiAlert variant="full" />}
-
-      <div data-testid={E2eTestId.ChatApiKeysTable}>
-        <DataTable
-          columns={columns}
-          data={apiKeys}
-          getRowId={(row) => row.id}
-          hideSelectedCount
-        />
-      </div>
-
-      {/* Create Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add API Key</DialogTitle>
-            <DialogDescription>
-              Add a new LLM provider API key for use in Chat
-            </DialogDescription>
-          </DialogHeader>
-          {geminiVertexAiEnabled && <GeminiVertexAiAlert variant="compact" />}
-          <div className="py-2">
-            <ChatApiKeyForm
-              mode="full"
-              showConsoleLink={false}
-              form={createForm}
-              existingKeys={apiKeys}
-              isPending={createMutation.isPending}
-              geminiVertexAiEnabled={geminiVertexAiEnabled}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsCreateDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={!isCreateValid || createMutation.isPending}
-            >
-              {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Test & Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit API Key</DialogTitle>
-            <DialogDescription>
-              Update the name or API key value
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            {selectedApiKey && (
-              <ChatApiKeyForm
-                mode="full"
-                showConsoleLink={false}
-                existingKey={selectedApiKey}
-                existingKeys={apiKeys}
-                form={editForm}
-                isPending={updateMutation.isPending}
-              />
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleEdit}
-              disabled={!isEditValid || updateMutation.isPending}
-            >
-              {updateMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Test & Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete API Key</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &quot;{selectedApiKey?.name}
-              &quot;? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-export default function ChatSettingsPage() {
-  return (
-    <Suspense
-      fallback={
+    <LoadingWrapper
+      isPending={isPending}
+      loadingFallback={
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       }
     >
-      <ChatSettingsContent />
-    </Suspense>
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-semibold">LLM Provider API Keys</h2>
+            <p className="text-sm text-muted-foreground">
+              Manage API keys for LLM providers used in the Archestra Chat
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => invalidateCacheMutation.mutate()}
+              disabled={invalidateCacheMutation.isPending}
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${invalidateCacheMutation.isPending ? "animate-spin" : ""}`}
+              />
+              Refresh models
+            </Button>
+            <Button
+              onClick={() => setIsCreateDialogOpen(true)}
+              data-testid={E2eTestId.AddChatApiKeyButton}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add API Key
+            </Button>
+          </div>
+        </div>
+
+        {byosEnabled &&
+          apiKeys.some((key) => key.secretStorageType === "database") && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Database-stored API keys detected</AlertTitle>
+              <AlertDescription>
+                External Vault storage is enabled, but some of your API keys are
+                still stored in the database. To migrate them to the vault,
+                delete them and create new ones with vault references.
+              </AlertDescription>
+            </Alert>
+          )}
+
+        {geminiVertexAiEnabled && <GeminiVertexAiAlert variant="full" />}
+
+        <div data-testid={E2eTestId.ChatApiKeysTable}>
+          <DataTable
+            columns={columns}
+            data={apiKeys}
+            getRowId={(row) => row.id}
+            hideSelectedCount
+          />
+        </div>
+
+        {/* Create Dialog */}
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add API Key</DialogTitle>
+              <DialogDescription>
+                Add a new LLM provider API key for use in Chat
+              </DialogDescription>
+            </DialogHeader>
+            {geminiVertexAiEnabled && <GeminiVertexAiAlert variant="compact" />}
+            <div className="py-2">
+              <ChatApiKeyForm
+                mode="full"
+                showConsoleLink={false}
+                form={createForm}
+                existingKeys={apiKeys}
+                isPending={createMutation.isPending}
+                geminiVertexAiEnabled={geminiVertexAiEnabled}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsCreateDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreate}
+                disabled={!isCreateValid || createMutation.isPending}
+              >
+                {createMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Test & Create
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Edit API Key</DialogTitle>
+              <DialogDescription>
+                Update the name or API key value
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {selectedApiKey && (
+                <ChatApiKeyForm
+                  mode="full"
+                  showConsoleLink={false}
+                  existingKey={selectedApiKey}
+                  existingKeys={apiKeys}
+                  form={editForm}
+                  isPending={updateMutation.isPending}
+                />
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleEdit}
+                disabled={!isEditValid || updateMutation.isPending}
+              >
+                {updateMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Test & Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete API Key</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete &quot;{selectedApiKey?.name}
+                &quot;? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsDeleteDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </LoadingWrapper>
   );
+}
+
+export default function ChatSettingsPage() {
+  return <ChatSettingsContent />;
 }

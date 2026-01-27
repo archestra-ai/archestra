@@ -24,8 +24,7 @@ import { A2AConnectionInstructions } from "@/components/a2a-connection-instructi
 import { AgentDialog } from "@/components/agent-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
-import { LoadingSpinner } from "@/components/loading";
-import { LoadingWrapper } from "@/components/loading-wrapper";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -416,7 +415,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   ];
 
   return (
-    <LoadingWrapper isPending={showLoading} skeleton={<LoadingSpinner />}>
+    <LoadingWrapper
+      isPending={showLoading}
+      loadingFallback={<LoadingSpinner />}
+    >
       <PageLayout
         title="Agents"
         description={

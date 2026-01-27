@@ -67,15 +67,17 @@ const PROVIDER_CONFIG: Record<
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 
-/** Providers to show as buttons (subset of all providers) */
-const VISIBLE_PROVIDERS: ProviderOption[] = [
+/** Providers to show as primary buttons */
+const PRIMARY_PROVIDERS: ProviderOption[] = [
   "openai",
-  "gemini",
   "anthropic",
-  "cerebras",
+  "gemini",
+  "bedrock",
   "claude-code",
-  "mistral",
 ];
+
+/** Providers to show in the overflow dropdown */
+const DROPDOWN_PROVIDERS: ProviderOption[] = ["cerebras", "mistral"];
 
 interface ProxyConnectionInstructionsProps {
   agentId?: string;
@@ -104,7 +106,7 @@ export function ProxyConnectionInstructions({
   return (
     <div className="space-y-3">
       <ButtonGroup>
-        {VISIBLE_PROVIDERS.map((provider) => (
+        {PRIMARY_PROVIDERS.map((provider) => (
           <Button
             key={provider}
             variant={selectedProvider === provider ? "default" : "outline"}
@@ -116,14 +118,32 @@ export function ProxyConnectionInstructions({
         ))}
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm">
+            <Button
+              variant={
+                DROPDOWN_PROVIDERS.includes(selectedProvider)
+                  ? "default"
+                  : "outline"
+              }
+              size="sm"
+            >
+              {DROPDOWN_PROVIDERS.includes(selectedProvider)
+                ? PROVIDER_CONFIG[selectedProvider].label
+                : null}
               <ChevronDown className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-2">
-            <p className="text-xs text-muted-foreground px-2 py-1">
-              More providers coming soon
-            </p>
+          <PopoverContent className="w-auto p-1">
+            {DROPDOWN_PROVIDERS.map((provider) => (
+              <Button
+                key={provider}
+                variant={selectedProvider === provider ? "default" : "ghost"}
+                size="sm"
+                className="w-full justify-start"
+                onClick={() => setSelectedProvider(provider)}
+              >
+                {PROVIDER_CONFIG[provider].label}
+              </Button>
+            ))}
           </PopoverContent>
         </Popover>
       </ButtonGroup>

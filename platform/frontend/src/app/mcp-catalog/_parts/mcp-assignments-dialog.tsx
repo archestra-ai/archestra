@@ -566,7 +566,7 @@ function ProfileAssignmentPill({
           size="sm"
           className={cn(
             "h-8 px-3 gap-1.5 text-xs max-w-[250px]",
-            hasNoAssignments && "border-dashed",
+            hasNoAssignments && "border-dashed opacity-50",
             hasChanges && "border-primary",
           )}
         >

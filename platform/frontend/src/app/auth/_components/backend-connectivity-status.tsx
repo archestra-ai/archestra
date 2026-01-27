@@ -30,6 +30,10 @@ export function BackendConnectivityStatus({
 }: BackendConnectivityStatusProps) {
   const { status, attemptCount, elapsedMs, retry } = useBackendConnectivity();
 
+  if (status === "initializing") {
+    return null;
+  }
+
   // When connected, render children (the login form)
   if (status === "connected") {
     return <>{children}</>;

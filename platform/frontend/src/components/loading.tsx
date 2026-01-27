@@ -33,7 +33,7 @@ export function LoadingSpinner({ className }: { className?: string }) {
 export function LoadingWrapper({
   isPending,
   error,
-  loadingFallback = <LoadingSpinner />,
+  loadingFallback = <LoadingSpinner className="top-1/2 left-1/2 absolute" />,
   errorFallback = null,
   children,
 }: {

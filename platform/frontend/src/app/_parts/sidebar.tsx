@@ -204,11 +204,8 @@ const MainSideBarSection = ({
 }) => {
   const allItems = getNavigationItems(isAuthenticated);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  if (permissionMap === null) {
-    return null;
-  }
   const permittedItems = allItems.filter(
-    (item) => permissionMap[item.url] ?? true,
+    (item) => permissionMap?.[item.url] ?? true,
   );
 
   return (
@@ -336,7 +333,7 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="flex flex-col gap-2">
-        {isLoadingAppearance ? <div className="h-[20px]" /> : logoToShow}
+        {isLoadingAppearance ? <div className="h-[47px]" /> : logoToShow}
       </SidebarHeader>
       <SidebarContent>
         {isAuthenticated ? (

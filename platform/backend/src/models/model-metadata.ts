@@ -1,5 +1,5 @@
 import type { SupportedProvider } from "@shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   CreateModelMetadata,
@@ -45,17 +45,23 @@ class ModelMetadataModel {
       return new Map();
     }
 
-    const results = await db.select().from(schema.modelMetadataTable);
+    // Build OR conditions to filter at database level
+    const conditions = keys.map((key) =>
+      and(
+        eq(schema.modelMetadataTable.provider, key.provider),
+        eq(schema.modelMetadataTable.modelId, key.modelId),
+      ),
+    );
 
-    // Build a map for fast lookup
-    const keySet = new Set(keys.map((k) => `${k.provider}:${k.modelId}`));
+    const results = await db
+      .select()
+      .from(schema.modelMetadataTable)
+      .where(or(...conditions));
+
     const map = new Map<string, ModelMetadata>();
-
     for (const result of results) {
       const key = `${result.provider}:${result.modelId}`;
-      if (keySet.has(key)) {
-        map.set(key, result);
-      }
+      map.set(key, result);
     }
 
     return map;

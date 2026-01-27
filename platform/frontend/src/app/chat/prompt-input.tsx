@@ -1,6 +1,12 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import {
+  E2eTestId,
+  getAcceptedFileTypes,
+  getSupportedFileTypesDescription,
+  type ModelInputModality,
+  supportsFileUploads,
+} from "@shared";
 import type { ChatStatus } from "ai";
 import { PaperclipIcon, Plus } from "lucide-react";
 import type { FormEvent } from "react";
@@ -34,12 +40,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  getAcceptedFileTypes,
-  getSupportedFileTypesDescription,
-  type ModelInputModality,
-  supportsFileUploads,
-} from "@shared";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat.query";

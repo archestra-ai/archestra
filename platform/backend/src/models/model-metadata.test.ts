@@ -113,6 +113,62 @@ describe("ModelMetadataModel", () => {
       expect(map.get("anthropic:claude-3-opus")?.modelId).toBe("claude-3-opus");
       expect(map.get("openai:nonexistent")).toBeUndefined();
     });
+
+    test("only returns requested records via database-level filtering", async () => {
+      // Create multiple records in the database
+      await ModelMetadataModel.create({
+        externalId: "openai/gpt-4o",
+        provider: "openai",
+        modelId: "gpt-4o",
+        description: "GPT-4o",
+        contextLength: 128000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000005",
+        completionPricePerToken: "0.000015",
+        lastSyncedAt: new Date(),
+      });
+
+      await ModelMetadataModel.create({
+        externalId: "openai/gpt-3.5-turbo",
+        provider: "openai",
+        modelId: "gpt-3.5-turbo",
+        description: "GPT-3.5 Turbo",
+        contextLength: 16000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      });
+
+      await ModelMetadataModel.create({
+        externalId: "anthropic/claude-3-opus",
+        provider: "anthropic",
+        modelId: "claude-3-opus",
+        description: "Claude 3 Opus",
+        contextLength: 200000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000015",
+        completionPricePerToken: "0.000075",
+        lastSyncedAt: new Date(),
+      });
+
+      // Request only one of the three records
+      const map = await ModelMetadataModel.findByProviderModelIds([
+        { provider: "openai", modelId: "gpt-4o" },
+      ]);
+
+      // Should only return the requested record, not all records in the table
+      expect(map.size).toBe(1);
+      expect(map.get("openai:gpt-4o")?.modelId).toBe("gpt-4o");
+      expect(map.get("openai:gpt-3.5-turbo")).toBeUndefined();
+      expect(map.get("anthropic:claude-3-opus")).toBeUndefined();
+    });
   });
 
   describe("upsert", () => {

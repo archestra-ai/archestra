@@ -366,12 +366,25 @@ class ModelsDevClient {
         continue;
       }
 
-      const pricePerMillionInput = (
-        Number.parseFloat(metadata.promptPricePerToken) * 1_000_000
-      ).toFixed(2);
-      const pricePerMillionOutput = (
-        Number.parseFloat(metadata.completionPricePerToken) * 1_000_000
-      ).toFixed(2);
+      const inputPrice = Number.parseFloat(metadata.promptPricePerToken);
+      const outputPrice = Number.parseFloat(metadata.completionPricePerToken);
+
+      // Skip if either price is NaN (invalid numeric string)
+      if (Number.isNaN(inputPrice) || Number.isNaN(outputPrice)) {
+        logger.warn(
+          {
+            modelId: metadata.modelId,
+            provider: metadata.provider,
+            promptPricePerToken: metadata.promptPricePerToken,
+            completionPricePerToken: metadata.completionPricePerToken,
+          },
+          "Skipping token price sync due to invalid pricing data",
+        );
+        continue;
+      }
+
+      const pricePerMillionInput = (inputPrice * 1_000_000).toFixed(2);
+      const pricePerMillionOutput = (outputPrice * 1_000_000).toFixed(2);
 
       const created = await TokenPriceModel.createIfNotExists(
         metadata.modelId,

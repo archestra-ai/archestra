@@ -1,5 +1,3 @@
-"use client";
-
 import { archestraApiSdk } from "@shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -10,7 +8,7 @@ export type BackendConnectionStatus =
   | "connected"
   | "unreachable";
 
-interface UseBackendConnectivityOptions {
+export interface UseBackendConnectivityOptions {
   /**
    * Time in milliseconds before declaring the backend unreachable.
    * Default: 60000 (1 minute)
@@ -31,9 +29,14 @@ interface UseBackendConnectivityOptions {
    * Default: true
    */
   autoStart?: boolean;
+  /**
+   * Custom health check function for testing.
+   * Default: uses archestraApiSdk.getHealth
+   */
+  checkHealthFn?: () => Promise<boolean>;
 }
 
-interface UseBackendConnectivityResult {
+export interface UseBackendConnectivityResult {
   /**
    * Current connection status
    */
@@ -52,6 +55,15 @@ interface UseBackendConnectivityResult {
   retry: () => void;
 }
 
+async function defaultCheckHealth(): Promise<boolean> {
+  try {
+    const response = await getHealth();
+    return response.response.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Hook to check backend connectivity with exponential backoff.
  *
@@ -68,11 +80,21 @@ export function useBackendConnectivity(
     initialDelayMs = 1000, // 1 second
     maxDelayMs = 30000, // 30 seconds
     autoStart = true,
+    checkHealthFn = defaultCheckHealth,
   } = options;
 
   const [status, setStatus] = useState<BackendConnectionStatus>("connecting");
   const [attemptCount, setAttemptCount] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
+
+  // Store options in refs to avoid effect dependency issues
+  const optionsRef = useRef({
+    timeoutMs,
+    initialDelayMs,
+    maxDelayMs,
+    checkHealthFn,
+  });
+  optionsRef.current = { timeoutMs, initialDelayMs, maxDelayMs, checkHealthFn };
 
   const startTimeRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,20 +114,13 @@ export function useBackendConnectivity(
     }
   }, []);
 
-  const checkHealth = useCallback(async (): Promise<boolean> => {
-    try {
-      const response = await getHealth();
-      return response.response.ok;
-    } catch {
-      return false;
-    }
-  }, []);
-
   const attemptConnection = useCallback(
     async (currentAttempt: number) => {
       if (!isMountedRef.current) return;
 
-      const isHealthy = await checkHealth();
+      const { checkHealthFn, timeoutMs, initialDelayMs, maxDelayMs } =
+        optionsRef.current;
+      const isHealthy = await checkHealthFn();
 
       if (!isMountedRef.current) return;
 
@@ -138,7 +153,7 @@ export function useBackendConnectivity(
         attemptConnection(currentAttempt + 1);
       }, nextDelay);
     },
-    [checkHealth, clearTimers, initialDelayMs, maxDelayMs, timeoutMs],
+    [clearTimers],
   );
 
   const startConnection = useCallback(() => {
@@ -151,12 +166,12 @@ export function useBackendConnectivity(
     // Record start time
     startTimeRef.current = Date.now();
 
-    // Start elapsed time tracking
+    // Start elapsed time tracking (1s interval since UI displays seconds)
     elapsedIntervalRef.current = setInterval(() => {
       if (startTimeRef.current && isMountedRef.current) {
         setElapsedMs(Date.now() - startTimeRef.current);
       }
-    }, 100);
+    }, 1000);
 
     // Start first attempt
     attemptConnection(0);

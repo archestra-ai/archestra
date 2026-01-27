@@ -69,7 +69,7 @@ export type OpenAiChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -334,7 +334,7 @@ export type OpenAiChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | null;
+            }> | unknown;
         };
     }>;
     created: number;
@@ -1450,7 +1450,7 @@ export type CerebrasChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -1913,7 +1913,7 @@ export type MistralChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -2178,7 +2178,7 @@ export type MistralChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | null;
+            }> | unknown;
         };
     }>;
     created: number;
@@ -2242,7 +2242,7 @@ export type MistralChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | null;
+            }> | unknown;
         };
     }> | number | 'chat.completion' | string | unknown | {
         completion_tokens: number;
@@ -2324,7 +2324,7 @@ export type VllmChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         function_call?: {
             arguments: string;
             name: string;
@@ -2655,7 +2655,7 @@ export type OllamaChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         function_call?: {
             arguments: string;
             name: string;
@@ -3208,7 +3208,7 @@ export type OpenAiChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -3473,7 +3473,7 @@ export type OpenAiChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | null;
+            }> | unknown;
         };
     }>;
     created: number;
@@ -4589,7 +4589,7 @@ export type CerebrasChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -5052,7 +5052,7 @@ export type MistralChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -5317,7 +5317,7 @@ export type MistralChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | null;
+            }> | unknown;
         };
     }>;
     created: number;
@@ -5381,7 +5381,7 @@ export type MistralChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | null;
+            }> | unknown;
         };
     }> | number | 'chat.completion' | string | unknown | {
         completion_tokens: number;
@@ -5463,7 +5463,7 @@ export type VllmChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         function_call?: {
             arguments: string;
             name: string;
@@ -5794,7 +5794,7 @@ export type OllamaChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | null;
+        }> | unknown;
         function_call?: {
             arguments: string;
             name: string;

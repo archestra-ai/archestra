@@ -597,15 +597,10 @@ class GeminiStreamAdapter
       if ("inlineData" in part && part.inlineData) {
         // Store for later reconstruction in toProviderResponse
         this.inlineDataParts.push(
-          sdkPartToRestPart(
-            part as Parameters<typeof sdkPartToRestPart>[0],
-          ),
+          sdkPartToRestPart(part as Parameters<typeof sdkPartToRestPart>[0]),
         );
         // Convert SDK chunk to REST format and pass through
-        const restChunk = sdkResponseToRestResponse(
-          chunk,
-          this.model,
-        );
+        const restChunk = sdkResponseToRestResponse(chunk, this.model);
         sseData = `data: ${JSON.stringify(restChunk)}\n\n`;
       }
 

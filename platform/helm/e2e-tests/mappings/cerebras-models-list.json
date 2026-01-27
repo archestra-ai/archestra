@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/cerebras/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "llama-4-scout-17b-16e-instruct",
+          "name": "Llama 4 Scout"
+        },
+        {
+          "id": "llama-3.3-70b",
+          "name": "Llama 3.3 70B"
+        }
+      ]
+    }
+  }
+}

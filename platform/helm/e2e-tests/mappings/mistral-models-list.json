@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/mistral/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "mistral-large-latest",
+          "created": 1700000000,
+          "owned_by": "mistral"
+        },
+        {
+          "id": "mistral-medium-latest",
+          "created": 1700000000,
+          "owned_by": "mistral"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/cohere/v2/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "models": [
+        {
+          "name": "command-r-plus",
+          "endpoints": ["chat", "generate"]
+        },
+        {
+          "name": "command-r",
+          "endpoints": ["chat", "generate"]
+        }
+      ]
+    }
+  }
+}

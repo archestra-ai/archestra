@@ -1,8 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import { useQueries } from "@tanstack/react-query";
-import { ExternalLink, Loader2, X } from "lucide-react";
+import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import {
   forwardRef,
   Suspense,
@@ -15,6 +18,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -509,10 +513,14 @@ function McpServerPill({
   );
 }
 
-interface ToolChecklistProps {
+export interface ToolChecklistProps {
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
   setSelectedToolIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+}
+
+function formatToolName(toolName: string) {
+  return toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? toolName;
 }
 
 function ExpandableDescription({ description }: { description: string }) {
@@ -568,13 +576,29 @@ function ExpandableDescription({ description }: { description: string }) {
   );
 }
 
-function ToolChecklist({
+export function ToolChecklist({
   tools,
   selectedToolIds,
   setSelectedToolIds,
 }: ToolChecklistProps) {
-  const allSelected = tools.every((tool) => selectedToolIds.has(tool.id));
-  const noneSelected = tools.every((tool) => !selectedToolIds.has(tool.id));
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredTools = useMemo(() => {
+    if (!searchQuery.trim()) return tools;
+    const query = searchQuery.toLowerCase();
+    return tools.filter(
+      (tool) =>
+        formatToolName(tool.name).toLowerCase().includes(query) ||
+        (tool.description?.toLowerCase().includes(query) ?? false),
+    );
+  }, [tools, searchQuery]);
+
+  const allSelected = filteredTools.every((tool) =>
+    selectedToolIds.has(tool.id),
+  );
+  const noneSelected = filteredTools.every(
+    (tool) => !selectedToolIds.has(tool.id),
+  );
   const selectedCount = tools.filter((t) => selectedToolIds.has(t.id)).length;
 
   const handleToggle = (toolId: string) => {
@@ -590,11 +614,19 @@ function ToolChecklist({
   };
 
   const handleSelectAll = () => {
-    setSelectedToolIds(new Set(tools.map((t) => t.id)));
+    const newSet = new Set(selectedToolIds);
+    for (const tool of filteredTools) {
+      newSet.add(tool.id);
+    }
+    setSelectedToolIds(newSet);
   };
 
   const handleDeselectAll = () => {
-    setSelectedToolIds(new Set());
+    const newSet = new Set(selectedToolIds);
+    for (const tool of filteredTools) {
+      newSet.delete(tool.id);
+    }
+    setSelectedToolIds(newSet);
   };
 
   return (
@@ -624,37 +656,55 @@ function ToolChecklist({
           </Button>
         </div>
       </div>
+      {tools.length > 5 && (
+        <div className="px-4 py-2 border-b shrink-0">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            <Input
+              placeholder="Search tools..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-7 pl-7 text-xs"
+            />
+          </div>
+        </div>
+      )}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-2 space-y-0.5">
-          {tools.map((tool) => {
-            // Extract tool name without MCP server prefix
-            const toolName = tool.name.split("__").pop() ?? tool.name;
-            const isSelected = selectedToolIds.has(tool.id);
+          {filteredTools.length === 0 ? (
+            <div className="text-center py-4 text-sm text-muted-foreground">
+              No tools match your search
+            </div>
+          ) : (
+            filteredTools.map((tool) => {
+              const toolName = formatToolName(tool.name);
+              const isSelected = selectedToolIds.has(tool.id);
 
-            return (
-              <label
-                key={tool.id}
-                htmlFor={`tool-${tool.id}`}
-                className={cn(
-                  "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
-                  isSelected ? "bg-primary/10" : "hover:bg-muted/50",
-                )}
-              >
-                <Checkbox
-                  id={`tool-${tool.id}`}
-                  checked={isSelected}
-                  onCheckedChange={() => handleToggle(tool.id)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{toolName}</div>
-                  {tool.description && (
-                    <ExpandableDescription description={tool.description} />
+              return (
+                <label
+                  key={tool.id}
+                  htmlFor={`tool-${tool.id}`}
+                  className={cn(
+                    "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
+                    isSelected ? "bg-primary/10" : "hover:bg-muted/50",
                   )}
-                </div>
-              </label>
-            );
-          })}
+                >
+                  <Checkbox
+                    id={`tool-${tool.id}`}
+                    checked={isSelected}
+                    onCheckedChange={() => handleToggle(tool.id)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">{toolName}</div>
+                    {tool.description && (
+                      <ExpandableDescription description={tool.description} />
+                    )}
+                  </div>
+                </label>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

@@ -4,7 +4,8 @@ export const RouteId = {
   GetAllAgents: "getAllAgents",
   CreateAgent: "createAgent",
   GetAgent: "getAgent",
-  GetDefaultAgent: "getDefaultAgent",
+  GetDefaultMcpGateway: "getDefaultMcpGateway",
+  GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
   GetAgentVersions: "getAgentVersions",
@@ -162,6 +163,11 @@ export const RouteId = {
   CerebrasChatCompletionsWithDefaultAgent:
     "cerebrasChatCompletionsWithDefaultAgent",
   CerebrasChatCompletionsWithAgent: "cerebrasChatCompletionsWithAgent",
+
+  // Proxy Routes - Mistral
+  MistralChatCompletionsWithDefaultAgent:
+    "mistralChatCompletionsWithDefaultAgent",
+  MistralChatCompletionsWithAgent: "mistralChatCompletionsWithAgent",
 
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",

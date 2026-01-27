@@ -99,6 +99,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://dashboard.cohere.com/api-keys",
     consoleName: "Cohere Dashboard",
   },
+  mistral: {
+    name: "Mistral AI",
+    icon: "/icons/mistral.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://console.mistral.ai/api-keys",
+    consoleName: "Mistral AI Console",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",

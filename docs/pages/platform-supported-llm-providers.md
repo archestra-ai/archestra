@@ -169,6 +169,23 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - **API Key format**: Obtain your API key from the [Cohere Dashboard](https://dashboard.cohere.ai/)
 
+## Mistral AI
+
+[Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.
+
+### Supported Mistral APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Mistral Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/mistral/{agent-id}`
+- **Authentication**: Pass your Mistral API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Getting an API Key
+
+You can get an API key from the [Mistral AI Console](https://console.mistral.ai/api-keys).
+
 ## vLLM
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.

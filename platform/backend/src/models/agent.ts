@@ -1,4 +1,4 @@
-import { DEFAULT_PROFILE_NAME } from "@shared";
+import { DEFAULT_LLM_PROXY_NAME, DEFAULT_MCP_GATEWAY_NAME } from "@shared";
 import {
   and,
   asc,
@@ -635,11 +635,32 @@ class AgentModel {
     };
   }
 
-  static async getAgentOrCreateDefault(
-    name?: string,
+  static async getMCPGatewayOrCreateDefault(
     organizationId?: string,
   ): Promise<Agent> {
-    // First, try to find an agent with isDefault=true
+    return AgentModel.getOrCreateDefaultByType(
+      "mcp_gateway",
+      DEFAULT_MCP_GATEWAY_NAME,
+      organizationId,
+    );
+  }
+
+  static async getLLMProxyOrCreateDefault(
+    organizationId?: string,
+  ): Promise<Agent> {
+    return AgentModel.getOrCreateDefaultByType(
+      "llm_proxy",
+      DEFAULT_LLM_PROXY_NAME,
+      organizationId,
+    );
+  }
+
+  /**
+   * Get the default profile (agentType: "profile" with isDefault: true).
+   * Returns null if no default profile exists.
+   * It's needed for backward compatibility with default profile which allowed llm proxy on without a uuid specified in the url.
+   */
+  static async getDefaultProfile(): Promise<Agent | null> {
     const rows = await db
       .select()
       .from(schema.agentsTable)
@@ -651,7 +672,53 @@ class AgentModel {
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
-      .where(eq(schema.agentsTable.isDefault, true));
+      .where(
+        and(
+          eq(schema.agentsTable.isDefault, true),
+          eq(schema.agentsTable.agentType, "profile"),
+        ),
+      );
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const agent = rows[0].agents;
+    const tools = rows
+      .map((row) => row.tools)
+      .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
+
+    return {
+      ...agent,
+      tools,
+      teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
+      labels: await AgentLabelModel.getLabelsForAgent(agent.id),
+    };
+  }
+
+  private static async getOrCreateDefaultByType(
+    agentType: "mcp_gateway" | "llm_proxy",
+    defaultName: string,
+    organizationId?: string,
+  ): Promise<Agent> {
+    // First, try to find an agent with isDefault=true and matching agentType
+    const rows = await db
+      .select()
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.agentToolsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .leftJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.isDefault, true),
+          eq(schema.agentsTable.agentType, agentType),
+        ),
+      );
 
     if (rows.length > 0) {
       // Default agent exists, return it
@@ -680,7 +747,8 @@ class AgentModel {
     }
 
     return AgentModel.create({
-      name: name || DEFAULT_PROFILE_NAME,
+      name: defaultName,
+      agentType,
       isDefault: true,
       organizationId: orgId || "",
       teams: [],
@@ -704,12 +772,17 @@ class AgentModel {
       return null;
     }
 
-    // If setting isDefault to true, unset all other agents' isDefault first
+    // If setting isDefault to true, unset isDefault for other agents of the same type
     if (agent.isDefault === true) {
       await db
         .update(schema.agentsTable)
         .set({ isDefault: false })
-        .where(eq(schema.agentsTable.isDefault, true));
+        .where(
+          and(
+            eq(schema.agentsTable.isDefault, true),
+            eq(schema.agentsTable.agentType, existingAgent.agentType),
+          ),
+        );
     }
 
     // Only update agent table if there are fields to update

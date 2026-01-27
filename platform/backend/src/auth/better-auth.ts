@@ -11,6 +11,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -238,6 +239,76 @@ export const auth: any = betterAuth({
             }
           }
           return { data: session };
+        },
+      },
+    },
+    member: {
+      create: {
+        before: async (member: {
+          id: string;
+          userId: string;
+          organizationId: string;
+          role: string;
+          createdAt: Date;
+        }) => {
+          // When a member is created via invitation acceptance, ensure the role
+          // matches the invitation's custom role (not better-auth's default)
+          try {
+            // Use a single JOIN query to find pending invitation for this user
+            // This combines user email lookup and invitation lookup into one query
+            const [result] = await db
+              .select({ invitationRole: schema.invitationsTable.role })
+              .from(schema.usersTable)
+              .innerJoin(
+                schema.invitationsTable,
+                and(
+                  eq(
+                    schema.invitationsTable.email,
+                    schema.usersTable.email, // Emails are stored lowercase in both tables
+                  ),
+                  eq(
+                    schema.invitationsTable.organizationId,
+                    member.organizationId,
+                  ),
+                  eq(schema.invitationsTable.status, "pending"),
+                ),
+              )
+              .where(eq(schema.usersTable.id, member.userId))
+              .limit(1);
+
+            // No pending invitation found - skip role override
+            if (!result) {
+              return { data: member };
+            }
+
+            if (
+              result.invitationRole &&
+              result.invitationRole !== member.role
+            ) {
+              logger.info(
+                {
+                  userId: member.userId,
+                  organizationId: member.organizationId,
+                  originalRole: member.role,
+                  invitationRole: result.invitationRole,
+                },
+                "[databaseHooks:member] Overriding role with invitation's custom role",
+              );
+              return {
+                data: {
+                  ...member,
+                  role: result.invitationRole,
+                },
+              };
+            }
+          } catch (error) {
+            logger.error(
+              { err: error, userId: member.userId },
+              "[databaseHooks:member] Error checking invitation role",
+            );
+          }
+
+          return { data: member };
         },
       },
     },

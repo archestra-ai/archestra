@@ -37,6 +37,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   bedrock: "amazon-bedrock",
   cerebras: "cerebras",
   cohere: "cohere",
+  mistral: "mistral",
   vllm: "vllm",
   ollama: "ollama",
   zhipuai: "zhipuai",

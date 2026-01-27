@@ -1,7 +1,13 @@
-import type {
-  GenerateContentParameters,
-  GenerateContentResponse,
-  GoogleGenAI,
+import {
+  Behavior,
+  type Candidate,
+  type GenerateContentConfig,
+  type GenerateContentParameters,
+  type GenerateContentResponse,
+  type GoogleGenAI,
+  type HarmCategory,
+  type HarmProbability,
+  type Part,
 } from "@google/genai";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
@@ -28,7 +34,6 @@ import type {
   UsageView,
 } from "@/types";
 import { MockGeminiClient } from "../mock-gemini-client";
-import * as geminiUtils from "../utils/adapters/gemini";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -86,7 +91,60 @@ class GeminiRequestAdapter
   }
 
   getMessages(): CommonMessage[] {
-    return geminiUtils.toCommonFormat(this.request.contents || []);
+    const contents = this.request.contents || [];
+    logger.debug(
+      { contentsCount: contents?.length || 0 },
+      "[adapters/gemini] getMessages: starting conversion",
+    );
+    const commonMessages: CommonMessage[] = [];
+
+    for (const content of contents) {
+      const commonMessage: CommonMessage = {
+        role: content.role as CommonMessage["role"],
+      };
+
+      // Process parts looking for function responses
+      if (content.parts) {
+        const toolCalls: CommonToolResult[] = [];
+
+        for (const part of content.parts) {
+          // Check if this part has the functionResponse property
+          if (
+            "functionResponse" in part &&
+            part.functionResponse &&
+            typeof part.functionResponse === "object" &&
+            "name" in part.functionResponse &&
+            "response" in part.functionResponse
+          ) {
+            const { functionResponse } = part;
+            const id =
+              "id" in functionResponse &&
+              typeof functionResponse.id === "string"
+                ? functionResponse.id
+                : generateToolCallId(functionResponse.name as string);
+
+            toolCalls.push({
+              id,
+              name: functionResponse.name as string,
+              content: functionResponse.response,
+              isError: false,
+            });
+          }
+        }
+
+        if (toolCalls.length > 0) {
+          commonMessage.toolCalls = toolCalls;
+        }
+      }
+
+      commonMessages.push(commonMessage);
+    }
+
+    logger.debug(
+      { commonMessageCount: commonMessages.length },
+      "[adapters/gemini] getMessages: conversion complete",
+    );
+    return commonMessages;
   }
 
   getToolResults(): CommonToolResult[] {
@@ -107,9 +165,7 @@ class GeminiRequestAdapter
               "id" in functionResponse &&
               typeof functionResponse.id === "string"
                 ? functionResponse.id
-                : geminiUtils.generateToolCallId(
-                    functionResponse.name as string,
-                  );
+                : generateToolCallId(functionResponse.name as string);
 
             results.push({
               id,
@@ -232,8 +288,55 @@ class GeminiRequestAdapter
   toProviderRequest(): GeminiRequestWithModel {
     let contents = this.request.contents || [];
 
-    if (Object.keys(this.toolResultUpdates).length > 0) {
-      contents = geminiUtils.applyUpdates(contents, this.toolResultUpdates);
+    // Apply tool result updates inline
+    const updateCount = Object.keys(this.toolResultUpdates).length;
+    if (updateCount > 0) {
+      logger.debug(
+        { contentsCount: contents?.length || 0, updateCount },
+        "[adapters/gemini] toProviderRequest: applying updates",
+      );
+
+      contents = contents.map((content) => {
+        // Only process user messages with parts
+        if (content.role === "user" && content.parts) {
+          const updatedParts = content.parts.map((part) => {
+            // Check if this part is a function response
+            if (
+              "functionResponse" in part &&
+              part.functionResponse &&
+              typeof part.functionResponse === "object" &&
+              "name" in part.functionResponse
+            ) {
+              const { functionResponse } = part;
+              const id =
+                "id" in functionResponse &&
+                typeof functionResponse.id === "string"
+                  ? functionResponse.id
+                  : generateToolCallId(functionResponse.name as string);
+
+              if (this.toolResultUpdates[id]) {
+                // Update the function response with sanitized content
+                return {
+                  functionResponse: {
+                    ...functionResponse,
+                    response: {
+                      sanitizedContent: this.toolResultUpdates[id],
+                    } as Record<string, unknown>,
+                  },
+                };
+              }
+            }
+            return part;
+          });
+
+          return {
+            ...content,
+            parts: updatedParts,
+          };
+        }
+
+        return content;
+      });
     }
 
     if (config.features.browserStreamingEnabled) {
@@ -389,11 +492,11 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   }
 
   getUsage(): UsageView {
-    const usage = this.response.usageMetadata;
-    return {
-      inputTokens: usage?.promptTokenCount ?? 0,
-      outputTokens: usage?.candidatesTokenCount ?? 0,
-    };
+    if (!this.response.usageMetadata) {
+      return { inputTokens: 0, outputTokens: 0 };
+    }
+    const { input, output } = getUsageTokens(this.response.usageMetadata);
+    return { inputTokens: input ?? 0, outputTokens: output ?? 0 };
   }
 
   getOriginalResponse(): GeminiResponse {
@@ -486,10 +589,7 @@ class GeminiStreamAdapter
       if (part.text) {
         this.state.text += part.text;
         // Convert SDK chunk to REST format for streaming
-        const restChunk = geminiUtils.sdkResponseToRestResponse(
-          chunk,
-          this.model,
-        );
+        const restChunk = sdkResponseToRestResponse(chunk, this.model);
         sseData = `data: ${JSON.stringify(restChunk)}\n\n`;
       }
 
@@ -497,15 +597,10 @@ class GeminiStreamAdapter
       if ("inlineData" in part && part.inlineData) {
         // Store for later reconstruction in toProviderResponse
         this.inlineDataParts.push(
-          geminiUtils.sdkPartToRestPart(
-            part as Parameters<typeof geminiUtils.sdkPartToRestPart>[0],
-          ),
+          sdkPartToRestPart(part as Parameters<typeof sdkPartToRestPart>[0]),
         );
         // Convert SDK chunk to REST format and pass through
-        const restChunk = geminiUtils.sdkResponseToRestResponse(
-          chunk,
-          this.model,
-        );
+        const restChunk = sdkResponseToRestResponse(chunk, this.model);
         sseData = `data: ${JSON.stringify(restChunk)}\n\n`;
       }
 
@@ -562,7 +657,7 @@ class GeminiStreamAdapter
 
   getRawToolCallEvents(): string[] {
     return this.state.rawToolCallEvents.map((event) => {
-      const restChunk = geminiUtils.sdkResponseToRestResponse(
+      const restChunk = sdkResponseToRestResponse(
         event as GenerateContentResponse,
         this.model,
       );
@@ -828,6 +923,309 @@ async function convertToolResultsToToon(
 // ADAPTER FACTORY
 // =============================================================================
 
+// =============================================================================
+// USAGE TOKEN HELPERS
+// =============================================================================
+
+export function getUsageTokens(usage: {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+}) {
+  return {
+    input: usage.promptTokenCount,
+    output: usage.candidatesTokenCount,
+  };
+}
+
+// =============================================================================
+// GEMINI FORMAT CONVERSION UTILITIES
+// =============================================================================
+
+/**
+ * Generate a consistent tool call ID for function responses that don't have one
+ * This is needed because Gemini's function responses may not always have an ID
+ */
+function generateToolCallId(functionName: string): string {
+  return `gemini-tool-${functionName}-${Date.now()}`;
+}
+
+/**
+ * Convert SDK Part format to REST API MessagePart format
+ */
+function sdkPartToRestPart(sdkPart: Part): Gemini.Types.MessagePart {
+  // Text part
+  if (sdkPart.text !== undefined) {
+    return {
+      text: sdkPart.text,
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Function call part
+  if (sdkPart.functionCall !== undefined) {
+    return {
+      functionCall: {
+        name: sdkPart.functionCall.name ?? "unknown_function",
+        id: sdkPart.functionCall.id,
+        args: sdkPart.functionCall.args,
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Function response part
+  if (sdkPart.functionResponse !== undefined) {
+    return {
+      functionResponse: {
+        name: sdkPart.functionResponse.name ?? "unknown_function",
+        id: sdkPart.functionResponse.id,
+        response: sdkPart.functionResponse.response || {},
+        willContinue: sdkPart.functionResponse.willContinue,
+        scheduling: sdkPart.functionResponse.scheduling,
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Inline data part
+  if (sdkPart.inlineData !== undefined) {
+    return {
+      inlineData: {
+        mimeType: sdkPart.inlineData.mimeType,
+        data: sdkPart.inlineData.data ?? "unknown_data",
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // File data part
+  if (sdkPart.fileData !== undefined) {
+    return {
+      fileData: {
+        mimeType: sdkPart.fileData.mimeType ?? "",
+        fileUri: sdkPart.fileData.fileUri ?? "",
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Executable code part
+  if (sdkPart.executableCode !== undefined) {
+    return {
+      language:
+        sdkPart.executableCode.language || ("LANGUAGE_UNSPECIFIED" as const),
+      executableCode: {
+        code: sdkPart.executableCode.code ?? "",
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Code execution result part
+  if (sdkPart.codeExecutionResult !== undefined) {
+    return {
+      codeExecutionResult: {
+        outcome:
+          sdkPart.codeExecutionResult.outcome ||
+          ("OUTCOME_UNSPECIFIED" as const),
+        output: sdkPart.codeExecutionResult.output,
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Fallback - return text part with empty text
+  return {
+    text: "",
+  };
+}
+
+/**
+ * Convert SDK Candidate format to REST API Candidate format
+ */
+function sdkCandidateToRestCandidate(
+  sdkCandidate: Candidate,
+): Gemini.Types.Candidate {
+  return {
+    content: {
+      role: sdkCandidate.content?.role || "model",
+      parts: sdkCandidate.content?.parts?.map(sdkPartToRestPart) || [],
+    },
+    finishReason: sdkCandidate.finishReason,
+    safetyRatings: sdkCandidate.safetyRatings
+      ?.filter(
+        (
+          rating,
+        ): rating is {
+          category: HarmCategory;
+          probability: HarmProbability;
+          blocked?: boolean;
+        } => rating.category !== undefined && rating.probability !== undefined,
+      )
+      .map((rating) => ({
+        category: rating.category,
+        probability: rating.probability,
+        blocked: rating.blocked,
+      })) as Gemini.Types.Candidate["safetyRatings"],
+    citationMetadata: sdkCandidate.citationMetadata?.citations
+      ? ({
+          citationSources: sdkCandidate.citationMetadata.citations.map(
+            (source) => ({
+              startIndex: source.startIndex,
+              endIndex: source.endIndex,
+              uri: source.uri,
+              license: source.license,
+            }),
+          ),
+        } as Gemini.Types.Candidate["citationMetadata"])
+      : undefined,
+    tokenCount: sdkCandidate.tokenCount,
+    groundingMetadata: sdkCandidate.groundingMetadata,
+    avgLogprobs: sdkCandidate.avgLogprobs,
+    logprobsResult: sdkCandidate.logprobsResult,
+    index: sdkCandidate.index ?? 0,
+    finishMessage: sdkCandidate.finishMessage,
+  } as Gemini.Types.Candidate;
+}
+
+/**
+ * Convert SDK GenerateContentResponse to REST API GenerateContentResponse
+ */
+function sdkResponseToRestResponse(
+  sdkResponse: GenerateContentResponse,
+  modelName: string,
+): Gemini.Types.GenerateContentResponse {
+  return {
+    candidates: sdkResponse.candidates?.map(sdkCandidateToRestCandidate) || [],
+    promptFeedback: sdkResponse.promptFeedback
+      ? {
+          blockReason: sdkResponse.promptFeedback.blockReason,
+          safetyRatings:
+            sdkResponse.promptFeedback.safetyRatings
+              ?.filter(
+                (
+                  rating,
+                ): rating is {
+                  category: HarmCategory;
+                  probability: HarmProbability;
+                  blocked?: boolean;
+                } =>
+                  rating.category !== undefined &&
+                  rating.probability !== undefined,
+              )
+              .map((rating) => ({
+                category: rating.category,
+                probability: rating.probability,
+                blocked: rating.blocked,
+              })) || [],
+        }
+      : undefined,
+    usageMetadata: sdkResponse.usageMetadata,
+    modelVersion: sdkResponse.modelVersion || modelName,
+    responseId: sdkResponse.responseId || "unknown",
+  } as Gemini.Types.GenerateContentResponse;
+}
+
+/**
+ * Convert a Gemini REST-style GenerateContentRequest body into the SDK's
+ * GenerateContentParameters shape. The SDK and REST shapes differ significantly:
+ * - SDK expects contents as an array of Content objects
+ * - SDK expects tools, systemInstruction, and generationConfig at top level
+ * - SDK doesn't use a nested "config" object for these parameters
+ *
+ * Note: Gemini SDK and REST API have different schemas. See:
+ * https://ai.google.dev/api/generate-content
+ */
+function restToSdkGenerateContentParams(
+  body: Partial<Gemini.Types.GenerateContentRequest>,
+  model: string,
+  mergedTools?: Gemini.Types.Tool[] | undefined,
+): GenerateContentParameters {
+  // Build a partial params object and cast at the end. Use Partial<> to keep
+  // strong typing while allowing incremental population.
+  const params: Partial<GenerateContentParameters> = {
+    model,
+    contents: [],
+    config: {} as GenerateContentConfig,
+  };
+
+  if (Array.isArray(body.contents)) {
+    params.contents = body.contents as GenerateContentParameters["contents"];
+  } else {
+    params.contents = [] as GenerateContentParameters["contents"];
+  }
+
+  if (body.generationConfig) {
+    params.config =
+      body.generationConfig as GenerateContentParameters["config"];
+  } else {
+    const generationConfig: Record<string, unknown> = {};
+    const configKeys = [
+      "temperature",
+      "maxOutputTokens",
+      "candidateCount",
+      "topP",
+      "topK",
+      "stopSequences",
+    ];
+    for (const k of configKeys) {
+      const val = (body as Record<string, unknown>)[k];
+      if (val !== undefined) generationConfig[k] = val;
+    }
+    if (Object.keys(generationConfig).length > 0) {
+      params.config = generationConfig as GenerateContentParameters["config"];
+    }
+  }
+  if (params.config === undefined) {
+    params.config = {} as GenerateContentConfig;
+  }
+  if (mergedTools && mergedTools.length > 0) {
+    const sdkTools = mergedTools.map((t) => {
+      const functionDeclarations = t.functionDeclarations?.map((fd) => {
+        const mappedBehavior = fd.behavior
+          ? (Behavior as Record<string, Behavior>)[fd.behavior]
+          : undefined;
+        return {
+          name: fd.name,
+          description: fd.description,
+          behavior: mappedBehavior,
+          parameters: fd.parameters,
+          parametersJsonSchema: fd.parametersJsonSchema,
+          response: fd.response,
+          responseJsonSchema: fd.responseJsonSchema,
+        };
+      });
+
+      return {
+        ...t,
+        functionDeclarations,
+      } as unknown as Record<string, unknown>;
+    });
+
+    params.config.tools = sdkTools;
+  }
+
+  if (body.systemInstruction) {
+    params.config.systemInstruction = { ...body.systemInstruction };
+  }
+
+  return params as GenerateContentParameters;
+}
+
 export const geminiAdapterFactory: LLMProvider<
   GeminiRequestWithModel,
   GeminiResponse,
@@ -897,7 +1295,7 @@ export const geminiAdapterFactory: LLMProvider<
       : undefined;
 
     // Convert REST body to SDK params
-    const sdkParams = geminiUtils.restToSdkGenerateContentParams(
+    const sdkParams = restToSdkGenerateContentParams(
       { ...request, contents: request.contents || [] },
       model,
       tools,
@@ -908,7 +1306,7 @@ export const geminiAdapterFactory: LLMProvider<
     );
 
     // Convert SDK response to REST format
-    return geminiUtils.sdkResponseToRestResponse(response, model);
+    return sdkResponseToRestResponse(response, model);
   },
 
   async executeStream(
@@ -926,7 +1324,7 @@ export const geminiAdapterFactory: LLMProvider<
       : undefined;
 
     // Convert REST body to SDK params
-    const sdkParams = geminiUtils.restToSdkGenerateContentParams(
+    const sdkParams = restToSdkGenerateContentParams(
       { ...request, contents: request.contents || [] },
       model,
       tools,

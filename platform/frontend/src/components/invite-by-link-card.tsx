@@ -227,7 +227,9 @@ export function InviteByLinkCard({
                   className="text-sm text-muted-foreground mb-4"
                   data-testid={E2eTestId.InvitationErrorMessage}
                 >
-                  {error?.message || "Failed to create invitation"}
+                  {error instanceof Error
+                    ? error.message
+                    : "Failed to create invitation"}
                 </p>
                 <Button onClick={resetErrorBoundary} variant="outline">
                   Try Again

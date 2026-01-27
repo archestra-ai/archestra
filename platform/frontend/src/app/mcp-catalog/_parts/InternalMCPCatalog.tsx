@@ -65,6 +65,10 @@ export function InternalMCPCatalog({
   const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
     new Set(),
   );
+  // Track server IDs that are first-time installations (for auto-opening assignments dialog)
+  const [firstInstallationServerIds, setFirstInstallationServerIds] = useState<
+    Set<string>
+  >(new Set());
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
     hasInstallingServers: installingServerIds.size > 0,
@@ -117,6 +121,10 @@ export function InternalMCPCatalog({
   );
   const { data: detailsServerData } = useMcpRegistryServer(detailsServerName);
 
+  // State for auto-opening assignments dialog after installation (stores catalog ID)
+  const [autoOpenAssignmentsCatalogId, setAutoOpenAssignmentsCatalogId] =
+    useState<string | null>(null);
+
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
   });
@@ -165,6 +173,22 @@ export function InternalMCPCatalog({
                 queryClient.invalidateQueries({
                   queryKey: ["mcp-catalog", server.catalogId, "tools"],
                 });
+
+                // Auto-open assignments dialog only for first installation
+                if (firstInstallationServerIds.has(serverId)) {
+                  const catalogItem = catalogItems?.find(
+                    (item) => item.id === server.catalogId,
+                  );
+                  if (catalogItem) {
+                    setAutoOpenAssignmentsCatalogId(catalogItem.id);
+                  }
+                  // Remove from first installation tracking
+                  setFirstInstallationServerIds((prev) => {
+                    const newSet = new Set(prev);
+                    newSet.delete(serverId);
+                    return newSet;
+                  });
+                }
               }
             } else if (server.localInstallationStatus === "error") {
               toast.error(`Failed to install ${server.name}`);
@@ -173,7 +197,13 @@ export function InternalMCPCatalog({
         });
       }
     }
-  }, [installedServers, installingServerIds, queryClient]);
+  }, [
+    installedServers,
+    installingServerIds,
+    queryClient,
+    catalogItems,
+    firstInstallationServerIds,
+  ]);
 
   // Resume polling for pending installations after page refresh
   useEffect(() => {
@@ -188,6 +218,18 @@ export function InternalMCPCatalog({
       }
     }
   }, [installedServers]);
+
+  // Check for OAuth installation completion and open assignments dialog
+  useEffect(() => {
+    const oauthCatalogId = sessionStorage.getItem(
+      "oauth_installation_complete_catalog_id",
+    );
+    if (oauthCatalogId) {
+      setAutoOpenAssignmentsCatalogId(oauthCatalogId);
+      // Clear the flag after processing
+      sessionStorage.removeItem("oauth_installation_complete_catalog_id");
+    }
+  }, []);
 
   const handleInstallRemoteServer = async (
     catalogItem: CatalogItem,
@@ -215,21 +257,38 @@ export function InternalMCPCatalog({
   const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
     if (!noAuthCatalogItem) return;
 
-    setInstallingItemId(noAuthCatalogItem.id);
+    const catalogItem = noAuthCatalogItem;
+
+    // Check if this is the first installation for this catalog item
+    const isFirstInstallation = !installedServers?.some(
+      (s) => s.catalogId === catalogItem.id,
+    );
+
+    setInstallingItemId(catalogItem.id);
     await installMutation.mutateAsync({
-      name: noAuthCatalogItem.name,
-      catalogId: noAuthCatalogItem.id,
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
       teamId: result.teamId ?? undefined,
     });
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
     setInstallingItemId(null);
+
+    // Auto-open assignments dialog only for the first installation
+    if (isFirstInstallation) {
+      setAutoOpenAssignmentsCatalogId(catalogItem.id);
+    }
   };
 
   const handleLocalServerInstallConfirm = async (
     installResult: LocalServerInstallResult,
   ) => {
     if (!localServerCatalogItem) return;
+
+    // Check if this is the first installation for this catalog item
+    const isFirstInstallation = !installedServers?.some(
+      (s) => s.catalogId === localServerCatalogItem.id,
+    );
 
     setInstallingItemId(localServerCatalogItem.id);
     const result = await installMutation.mutateAsync({
@@ -246,6 +305,12 @@ export function InternalMCPCatalog({
     const installedServerId = result?.installedServer?.id;
     if (installedServerId) {
       setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
+      // Track if this is first installation for opening assignments dialog later
+      if (isFirstInstallation) {
+        setFirstInstallationServerIds((prev) =>
+          new Set(prev).add(installedServerId),
+        );
+      }
     }
 
     closeDialog("local-install");
@@ -257,6 +322,11 @@ export function InternalMCPCatalog({
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
   ) => {
+    // Check if this is the first installation for this catalog item
+    const isFirstInstallation = !installedServers?.some(
+      (s) => s.catalogId === catalogItem.id,
+    );
+
     setInstallingItemId(catalogItem.id);
 
     // For non-BYOS mode: Extract access_token from metadata if present and pass as accessToken
@@ -279,6 +349,11 @@ export function InternalMCPCatalog({
       teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);
+
+    // Auto-open assignments dialog only for the first installation
+    if (isFirstInstallation) {
+      setAutoOpenAssignmentsCatalogId(catalogItem.id);
+    }
   };
 
   const handleOAuthConfirm = async (result: OAuthInstallResult) => {
@@ -310,6 +385,16 @@ export function InternalMCPCatalog({
         sessionStorage.setItem("oauth_team_id", result.teamId);
       } else {
         sessionStorage.removeItem("oauth_team_id");
+      }
+
+      // Store if this is a first installation (for auto-opening assignments dialog)
+      const isFirstInstallation = !installedServers?.some(
+        (s) => s.catalogId === selectedCatalogItem.id,
+      );
+      if (isFirstInstallation) {
+        sessionStorage.setItem("oauth_is_first_installation", "true");
+      } else {
+        sessionStorage.removeItem("oauth_is_first_installation");
       }
 
       // Redirect to OAuth provider
@@ -576,6 +661,12 @@ export function InternalMCPCatalog({
                   }}
                   onDelete={() => setDeletingItem(item)}
                   onCancelInstallation={handleCancelInstallation}
+                  autoOpenAssignmentsDialog={
+                    autoOpenAssignmentsCatalogId === item.id
+                  }
+                  onAssignmentsDialogClose={() =>
+                    setAutoOpenAssignmentsCatalogId(null)
+                  }
                 />
               );
             })}
@@ -594,6 +685,15 @@ export function InternalMCPCatalog({
       <CreateCatalogDialog
         isOpen={isDialogOpened("create")}
         onClose={() => closeDialog("create")}
+        onSuccess={(createdItem) => {
+          // Auto-open the appropriate install dialog based on server type
+          if (createdItem.serverType === "local") {
+            handleInstallLocalServer(createdItem);
+          } else if (createdItem.serverType === "remote") {
+            handleInstallRemoteServer(createdItem, false);
+          }
+          // For builtin servers, no connect dialog is needed
+        }}
       />
 
       <CustomServerRequestDialog

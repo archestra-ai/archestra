@@ -181,7 +181,8 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
 async function seedDefaultTeam(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   const user = await UserModel.createOrGetExistingDefaultAdminUser(auth);
-  const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+  const defaultMcpGateway = await AgentModel.getMCPGatewayOrCreateDefault();
+  const defaultLlmProxy = await AgentModel.getLLMProxyOrCreateDefault();
 
   if (!user) {
     logger.error(
@@ -213,9 +214,12 @@ async function seedDefaultTeam(): Promise<void> {
     logger.info("Added default user to default team");
   }
 
-  // Assign team to default profile (idempotent)
-  await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [defaultTeam.id]);
-  logger.info("Assigned default team to default profile");
+  // Assign team to default agents (idempotent)
+  await AgentTeamModel.assignTeamsToAgent(defaultMcpGateway.id, [
+    defaultTeam.id,
+  ]);
+  await AgentTeamModel.assignTeamsToAgent(defaultLlmProxy.id, [defaultTeam.id]);
+  logger.info("Assigned default team to default agents");
 }
 
 /**
@@ -292,8 +296,9 @@ async function seedTeamTokens(): Promise<void> {
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
-  // Create default agent before seeding internal agents
-  await AgentModel.getAgentOrCreateDefault();
+  // Create default agents before seeding internal agents
+  await AgentModel.getMCPGatewayOrCreateDefault();
+  await AgentModel.getLLMProxyOrCreateDefault();
   await seedDefaultTeam();
   await seedChatAssistantAgent();
   await seedArchestraCatalogAndTools();

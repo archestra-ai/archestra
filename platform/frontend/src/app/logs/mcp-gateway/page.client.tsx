@@ -146,15 +146,11 @@ function McpToolCallsTable({
   const apiSortBy: NonNullable<
     archestraApiTypes.GetMcpToolCallsData["query"]
   >["sortBy"] =
-    sortBy === "agent"
-      ? "agentId"
-      : sortBy === "mcpServerName"
-        ? "mcpServerName"
-        : sortBy === "method"
-          ? "method"
-          : sortBy === "createdAt"
-            ? "createdAt"
-            : undefined;
+    sortBy === "method"
+      ? "method"
+      : sortBy === "createdAt"
+        ? "createdAt"
+        : undefined;
 
   const { data: mcpToolCallsResponse } = useMcpToolCalls({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
@@ -222,18 +218,7 @@ function McpToolCallsTable({
         const agent = agents?.find((a) => a.id === row.agentId);
         return agent?.name ?? "Unknown";
       },
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Profile
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
+      header: "MCP Gateway",
       cell: ({ row }) => {
         const agent = agents?.find((a) => a.id === row.original.agentId);
         return (
@@ -243,18 +228,7 @@ function McpToolCallsTable({
     },
     {
       id: "mcpServerName",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            MCP Server
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
+      header: "MCP Server",
       cell: ({ row }) => {
         return (
           <Badge variant="secondary" className="text-xs whitespace-normal">
@@ -330,56 +304,6 @@ function McpToolCallsTable({
         );
       },
     },
-    {
-      id: "result",
-      header: "Result",
-      cell: ({ row }) => {
-        const result = row.original.toolResult;
-        const method = row.original.method || "tools/call";
-
-        // Handle tools/call with standard result structure
-        if (
-          method === "tools/call" &&
-          result &&
-          typeof result === "object" &&
-          "isError" in result
-        ) {
-          const toolResult = result as {
-            isError: boolean;
-            error?: string;
-            content?: unknown;
-          };
-          if (toolResult.isError) {
-            return (
-              <div className="text-xs text-destructive">
-                <TruncatedText
-                  message={toolResult.error || "Unknown error"}
-                  maxLength={60}
-                />
-              </div>
-            );
-          }
-          const contentString =
-            typeof toolResult.content === "string"
-              ? toolResult.content
-              : JSON.stringify(toolResult.content);
-          return (
-            <div className="text-xs">
-              <TruncatedText message={contentString} maxLength={60} />
-            </div>
-          );
-        }
-
-        // For other methods, just stringify the result
-        const resultString =
-          typeof result === "string" ? result : JSON.stringify(result);
-        return (
-          <div className="text-xs">
-            <TruncatedText message={resultString} maxLength={60} />
-          </div>
-        );
-      },
-    },
   ];
 
   const hasFilters =
@@ -428,9 +352,9 @@ function McpToolCallsTable({
           <SearchableSelect
             value={profileFilter}
             onValueChange={handleProfileFilterChange}
-            placeholder="Filter by Profile"
+            placeholder="Filter by MCP Gateway"
             items={[
-              { value: "all", label: "All Profiles" },
+              { value: "all", label: "All MCP Gateways" },
               ...(agents?.map((agent) => ({
                 value: agent.id,
                 label: agent.name,
@@ -459,9 +383,9 @@ function McpToolCallsTable({
         <SearchableSelect
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
-          placeholder="Filter by Profile"
+          placeholder="Filter by MCP Gateway"
           items={[
-            { value: "all", label: "All Profiles" },
+            { value: "all", label: "All MCP Gateways" },
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,
@@ -505,6 +429,9 @@ function McpToolCallsTable({
         manualSorting
         sorting={sorting}
         onSortingChange={setSorting}
+        onRowClick={(row) => {
+          router.push(`/logs/mcp-gateway/${row.id}`);
+        }}
       />
     </div>
   );

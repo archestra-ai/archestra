@@ -55,7 +55,7 @@ const ChoiceSchema = z
           .describe(
             `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431`,
           ),
-        tool_calls: z.array(ToolCallSchema).optional(),
+        tool_calls: z.array(ToolCallSchema).nullable().optional(),
       })
       .describe(
         `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000`,

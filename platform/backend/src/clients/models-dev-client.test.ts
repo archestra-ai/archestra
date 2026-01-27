@@ -558,4 +558,78 @@ describe("ModelsDevClient", () => {
       expect(validPrice?.pricePerMillionOutput).toBe("15.00");
     });
   });
+
+  describe("API response validation", () => {
+    test("handles valid API response", async () => {
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await modelsDevClient.fetchModelsFromApi();
+
+      expect(result.openai).toBeDefined();
+      expect(result.openai.models["gpt-4o"]).toBeDefined();
+    });
+
+    test("handles API response with extra fields gracefully", async () => {
+      // Simulate API response with additional unexpected fields
+      const mockResponse = {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          npm: "@ai-sdk/openai",
+          env: ["OPENAI_API_KEY"],
+          models: {
+            "gpt-4o": {
+              id: "gpt-4o",
+              name: "GPT-4o",
+              // Extra field not in schema
+              new_field: "some value",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await modelsDevClient.fetchModelsFromApi();
+
+      // Should still parse successfully (Zod strips unknown keys by default)
+      expect(result.openai).toBeDefined();
+    });
+  });
+
+  describe("syncIfNeeded with retry", () => {
+    test("calls syncModelMetadata in background", async () => {
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      // syncIfNeeded is non-blocking, so we need to wait a bit
+      modelsDevClient.syncIfNeeded();
+
+      // Wait for async operation to complete
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
 });

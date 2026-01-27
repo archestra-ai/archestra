@@ -1,5 +1,5 @@
 import type { SupportedProvider } from "@shared";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { CreateModel, Model, ModelCapabilities } from "@/types";
 
@@ -116,40 +116,33 @@ class ModelModel {
 
   /**
    * Bulk upsert models.
-   * Uses individual upserts within a transaction for simplicity and reliability.
+   * Uses a single batch insert with ON CONFLICT for better performance.
    */
   static async bulkUpsert(dataArray: CreateModel[]): Promise<Model[]> {
     if (dataArray.length === 0) {
       return [];
     }
 
-    const results: Model[] = [];
-
-    // Use transaction for atomicity
-    await db.transaction(async (tx) => {
-      for (const data of dataArray) {
-        const [result] = await tx
-          .insert(schema.modelsTable)
-          .values(data)
-          .onConflictDoUpdate({
-            target: [schema.modelsTable.provider, schema.modelsTable.modelId],
-            set: {
-              externalId: data.externalId,
-              description: data.description,
-              contextLength: data.contextLength,
-              inputModalities: data.inputModalities,
-              outputModalities: data.outputModalities,
-              supportsToolCalling: data.supportsToolCalling,
-              promptPricePerToken: data.promptPricePerToken,
-              completionPricePerToken: data.completionPricePerToken,
-              lastSyncedAt: new Date(),
-              updatedAt: new Date(),
-            },
-          })
-          .returning();
-        results.push(result);
-      }
-    });
+    // Single batch insert with ON CONFLICT DO UPDATE using excluded values
+    const results = await db
+      .insert(schema.modelsTable)
+      .values(dataArray)
+      .onConflictDoUpdate({
+        target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+        set: {
+          externalId: sql`excluded.external_id`,
+          description: sql`excluded.description`,
+          contextLength: sql`excluded.context_length`,
+          inputModalities: sql`excluded.input_modalities`,
+          outputModalities: sql`excluded.output_modalities`,
+          supportsToolCalling: sql`excluded.supports_tool_calling`,
+          promptPricePerToken: sql`excluded.prompt_price_per_token`,
+          completionPricePerToken: sql`excluded.completion_price_per_token`,
+          lastSyncedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
 
     return results;
   }

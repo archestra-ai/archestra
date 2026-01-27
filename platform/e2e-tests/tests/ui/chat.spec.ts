@@ -53,11 +53,12 @@ const geminiConfig: ChatProviderTestConfig = {
 };
 
 // Cerebras - Uses OpenAI-compatible streaming format
+// Note: Cerebras filters out models with "llama" in the name for chat, so we use cerebras-gpt
 const cerebrasConfig: ChatProviderTestConfig = {
   providerName: "cerebras",
   providerDisplayName: "Cerebras",
-  modelId: "llama-4-scout-17b-16e-instruct",
-  modelDisplayName: "Llama 4 Scout",
+  modelId: "cerebras-gpt-13b",
+  modelDisplayName: "cerebras-gpt-13b",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };

@@ -1,4 +1,5 @@
 import { type SupportedProvider, TimeInMs } from "@shared";
+import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ModelModel, TokenPriceModel } from "@/models";
@@ -25,6 +26,15 @@ const SYNC_INTERVAL_MS = 24 * TimeInMs.Hour;
  * models.dev API endpoint
  */
 const MODELS_DEV_API_URL = "https://models.dev/api.json";
+
+/**
+ * Retry configuration for background sync
+ */
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 30000,
+} as const;
 
 /**
  * Maps models.dev provider IDs to Archestra provider names.
@@ -131,6 +141,71 @@ export type ModelsDevProvider = {
 export type ModelsDevApiResponse = Record<string, ModelsDevProvider>;
 
 // ============================================================================
+// Zod schemas for API response validation
+// ============================================================================
+
+const ModelsDevCostSchema = z
+  .object({
+    input: z.number().optional(),
+    output: z.number().optional(),
+    reasoning: z.number().optional(),
+    cache_read: z.number().optional(),
+    cache_write: z.number().optional(),
+    input_audio: z.number().optional(),
+    output_audio: z.number().optional(),
+  })
+  .optional();
+
+const ModelsDevLimitSchema = z
+  .object({
+    context: z.number().optional(),
+    input: z.number().optional(),
+    output: z.number().optional(),
+  })
+  .optional();
+
+const ModelsDevModalitiesSchema = z
+  .object({
+    input: z.array(z.string()).optional(),
+    output: z.array(z.string()).optional(),
+  })
+  .optional();
+
+const ModelsDevModelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  family: z.string().optional(),
+  attachment: z.boolean().optional(),
+  reasoning: z.boolean().optional(),
+  tool_call: z.boolean().optional(),
+  structured_output: z.boolean().optional(),
+  temperature: z.boolean().optional(),
+  knowledge: z.string().optional(),
+  release_date: z.string().optional(),
+  last_updated: z.string().optional(),
+  modalities: ModelsDevModalitiesSchema,
+  open_weights: z.boolean().optional(),
+  cost: ModelsDevCostSchema,
+  limit: ModelsDevLimitSchema,
+  status: z.enum(["alpha", "beta", "deprecated"]).optional(),
+});
+
+const ModelsDevProviderSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  npm: z.string().optional(),
+  env: z.array(z.string()).optional(),
+  doc: z.string().optional(),
+  api: z.string().nullable().optional(),
+  models: z.record(z.string(), ModelsDevModelSchema),
+});
+
+const ModelsDevApiResponseSchema = z.record(
+  z.string(),
+  ModelsDevProviderSchema,
+);
+
+// ============================================================================
 // Client implementation
 // ============================================================================
 
@@ -143,6 +218,7 @@ export type ModelsDevApiResponse = Record<string, ModelsDevProvider>;
 class ModelsDevClient {
   /**
    * Fetches all providers and models from models.dev API.
+   * Validates the response against the expected schema.
    */
   async fetchModelsFromApi(): Promise<ModelsDevApiResponse> {
     try {
@@ -150,7 +226,20 @@ class ModelsDevClient {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      return (await response.json()) as ModelsDevApiResponse;
+
+      const json = await response.json();
+      const parseResult = ModelsDevApiResponseSchema.safeParse(json);
+
+      if (!parseResult.success) {
+        logger.warn(
+          { errors: parseResult.error.format() },
+          "models.dev API response validation failed, using partial data",
+        );
+        // Fall back to casting if validation fails - the API may have added new fields
+        return json as ModelsDevApiResponse;
+      }
+
+      return parseResult.data;
     } catch (error) {
       logger.error(
         { error: error instanceof Error ? error.message : String(error) },
@@ -331,14 +420,58 @@ class ModelsDevClient {
   /**
    * Convenience method to sync if needed (non-blocking).
    * Call this in the models route to trigger background sync.
+   * Uses exponential backoff retry for transient failures.
    */
   syncIfNeeded(): void {
-    this.syncModelMetadata().catch((error) => {
+    this.syncWithRetry().catch((error) => {
       logger.error(
         { error: error instanceof Error ? error.message : String(error) },
-        "Background models.dev sync failed",
+        "Background models.dev sync failed after all retries",
       );
     });
+  }
+
+  /**
+   * Attempts to sync model metadata with exponential backoff retry.
+   */
+  private async syncWithRetry(): Promise<number> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+      try {
+        return await this.syncModelMetadata();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        if (attempt < RETRY_CONFIG.maxRetries) {
+          const delayMs = Math.min(
+            RETRY_CONFIG.baseDelayMs * 2 ** attempt,
+            RETRY_CONFIG.maxDelayMs,
+          );
+
+          logger.warn(
+            {
+              attempt: attempt + 1,
+              maxRetries: RETRY_CONFIG.maxRetries,
+              delayMs,
+              error: lastError.message,
+            },
+            "models.dev sync failed, retrying",
+          );
+
+          await this.sleep(delayMs);
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
+   * Sleeps for the specified duration.
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

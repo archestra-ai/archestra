@@ -45,16 +45,25 @@ jobs:
             | cut -d: -f2) || true
 
           mkdir -p platform/prev-static-assets
-          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "${{ github.sha }}" ]; then
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$GITHUB_SHA_VALUE" ]; then
             PREV_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PREV_TAG}"
-            docker pull "$PREV_IMAGE" || true
+            echo "Pulling previous image: $PREV_IMAGE"
+            docker pull "$PREV_IMAGE" || { echo "Warning: Failed to pull previous image"; true; }
             CID=$(docker create "$PREV_IMAGE" 2>/dev/null) || true
             if [ -n "$CID" ]; then
               # Extract from /static-assets-source/ which has ONLY that build's chunks (not accumulated)
-              docker cp "${CID}:/static-assets-source/." platform/prev-static-assets/ || true
+              echo "Extracting previous static assets from container $CID"
+              docker cp "${CID}:/static-assets-source/." platform/prev-static-assets/ || echo "Warning: Failed to copy previous assets"
               docker rm "$CID"
+              echo "Successfully extracted previous static assets"
+            else
+              echo "No previous container created, skipping asset extraction"
             fi
+          else
+            echo "No previous version to extract (PREV_TAG: $PREV_TAG)"
           fi
+        env:
+          GITHUB_SHA_VALUE: ${{ github.sha }}
 
       # NOTE: only build on amd64 for now as our staging environment runs on amd64
       # if we will need to support arm64, we should follow the pattern we do in

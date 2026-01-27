@@ -64,7 +64,7 @@ local_resource(
     for i in {1..30}; do
       if pnpm db:migrate 2>/dev/null; then
         echo "✅ Migration completed successfully"
-        tilt trigger pnpm-dev
+        tilt trigger pnpm-dev-backend
         exit 0
       fi
       echo "⏳ Waiting for PostgreSQL... (attempt $i/30)"
@@ -82,7 +82,7 @@ set count=0
 set /a count+=1
 pnpm db:migrate 2>nul && (
   echo Migration completed successfully
-  tilt trigger pnpm-dev
+  tilt trigger pnpm-dev-backend
   exit /b 0
 )
 if !count! lss 30 (

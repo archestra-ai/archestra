@@ -6,7 +6,7 @@ local_resource(
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
-  resource_deps=['pnpm-install', 'pnpm-dev']
+  resource_deps=['pnpm-install', 'pnpm-dev-frontend', 'pnpm-dev-backend']
 )
 
 local_resource(
@@ -24,7 +24,7 @@ local_resource(
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
-  resource_deps=['pnpm-install', 'pnpm-dev']
+  resource_deps=['pnpm-install', 'pnpm-dev-frontend', 'pnpm-dev-backend']
 )
 
 local_resource(
@@ -34,7 +34,7 @@ local_resource(
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
-  resource_deps=['pnpm-install', 'pnpm-dev']
+  resource_deps=['pnpm-install', 'pnpm-dev-frontend', 'pnpm-dev-backend']
 )
 
 # E2E test dependencies (WireMock, Keycloak)

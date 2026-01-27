@@ -7,8 +7,11 @@ import {
 } from "@shared";
 import {
   CheckIcon,
+  CopyIcon,
+  DollarSign,
   FileText,
   ImageIcon,
+  Layers,
   Loader2,
   Mic,
   Settings2,
@@ -52,42 +55,20 @@ type ModalityFilterConfig = {
   modality: FilterableModality;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  tooltip: string;
 };
 
 /** Available modality filters */
 const MODALITY_FILTERS: ModalityFilterConfig[] = [
-  {
-    modality: "image",
-    icon: ImageIcon,
-    label: "Vision",
-    tooltip: "Filter by models which support image input",
-  },
-  {
-    modality: "audio",
-    icon: Mic,
-    label: "Audio",
-    tooltip: "Filter by models which support audio input",
-  },
-  {
-    modality: "video",
-    icon: Video,
-    label: "Video",
-    tooltip: "Filter by models which support video input",
-  },
-  {
-    modality: "pdf",
-    icon: FileText,
-    label: "PDF",
-    tooltip: "Filter by models which support PDF input",
-  },
+  { modality: "image", icon: ImageIcon, label: "Vision" },
+  { modality: "audio", icon: Mic, label: "Audio" },
+  { modality: "video", icon: Video, label: "Video" },
+  { modality: "pdf", icon: FileText, label: "PDF" },
 ];
 
 /** Tool calling filter config */
 const TOOL_CALLING_FILTER = {
   icon: Settings2,
   label: "Tools",
-  tooltip: "Filter by models which support tool calls",
 };
 
 interface ModelSelectorProps {
@@ -191,6 +172,134 @@ function ModelCapabilityBadges({
   );
 }
 
+/**
+ * Formats a context length number into a human-readable string.
+ * e.g., 128000 -> "128K", 1000000 -> "1M"
+ */
+function formatContextLength(contextLength: number): string {
+  if (contextLength >= 1_000_000) {
+    return `${(contextLength / 1_000_000).toFixed(contextLength % 1_000_000 === 0 ? 0 : 1)}M`;
+  }
+  if (contextLength >= 1_000) {
+    return `${(contextLength / 1_000).toFixed(contextLength % 1_000 === 0 ? 0 : 1)}K`;
+  }
+  return contextLength.toString();
+}
+
+/**
+ * Displays the context window size with a tooltip.
+ */
+function ContextLengthIndicator({
+  contextLength,
+}: {
+  contextLength: number | null | undefined;
+}) {
+  if (!contextLength) {
+    return null;
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground font-mono">
+            <Layers className="size-3" />
+            {formatContextLength(contextLength)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {contextLength.toLocaleString()} token context window
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Displays pricing information with a tooltip showing cost per million tokens.
+ */
+function PricingIndicator({
+  pricePerMillionInput,
+  pricePerMillionOutput,
+}: {
+  pricePerMillionInput: string | null | undefined;
+  pricePerMillionOutput: string | null | undefined;
+}) {
+  if (!pricePerMillionInput && !pricePerMillionOutput) {
+    return null;
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center text-muted-foreground">
+            <DollarSign className="size-3" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          <div className="flex flex-col gap-0.5">
+            {pricePerMillionInput && (
+              <span>Input: ${pricePerMillionInput}/M tokens</span>
+            )}
+            {pricePerMillionOutput && (
+              <span>Output: ${pricePerMillionOutput}/M tokens</span>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Copy button for model ID that stops propagation to prevent row selection.
+ */
+function CopyModelIdButton({ modelId }: { modelId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleClick = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      try {
+        await navigator.clipboard.writeText(modelId);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Fallback for older browsers
+        const textArea = document.createElement("textarea");
+        textArea.value = modelId;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    },
+    [modelId],
+  );
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      onMouseDown={(e) => e.stopPropagation()}
+      className="inline-flex items-center justify-center size-4 rounded hover:bg-muted/80 transition-colors ml-1 opacity-0 group-hover:opacity-100"
+      aria-label={copied ? "Copied!" : "Copy model ID"}
+    >
+      {copied ? (
+        <CheckIcon className="size-2.5 text-green-500" />
+      ) : (
+        <CopyIcon className="size-2.5 text-muted-foreground" />
+      )}
+    </button>
+  );
+}
+
 /** Filter state type */
 type ModelFilters = {
   modalities: Set<FilterableModality>;
@@ -210,39 +319,30 @@ const INITIAL_FILTERS: ModelFilters = {
 function FilterToggle({
   icon: Icon,
   label,
-  tooltip,
   pressed,
   onPressedChange,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  tooltip: string;
   pressed: boolean;
   onPressedChange: (pressed: boolean) => void;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Toggle
-          size="sm"
-          pressed={pressed}
-          onPressedChange={onPressedChange}
-          className={cn(
-            "h-7 px-2 gap-1.5 border transition-colors",
-            pressed
-              ? "bg-primary text-primary-foreground border-primary ring-2 ring-primary/20"
-              : "border-transparent hover:border-border",
-          )}
-        >
-          {pressed && <CheckIcon className="size-3" />}
-          <Icon className="size-3.5" />
-          <span className="text-xs">{label}</span>
-        </Toggle>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="text-xs">
-        {tooltip}
-      </TooltipContent>
-    </Tooltip>
+    <Toggle
+      size="sm"
+      pressed={pressed}
+      onPressedChange={onPressedChange}
+      className={cn(
+        "h-7 px-2 gap-1.5 border transition-colors",
+        pressed
+          ? "bg-primary text-primary-foreground border-primary ring-2 ring-primary/20"
+          : "border-transparent hover:border-border",
+      )}
+    >
+      {pressed && <CheckIcon className="size-3" />}
+      <Icon className="size-3.5" />
+      <span className="text-xs">{label}</span>
+    </Toggle>
   );
 }
 
@@ -289,36 +389,32 @@ function ModelFiltersBar({
   }
 
   return (
-    <TooltipProvider delayDuration={500} skipDelayDuration={300}>
-      <div className="flex items-center gap-1 px-3 py-2 border-b">
-        <span className="text-xs text-muted-foreground mr-1">Filter:</span>
-        <div className="flex flex-wrap items-center gap-1 flex-1">
-          {visibleModalityFilters.map((config) => (
-            <FilterToggle
-              key={config.modality}
-              icon={config.icon}
-              label={config.label}
-              tooltip={config.tooltip}
-              pressed={filters.modalities.has(config.modality)}
-              onPressedChange={(pressed) =>
-                toggleModality(config.modality, pressed)
-              }
-            />
-          ))}
+    <div className="flex items-center gap-1 px-3 py-2 border-b">
+      <span className="text-xs text-muted-foreground mr-1">Filter:</span>
+      <div className="flex flex-wrap items-center gap-1 flex-1">
+        {visibleModalityFilters.map((config) => (
           <FilterToggle
-            icon={TOOL_CALLING_FILTER.icon}
-            label={TOOL_CALLING_FILTER.label}
-            tooltip={TOOL_CALLING_FILTER.tooltip}
-            pressed={filters.toolCalling}
-            onPressedChange={toggleToolCalling}
+            key={config.modality}
+            icon={config.icon}
+            label={config.label}
+            pressed={filters.modalities.has(config.modality)}
+            onPressedChange={(pressed) =>
+              toggleModality(config.modality, pressed)
+            }
           />
-        </div>
-        <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-          <XIcon className="size-4" />
-          <span className="sr-only">Close</span>
-        </DialogClose>
+        ))}
+        <FilterToggle
+          icon={TOOL_CALLING_FILTER.icon}
+          label={TOOL_CALLING_FILTER.label}
+          pressed={filters.toolCalling}
+          onPressedChange={toggleToolCalling}
+        />
       </div>
-    </TooltipProvider>
+      <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+        <XIcon className="size-4" />
+        <span className="sr-only">Close</span>
+      </DialogClose>
+    </div>
   );
 }
 
@@ -547,14 +643,32 @@ export function ModelSelector({
                     key={model.id}
                     value={model.id}
                     onSelect={() => handleSelectModel(model.id)}
+                    className="group"
                   >
                     <ModelSelectorLogo
                       provider={providerToLogoProvider[provider]}
                     />
-                    <ModelSelectorName>{model.displayName}</ModelSelectorName>
+                    <ModelSelectorName>
+                      {model.displayName}{" "}
+                      <span className="text-xs text-muted-foreground font-mono">
+                        ({model.id})
+                      </span>
+                      <CopyModelIdButton modelId={model.id} />
+                    </ModelSelectorName>
                     <div className="ml-auto flex items-center gap-2">
                       <ModelCapabilityBadges
                         capabilities={model.capabilities}
+                      />
+                      <ContextLengthIndicator
+                        contextLength={model.capabilities?.contextLength}
+                      />
+                      <PricingIndicator
+                        pricePerMillionInput={
+                          model.capabilities?.pricePerMillionInput
+                        }
+                        pricePerMillionOutput={
+                          model.capabilities?.pricePerMillionOutput
+                        }
                       />
                       {selectedModel === model.id ? (
                         <CheckIcon className="size-4" />

@@ -467,7 +467,7 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
  * Fetch models from AWS Bedrock API
  * Uses Bearer token authentication (proxy handles AWS credentials)
  */
-async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
+export async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.llm.bedrock.baseUrl;
   if (!baseUrl) {
     logger.warn("Bedrock base URL not configured");
@@ -475,7 +475,7 @@ async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
   }
 
   // Remove '-runtime' from base URL to get the control plane endpoint
-  const url = `${baseUrl.replace("-runtime", "")}/foundation-models?byOutputModality=TEXT`;
+  const url = `${baseUrl.replace("-runtime", "")}/foundation-models?byOutputModality=TEXT&byInputModality=TEXT`;
 
   const response = await fetch(url, {
     headers: {

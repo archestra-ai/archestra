@@ -174,7 +174,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
-  bedrock: "openai.gpt-oss-20b-1:0", // Bedrock's fast model, which should be available in all regions for on-demand inference
+  bedrock: "amazon.nova-2-lite-v1:0", // Bedrock's fast model, which should be available in all regions for on-demand inference
 };
 
 /**

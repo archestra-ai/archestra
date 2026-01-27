@@ -393,7 +393,136 @@ describe("OpenAIRequestAdapter", () => {
     });
   });
 
-  describe("toProviderRequest", () => {
+  describe("toProviderRequest - tool results handling", () => {
+    test("preserves successful tool results as tool messages", () => {
+      const request = createMockRequest([
+        { role: "user", content: "Get the data" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_123",
+              type: "function",
+              function: {
+                name: "test_tool",
+                arguments: "{}",
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_123",
+          content: '{"result":"success","data":[1,2,3]}',
+        },
+      ]);
+
+      const adapter = openaiAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      const toolMessage = result.messages.find((m) => m.role === "tool");
+      expect(toolMessage).toBeDefined();
+      expect(toolMessage?.tool_call_id).toBe("call_123");
+      expect(toolMessage?.content).toBe('{"result":"success","data":[1,2,3]}');
+    });
+
+    test("preserves error tool results as tool messages", () => {
+      const request = createMockRequest([
+        { role: "user", content: "Get the data" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_456",
+              type: "function",
+              function: {
+                name: "test_tool",
+                arguments: "{}",
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_456",
+          content: "Error: Tool execution failed",
+        },
+      ]);
+
+      const adapter = openaiAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      const toolMessage = result.messages.find((m) => m.role === "tool");
+      expect(toolMessage).toBeDefined();
+      expect(toolMessage?.tool_call_id).toBe("call_456");
+      expect(toolMessage?.content).toBe("Error: Tool execution failed");
+    });
+
+    test("handles multiple tool results as separate tool messages", () => {
+      const request = createMockRequest([
+        { role: "user", content: "Do multiple things" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "tool_one",
+                arguments: "{}",
+              },
+            },
+            {
+              id: "call_2",
+              type: "function",
+              function: {
+                name: "tool_two",
+                arguments: "{}",
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: '"simple text"',
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_2",
+          content: "Error: Network timeout",
+        },
+      ]);
+
+      const adapter = openaiAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      const toolMessages = result.messages.filter((m) => m.role === "tool");
+      expect(toolMessages).toHaveLength(2);
+      expect(toolMessages[0].tool_call_id).toBe("call_1");
+      expect(toolMessages[0].content).toBe('"simple text"');
+      expect(toolMessages[1].tool_call_id).toBe("call_2");
+      expect(toolMessages[1].content).toBe("Error: Network timeout");
+    });
+
+    test("handles request with no tool results", () => {
+      const request = createMockRequest([
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi there!" },
+      ]);
+
+      const adapter = openaiAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      const toolMessages = result.messages.filter((m) => m.role === "tool");
+      expect(toolMessages).toHaveLength(0);
+    });
+  });
+
+  describe("toProviderRequest - general", () => {
     test("applies model change to request", () => {
       const request = createMockRequest([{ role: "user", content: "Hello" }], {
         model: "gpt-4o",

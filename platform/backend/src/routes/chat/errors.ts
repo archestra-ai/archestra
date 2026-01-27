@@ -1,5 +1,6 @@
 import {
   AnthropicErrorTypes,
+  BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
   type ChatErrorResponse,
@@ -85,6 +86,11 @@ interface ParsedAnthropicError {
 
 interface ParsedZhipuaiError {
   code?: string;
+  message?: string;
+}
+
+interface ParsedBedrockError {
+  type?: string;
   message?: string;
 }
 
@@ -429,6 +435,121 @@ function mapCohereErrorToCode(
   return mapStatusCodeToErrorCode(statusCode);
 }
 
+// Bedrock Error Parser and Mapper
+
+/**
+ * Parse AWS Bedrock Converse API error response body.
+ * Bedrock errors have structure: { message: "...", __type: "ThrottlingException" }
+ * Also handles proxy format: { error: { message, type } } with embedded AWS error info.
+ *
+ * @see https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html
+ */
+function parseBedrockError(responseBody: string): ParsedBedrockError | null {
+  try {
+    const parsed = JSON.parse(responseBody);
+
+    // AWS native format: { message, __type }
+    if (parsed?.__type) {
+      return {
+        type: parsed.__type,
+        message: parsed.message,
+      };
+    }
+
+    // Proxy format: { error: { message, type } }
+    if (parsed?.error) {
+      const errorMessage = parsed.error.message ?? parsed.error.type;
+
+      // Try to extract __type from embedded JSON in the message
+      if (typeof errorMessage === "string") {
+        try {
+          const embedded = JSON.parse(errorMessage);
+          if (embedded?.__type) {
+            return {
+              type: embedded.__type,
+              message: embedded.message ?? errorMessage,
+            };
+          }
+        } catch {
+          // Not JSON, use as-is
+        }
+      }
+
+      return {
+        type: parsed.error.type,
+        message: errorMessage,
+      };
+    }
+
+    // Flat message-only format
+    if (parsed?.message) {
+      return {
+        message: parsed.message,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Map AWS Bedrock Converse API error to ChatErrorCode.
+ * Uses __type exception name from the API response.
+ *
+ * Exception types documented at:
+ * @see https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html
+ *
+ * HTTP Status -> Exception Type mapping:
+ * - 400 -> ValidationException (invalid request)
+ * - 403 -> AccessDeniedException (no access)
+ * - 404 -> ResourceNotFoundException (model not found)
+ * - 408 -> ModelTimeoutException (model timeout)
+ * - 424 -> ModelErrorException (model error)
+ * - 429 -> ThrottlingException / ModelNotReadyException (rate limited)
+ * - 500 -> InternalServerException (internal error)
+ * - 503 -> ServiceUnavailableException (service unavailable)
+ */
+function mapBedrockErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedBedrockError | null,
+): ChatErrorCode {
+  const errorType = parsedError?.type;
+  const errorMessage = parsedError?.message;
+
+  // Check for context window exceeded in message
+  if (errorMessage?.toLowerCase().includes("model_context_window_exceeded")) {
+    return ChatErrorCode.ContextTooLong;
+  }
+
+  if (errorType) {
+    switch (errorType) {
+      case BedrockErrorTypes.ACCESS_DENIED:
+        return ChatErrorCode.PermissionDenied;
+      case BedrockErrorTypes.INTERNAL_SERVER:
+        return ChatErrorCode.ServerError;
+      case BedrockErrorTypes.MODEL_ERROR:
+        return ChatErrorCode.ServerError;
+      case BedrockErrorTypes.MODEL_NOT_READY:
+        return ChatErrorCode.RateLimit;
+      case BedrockErrorTypes.MODEL_TIMEOUT:
+        return ChatErrorCode.ServerError;
+      case BedrockErrorTypes.RESOURCE_NOT_FOUND:
+        return ChatErrorCode.NotFound;
+      case BedrockErrorTypes.SERVICE_UNAVAILABLE:
+        return ChatErrorCode.ServerError;
+      case BedrockErrorTypes.THROTTLING:
+        return ChatErrorCode.RateLimit;
+      case BedrockErrorTypes.VALIDATION:
+        return ChatErrorCode.InvalidRequest;
+    }
+  }
+
+  // Fall back to HTTP status code
+  return mapStatusCodeToErrorCode(statusCode);
+}
+
 // =============================================================================
 // Provider-Specific Error Mappers
 // =============================================================================
@@ -756,7 +877,8 @@ type ParsedProviderError =
   | ParsedAnthropicError
   | ParsedGeminiError
   | ParsedCohereError
-  | ParsedZhipuaiError;
+  | ParsedZhipuaiError
+  | ParsedBedrockError;
 
 type ErrorParser = (responseBody: string) => ParsedProviderError | null;
 type ErrorMapper = (
@@ -814,6 +936,16 @@ function mapZhipuaiErrorWrapper(
   return mapZhipuaiErrorToCode(
     statusCode,
     parsedError as ParsedZhipuaiError | null,
+  );
+}
+
+function mapBedrockErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapBedrockErrorToCode(
+    statusCode,
+    parsedError as ParsedBedrockError | null,
   );
 }
 
@@ -972,6 +1104,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   openai: parseOpenAIError,
   anthropic: parseAnthropicError,
   gemini: parseGeminiError,
+  bedrock: parseBedrockError,
   cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
   cohere: parseCohereError,
   mistral: parseOpenAIError, // Mistral uses OpenAI-compatible API
@@ -989,6 +1122,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   openai: mapOpenAIErrorWrapper,
   anthropic: mapAnthropicErrorWrapper,
   gemini: mapGeminiErrorWrapper,
+  bedrock: mapBedrockErrorWrapper,
   cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
   cohere: mapCohereErrorWrapper,
   mistral: mapOpenAIErrorWrapper, // Mistral uses OpenAI-compatible API

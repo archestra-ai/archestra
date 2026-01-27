@@ -54,10 +54,10 @@ class MemberModel {
    * Get a member by user ID and organization ID.
    */
   static async getByUserId(userId: string, organizationId: string) {
-    logger.debug(
-      { userId, organizationId },
-      "MemberModel.getByUserId: fetching member",
-    );
+    // logger.debug(
+    //   { userId, organizationId },
+    //   "MemberModel.getByUserId: fetching member",
+    // );
     const [member] = await db
       .select()
       .from(schema.membersTable)
@@ -68,10 +68,10 @@ class MemberModel {
         ),
       )
       .limit(1);
-    logger.debug(
-      { userId, organizationId, found: !!member },
-      "MemberModel.getByUserId: completed",
-    );
+    // logger.debug(
+    //   { userId, organizationId, found: !!member },
+    //   "MemberModel.getByUserId: completed",
+    // );
     return member;
   }
 

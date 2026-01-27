@@ -1,4 +1,5 @@
 export { default as Anthropic } from "./anthropic";
+export { default as Bedrock } from "./bedrock";
 export { default as Cerebras } from "./cerebras";
 export { default as Cohere } from "./cohere";
 export { default as Gemini } from "./gemini";

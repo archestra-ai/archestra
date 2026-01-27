@@ -232,11 +232,16 @@ export interface StreamAccumulatorState {
  */
 export interface ChunkProcessingResult {
   /** SSE data to send to client immediately (null if should be held) */
-  sseData: string | null;
+  sseData: string | Uint8Array | null;
   /** Whether this chunk contains tool call data (held for policy evaluation) */
   isToolCallChunk: boolean;
   /** Whether this is the final chunk */
   isFinal: boolean;
+  /** Error information if this chunk represents an error event */
+  error?: {
+    type: string;
+    message: string;
+  };
 }
 
 /**
@@ -278,20 +283,20 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * Format a text fragment as SSE to inject into an ongoing stream.
    * Used for progress messages (e.g., dual LLM status) during streaming.
    */
-  formatTextDeltaSSE(text: string): string;
+  formatTextDeltaSSE(text: string): string | Uint8Array;
 
   /** Get raw tool call events as SSE strings (for replay after policy approval) */
-  getRawToolCallEvents(): string[];
+  getRawToolCallEvents(): (string | Uint8Array)[];
 
   /**
    * Format a complete, self-contained text response as SSE events.
    * Used when replacing the response entirely (e.g., policy refusal).
    * Returns provider-specific events that form a valid complete response.
    */
-  formatCompleteTextSSE(text: string): string[];
+  formatCompleteTextSSE(text: string): (string | Uint8Array)[];
 
   /** Format the stream end marker */
-  formatEndSSE(): string;
+  formatEndSSE(): string | Uint8Array;
 
   // ---------------------------------------------------------------------------
   // Build Response
@@ -342,8 +347,8 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Create a response adapter */
   createResponseAdapter(response: TResponse): LLMResponseAdapter<TResponse>;
 
-  /** Create a stream adapter */
-  createStreamAdapter(): LLMStreamAdapter<TChunk, TResponse>;
+  /** Create a stream adapter. Request is optional and used by some providers (e.g., Bedrock for tool name mapping) */
+  createStreamAdapter(request?: TRequest): LLMStreamAdapter<TChunk, TResponse>;
 
   // ---------------------------------------------------------------------------
   // Client & Headers

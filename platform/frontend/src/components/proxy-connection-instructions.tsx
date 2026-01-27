@@ -60,6 +60,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.zhipuai,
     originalUrl: "https://open.bigmodel.cn/api/",
   },
+  bedrock: {
+    label: providerDisplayNames.bedrock,
+    originalUrl: "https://bedrock-runtime.your-region.amazonaws.com/",
+  },
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 
@@ -211,7 +215,7 @@ function UrlReplacementRow({
       </div>
       <span className="text-muted-foreground flex-shrink-0">→</span>
       <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-        <CodeText className="text-xs text-primary whitespace-nowrap">
+        <CodeText className="text-xs text-primary flex-1 break-all">
           {newUrl}
         </CodeText>
         <CopyButton

@@ -34,6 +34,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   openai: "openai",
   anthropic: "anthropic",
   gemini: "google",
+  bedrock: "amazon-bedrock",
   cerebras: "cerebras",
   cohere: "cohere",
   mistral: "mistral",

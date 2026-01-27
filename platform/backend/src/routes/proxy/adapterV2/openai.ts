@@ -707,10 +707,11 @@ export class OpenAIResponseAdapter
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.usage?.prompt_tokens ?? 0,
-      outputTokens: this.response.usage?.completion_tokens ?? 0,
-    };
+    if (!this.response.usage) {
+      return { inputTokens: 0, outputTokens: 0 };
+    }
+    const { input, output } = getUsageTokens(this.response.usage);
+    return { inputTokens: input, outputTokens: output };
   }
 
   getOriginalResponse(): OpenAiResponse {
@@ -1111,6 +1112,17 @@ export async function convertToolResultsToToon(
 // =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
+
+// =============================================================================
+// USAGE TOKEN HELPERS
+// =============================================================================
+
+export function getUsageTokens(usage: OpenAi.Types.Usage) {
+  return {
+    input: usage.prompt_tokens,
+    output: usage.completion_tokens,
+  };
+}
 
 export const openaiAdapterFactory: LLMProvider<
   OpenAiRequest,

@@ -131,6 +131,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://z.ai/model-api",
     consoleName: "Zhipu AI Platform",
   },
+  bedrock: {
+    name: "AWS Bedrock",
+    icon: "/icons/bedrock.png",
+    placeholder: "Bearer token...",
+    enabled: true,
+    consoleUrl: "https://console.aws.amazon.com/bedrock",
+    consoleName: "AWS Console",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

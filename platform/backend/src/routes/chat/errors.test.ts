@@ -1,5 +1,6 @@
 import {
   AnthropicErrorTypes,
+  BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
   GeminiErrorCodes,
@@ -852,6 +853,200 @@ describe("mapProviderError - Gemini ErrorInfo reasons", () => {
       // With ErrorInfo extraction, this should now map to Authentication, not InvalidRequest
       expect(result.code).toBe(ChatErrorCode.Authentication);
       expect(result.originalError?.message).toContain("API key not valid");
+    });
+  });
+});
+
+// =============================================================================
+// Bedrock Error Tests (AWS Converse API)
+// =============================================================================
+
+describe("mapProviderError - Bedrock", () => {
+  /**
+   * Helper to create an error-like object for Bedrock AWS Converse API
+   * Bedrock errors have structure: { message: "...", __type: "ThrottlingException" }
+   */
+  function createBedrockError(
+    statusCode: number,
+    awsType: string,
+    message: string,
+  ) {
+    return {
+      name: "Error",
+      statusCode,
+      responseBody: JSON.stringify({
+        message,
+        __type: awsType,
+      }),
+    };
+  }
+
+  describe("400 - ValidationException", () => {
+    it("should map to InvalidRequest", () => {
+      const error = createBedrockError(
+        400,
+        BedrockErrorTypes.VALIDATION,
+        "Malformed input request",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+      expect(result.isRetryable).toBe(false);
+      expect(result.originalError?.provider).toBe("bedrock");
+      expect(result.originalError?.status).toBe(400);
+    });
+  });
+
+  describe("403 - AccessDeniedException", () => {
+    it("should map to PermissionDenied", () => {
+      const error = createBedrockError(
+        403,
+        BedrockErrorTypes.ACCESS_DENIED,
+        "User is not authorized to perform this action",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.PermissionDenied);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("404 - ResourceNotFoundException", () => {
+    it("should map to NotFound", () => {
+      const error = createBedrockError(
+        404,
+        BedrockErrorTypes.RESOURCE_NOT_FOUND,
+        "The specified model does not exist",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.NotFound);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("408 - ModelTimeoutException", () => {
+    it("should map to ServerError", () => {
+      const error = createBedrockError(
+        408,
+        BedrockErrorTypes.MODEL_TIMEOUT,
+        "Model invocation timed out",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("424 - ModelErrorException", () => {
+    it("should map to ServerError", () => {
+      const error = createBedrockError(
+        424,
+        BedrockErrorTypes.MODEL_ERROR,
+        "The model returned an error",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("429 - ThrottlingException", () => {
+    it("should map to RateLimit", () => {
+      const error = createBedrockError(
+        429,
+        BedrockErrorTypes.THROTTLING,
+        "Too many requests, please wait before trying again",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("429 - ModelNotReadyException", () => {
+    it("should map to RateLimit", () => {
+      const error = createBedrockError(
+        429,
+        BedrockErrorTypes.MODEL_NOT_READY,
+        "Model is not ready for inference",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("500 - InternalServerException", () => {
+    it("should map to ServerError", () => {
+      const error = createBedrockError(
+        500,
+        BedrockErrorTypes.INTERNAL_SERVER,
+        "An internal server error occurred",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("503 - ServiceUnavailableException", () => {
+    it("should map to ServerError", () => {
+      const error = createBedrockError(
+        503,
+        BedrockErrorTypes.SERVICE_UNAVAILABLE,
+        "Service is temporarily unavailable",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("context window exceeded", () => {
+    it("should map to ContextTooLong when message contains model_context_window_exceeded", () => {
+      const error = createBedrockError(
+        400,
+        BedrockErrorTypes.VALIDATION,
+        "model_context_window_exceeded: The input is too long for the model",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("fallback to HTTP status code", () => {
+    it("should fall back to status code when __type is missing", () => {
+      const error = {
+        statusCode: 429,
+        responseBody: JSON.stringify({
+          message: "Rate limited",
+        }),
+      };
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+    });
+  });
+
+  describe("provider preservation", () => {
+    it("should preserve bedrock provider", () => {
+      const error = createBedrockError(
+        500,
+        BedrockErrorTypes.INTERNAL_SERVER,
+        "Error",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.originalError?.provider).toBe("bedrock");
     });
   });
 });

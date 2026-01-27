@@ -12,8 +12,12 @@ import type { GoogleGenAI } from "@google/genai";
 import type { SupportedProvider } from "@shared";
 import client from "prom-client";
 import logger from "@/logging";
+import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapterV2/anthropic";
+import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapterV2/cohere";
+import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapterV2/gemini";
+import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapterV2/openai";
+import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapterV2/zhipuai";
 import type { Agent } from "@/types";
-import * as utils from "./routes/proxy/utils";
 
 type Fetch = (
   input: string | URL | Request,
@@ -449,9 +453,7 @@ export function getObservableFetch(
           provider === "ollama"
         ) {
           // Cerebras, vLLM and Ollama use OpenAI-compatible API format
-          const { input, output } = utils.adapters.openai.getUsageTokens(
-            data.usage,
-          );
+          const { input, output } = getOpenAIUsage(data.usage);
           reportLLMTokens(
             provider,
             profile,
@@ -460,9 +462,7 @@ export function getObservableFetch(
             externalAgentId,
           );
         } else if (provider === "anthropic") {
-          const { input, output } = utils.adapters.anthropic.getUsageTokens(
-            data.usage,
-          );
+          const { input, output } = getAnthropicUsage(data.usage);
           reportLLMTokens(
             provider,
             profile,
@@ -471,9 +471,7 @@ export function getObservableFetch(
             externalAgentId,
           );
         } else if (provider === "cohere") {
-          const { input, output } = utils.adapters.cohere.getUsageTokens(
-            data.usage,
-          );
+          const { input, output } = getCohereUsage(data.usage);
           reportLLMTokens(
             provider,
             profile,
@@ -482,9 +480,7 @@ export function getObservableFetch(
             externalAgentId,
           );
         } else if (provider === "zhipuai") {
-          const { input, output } = utils.adapters.zhipuai.getUsageTokens(
-            data.usage,
-          );
+          const { input, output } = getZhipuaiUsage(data.usage);
           reportLLMTokens(
             provider,
             profile,
@@ -553,7 +549,7 @@ export function getObservableGenAI(
       // Record token metrics
       const usage = result.usageMetadata;
       if (usage) {
-        const { input, output } = utils.adapters.gemini.getUsageTokens(usage);
+        const { input, output } = getGeminiUsage(usage);
         reportLLMTokens(
           provider,
           profile,

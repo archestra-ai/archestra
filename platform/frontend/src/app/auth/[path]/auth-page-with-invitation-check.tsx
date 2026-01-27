@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { AuthViewWithErrorHandling } from "@/app/auth/_components/auth-view-with-error-handling";
+import { BackendConnectivityStatus } from "@/app/auth/_components/backend-connectivity-status";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import { LoadingSpinner } from "@/components/loading";
 import {
@@ -98,42 +99,44 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
     path === "sign-in" && !invitationId && !isBasicAuthDisabled;
 
   return (
-    <main className="h-full flex items-center justify-center p-4">
-      <div className="space-y-4 w-full max-w-md">
-        {showDefaultCredentialsWarning && (
-          <div className="p-0 m-0 pb-4">
-            <DefaultCredentialsWarning alwaysShow />
-          </div>
-        )}
-        {showExistingUserMessage && (
-          <Card className="mb-4">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Welcome Back!</CardTitle>
-              <CardDescription>
-                You already have an account. Please sign in to join the new
-                organization.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        )}
-        {/*
-          callbackURL behavior differs by flow:
-          - Invitation flow: Points back to auth page with invitationId preserved.
-            After OAuth/SSO completes, user returns here to trigger invitation acceptance.
-          - Normal flow: Points to final destination (from redirectTo param or /).
-            After auth completes, user goes directly to their intended page.
-        */}
-        <AuthViewWithErrorHandling
-          path={path}
-          callbackURL={
-            invitationId
-              ? `${
-                  path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
-                }?invitationId=${invitationId}`
-              : getValidatedRedirectPath(redirectTo)
-          }
-        />
-      </div>
-    </main>
+    <BackendConnectivityStatus>
+      <main className="h-full flex items-center justify-center p-4">
+        <div className="space-y-4 w-full max-w-md">
+          {showDefaultCredentialsWarning && (
+            <div className="p-0 m-0 pb-4">
+              <DefaultCredentialsWarning alwaysShow />
+            </div>
+          )}
+          {showExistingUserMessage && (
+            <Card className="mb-4">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Welcome Back!</CardTitle>
+                <CardDescription>
+                  You already have an account. Please sign in to join the new
+                  organization.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
+          {/*
+            callbackURL behavior differs by flow:
+            - Invitation flow: Points back to auth page with invitationId preserved.
+              After OAuth/SSO completes, user returns here to trigger invitation acceptance.
+            - Normal flow: Points to final destination (from redirectTo param or /).
+              After auth completes, user goes directly to their intended page.
+          */}
+          <AuthViewWithErrorHandling
+            path={path}
+            callbackURL={
+              invitationId
+                ? `${
+                    path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
+                  }?invitationId=${invitationId}`
+                : getValidatedRedirectPath(redirectTo)
+            }
+          />
+        </div>
+      </main>
+    </BackendConnectivityStatus>
   );
 }

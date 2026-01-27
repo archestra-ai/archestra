@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import config from "@/config";
 import logger from "@/logging";
 import type { DualLlmMessage } from "@/types";
+import { BedrockClient } from "./bedrock-client";
 import { createGoogleGenAIClient } from "./gemini-client";
 
 /**
@@ -1003,6 +1004,180 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * Bedrock implementation of DualLlmClient
+ * Uses AWS Bedrock Converse API for chat completions
+ */
+export class BedrockDualLlmClient implements DualLlmClient {
+  private client: BedrockClient;
+  private model: string;
+
+  /**
+   * Create a Bedrock client for dual LLM.
+   *
+   * @param apiKey - Bearer token for API key auth (optional if using AWS credentials)
+   * @param model - Model ID (e.g., "anthropic.claude-3-sonnet-20240229-v1:0")
+   * @param baseUrl - Bedrock runtime endpoint URL
+   */
+  constructor(apiKey: string | undefined, model: string, baseUrl: string) {
+    logger.debug(
+      { model, baseUrl },
+      "[dualLlmClient] Bedrock: initializing client",
+    );
+
+    // Extract region from baseUrl (e.g., "https://bedrock-runtime.us-east-1.amazonaws.com")
+    const region = this.extractRegionFromUrl(baseUrl);
+
+    this.client = new BedrockClient({
+      baseUrl,
+      region,
+      apiKey,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] Bedrock: starting chat completion",
+    );
+
+    // Convert DualLlmMessage format to Bedrock Converse format
+    const bedrockMessages = messages.map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: [{ text: msg.content }],
+    }));
+
+    const response = await this.client.converse(this.model, {
+      messages: bedrockMessages,
+      inferenceConfig: {
+        temperature,
+        maxTokens: 4096,
+      },
+    });
+
+    // Extract text from response content blocks
+    const content = this.extractTextFromResponse(
+      response as unknown as Record<string, unknown>,
+    );
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Bedrock: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] Bedrock: starting chat with schema",
+    );
+
+    // Bedrock doesn't have native structured output
+    // Use prompt-based approach similar to Anthropic
+    const systemPrompt = `You must respond with valid JSON matching this schema:
+${JSON.stringify(schema.schema, null, 2)}
+
+Return only the JSON object, no other text.`;
+
+    // Prepend the schema instruction to the first user message
+    const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
+      if (idx === 0 && msg.role === "user") {
+        return {
+          ...msg,
+          content: `${systemPrompt}\n\n${msg.content}`,
+        };
+      }
+      return msg;
+    });
+
+    // Convert to Bedrock format
+    const bedrockMessages = enhancedMessages.map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: [{ text: msg.content }],
+    }));
+
+    const response = await this.client.converse(this.model, {
+      messages: bedrockMessages,
+      inferenceConfig: {
+        temperature,
+        maxTokens: 4096,
+      },
+    });
+
+    const content = this.extractTextFromResponse(
+      response as unknown as Record<string, unknown>,
+    );
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Bedrock: chat with schema complete, parsing response",
+    );
+
+    // Parse JSON response
+    // Try to extract JSON from markdown code blocks if present
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
+      null,
+      content,
+    ];
+    const jsonText = jsonMatch[1].trim();
+
+    try {
+      return JSON.parse(jsonText) as T;
+    } catch (parseError) {
+      logger.error(
+        { model: this.model, content: jsonText, parseError },
+        "[dualLlmClient] Bedrock: failed to parse JSON response",
+      );
+      throw parseError;
+    }
+  }
+
+  private extractRegionFromUrl(baseUrl: string): string {
+    // Extract region from URL like "https://bedrock-runtime.us-east-1.amazonaws.com"
+    const match = baseUrl.match(
+      /bedrock-runtime\.([a-z0-9-]+)\.amazonaws\.com/,
+    );
+    if (match) {
+      return match[1];
+    }
+    // Default to us-east-1 if region can't be extracted
+    logger.warn(
+      { baseUrl },
+      "[dualLlmClient] Bedrock: could not extract region from URL, defaulting to us-east-1",
+    );
+    return "us-east-1";
+  }
+
+  private extractTextFromResponse(response: Record<string, unknown>): string {
+    const output = response.output as
+      | { message?: { content?: Array<Record<string, unknown>> } }
+      | undefined;
+    const contentBlocks = output?.message?.content || [];
+    const textBlock = contentBlocks.find(
+      (block): block is { text: string } =>
+        "text" in block && typeof block.text === "string",
+    );
+    return textBlock?.text?.trim() || "";
+  }
+}
+
+/**
  * Factory function to create the appropriate LLM client
  *
  * @param provider - The LLM provider
@@ -1065,6 +1240,20 @@ export function createDualLlmClient(
         throw new Error("API key required for Zhipuai dual LLM");
       }
       return new ZhipuaiDualLlmClient(apiKey, model);
+    case "bedrock":
+      if (!model) {
+        throw new Error("Model name required for Bedrock dual LLM");
+      }
+      if (!config.llm.bedrock.baseUrl) {
+        throw new Error(
+          "Bedrock base URL not configured (ARCHESTRA_BEDROCK_BASE_URL)",
+        );
+      }
+      return new BedrockDualLlmClient(
+        apiKey,
+        model,
+        config.llm.bedrock.baseUrl,
+      );
     default:
       logger.debug(
         { provider },

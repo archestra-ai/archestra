@@ -296,10 +296,10 @@ export async function validateTeamToken(
   // Validate the token itself
   const token = await TeamTokenModel.validateToken(tokenValue);
   if (!token) {
-    logger.debug(
-      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
-      "validateTeamToken: token not found in team_token table",
-    );
+    // logger.debug(
+    //   { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+    //   "validateTeamToken: token not found in team_token table",
+    // );
     return null;
   }
 
@@ -422,10 +422,10 @@ export async function validateMCPGatewayToken(
   // Then try user token validation
   const userTokenResult = await validateUserToken(profileId, tokenValue);
   if (userTokenResult) {
-    logger.debug(
-      { profileId, userId: userTokenResult.userId },
-      "validateMCPGatewayToken: validated as user token",
-    );
+    // logger.debug(
+    //   { profileId, userId: userTokenResult.userId },
+    //   "validateMCPGatewayToken: validated as user token",
+    // );
     return userTokenResult;
   }
 

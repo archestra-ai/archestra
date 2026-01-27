@@ -30,6 +30,41 @@ jobs:
           service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
+      - name: Install gke-gcloud-auth-plugin
+        run: gcloud components install gke-gcloud-auth-plugin
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials archestra-staging \
+            --zone us-central1-a --project friendly-path-465518-r6
+
+      - name: Extract previous version static assets
+        run: |
+          PREV_TAG=$(kubectl get deployment archestra-platform -n archestra \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
+            | cut -d: -f2) || true
+
+          mkdir -p platform/prev-static-assets
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$GITHUB_SHA_VALUE" ]; then
+            PREV_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PREV_TAG}"
+            echo "Pulling previous image: $PREV_IMAGE"
+            docker pull "$PREV_IMAGE" || { echo "Warning: Failed to pull previous image"; true; }
+            CID=$(docker create "$PREV_IMAGE" 2>/dev/null) || true
+            if [ -n "$CID" ]; then
+              # Extract from /static-assets-source/ which has ONLY that build's chunks (not accumulated)
+              echo "Extracting previous static assets from container $CID"
+              docker cp "${CID}:/static-assets-source/." platform/prev-static-assets/ || echo "Warning: Failed to copy previous assets"
+              docker rm "$CID"
+              echo "Successfully extracted previous static assets"
+            else
+              echo "No previous container created, skipping asset extraction"
+            fi
+          else
+            echo "No previous version to extract (PREV_TAG: $PREV_TAG)"
+          fi
+        env:
+          GITHUB_SHA_VALUE: ${{ github.sha }}
+
       # NOTE: only build on amd64 for now as our staging environment runs on amd64
       # if we will need to support arm64, we should follow the pattern we do in
       # .github/workflows/build-dockerhub-image.yml and do a matrix build so that we are build

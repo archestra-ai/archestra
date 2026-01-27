@@ -591,34 +591,37 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
 
   describe("adapter integration tests", () => {
     test("OpenAI adapter roundtrip", async () => {
-      const { toCommonFormat, applyUpdates } = await import(
-        "./adapters/openai"
-      );
+      const { openaiAdapterFactory } = await import("../adapterV2/openai");
 
-      const openAiMessages = [
-        { role: "user" as const, content: "Get emails" },
-        {
-          role: "assistant" as const,
-          content: null,
-          tool_calls: [
-            {
-              id: "call_123",
-              type: "function" as const,
-              function: {
-                name: "get_emails",
-                arguments: "{}",
+      const openAiRequest = {
+        model: "gpt-4",
+        messages: [
+          { role: "user" as const, content: "Get emails" },
+          {
+            role: "assistant" as const,
+            content: null,
+            tool_calls: [
+              {
+                id: "call_123",
+                type: "function" as const,
+                function: {
+                  name: "get_emails",
+                  arguments: "{}",
+                },
               },
-            },
-          ],
-        },
-        {
-          role: "tool" as const,
-          tool_call_id: "call_123",
-          content: JSON.stringify({ data: "test" }),
-        },
-      ];
+            ],
+          },
+          {
+            role: "tool" as const,
+            tool_call_id: "call_123",
+            content: JSON.stringify({ data: "test" }),
+          },
+        ],
+      };
 
-      const commonMessages = toCommonFormat(openAiMessages);
+      const requestAdapter =
+        openaiAdapterFactory.createRequestAdapter(openAiRequest);
+      const commonMessages = requestAdapter.getMessages();
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
@@ -628,45 +631,52 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "restrictive",
         { teamIds: [] },
       );
-      const updated = applyUpdates(openAiMessages, result.toolResultUpdates);
+      requestAdapter.applyToolResultUpdates(result.toolResultUpdates);
+      const updatedRequest = requestAdapter.toProviderRequest();
 
       // Should preserve original structure
-      expect(updated).toHaveLength(3);
-      expect(updated[0]).toEqual(openAiMessages[0]);
-      expect(updated[1]).toEqual(openAiMessages[1]);
+      expect(updatedRequest.messages).toHaveLength(3);
+      expect(updatedRequest.messages[0]).toEqual(openAiRequest.messages[0]);
+      expect(updatedRequest.messages[1]).toEqual(openAiRequest.messages[1]);
     });
 
     test("Anthropic adapter roundtrip", async () => {
-      const { toCommonFormat, applyUpdates } = await import(
-        "./adapters/anthropic"
+      const { anthropicAdapterFactory } = await import(
+        "../adapterV2/anthropic"
       );
 
-      const anthropicMessages = [
-        { role: "user" as const, content: "Get emails" },
-        {
-          role: "assistant" as const,
-          content: [
-            {
-              type: "tool_use" as const,
-              id: "tool_123",
-              name: "get_emails",
-              input: {},
-            },
-          ],
-        },
-        {
-          role: "user" as const,
-          content: [
-            {
-              type: "tool_result" as const,
-              tool_use_id: "tool_123",
-              content: JSON.stringify({ data: "test" }),
-            },
-          ],
-        },
-      ];
+      const anthropicRequest = {
+        model: "claude-3-sonnet-20240229",
+        max_tokens: 1024,
+        messages: [
+          { role: "user" as const, content: "Get emails" },
+          {
+            role: "assistant" as const,
+            content: [
+              {
+                type: "tool_use" as const,
+                id: "tool_123",
+                name: "get_emails",
+                input: {},
+              },
+            ],
+          },
+          {
+            role: "user" as const,
+            content: [
+              {
+                type: "tool_result" as const,
+                tool_use_id: "tool_123",
+                content: JSON.stringify({ data: "test" }),
+              },
+            ],
+          },
+        ],
+      };
 
-      const commonMessages = toCommonFormat(anthropicMessages);
+      const requestAdapter =
+        anthropicAdapterFactory.createRequestAdapter(anthropicRequest);
+      const commonMessages = requestAdapter.getMessages();
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
@@ -676,12 +686,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "restrictive",
         { teamIds: [] },
       );
-      const updated = applyUpdates(anthropicMessages, result.toolResultUpdates);
+      requestAdapter.applyToolResultUpdates(result.toolResultUpdates);
+      const updatedRequest = requestAdapter.toProviderRequest();
 
       // Should preserve original structure
-      expect(updated).toHaveLength(3);
-      expect(updated[0]).toEqual(anthropicMessages[0]);
-      expect(updated[1]).toEqual(anthropicMessages[1]);
+      expect(updatedRequest.messages).toHaveLength(3);
+      expect(updatedRequest.messages[0]).toEqual(anthropicRequest.messages[0]);
+      expect(updatedRequest.messages[1]).toEqual(anthropicRequest.messages[1]);
     });
   });
 });

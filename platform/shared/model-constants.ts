@@ -7,6 +7,7 @@ export const SupportedProvidersSchema = z.enum([
   "openai",
   "gemini",
   "anthropic",
+  "bedrock",
   "cohere",
   "cerebras",
   "mistral",
@@ -19,6 +20,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openai:chatCompletions",
   "gemini:generateContent",
   "anthropic:messages",
+  "bedrock:converse",
   "cohere:chat",
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
@@ -36,6 +38,7 @@ export type SupportedProviderDiscriminator = z.infer<
 export const providerDisplayNames: Record<SupportedProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
+  bedrock: "AWS Bedrock",
   gemini: "Gemini",
   cohere: "Cohere",
   cerebras: "Cerebras",

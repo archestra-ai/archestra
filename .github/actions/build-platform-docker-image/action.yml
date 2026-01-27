@@ -59,6 +59,12 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Ensure prev-static-assets directory exists
+      shell: bash
+      run: mkdir -p "${INPUT_CONTEXT}/prev-static-assets"
+      env:
+        INPUT_CONTEXT: ${{ inputs.context }}
+
     - name: Setup Blacksmith Builder
       uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 

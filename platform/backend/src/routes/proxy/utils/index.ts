@@ -1,5 +1,4 @@
 export * as tokenizers from "@/tokenizers";
-export * as adapters from "./adapters";
 export * as costOptimization from "./cost-optimization";
 export * as externalAgentId from "./external-agent-id";
 export * as sessionId from "./session-id";

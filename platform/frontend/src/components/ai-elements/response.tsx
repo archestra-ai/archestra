@@ -22,8 +22,11 @@ export const Response = memo(
         // Add proper paragraph spacing
         "[&_p]:my-2",
         // Add proper code block styling
-        "[&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded",
+        // Only style inline code, not code inside pre elements
+        "[&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:text-foreground [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5 [&_:not(pre)>code]:rounded",
         "[&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto",
+        // Fix streamdown code blocks - remove padding from code elements inside them
+        "[&_[data-streamdown='code-block']_code]:p-0 [&_[data-streamdown='code-block']_code]:bg-transparent",
         className,
       )}
       {...props}

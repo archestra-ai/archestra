@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
+import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
 import CohereChatInteraction from "./llmProviders/cohere";
 import type {
@@ -123,6 +124,8 @@ export class DynamicInteraction implements InteractionUtils {
       return new OpenAiChatCompletionInteraction(interaction);
     } else if (type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);
+    } else if (type === "bedrock:converse") {
+      return new BedrockConverseInteraction(interaction);
     } else if (type === "zhipuai:chatCompletions") {
       return new ZhipuaiChatCompletionInteraction(interaction);
     } else if (type === "cerebras:chatCompletions") {

@@ -1,7 +1,7 @@
 "use client";
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "./utils";
 
 const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
@@ -29,7 +29,7 @@ export function useMcpToolCalls({
   sortDirection?: "asc" | "desc";
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: [
       "mcpToolCalls",
       agentId,
@@ -85,7 +85,7 @@ export function useMcpToolCall({
   mcpToolCallId: string;
   initialData?: archestraApiTypes.GetMcpToolCallResponses["200"];
 }) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["mcpToolCalls", mcpToolCallId],
     queryFn: async () => {
       const response = await getMcpToolCall({ path: { mcpToolCallId } });

@@ -16,7 +16,7 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
-import { useModelsByProviderQuery } from "@/lib/chat-models.query";
+import { useModelsByProvider } from "@/lib/chat-models.query";
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -54,7 +54,7 @@ export function ModelSelector({
   disabled = false,
   onOpenChange: onOpenChangeProp,
 }: ModelSelectorProps) {
-  const { modelsByProvider, isLoading } = useModelsByProviderQuery();
+  const { modelsByProvider, isPending: isLoading } = useModelsByProvider();
   const [open, setOpen] = useState(false);
 
   const handleOpenChange = (newOpen: boolean) => {

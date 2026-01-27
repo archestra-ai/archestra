@@ -45,7 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { type ChatModel, useChatModelsQuery } from "@/lib/chat-models.query";
+import { type ChatModel, useChatModels } from "@/lib/chat-models.query";
 import {
   useCreateTokenPrice,
   useDeleteTokenPrice,
@@ -311,7 +311,7 @@ export default function TokenPricePage() {
 
   const { data: tokenPrices = [], isLoading: tokenPricesLoading } =
     useTokenPrices();
-  const { data: chatModels = [] } = useChatModelsQuery();
+  const { data: chatModels = [] } = useChatModels();
   const deleteTokenPrice = useDeleteTokenPrice();
   const createTokenPrice = useCreateTokenPrice();
   const updateTokenPrice = useUpdateTokenPrice();

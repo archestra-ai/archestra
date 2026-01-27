@@ -18,7 +18,7 @@ import {
   Tag,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -66,9 +66,7 @@ export default function LlmProxiesPage({
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <LlmProxies initialData={initialData} />
-        </Suspense>
+        <LlmProxies initialData={initialData} />
       </ErrorBoundary>
     </div>
   );
@@ -163,7 +161,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
-  const { data: agentsResponse } = useProfilesPaginated({
+  const { data: agentsResponse, isPending } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -172,9 +170,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     name: nameFilter || undefined,
     agentTypes: ["llm_proxy", "profile"],
   });
-
-  const agents = agentsResponse?.data || [];
-  const pagination = agentsResponse?.pagination;
 
   const { data: _teams } = useQuery({
     queryKey: ["teams"],
@@ -195,6 +190,8 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
 
+  type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingProxy, setConnectingProxy] = useState<{
     id: string;
@@ -203,8 +200,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   } | null>(null);
   const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
-
-  type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -253,6 +248,14 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     },
     [searchParams, router, pathname],
   );
+
+  const agents = agentsResponse?.data || [];
+  const pagination = agentsResponse?.pagination;
+
+  // Show loading state only on initial load (not when we have initialData)
+  if (isPending && !initialData?.agents) {
+    return <LoadingSpinner />;
+  }
 
   // LLM Proxies table columns - no Tools or Subagents
   const columns: ColumnDef<ProxyData>[] = [

@@ -23,7 +23,7 @@ function InvitationsListContent({
   organizationId?: string;
 }) {
   const queryClient = useQueryClient();
-  const { data: invitations } = useInvitationsList(organizationId);
+  const { data: invitations = [] } = useInvitationsList(organizationId);
   const cancelMutation = useCancelInvitation();
 
   const handleCopy = async (id: string, email: string) => {

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
@@ -46,8 +46,8 @@ import {
 } from "@/components/ui/tooltip";
 import {
   useDeleteProfile,
+  useProfiles,
   useProfilesPaginated,
-  useProfilesQuery,
 } from "@/lib/agent.query";
 import {
   DEFAULT_AGENTS_PAGE_SIZE,
@@ -70,9 +70,7 @@ export default function AgentsPage({
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <Agents initialData={initialData} />
-        </Suspense>
+        <Agents initialData={initialData} />
       </ErrorBoundary>
     </div>
   );
@@ -167,7 +165,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
-  const { data: agentsResponse } = useProfilesPaginated({
+  const { data: agentsResponse, isPending } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -176,9 +174,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     name: nameFilter || undefined,
     agentTypes: ["agent"],
   });
-
-  const agents = agentsResponse?.data || [];
-  const pagination = agentsResponse?.pagination;
 
   const { data: _teams } = useQuery({
     queryKey: ["teams"],
@@ -199,6 +194,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
 
+  type AgentData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
@@ -207,6 +204,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   } | null>(null);
   const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+  const [versionHistoryAgent, setVersionHistoryAgent] =
+    useState<AgentData | null>(null);
 
   // Handle 'create' URL parameter to open the Create Agent dialog
   useEffect(() => {
@@ -218,10 +217,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       router.replace(`${pathname}?${newParams.toString()}`);
     }
   }, [searchParams, pathname, router]);
-  const [versionHistoryAgent, setVersionHistoryAgent] =
-    useState<AgentData | null>(null);
-
-  type AgentData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -270,6 +265,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     },
     [searchParams, router, pathname],
   );
+
+  const agents = agentsResponse?.data || [];
+  const pagination = agentsResponse?.pagination;
+
+  // Show loading state only on initial load (not when we have initialData)
+  if (isPending && !initialData?.agents) {
+    return <LoadingSpinner />;
+  }
 
   const columns: ColumnDef<AgentData>[] = [
     {
@@ -539,11 +542,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 }
 
 function AgentConnectionColumns({ agentId }: { agentId: string }) {
-  // Fetch agent data for A2A connection instructions (non-suspense to avoid loading flicker)
-  const { data: profiles } = useProfilesQuery();
+  // Fetch agent data for A2A connection instructions
+  const { data: profiles, isPending } = useProfiles();
   const agent = profiles?.find((p) => p.id === agentId);
 
-  if (!agent) {
+  if (isPending || !agent) {
     return (
       <div className="flex items-center justify-center py-8">
         <LoadingSpinner />
@@ -553,15 +556,7 @@ function AgentConnectionColumns({ agentId }: { agentId: string }) {
 
   return (
     <div className="p-4 rounded-lg border bg-card">
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center py-8">
-            <LoadingSpinner />
-          </div>
-        }
-      >
-        <A2AConnectionInstructions agent={agent} />
-      </Suspense>
+      <A2AConnectionInstructions agent={agent} />
     </div>
   );
 }

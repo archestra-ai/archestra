@@ -1,16 +1,12 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const { getDefaultDualLlmConfig, updateDualLlmConfig } = archestraApiSdk;
 
 export function useDualLlmConfig(params?: {
   initialData?: archestraApiTypes.GetDefaultDualLlmConfigResponses["200"];
 }) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["dual-llm-config", "default"],
     queryFn: async () => (await getDefaultDualLlmConfig()).data ?? null,
     initialData: params?.initialData,

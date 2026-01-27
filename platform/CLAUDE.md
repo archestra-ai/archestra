@@ -364,7 +364,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Frontend**:
 
-- Use TanStack Query for data fetching
+- Use TanStack Query for data fetching (prefer `useQuery` over `useSuspenseQuery` with explicit loading states)
 - Use shadcn/ui components only
 - **Use components from `frontend/src/components/ui` over plain HTML elements**: Never use raw `<button>`, `<input>`, `<select>`, etc. when a component exists in `frontend/src/components/ui` (Button over button, Input over input, etc.)
 - **Handle toasts in .query.ts files, not in components**: Toast notifications for mutations (success/error) should be defined in the mutation's `onSuccess`/`onError` callbacks within `.query.ts` files, not in components

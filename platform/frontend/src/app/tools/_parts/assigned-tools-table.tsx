@@ -42,7 +42,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAutoConfigurePolicies } from "@/lib/agent-tools.query";
-import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useBulkCallPolicyMutation,
   useBulkResultPolicyMutation,
@@ -115,7 +115,7 @@ export function AssignedToolsTable({
   const { data: resultPolicies } = useToolResultPolicies(
     initialData?.toolResultPolicies,
   );
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalogSuspense({
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
     initialData: initialData?.internalMcpCatalog,
   });
 
@@ -568,7 +568,7 @@ export function AssignedToolsTable({
 
           const currentAction = getCallPolicyActionFromPolicies(
             row.original.id,
-            invocationPolicies,
+            invocationPolicies ?? { byProfileToolId: {} },
           );
 
           return (
@@ -631,7 +631,7 @@ export function AssignedToolsTable({
 
           const resultAction = getResultPolicyActionFromPolicies(
             row.original.id,
-            resultPolicies,
+            resultPolicies ?? { byProfileToolId: {} },
           );
 
           const actionLabel =

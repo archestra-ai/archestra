@@ -18,7 +18,7 @@ import {
   Tag,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -67,9 +67,7 @@ export default function McpGatewaysPage({
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <McpGateways initialData={initialData} />
-        </Suspense>
+        <McpGateways initialData={initialData} />
       </ErrorBoundary>
     </div>
   );
@@ -168,7 +166,7 @@ function McpGateways({
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
-  const { data: agentsResponse } = useProfilesPaginated({
+  const { data: agentsResponse, isPending } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -177,9 +175,6 @@ function McpGateways({
     name: nameFilter || undefined,
     agentTypes: ["mcp_gateway", "profile"],
   });
-
-  const agents = agentsResponse?.data || [];
-  const pagination = agentsResponse?.pagination;
 
   const { data: _teams } = useQuery({
     queryKey: ["teams"],
@@ -200,6 +195,9 @@ function McpGateways({
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
 
+  type GatewayData =
+    archestraApiTypes.GetAgentsResponses["200"]["data"][number];
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingGateway, setConnectingGateway] = useState<{
     id: string;
@@ -212,9 +210,6 @@ function McpGateways({
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
-
-  type GatewayData =
-    archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -263,6 +258,14 @@ function McpGateways({
     },
     [searchParams, router, pathname],
   );
+
+  const agents = agentsResponse?.data || [];
+  const pagination = agentsResponse?.pagination;
+
+  // Show loading state only on initial load (not when we have initialData)
+  if (isPending && !initialData?.agents) {
+    return <LoadingSpinner />;
+  }
 
   const columns: ColumnDef<GatewayData>[] = [
     {
@@ -606,18 +609,7 @@ function GatewayConnectionColumns({
       <div className="relative">
         <div className={activeTab === "mcp" ? "block" : "hidden"}>
           <div className="p-4 rounded-lg border bg-card">
-            <Suspense
-              fallback={
-                <div className="flex items-center justify-center py-8">
-                  <LoadingSpinner />
-                </div>
-              }
-            >
-              <McpConnectionInstructions
-                agentId={agentId}
-                hideProfileSelector
-              />
-            </Suspense>
+            <McpConnectionInstructions agentId={agentId} hideProfileSelector />
           </div>
         </div>
         {agentType === "profile" && (

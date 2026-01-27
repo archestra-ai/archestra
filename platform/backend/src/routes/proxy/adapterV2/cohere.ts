@@ -917,6 +917,15 @@ function extractErrorMessage(error: unknown): string {
   return String(error);
 }
 
+export function getUsageTokens(usage: Cohere.Types.Usage) {
+  return {
+    input:
+      usage?.tokens?.input_tokens ?? usage?.billed_units?.input_tokens ?? 0,
+    output:
+      usage?.tokens?.output_tokens ?? usage?.billed_units?.output_tokens ?? 0,
+  };
+}
+
 export const cohereAdapterFactory: LLMProvider<
   CohereRequest,
   CohereResponse,

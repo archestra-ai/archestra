@@ -15,6 +15,7 @@ import logger from "@/logging";
 import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapterV2/anthropic";
 import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapterV2/gemini";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapterV2/openai";
+import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapterV2/cohere";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapterV2/zhipuai";
 import type { Agent } from "@/types";
 
@@ -470,9 +471,7 @@ export function getObservableFetch(
             externalAgentId,
           );
         } else if (provider === "cohere") {
-          const { input, output } = utils.adapters.cohere.getUsageTokens(
-            data.usage,
-          );
+          const { input, output } = getCohereUsage(data.usage);
           reportLLMTokens(
             provider,
             profile,

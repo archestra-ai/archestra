@@ -314,9 +314,6 @@ export type OpenAiChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -337,7 +334,7 @@ export type OpenAiChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }>;
+            }> | unknown;
         };
     }>;
     created: number;
@@ -2161,9 +2158,6 @@ export type MistralChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -2184,7 +2178,7 @@ export type MistralChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }>;
+            }> | unknown;
         };
     }>;
     created: number;
@@ -2228,9 +2222,6 @@ export type MistralChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -2251,7 +2242,7 @@ export type MistralChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }>;
+            }> | unknown;
         };
     }> | number | 'chat.completion' | string | unknown | {
         completion_tokens: number;
@@ -3462,9 +3453,6 @@ export type OpenAiChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -3485,7 +3473,7 @@ export type OpenAiChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }>;
+            }> | unknown;
         };
     }>;
     created: number;
@@ -5309,9 +5297,6 @@ export type MistralChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -5332,7 +5317,7 @@ export type MistralChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }>;
+            }> | unknown;
         };
     }>;
     created: number;
@@ -5376,9 +5361,6 @@ export type MistralChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-             */
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -5399,7 +5381,7 @@ export type MistralChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }>;
+            }> | unknown;
         };
     }> | number | 'chat.completion' | string | unknown | {
         completion_tokens: number;

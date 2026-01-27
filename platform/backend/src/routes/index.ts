@@ -6,6 +6,7 @@ import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
 import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
+import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
@@ -44,6 +45,8 @@ export const anthropicProxyRoutes = config.llm.anthropic.useV2Routes
   : anthropicProxyRoutesV1;
 // Cerebras proxy routes - V2 only (no legacy V1 implementation)
 export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;
+// Mistral proxy routes - V2 only (OpenAI-compatible, no legacy V1)
+export const mistralProxyRoutes = mistralProxyRoutesV2;
 // Gemini proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
 export const geminiProxyRoutes = config.llm.gemini.useV2Routes
   ? geminiProxyRoutesV2

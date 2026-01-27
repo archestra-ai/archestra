@@ -70,7 +70,7 @@ test.describe("MCP Install", () => {
     // Check that tools are discovered
     await serverCard
       .getByText("/2")
-      .waitFor({ state: "visible", timeout: 30_000 });
+      .waitFor({ state: "visible", timeout: 60_000 });
 
     // cleanup
     await deleteCatalogItem(

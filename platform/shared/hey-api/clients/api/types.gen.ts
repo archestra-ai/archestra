@@ -334,7 +334,7 @@ export type OpenAiChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
@@ -2178,7 +2178,7 @@ export type MistralChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
@@ -2242,7 +2242,7 @@ export type MistralChatCompletionResponseInput = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }> | number | 'chat.completion' | string | unknown | {
         completion_tokens: number;
@@ -3473,7 +3473,7 @@ export type OpenAiChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
@@ -5317,7 +5317,7 @@ export type MistralChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }>;
     created: number;
@@ -5381,7 +5381,7 @@ export type MistralChatCompletionResponse = {
                     input: string;
                     name: string;
                 };
-            }> | unknown;
+            }> | null;
         };
     }> | number | 'chat.completion' | string | unknown | {
         completion_tokens: number;

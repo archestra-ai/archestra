@@ -185,11 +185,13 @@ export const RouteId = {
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
   BedrockConverseWithAgent: "bedrockConverseWithAgent",
-  BedrockConverseStreamWithDefaultAgent: "bedrockConverseStreamWithDefaultAgent",
+  BedrockConverseStreamWithDefaultAgent:
+    "bedrockConverseStreamWithDefaultAgent",
   BedrockConverseStreamWithAgent: "bedrockConverseStreamWithAgent",
   // AI SDK compatible routes (model ID in URL)
   BedrockConverseWithAgentAndModel: "bedrockConverseWithAgentAndModel",
-  BedrockConverseStreamWithAgentAndModel: "bedrockConverseStreamWithAgentAndModel",
+  BedrockConverseStreamWithAgentAndModel:
+    "bedrockConverseStreamWithAgentAndModel",
 
   // Chat Routes
   StreamChat: "streamChat",

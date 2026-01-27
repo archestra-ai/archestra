@@ -493,7 +493,7 @@ class ModelsDevClient {
   private async syncTokenPrices(models: CreateModel[]): Promise<void> {
     const tokenPricesToCreate: Array<{
       model: string;
-      provider: typeof models[number]["provider"];
+      provider: (typeof models)[number]["provider"];
       pricePerMillionInput: string;
       pricePerMillionOutput: string;
     }> = [];

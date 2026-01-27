@@ -627,28 +627,21 @@ async function getProviderApiKey({
   }
 
   // Fall back to environment variable
-  switch (provider) {
-    case "anthropic":
-      return config.chat.anthropic.apiKey || null;
-    case "cerebras":
-      return config.chat.cerebras.apiKey || null;
-    case "mistral":
-      return config.chat.mistral.apiKey || null;
-    case "gemini":
-      return config.chat.gemini.apiKey || null;
-    case "openai":
-      return config.chat.openai.apiKey || null;
-    case "vllm":
-      // vLLM typically doesn't require API keys, return empty or configured key
-      return config.chat.vllm.apiKey || "";
-    case "ollama":
-      // Ollama typically doesn't require API keys, return empty or configured key
-      return config.chat.ollama.apiKey || "";
-    case "zhipuai":
-      return config.chat.zhipuai?.apiKey || null;
-    default:
-      return null;
-  }
+  // Using Record<SupportedProvider, ...> ensures TypeScript will error if a new provider is added
+  // but not included in this map. This prevents missing API key fallbacks for new providers.
+  const envApiKeyFallbacks: Record<SupportedProvider, () => string | null> = {
+    anthropic: () => config.chat.anthropic.apiKey || null,
+    cerebras: () => config.chat.cerebras.apiKey || null,
+    cohere: () => config.chat.cohere?.apiKey || null,
+    gemini: () => config.chat.gemini.apiKey || null,
+    mistral: () => config.chat.mistral.apiKey || null,
+    ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
+    openai: () => config.chat.openai.apiKey || null,
+    vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
+    zhipuai: () => config.chat.zhipuai?.apiKey || null,
+  };
+
+  return envApiKeyFallbacks[provider]();
 }
 
 // We need to make sure that every new provider we support has a model fetcher function

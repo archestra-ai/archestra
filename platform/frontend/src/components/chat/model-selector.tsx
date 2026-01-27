@@ -83,7 +83,10 @@ interface ModelSelectorProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-/** Map our provider names to logo provider names */
+/** Map our provider names to logo provider names
+ * models.dev provider IDs
+ * see https://github.com/anomalyco/models.dev/tree/dev/providers
+ * */
 const providerToLogoProvider: Record<SupportedProvider, string> = {
   openai: "openai",
   anthropic: "anthropic",
@@ -92,9 +95,34 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   cohere: "cohere",
   mistral: "mistral",
   vllm: "vllm",
-  ollama: "ollama",
+  ollama: "ollama-cloud", // models.dev uses ollama-cloud for the Ollama provider
   zhipuai: "zhipuai",
 };
+
+/**
+ * Creates a unique value for a model that includes the provider.
+ * This prevents issues when different providers have models with the same ID.
+ */
+function createModelValue(
+  provider: SupportedProvider,
+  modelId: string,
+): string {
+  return `${provider}:${modelId}`;
+}
+
+/**
+ * Extracts the provider and model ID from a combined model value.
+ */
+function parseModelValue(
+  value: string,
+): { provider: SupportedProvider; modelId: string } | null {
+  const colonIndex = value.indexOf(":");
+  if (colonIndex === -1) return null;
+  return {
+    provider: value.substring(0, colonIndex) as SupportedProvider,
+    modelId: value.substring(colonIndex + 1),
+  };
+}
 
 /**
  * Capability icon component - matches Vercel AI Elements style.
@@ -540,15 +568,19 @@ export function ModelSelector({
     return selectedModel; // Fall back to ID if not found
   }, [selectedModel, availableProviders, modelsByProvider]);
 
-  const handleSelectModel = (model: string) => {
+  const handleSelectModel = (modelValue: string) => {
+    // Parse the provider:modelId format
+    const parsed = parseModelValue(modelValue);
+    const modelId = parsed?.modelId ?? modelValue;
+
     // If selecting the same model, just close the dialog
-    if (model === selectedModel) {
+    if (modelId === selectedModel) {
       handleOpenChange(false);
       return;
     }
 
     handleOpenChange(false);
-    onModelChange(model);
+    onModelChange(modelId);
   };
 
   // Check if selectedModel is in the available models
@@ -640,46 +672,51 @@ export function ModelSelector({
                 key={provider}
                 heading={providerDisplayNames[provider]}
               >
-                {filteredModelsByProvider[provider]?.map((model) => (
-                  <ModelSelectorItem
-                    key={model.id}
-                    value={model.id}
-                    onSelect={() => handleSelectModel(model.id)}
-                    className="group"
-                  >
-                    <ModelSelectorLogo
-                      provider={providerToLogoProvider[provider]}
-                    />
-                    <ModelSelectorName>
-                      {model.displayName}{" "}
-                      <span className="text-xs text-muted-foreground font-mono">
-                        ({model.id})
-                      </span>
-                      <CopyModelIdButton modelId={model.id} />
-                    </ModelSelectorName>
-                    <div className="ml-auto flex items-center gap-2">
-                      <ModelCapabilityBadges
-                        capabilities={model.capabilities}
+                {filteredModelsByProvider[provider]?.map((model) => {
+                  // Use provider:modelId format for unique keys/values
+                  // This prevents issues when different providers have models with the same ID
+                  const modelValue = createModelValue(provider, model.id);
+                  return (
+                    <ModelSelectorItem
+                      key={modelValue}
+                      value={modelValue}
+                      onSelect={() => handleSelectModel(modelValue)}
+                      className="group"
+                    >
+                      <ModelSelectorLogo
+                        provider={providerToLogoProvider[provider]}
                       />
-                      <ContextLengthIndicator
-                        contextLength={model.capabilities?.contextLength}
-                      />
-                      <PricingIndicator
-                        pricePerMillionInput={
-                          model.capabilities?.pricePerMillionInput
-                        }
-                        pricePerMillionOutput={
-                          model.capabilities?.pricePerMillionOutput
-                        }
-                      />
-                      {selectedModel === model.id ? (
-                        <CheckIcon className="size-4" />
-                      ) : (
-                        <div className="size-4" />
-                      )}
-                    </div>
-                  </ModelSelectorItem>
-                ))}
+                      <ModelSelectorName>
+                        {model.displayName}{" "}
+                        <span className="text-xs text-muted-foreground font-mono">
+                          ({model.id})
+                        </span>
+                        <CopyModelIdButton modelId={model.id} />
+                      </ModelSelectorName>
+                      <div className="ml-auto flex items-center gap-2">
+                        <ModelCapabilityBadges
+                          capabilities={model.capabilities}
+                        />
+                        <ContextLengthIndicator
+                          contextLength={model.capabilities?.contextLength}
+                        />
+                        <PricingIndicator
+                          pricePerMillionInput={
+                            model.capabilities?.pricePerMillionInput
+                          }
+                          pricePerMillionOutput={
+                            model.capabilities?.pricePerMillionOutput
+                          }
+                        />
+                        {selectedModel === model.id ? (
+                          <CheckIcon className="size-4" />
+                        ) : (
+                          <div className="size-4" />
+                        )}
+                      </div>
+                    </ModelSelectorItem>
+                  );
+                })}
               </ModelSelectorGroup>
             ))}
           </ModelSelectorList>

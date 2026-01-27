@@ -73,7 +73,7 @@ function ConnectingView({
             <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
-                Connection attempt {attemptCount} failed. Retrying...
+                Still trying to connect (attempt {attemptCount})...
                 {elapsedSeconds > 0 && ` (${elapsedSeconds}s elapsed)`}
               </AlertDescription>
             </Alert>

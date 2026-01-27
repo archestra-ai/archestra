@@ -63,7 +63,9 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.getByText(/Connection attempt 3 failed/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Still trying to connect \(attempt 3\)/),
+    ).toBeInTheDocument();
     expect(screen.getByText(/5s elapsed/)).toBeInTheDocument();
   });
 
@@ -167,7 +169,9 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.getByText(/Connection attempt 1 failed/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Still trying to connect \(attempt 1\)/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/elapsed/)).not.toBeInTheDocument();
   });
 

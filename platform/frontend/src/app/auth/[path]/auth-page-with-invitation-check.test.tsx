@@ -50,16 +50,6 @@ vi.mock("@/components/default-credentials-warning", () => ({
   )),
 }));
 
-// Mock useBackendConnectivity to always return connected status
-vi.mock("@/lib/backend-connectivity", () => ({
-  useBackendConnectivity: vi.fn(() => ({
-    status: "connected",
-    attemptCount: 0,
-    elapsedMs: 0,
-    retry: vi.fn(),
-  })),
-}));
-
 const mockRouterPush = vi.fn();
 const mockRetry = vi.fn();
 
@@ -368,7 +358,7 @@ describe("AuthPageWithInvitationCheck", () => {
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
       expect(
-        screen.getByText(/Connection attempt 3 failed/),
+        screen.getByText(/Still trying to connect \(attempt 3\)/),
       ).toBeInTheDocument();
       expect(screen.getByText(/5s elapsed/)).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();

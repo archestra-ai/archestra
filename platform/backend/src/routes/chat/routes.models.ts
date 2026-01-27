@@ -12,11 +12,11 @@ import {
   createGoogleGenAIClient,
   isVertexAiEnabled,
 } from "@/clients/gemini-client";
+import { openRouterModelRegistry } from "@/clients/openrouter-model-registry";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, ModelMetadataModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { openRouterModelRegistry } from "@/clients/openrouter-model-registry";
 import {
   type Anthropic,
   constructResponseSchema,

@@ -44,6 +44,16 @@ vi.mock("@/components/default-credentials-warning", () => ({
   )),
 }));
 
+// Mock useBackendConnectivity to always return connected status
+vi.mock("@/lib/backend-connectivity", () => ({
+  useBackendConnectivity: vi.fn(() => ({
+    status: "connected",
+    attemptCount: 0,
+    elapsedMs: 0,
+    retry: vi.fn(),
+  })),
+}));
+
 const mockRouterPush = vi.fn();
 
 describe("AuthPageWithInvitationCheck", () => {

@@ -174,7 +174,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
-  bedrock: "amazon.nova-2-lite-v1:0", // Bedrock's fast model, which should be available in all regions for on-demand inference
+  bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, which should be available in all regions for on-demand inference
 };
 
 /**
@@ -187,6 +187,7 @@ export function createDirectLLMModel(params: {
   modelName: string;
 }): LLMModel {
   const { provider, apiKey, modelName } = params;
+  logger.info({ provider, apiKey, modelName }, "Creating direct LLM model");
 
   if (provider === "anthropic") {
     if (!apiKey) {
@@ -303,6 +304,30 @@ export function createDirectLLMModel(params: {
     const client = createOpenAI({
       apiKey,
       baseURL: config.chat.zhipuai.baseUrl,
+    });
+    return client(modelName);
+  }
+
+  if (provider === "bedrock") {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Amazon Bedrock API key is required. Please configure ARCHESTRA_CHAT_BEDROCK_API_KEY.",
+      );
+    }
+    // Extract region from Bedrock base URL if configured
+    const baseUrl = config.llm.bedrock.baseUrl;
+    const regionMatch = baseUrl.match(/bedrock-runtime\.([a-z0-9-]+)\./);
+    const region = regionMatch?.[1] || "us-east-1";
+
+    const client = createAmazonBedrock({
+      apiKey,
+      region,
+      baseURL: config.llm.bedrock.baseUrl,
+      secretAccessKey: undefined,
+      accessKeyId: undefined,
+      sessionToken: undefined,
+      credentialProvider: undefined,
     });
     return client(modelName);
   }

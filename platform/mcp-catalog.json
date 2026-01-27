@@ -1,0 +1,42 @@
+[
+  {
+    "id": "mcp-ui-filesystem",
+    "name": "MCP UI Filesystem",
+    "description": "File system operations MCP with UI support for browsing and managing files",
+    "version": "1.0.0",
+    "author": "MCP UI Org",
+    "repository": "https://github.com/MCP-UI-Org/mcp-ui",
+    "category": "file-system",
+    "tags": ["filesystem", "ui", "files", "directories"],
+    "config": {
+      "command": "npx",
+      "args": ["@mcp-ui/filesystem"],
+      "env": {}
+    },
+    "ui_enabled": true,
+    "gateway_compatible": true,
+    "llm_gateway_compatible": true,
+    "tested": true
+  },
+  {
+    "id": "mcp-ui-database", 
+    "name": "MCP UI Database",
+    "description": "Database operations MCP with UI support for querying and managing databases",
+    "version": "1.0.0",
+    "author": "MCP UI Org", 
+    "repository": "https://github.com/MCP-UI-Org/mcp-ui",
+    "category": "database",
+    "tags": ["database", "ui", "sql", "queries"],
+    "config": {
+      "command": "npx",
+      "args": ["@mcp-ui/database"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}"
+      }
+    },
+    "ui_enabled": true,
+    "gateway_compatible": true, 
+    "llm_gateway_compatible": true,
+    "tested": true
+  }
+]

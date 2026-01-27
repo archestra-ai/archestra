@@ -25,6 +25,7 @@ import { AgentDialog } from "@/components/agent-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
+import { LoadingWrapper } from "@/components/loading-wrapper";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -268,11 +269,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
-
-  // Show loading state only on initial load (not when we have initialData)
-  if (isPending && !initialData?.agents) {
-    return <LoadingSpinner />;
-  }
+  const showLoading = isPending && !initialData?.agents;
 
   const columns: ColumnDef<AgentData>[] = [
     {
@@ -419,125 +416,127 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   ];
 
   return (
-    <PageLayout
-      title="Agents"
-      description={
-        <p className="text-sm text-muted-foreground">
-          Agents are internal AI assistants with system prompts, tools, and
-          integrations like ChatOps, email, and A2A.{" "}
-          <a
-            href="https://archestra.ai/docs/platform-agents"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
+    <LoadingWrapper isPending={showLoading} skeleton={<LoadingSpinner />}>
+      <PageLayout
+        title="Agents"
+        description={
+          <p className="text-sm text-muted-foreground">
+            Agents are internal AI assistants with system prompts, tools, and
+            integrations like ChatOps, email, and A2A.{" "}
+            <a
+              href="https://archestra.ai/docs/platform-agents"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              Read more in the docs
+            </a>
+          </p>
+        }
+        actionButton={
+          <PermissionButton
+            permissions={{ profile: ["create"] }}
+            onClick={() => setIsCreateDialogOpen(true)}
+            data-testid={E2eTestId.CreateAgentButton}
           >
-            Read more in the docs
-          </a>
-        </p>
-      }
-      actionButton={
-        <PermissionButton
-          permissions={{ profile: ["create"] }}
-          onClick={() => setIsCreateDialogOpen(true)}
-          data-testid={E2eTestId.CreateAgentButton}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create Agent
-        </PermissionButton>
-      }
-    >
-      <div>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Agent
+          </PermissionButton>
+        }
+      >
         <div>
-          <div className="mb-6 flex items-center gap-4">
-            <Button variant="outline" asChild>
-              <Link href="/agents/builder">
-                <Grip className="mr-2 h-4 w-4" />
-                Agent Builder
-              </Link>
-            </Button>
-            <div className="relative max-w-md flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <DebouncedInput
-                placeholder="Search agents by name..."
-                initialValue={searchQuery}
-                onChange={handleSearchChange}
-                className="pl-9"
-              />
+          <div>
+            <div className="mb-6 flex items-center gap-4">
+              <Button variant="outline" asChild>
+                <Link href="/agents/builder">
+                  <Grip className="mr-2 h-4 w-4" />
+                  Agent Builder
+                </Link>
+              </Button>
+              <div className="relative max-w-md flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <DebouncedInput
+                  placeholder="Search agents by name..."
+                  initialValue={searchQuery}
+                  onChange={handleSearchChange}
+                  className="pl-9"
+                />
+              </div>
             </div>
+
+            {!agents || agents.length === 0 ? (
+              <div className="text-muted-foreground">
+                {nameFilter
+                  ? "No agents found matching your search"
+                  : "No agents found"}
+              </div>
+            ) : (
+              <div data-testid={E2eTestId.AgentsTable}>
+                <DataTable
+                  columns={columns}
+                  data={agents}
+                  sorting={sorting}
+                  onSortingChange={handleSortingChange}
+                  manualSorting={true}
+                  manualPagination={true}
+                  pagination={{
+                    pageIndex,
+                    pageSize,
+                    total: pagination?.total || 0,
+                  }}
+                  onPaginationChange={handlePaginationChange}
+                />
+              </div>
+            )}
+
+            <AgentDialog
+              open={isCreateDialogOpen}
+              onOpenChange={setIsCreateDialogOpen}
+              agentType="agent"
+              onCreated={(agent) => {
+                setIsCreateDialogOpen(false);
+                setConnectingAgent({ ...agent, agentType: "agent" });
+              }}
+              onViewVersionHistory={setVersionHistoryAgent}
+            />
+
+            {connectingAgent && (
+              <ConnectAgentDialog
+                agent={connectingAgent}
+                open={!!connectingAgent}
+                onOpenChange={(open) => !open && setConnectingAgent(null)}
+              />
+            )}
+
+            <AgentDialog
+              open={!!editingAgent}
+              onOpenChange={(open) => !open && setEditingAgent(null)}
+              agent={editingAgent}
+              agentType="agent"
+              onViewVersionHistory={setVersionHistoryAgent}
+            />
+
+            <PromptVersionHistoryDialog
+              open={!!versionHistoryAgent}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setVersionHistoryAgent(null);
+                }
+              }}
+              agent={versionHistoryAgent}
+            />
+
+            {deletingAgentId && (
+              <DeleteAgentDialog
+                agentId={deletingAgentId}
+                open={!!deletingAgentId}
+                onOpenChange={(open) => !open && setDeletingAgentId(null)}
+              />
+            )}
           </div>
-
-          {!agents || agents.length === 0 ? (
-            <div className="text-muted-foreground">
-              {nameFilter
-                ? "No agents found matching your search"
-                : "No agents found"}
-            </div>
-          ) : (
-            <div data-testid={E2eTestId.AgentsTable}>
-              <DataTable
-                columns={columns}
-                data={agents}
-                sorting={sorting}
-                onSortingChange={handleSortingChange}
-                manualSorting={true}
-                manualPagination={true}
-                pagination={{
-                  pageIndex,
-                  pageSize,
-                  total: pagination?.total || 0,
-                }}
-                onPaginationChange={handlePaginationChange}
-              />
-            </div>
-          )}
-
-          <AgentDialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-            agentType="agent"
-            onCreated={(agent) => {
-              setIsCreateDialogOpen(false);
-              setConnectingAgent({ ...agent, agentType: "agent" });
-            }}
-            onViewVersionHistory={setVersionHistoryAgent}
-          />
-
-          {connectingAgent && (
-            <ConnectAgentDialog
-              agent={connectingAgent}
-              open={!!connectingAgent}
-              onOpenChange={(open) => !open && setConnectingAgent(null)}
-            />
-          )}
-
-          <AgentDialog
-            open={!!editingAgent}
-            onOpenChange={(open) => !open && setEditingAgent(null)}
-            agent={editingAgent}
-            agentType="agent"
-            onViewVersionHistory={setVersionHistoryAgent}
-          />
-
-          <PromptVersionHistoryDialog
-            open={!!versionHistoryAgent}
-            onOpenChange={(open) => {
-              if (!open) {
-                setVersionHistoryAgent(null);
-              }
-            }}
-            agent={versionHistoryAgent}
-          />
-
-          {deletingAgentId && (
-            <DeleteAgentDialog
-              agentId={deletingAgentId}
-              open={!!deletingAgentId}
-              onOpenChange={(open) => !open && setDeletingAgentId(null)}
-            />
-          )}
         </div>
-      </div>
-    </PageLayout>
+      </PageLayout>
+    </LoadingWrapper>
   );
 }
 

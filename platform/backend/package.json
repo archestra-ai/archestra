@@ -34,6 +34,7 @@
     "@ai-sdk/cohere": "^3.0.8",
     "@ai-sdk/google": "^3.0.9",
     "@ai-sdk/google-vertex": "^4.0.28",
+    "@ai-sdk/mistral": "^3.0.9",
     "@ai-sdk/openai": "^3.0.11",
     "@anthropic-ai/sdk": "^0.71.2",
     "@anthropic-ai/tokenizer": "^0.0.4",

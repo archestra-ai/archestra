@@ -9,6 +9,7 @@
  * the most recent ones intact so the LLM can work with current state.
  */
 
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import logger from "@/logging";
 import {
   estimateToolResultContentLength,
@@ -209,7 +210,8 @@ function createPlaceholder(
   toolName: string,
   content: string | unknown,
 ): string {
-  const shortName = toolName.split("__").pop() || toolName;
+  const shortName =
+    toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() || toolName;
   const url = extractPageUrl(content);
   return `[Page ${url} ${shortName} was here]`;
 }

@@ -6,10 +6,11 @@ import { ArchestraArchitectureDiagram } from "@/components/archestra-architectur
 import type { ArchitectureTabType } from "@/components/architecture-diagram/architecture-diagram";
 import { ConnectionOptions } from "@/components/connection-options";
 import { PageLayout } from "@/components/page-layout";
-import { useDefaultProfile } from "@/lib/agent.query";
+import { useDefaultLlmProxy, useDefaultMcpGateway } from "@/lib/agent.query";
 
 export default function ConnectionPage() {
-  const { data: defaultProfile } = useDefaultProfile();
+  const { data: defaultMcpGateway } = useDefaultMcpGateway();
+  const { data: defaultLlmProxy } = useDefaultLlmProxy();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
 
@@ -26,8 +27,9 @@ export default function ConnectionPage() {
   return (
     <PageLayout
       title="Connect"
-      description="Connect your AI agents through LLM Gateway or MCP Gateway"
+      description="Connect your AI agents through LLM Proxy or MCP Gateway"
     >
+      <span id="chunk-test" className="hidden" />
       <div className="space-y-8">
         {/* Architecture & Connection */}
         <div>
@@ -40,7 +42,8 @@ export default function ConnectionPage() {
             </div>
             <div>
               <ConnectionOptions
-                agentId={defaultProfile?.id}
+                mcpGatewayId={defaultMcpGateway?.id}
+                llmProxyId={defaultLlmProxy?.id}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
               />

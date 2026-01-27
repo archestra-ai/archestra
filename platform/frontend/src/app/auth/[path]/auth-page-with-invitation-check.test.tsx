@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useBackendConnectivity } from "@/lib/backend-connectivity";
 import { useInvitationCheck } from "@/lib/invitation.query";
 import { AuthPageWithInvitationCheck } from "./auth-page-with-invitation-check";
 
@@ -13,6 +14,11 @@ vi.mock("next/navigation", () => ({
 // Mock invitation query
 vi.mock("@/lib/invitation.query", () => ({
   useInvitationCheck: vi.fn(),
+}));
+
+// Mock backend connectivity
+vi.mock("@/lib/backend-connectivity", () => ({
+  useBackendConnectivity: vi.fn(),
 }));
 
 // Mock config
@@ -45,6 +51,7 @@ vi.mock("@/components/default-credentials-warning", () => ({
 }));
 
 const mockRouterPush = vi.fn();
+const mockRetry = vi.fn();
 
 describe("AuthPageWithInvitationCheck", () => {
   beforeEach(() => {
@@ -52,6 +59,13 @@ describe("AuthPageWithInvitationCheck", () => {
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
+    // Default to connected state so existing tests work
+    vi.mocked(useBackendConnectivity).mockReturnValue({
+      status: "connected",
+      attemptCount: 0,
+      elapsedMs: 0,
+      retry: mockRetry,
+    });
   });
 
   describe("sign-in page", () => {
@@ -301,6 +315,122 @@ describe("AuthPageWithInvitationCheck", () => {
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
       expect(screen.getByTestId("auth-callback")).toHaveTextContent("/");
+    });
+  });
+
+  describe("backend connectivity", () => {
+    it("should show connecting message instead of login form when backend is connecting", () => {
+      vi.mocked(useSearchParams).mockReturnValue({
+        get: vi.fn().mockReturnValue(null),
+      } as unknown as ReturnType<typeof useSearchParams>);
+      vi.mocked(useInvitationCheck).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+      } as ReturnType<typeof useInvitationCheck>);
+      vi.mocked(useBackendConnectivity).mockReturnValue({
+        status: "connecting",
+        attemptCount: 0,
+        elapsedMs: 0,
+        retry: mockRetry,
+      });
+
+      render(<AuthPageWithInvitationCheck path="sign-in" />);
+
+      expect(screen.getByText("Connecting to Server")).toBeInTheDocument();
+      expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
+    });
+
+    it("should show retry information when connection attempts have failed", () => {
+      vi.mocked(useSearchParams).mockReturnValue({
+        get: vi.fn().mockReturnValue(null),
+      } as unknown as ReturnType<typeof useSearchParams>);
+      vi.mocked(useInvitationCheck).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+      } as ReturnType<typeof useInvitationCheck>);
+      vi.mocked(useBackendConnectivity).mockReturnValue({
+        status: "connecting",
+        attemptCount: 3,
+        elapsedMs: 5000,
+        retry: mockRetry,
+      });
+
+      render(<AuthPageWithInvitationCheck path="sign-in" />);
+
+      expect(
+        screen.getByText(/Still trying to connect \(attempt 3\)/),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/5s elapsed/)).toBeInTheDocument();
+      expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
+    });
+
+    it("should show unreachable message instead of login form when backend is unreachable", () => {
+      vi.mocked(useSearchParams).mockReturnValue({
+        get: vi.fn().mockReturnValue(null),
+      } as unknown as ReturnType<typeof useSearchParams>);
+      vi.mocked(useInvitationCheck).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+      } as ReturnType<typeof useInvitationCheck>);
+      vi.mocked(useBackendConnectivity).mockReturnValue({
+        status: "unreachable",
+        attemptCount: 5,
+        elapsedMs: 60000,
+        retry: mockRetry,
+      });
+
+      render(<AuthPageWithInvitationCheck path="sign-in" />);
+
+      expect(screen.getByText("Unable to Connect")).toBeInTheDocument();
+      expect(screen.getByText("Server Unreachable")).toBeInTheDocument();
+      expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
+    });
+
+    it("should call retry when Try Again button is clicked", () => {
+      vi.mocked(useSearchParams).mockReturnValue({
+        get: vi.fn().mockReturnValue(null),
+      } as unknown as ReturnType<typeof useSearchParams>);
+      vi.mocked(useInvitationCheck).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+      } as ReturnType<typeof useInvitationCheck>);
+      vi.mocked(useBackendConnectivity).mockReturnValue({
+        status: "unreachable",
+        attemptCount: 5,
+        elapsedMs: 60000,
+        retry: mockRetry,
+      });
+
+      render(<AuthPageWithInvitationCheck path="sign-in" />);
+
+      const retryButton = screen.getByRole("button", { name: /Try Again/i });
+      fireEvent.click(retryButton);
+
+      expect(mockRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it("should show login form when backend is connected", () => {
+      vi.mocked(useSearchParams).mockReturnValue({
+        get: vi.fn().mockReturnValue(null),
+      } as unknown as ReturnType<typeof useSearchParams>);
+      vi.mocked(useInvitationCheck).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+      } as ReturnType<typeof useInvitationCheck>);
+      vi.mocked(useBackendConnectivity).mockReturnValue({
+        status: "connected",
+        attemptCount: 0,
+        elapsedMs: 0,
+        retry: mockRetry,
+      });
+
+      render(<AuthPageWithInvitationCheck path="sign-in" />);
+
+      expect(screen.getByTestId("auth-view")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Connecting to Server"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("Unable to Connect")).not.toBeInTheDocument();
     });
   });
 });

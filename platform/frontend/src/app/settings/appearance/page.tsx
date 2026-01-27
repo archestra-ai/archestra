@@ -61,6 +61,7 @@ export default function AppearanceSettingsPage() {
 
   return (
     <div>
+      <span id="chunk-test" className="hidden" />
       <div className="space-y-6">
         <LightDarkToggle currentThemeId={currentUITheme} />
         <LogoUpload currentLogo={logo} onLogoChange={handleLogoChange} />

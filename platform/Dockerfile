@@ -163,7 +163,17 @@ COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public
 COPY --from=builder /app/frontend/.next/standalone ./
+
+# Copy previous version's static assets first (from CI build context)
+# Content-hashed filenames ensure no conflicts between versions
+COPY prev-static-assets/ ./frontend/.next/static/
+
+# Copy current build's assets on top
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
+
+# Keep a clean copy of ONLY this build's assets (not accumulated)
+# CI will extract from this path for the NEXT deployment
+COPY --from=builder /app/frontend/.next/static /static-assets-source/
 
 # Create base supervisord configuration (without postgres)
 #
@@ -295,6 +305,14 @@ fi
 if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     echo "ARCHESTRA_QUICKSTART=true detected"
     echo "Quickstart mode enabled - initializing embedded KinD cluster..."
+
+    # Set default frontend URL for quickstart mode if not already set
+    # This is required to disable secure cookies (NODE_ENV=production enables HTTPS-only cookies by default)
+    # Without this, authentication fails over HTTP connections
+    if [ -z "$ARCHESTRA_FRONTEND_URL" ]; then
+        export ARCHESTRA_FRONTEND_URL="http://localhost:3000"
+        echo "Set ARCHESTRA_FRONTEND_URL to $ARCHESTRA_FRONTEND_URL (required for HTTP connections)"
+    fi
     if [ ! -S /var/run/docker.sock ]; then
         echo "Quickstart mode is on but Docker socket is not mounted"
         echo "Add: -v /var/run/docker.sock:/var/run/docker.sock to your docker run command"

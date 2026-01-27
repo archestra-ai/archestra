@@ -1,22 +1,23 @@
 "use client";
 
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
-import type { ComponentProps, ComponentType } from "react";
-import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
+import type { ComponentProps } from "react";
+import {
+  type FallbackProps,
+  ErrorBoundary as ReactErrorBoundary,
+} from "react-error-boundary";
 import { ClientErrorFallback } from "@/components/error-fallback";
-
-type FallbackProps = {
-  error: Error;
-  resetErrorBoundary: () => void;
-};
 
 function DefaultFallbackComponent({
   error,
   resetErrorBoundary,
 }: FallbackProps) {
+  const errorMessage =
+    error instanceof Error ? error.message : "An unknown error occurred";
+  const errorStack = error instanceof Error ? error.stack : undefined;
   return (
     <ClientErrorFallback
-      error={{ message: error.message, stack: error.stack }}
+      error={{ message: errorMessage, stack: errorStack }}
       resetErrorBoundary={resetErrorBoundary}
     />
   );
@@ -28,10 +29,10 @@ export function ErrorBoundary({
   onReset,
 }: {
   children: React.ReactNode;
-  FallbackComponent?: ComponentType<FallbackProps>;
+  FallbackComponent?: React.ComponentType<FallbackProps>;
   onReset?: ComponentProps<typeof ReactErrorBoundary>["onReset"];
 }) {
-  const onError = (_error: Error) => {
+  const onError = (_error: unknown) => {
     // we can do sth else with the error here
   };
 

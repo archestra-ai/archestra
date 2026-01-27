@@ -138,6 +138,33 @@ const cerebrasConfig: TokenCostLimitTestConfig = {
   },
 };
 
+const mistralConfig: TokenCostLimitTestConfig = {
+  providerName: "Mistral",
+
+  endpoint: (profileId) => `/v1/mistral/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-mistral-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+
+  modelName: "test-mistral-cost-limit",
+
+  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  tokenPrice: {
+    provider: "mistral",
+    model: "test-mistral-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 const vllmConfig: TokenCostLimitTestConfig = {
   providerName: "vLLM",
 
@@ -256,6 +283,7 @@ const testConfigs: TokenCostLimitTestConfig[] = [
   geminiConfig,
   cohereConfig,
   cerebrasConfig,
+  mistralConfig,
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,

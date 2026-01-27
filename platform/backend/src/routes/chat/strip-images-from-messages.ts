@@ -12,6 +12,7 @@
  * no value and only burns tokens on future requests.
  */
 
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import logger from "@/logging";
 import {
   estimateToolResultContentLength,
@@ -101,7 +102,8 @@ function createBrowserToolPlaceholder(
   toolName: string,
   content: unknown,
 ): string {
-  const shortName = toolName.split("__").pop() || toolName;
+  const shortName =
+    toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() || toolName;
   const url = extractPageUrl(content);
   return `[Page ${url} ${shortName} was here]`;
 }

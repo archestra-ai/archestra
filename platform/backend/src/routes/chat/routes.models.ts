@@ -232,6 +232,44 @@ async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Mistral API (OpenAI-compatible)
+ */
+async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.chat.mistral.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Mistral models",
+    );
+    throw new Error(`Failed to fetch Mistral models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "mistral" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from vLLM API
  * vLLM exposes an OpenAI-compatible /models endpoint
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
@@ -589,6 +627,8 @@ async function getProviderApiKey({
       return config.chat.anthropic.apiKey || null;
     case "cerebras":
       return config.chat.cerebras.apiKey || null;
+    case "mistral":
+      return config.chat.mistral.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
     case "openai":
@@ -614,6 +654,7 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   cerebras: fetchCerebrasModels,
   gemini: fetchGeminiModels,
+  mistral: fetchMistralModels,
   openai: fetchOpenAiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
@@ -670,7 +711,11 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "cerebras", "openai", "cohere"].includes(provider)) {
+    if (
+      ["anthropic", "cerebras", "cohere", "mistral", "openai"].includes(
+        provider,
+      )
+    ) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

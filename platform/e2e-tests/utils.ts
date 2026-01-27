@@ -1,10 +1,9 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
 import { type APIRequestContext, expect, type Page } from "@playwright/test";
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, DEFAULT_MCP_GATEWAY_NAME } from "@shared";
 import { testMcpServerCommand } from "@shared/test-mcp-server";
 import {
   API_BASE_URL,
-  DEFAULT_PROFILE_NAME,
   DEFAULT_TEAM_NAME,
   E2eTestId,
   ENGINEERING_TEAM_NAME,
@@ -86,7 +85,17 @@ export async function addCustomSelfHostedCatalogItem({
   }
   await page.getByRole("button", { name: "Add Server" }).click();
   await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1_000);
+
+  // After adding a server, the install dialog opens automatically.
+  // Close it so the calling test can control when to open it.
+  // Wait for the install dialog to appear and then close it by pressing Escape.
+  await page
+    .getByRole("dialog")
+    .filter({ hasText: /Install -/ })
+    .waitFor({ state: "visible", timeout: 10000 });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+
   const catalogItems = await archestraApiSdk.getInternalMcpCatalog({
     headers: { Cookie: cookieHeaders },
   });
@@ -158,9 +167,9 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   // Wait for dialog to open
   await page.waitForLoadState("networkidle");
 
-  // The new McpAssignmentsDialog shows profile pills - click on "Default Profile" to open popover
+  // The new McpAssignmentsDialog shows profile pills - click on "Default MCP Gateway" to open popover
   const profilePill = page.getByRole("button", {
-    name: new RegExp(`${DEFAULT_PROFILE_NAME}.*\\(\\d+/\\d+\\)`),
+    name: new RegExp(`${DEFAULT_MCP_GATEWAY_NAME}.*\\(\\d+/\\d+\\)`),
   });
   await profilePill.waitFor({ state: "visible", timeout: 10_000 });
   await profilePill.click();
@@ -208,20 +217,20 @@ export async function verifyToolCallResultViaApi({
   toolName: string;
   cookieHeaders: string;
 }) {
-  const defaultAgentResponse = await archestraApiSdk.getDefaultAgent({
+  const defaultMcpGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
     headers: { Cookie: cookieHeaders },
   });
-  if (defaultAgentResponse.error) {
+  if (defaultMcpGatewayResponse.error) {
     throw new Error(
-      `Failed to get default agent: ${JSON.stringify(defaultAgentResponse.error)}`,
+      `Failed to get default MCP gateway: ${JSON.stringify(defaultMcpGatewayResponse.error)}`,
     );
   }
-  if (!defaultAgentResponse.data) {
+  if (!defaultMcpGatewayResponse.data) {
     throw new Error(
-      `No default agent returned from API. Response: ${JSON.stringify(defaultAgentResponse)}`,
+      `No default MCP gateway returned from API. Response: ${JSON.stringify(defaultMcpGatewayResponse)}`,
     );
   }
-  const defaultProfile = defaultAgentResponse.data;
+  const defaultProfile = defaultMcpGatewayResponse.data;
 
   let token: string;
   if (tokenToUse === "default-team") {
@@ -349,32 +358,24 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
     );
   }
 
-  // 2. Get all profiles and find Default Agent
-  const agentsResponse = await archestraApiSdk.getAgents({
+  // 2. Get the default MCP Gateway profile
+  const defaultMcpGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
     headers: { Cookie: cookieHeaders },
   });
 
   // Check for API errors
-  if (agentsResponse.error) {
+  if (defaultMcpGatewayResponse.error) {
     throw new Error(
-      `Failed to get agents: ${JSON.stringify(agentsResponse.error)}`,
+      `Failed to get default MCP gateway: ${JSON.stringify(defaultMcpGatewayResponse.error)}`,
     );
   }
-  if (!agentsResponse.data?.data || agentsResponse.data.data.length === 0) {
+  if (!defaultMcpGatewayResponse.data) {
     throw new Error(
-      `No agents returned from API. Response: ${JSON.stringify(agentsResponse)}`,
+      `No default MCP gateway returned from API. Response: ${JSON.stringify(defaultMcpGatewayResponse)}`,
     );
   }
 
-  const defaultProfile = agentsResponse.data.data.find(
-    (agent) => agent.name === DEFAULT_PROFILE_NAME,
-  );
-  if (!defaultProfile) {
-    const profileNames = agentsResponse.data.data.map((a) => a.name).join(", ");
-    throw new Error(
-      `Profile "${DEFAULT_PROFILE_NAME}" not found. Available profiles: [${profileNames}]`,
-    );
-  }
+  const defaultProfile = defaultMcpGatewayResponse.data;
 
   // 3. Assign BOTH Default Team and Engineering Team to the profile
   const updateResponse = await archestraApiSdk.updateAgent({

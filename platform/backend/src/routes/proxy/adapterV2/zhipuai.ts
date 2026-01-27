@@ -528,10 +528,11 @@ class ZhipuaiResponseAdapter implements LLMResponseAdapter<ZhipuaiResponse> {
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.usage?.prompt_tokens ?? 0,
-      outputTokens: this.response.usage?.completion_tokens ?? 0,
-    };
+    if (!this.response.usage) {
+      return { inputTokens: 0, outputTokens: 0 };
+    }
+    const { input, output } = getUsageTokens(this.response.usage);
+    return { inputTokens: input, outputTokens: output };
   }
 
   getOriginalResponse(): ZhipuaiResponse {
@@ -937,6 +938,17 @@ async function convertToolResultsToToon(
 // =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
+
+// =============================================================================
+// USAGE TOKEN HELPERS
+// =============================================================================
+
+export function getUsageTokens(usage: Zhipuai.Types.Usage) {
+  return {
+    input: usage.prompt_tokens,
+    output: usage.completion_tokens,
+  };
+}
 
 export const zhipuaiAdapterFactory: LLMProvider<
   ZhipuaiRequest,

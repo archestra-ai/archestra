@@ -121,7 +121,215 @@ describe("AnthropicResponseAdapter", () => {
 });
 
 describe("AnthropicRequestAdapter", () => {
-  describe("toProviderRequest", () => {
+  describe("toProviderRequest - tool results handling", () => {
+    test("handles empty tool results (no tool_result blocks)", () => {
+      const messages = [
+        { role: "user", content: "Hello" },
+      ] as Anthropic.Types.MessagesRequest["messages"];
+
+      const request = createMockRequest(messages);
+      const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("user");
+    });
+
+    test("preserves successful tool results in user message with tool_result blocks", () => {
+      const messages = [
+        { role: "user", content: "List issues" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "tool_123",
+              name: "github_mcp_server__list_issues",
+              input: { repo: "archestra-ai/archestra", count: 5 },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool_123",
+              content:
+                '{"issues":[{"number":1,"title":"First issue"},{"number":2,"title":"Second issue"}]}',
+              is_error: false,
+            },
+          ],
+        },
+      ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+
+      const request = createMockRequest(messages);
+      const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      expect(result.messages).toHaveLength(3);
+      const toolResultMessage = result.messages[2];
+      expect(toolResultMessage.role).toBe("user");
+      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+
+      const content = toolResultMessage.content as Array<{
+        type: string;
+        tool_use_id?: string;
+        content?: string;
+        is_error?: boolean;
+      }>;
+      expect(content[0].type).toBe("tool_result");
+      expect(content[0].tool_use_id).toBe("tool_123");
+      expect(content[0].is_error).toBe(false);
+    });
+
+    test("preserves error tool results with is_error flag", () => {
+      const messages = [
+        { role: "user", content: "List issues" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "tool_456",
+              name: "github_mcp_server__list_issues",
+              input: {},
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool_456",
+              content: "Error: GitHub API rate limit exceeded",
+              is_error: true,
+            },
+          ],
+        },
+      ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+
+      const request = createMockRequest(messages);
+      const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      const toolResultMessage = result.messages[2];
+      const content = toolResultMessage.content as Array<{
+        type: string;
+        tool_use_id?: string;
+        content?: string;
+        is_error?: boolean;
+      }>;
+      expect(content[0].type).toBe("tool_result");
+      expect(content[0].tool_use_id).toBe("tool_456");
+      expect(content[0].content).toBe("Error: GitHub API rate limit exceeded");
+      expect(content[0].is_error).toBe(true);
+    });
+
+    test("handles multiple tool results in single user message", () => {
+      const messages = [
+        { role: "user", content: "Do multiple things" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "tool_1",
+              name: "test_tool",
+              input: {},
+            },
+            {
+              type: "tool_use",
+              id: "tool_2",
+              name: "test_tool",
+              input: {},
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool_1",
+              content: '"success"',
+              is_error: false,
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "tool_2",
+              content: "Error: Failed",
+              is_error: true,
+            },
+          ],
+        },
+      ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+
+      const request = createMockRequest(messages);
+      const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      const toolResultMessage = result.messages[2];
+      const content = toolResultMessage.content as Array<{
+        type: string;
+        tool_use_id?: string;
+        content?: string;
+        is_error?: boolean;
+      }>;
+
+      expect(content).toHaveLength(2);
+      expect(content[0].tool_use_id).toBe("tool_1");
+      expect(content[0].is_error).toBe(false);
+      expect(content[1].tool_use_id).toBe("tool_2");
+      expect(content[1].is_error).toBe(true);
+    });
+
+    test("updateToolResult modifies existing tool result content", () => {
+      const messages = [
+        { role: "user", content: "Get data" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "tool_123",
+              name: "fetch_data",
+              input: {},
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool_123",
+              content: '{"original": "data"}',
+              is_error: false,
+            },
+          ],
+        },
+      ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+
+      const request = createMockRequest(messages);
+      const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+      adapter.updateToolResult(
+        "tool_123",
+        '{"modified": "data", "extra": "field"}',
+      );
+      const result = adapter.toProviderRequest();
+
+      const toolResultMessage = result.messages[2];
+      const content = toolResultMessage.content as Array<{
+        type: string;
+        content?: string;
+      }>;
+      expect(content[0].content).toBe('{"modified": "data", "extra": "field"}');
+    });
+  });
+
+  describe("toProviderRequest - MCP image handling", () => {
     test("converts MCP image blocks in tool results", () => {
       const originalBrowserStreaming = config.features.browserStreamingEnabled;
       config.features.browserStreamingEnabled = true;

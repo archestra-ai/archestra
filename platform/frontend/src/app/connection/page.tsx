@@ -29,6 +29,7 @@ export default function ConnectionPage() {
       title="Connect"
       description="Connect your AI agents through LLM Proxy or MCP Gateway"
     >
+      <span id="chunk-test" className="hidden" />
       <div className="space-y-8">
         {/* Architecture & Connection */}
         <div>

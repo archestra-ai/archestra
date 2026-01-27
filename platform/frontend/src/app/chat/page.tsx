@@ -907,6 +907,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen w-full">
+      <span id="chunk-test" className="hidden" />
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />

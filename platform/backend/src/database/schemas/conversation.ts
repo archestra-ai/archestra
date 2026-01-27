@@ -9,7 +9,6 @@ import {
 import type { SupportedChatProvider } from "@/types";
 import agentsTable from "./agent";
 import chatApiKeysTable from "./chat-api-key";
-import promptsTable from "./prompt";
 
 // Note: Additional pg_trgm GIN index for search is created in migration 0116_pg_trgm_indexes.sql:
 // - conversations_title_trgm_idx: GIN index on title column
@@ -20,9 +19,6 @@ const conversationsTable = pgTable("conversations", {
   agentId: uuid("agent_id")
     .notNull()
     .references(() => agentsTable.id, { onDelete: "cascade" }),
-  promptId: uuid("prompt_id").references(() => promptsTable.id, {
-    onDelete: "set null",
-  }),
   chatApiKeyId: uuid("chat_api_key_id").references(() => chatApiKeysTable.id, {
     onDelete: "set null",
   }),

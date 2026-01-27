@@ -126,7 +126,9 @@ export function InvitationsList({
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {error?.message || "Failed to load invitations"}
+                  {error instanceof Error
+                    ? error.message
+                    : "Failed to load invitations"}
                 </p>
                 <Button onClick={resetErrorBoundary} variant="outline">
                   Try Again

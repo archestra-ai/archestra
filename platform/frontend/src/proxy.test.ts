@@ -20,13 +20,14 @@ function createMockRequest(options: {
 describe("proxy", () => {
   const originalEnv = {
     ARCHESTRA_FRONTEND_URL: process.env.ARCHESTRA_FRONTEND_URL,
-    ARCHESTRA_API_BASE_URL: process.env.ARCHESTRA_API_BASE_URL,
+    ARCHESTRA_INTERNAL_API_BASE_URL:
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL,
   };
 
   beforeEach(() => {
     // Reset env vars before each test
     delete process.env.ARCHESTRA_FRONTEND_URL;
-    delete process.env.ARCHESTRA_API_BASE_URL;
+    delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
     // Suppress console.log during tests
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
@@ -38,10 +39,11 @@ describe("proxy", () => {
     } else {
       delete process.env.ARCHESTRA_FRONTEND_URL;
     }
-    if (originalEnv.ARCHESTRA_API_BASE_URL) {
-      process.env.ARCHESTRA_API_BASE_URL = originalEnv.ARCHESTRA_API_BASE_URL;
+    if (originalEnv.ARCHESTRA_INTERNAL_API_BASE_URL) {
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL =
+        originalEnv.ARCHESTRA_INTERNAL_API_BASE_URL;
     } else {
-      delete process.env.ARCHESTRA_API_BASE_URL;
+      delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
     }
     vi.restoreAllMocks();
   });
@@ -185,7 +187,7 @@ describe("proxy", () => {
     });
 
     it("should use custom backend URL from env var", () => {
-      process.env.ARCHESTRA_API_BASE_URL = "https://api.example.com";
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL = "https://api.example.com";
 
       const request = createMockRequest({
         method: "POST",

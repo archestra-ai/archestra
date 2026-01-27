@@ -1,6 +1,12 @@
 archestra:
   replicaCount: 4
 
+  # Pod Disruption Budget: ensure at least 3 of 4 pods stay running during
+  # voluntary disruptions (node upgrades, autoscaling, maintenance)
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
   # Faster rolling updates: allow 2 pods to be created at once
   deploymentStrategy:
     type: RollingUpdate
@@ -12,6 +18,7 @@ archestra:
   # Uses Application Default Credentials (ADC) via GKE Workload Identity
   # instead of API keys for authentication
   env:
+    ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"

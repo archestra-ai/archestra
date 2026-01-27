@@ -126,7 +126,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgent]: {
     profile: ["read"],
   },
-  [RouteId.GetDefaultAgent]: {
+  [RouteId.GetDefaultMcpGateway]: {
+    profile: ["read"],
+  },
+  [RouteId.GetDefaultLlmProxy]: {
     profile: ["read"],
   },
   [RouteId.CreateAgent]: {
@@ -545,6 +548,19 @@ export const requiredEndpointPermissionsMap: Partial<
     profile: ["update"],
     prompt: ["read"],
   },
+  // Agent Delegation Routes (internal agents only)
+  [RouteId.GetAgentDelegations]: {
+    profile: ["read"],
+  },
+  [RouteId.SyncAgentDelegations]: {
+    profile: ["update"],
+  },
+  [RouteId.DeleteAgentDelegation]: {
+    profile: ["update"],
+  },
+  [RouteId.GetAllDelegationConnections]: {
+    profile: ["read"],
+  },
   [RouteId.GetLimits]: {
     limit: ["read"],
   },
@@ -676,7 +692,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteIncomingEmailSubscription]: {
     organization: ["update"],
   },
-  [RouteId.GetPromptEmailAddress]: {}, // Any authenticated user can view prompt email addresses
+  [RouteId.GetAgentEmailAddress]: {}, // Any authenticated user can view agent email addresses
 
   // ChatOps Routes (admin-only for management)
   [RouteId.GetChatOpsStatus]: {
@@ -699,7 +715,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     conversation: ["read"],
   },
 
-  "/profiles": {
+  "/mcp-gateways": {
+    profile: ["read"],
+  },
+  "/llm-proxies": {
+    profile: ["read"],
+  },
+  "/agents": {
     profile: ["read"],
   },
 

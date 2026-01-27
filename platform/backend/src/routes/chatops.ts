@@ -7,12 +7,13 @@ import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
 } from "@/agents/chatops/constants";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { isRateLimited } from "@/agents/utils";
+import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import {
+  AgentModel,
   ChatOpsChannelBindingModel,
   OrganizationModel,
-  PromptModel,
 } from "@/models";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
@@ -63,7 +64,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Rate limiting
       const clientIp = request.ip || "unknown";
-      if (await isRateLimited(clientIp)) {
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-chatops-${clientIp}` as AllowedCacheKey;
+      const rateLimitConfig = {
+        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+      };
+      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
         logger.warn(
           { ip: clientIp },
           "[ChatOps] Rate limit exceeded for MS Teams webhook",
@@ -199,8 +206,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 workspaceId: message.workspaceId,
               });
 
-              if (binding) {
-                const prompt = await PromptModel.findById(binding.promptId);
+              if (binding?.agentId) {
+                const agent = await AgentModel.findById(binding.agentId);
                 await context.sendActivity({
                   attachments: [
                     {
@@ -213,12 +220,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         body: [
                           {
                             type: "TextBlock",
-                            text: `This channel is bound to agent: **${prompt?.name || binding.promptId}** which means it will handle all requests in the channel by default.`,
+                            text: `This channel is bound to agent: **${agent?.name || binding.agentId}** which means it will handle all requests in the channel by default.`,
                             wrap: true,
                           },
                           {
                             type: "TextBlock",
-                            text: `**Tip:** You can use other agents by mentioning **@Archestra >AgentName** (e.g., @Archestra >Sales what's the status?).`,
+                            text: `**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @Archestra Sales > what's the status?).`,
                             wrap: true,
                           },
                           {
@@ -410,40 +417,6 @@ export default chatopsRoutes;
 // Internal Helpers (not exported)
 // =============================================================================
 
-interface RateLimitEntry {
-  count: number;
-  windowStart: number;
-}
-
-/**
- * Check if an IP is rate limited using the shared CacheManager
- */
-async function isRateLimited(ip: string): Promise<boolean> {
-  const now = Date.now();
-  const cacheKey = `${CacheKey.WebhookRateLimit}-chatops-${ip}` as const;
-  const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
-
-  if (!entry || now - entry.windowStart > CHATOPS_RATE_LIMIT.WINDOW_MS) {
-    await cacheManager.set(
-      cacheKey,
-      { count: 1, windowStart: now },
-      CHATOPS_RATE_LIMIT.WINDOW_MS * 2,
-    );
-    return false;
-  }
-
-  if (entry.count >= CHATOPS_RATE_LIMIT.MAX_REQUESTS) {
-    return true;
-  }
-
-  await cacheManager.set(
-    cacheKey,
-    { count: entry.count + 1, windowStart: entry.windowStart },
-    CHATOPS_RATE_LIMIT.WINDOW_MS * 2,
-  );
-  return false;
-}
-
 /**
  * Get the default organization ID (single-tenant mode)
  */
@@ -484,12 +457,12 @@ async function sendAgentSelectionCard(
   context: TurnContext,
   message: IncomingChatMessage,
 ): Promise<void> {
-  // Get available prompts (agents in UI) for MS Teams
-  const prompts = await PromptModel.findByAllowedChatopsProvider(
+  // Get available agents for MS Teams
+  const agents = await AgentModel.findByAllowedChatopsProvider(
     "ms-teams" as ChatOpsProviderType,
   );
 
-  if (prompts.length === 0) {
+  if (agents.length === 0) {
     await context.sendActivity(
       "No agents are configured for Microsoft Teams.\n" +
         "Please ask your administrator to enable Teams in the agent settings.",
@@ -498,9 +471,9 @@ async function sendAgentSelectionCard(
   }
 
   // Build choices for the dropdown
-  const choices = prompts.map((prompt) => ({
-    title: prompt.name,
-    value: prompt.id,
+  const choices = agents.map((agent) => ({
+    title: agent.name,
+    value: agent.id,
   }));
 
   // Check for existing binding to pre-select
@@ -526,9 +499,9 @@ async function sendAgentSelectionCard(
         },
         {
           type: "Input.ChoiceSet",
-          id: "promptId",
+          id: "agentId",
           style: "compact",
-          value: existingBinding.promptId,
+          value: existingBinding.agentId,
           choices,
         },
       ]
@@ -546,7 +519,7 @@ async function sendAgentSelectionCard(
         },
         {
           type: "TextBlock",
-          text: "**Tip:** You can use other agents by mentioning **@Archestra >AgentName** (e.g., @Archestra >Sales what's the status?).",
+          text: "**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @Archestra Sales > what's the status?).",
           wrap: true,
           spacing: "Small",
         },
@@ -580,7 +553,7 @@ async function sendAgentSelectionCard(
         },
         {
           type: "Input.ChoiceSet",
-          id: "promptId",
+          id: "agentId",
           style: "compact",
           value: choices[0]?.value || "",
           choices,
@@ -627,31 +600,31 @@ async function handleAgentSelection(
 ): Promise<void> {
   const value = context.activity.value as
     | {
-        promptId?: string;
+        agentId?: string;
         channelId?: string;
         workspaceId?: string;
         originalMessageText?: string;
       }
     | undefined;
-  const { promptId, channelId, workspaceId, originalMessageText } = value || {};
+  const { agentId, channelId, workspaceId, originalMessageText } = value || {};
 
-  if (!promptId) {
+  if (!agentId) {
     await context.sendActivity("Please select an agent from the dropdown.");
     return;
   }
 
-  // Verify the prompt exists and allows MS Teams
-  const prompt = await PromptModel.findById(promptId);
-  if (!prompt) {
+  // Verify the agent exists and allows MS Teams
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) {
     await context.sendActivity(
       "The selected agent no longer exists. Please try again.",
     );
     return;
   }
 
-  if (!prompt.allowedChatops?.includes("ms-teams")) {
+  if (!agent.allowedChatops?.includes("ms-teams")) {
     await context.sendActivity(
-      `The agent "${prompt.name}" is no longer available for Microsoft Teams. Please select a different agent.`,
+      `The agent "${agent.name}" is no longer available for Microsoft Teams. Please select a different agent.`,
     );
     return;
   }
@@ -659,19 +632,41 @@ async function handleAgentSelection(
   // Get the default organization
   const organizationId = await getDefaultOrganizationId();
 
+  logger.debug(
+    {
+      organizationId,
+      channelId: channelId || message.channelId,
+      workspaceId: workspaceId || message.workspaceId,
+      workspaceIdType: typeof (workspaceId || message.workspaceId),
+      agentId,
+      agentName: agent.name,
+      originalMessageText,
+    },
+    "[ChatOps] handleAgentSelection: about to upsert binding",
+  );
+
   // Create or update the binding
   await ChatOpsChannelBindingModel.upsertByChannel({
     organizationId,
     provider: "ms-teams",
     channelId: channelId || message.channelId,
     workspaceId: workspaceId || message.workspaceId,
-    promptId,
+    agentId,
   });
+
+  logger.debug("[ChatOps] handleAgentSelection: binding upserted");
 
   // If there was an original message (not a command), process it now
   if (originalMessageText && !isCommand(originalMessageText)) {
+    logger.debug(
+      { originalMessageText },
+      "[ChatOps] handleAgentSelection: about to send 'processing' message",
+    );
     await context.sendActivity(
-      `Agent **${prompt.name}** is now bound to this channel. Processing your message...`,
+      `Agent **${agent.name}** is now bound to this channel. Processing your message...`,
+    );
+    logger.debug(
+      "[ChatOps] handleAgentSelection: 'processing' message sent, about to call processMessage",
     );
 
     // Get the provider and process the original message
@@ -696,15 +691,28 @@ async function handleAgentSelection(
         },
       };
 
-      await chatOpsManager.processMessage({
+      // Use sendReply: false and handle the response/error here using the turn context
+      // This ensures replies appear in the correct thread
+      const result = await chatOpsManager.processMessage({
         message: originalMessage,
         provider,
-        sendReply: true,
+        sendReply: false,
       });
+
+      if (result.success && result.agentResponse) {
+        // Send agent response via turn context (ensures correct thread)
+        await context.sendActivity(
+          `${result.agentResponse}\n\n---\n_Via ${agent.name}_`,
+        );
+      } else if (!result.success && result.error) {
+        // Send error message via turn context (ensures correct thread)
+        const errorMessage = getSecurityErrorMessage(result.error);
+        await context.sendActivity(`⚠️ **Access Denied**\n\n${errorMessage}`);
+      }
     }
   } else {
     await context.sendActivity(
-      `Agent **${prompt.name}** is now bound to this channel.\n` +
+      `Agent **${agent.name}** is now bound to this channel.\n` +
         "Send a message (with @mention) to start interacting!",
     );
   }
@@ -715,4 +723,24 @@ async function handleAgentSelection(
  */
 function isCommand(text: string): boolean {
   return text.trim().startsWith("/");
+}
+
+/**
+ * Convert internal error codes to user-friendly messages
+ */
+function getSecurityErrorMessage(error: string): string {
+  if (error.includes("User.ReadBasic.All permission")) {
+    return "Could not verify your identity. The bot requires the `User.ReadBasic.All` Microsoft Graph API permission to be configured. Please contact your administrator.";
+  }
+  if (error.includes("not a registered Archestra user")) {
+    // Extract email from error message if present
+    const emailMatch = error.match(/Unauthorized: (.+?) is not/);
+    const email = emailMatch?.[1] || "Your email";
+    return `${email} is not a registered Archestra user. Contact your administrator for access.`;
+  }
+  if (error.includes("does not have access to this agent")) {
+    return "You don't have access to this agent. Contact your administrator for access.";
+  }
+  // Fallback for other errors
+  return error;
 }

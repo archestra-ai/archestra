@@ -170,7 +170,7 @@ export function ManageUsersDialog({
   ): string =>
     mcpServer.teamId
       ? mcpServer.teamDetails?.name || "Team"
-      : mcpServer.ownerEmail || "Unknown";
+      : mcpServer.ownerEmail || "Deleted user";
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

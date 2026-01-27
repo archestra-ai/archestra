@@ -19,7 +19,6 @@ import {
   InternalMcpCatalogModel,
   LimitModel,
   McpServerModel,
-  PromptAgentModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
@@ -109,8 +108,8 @@ export interface ArchestraContext {
   };
   conversationId?: string;
   userId?: string;
-  /** The ID of the current prompt (for agent tool lookup) */
-  promptId?: string;
+  /** The ID of the current internal agent (for agent delegation tool lookup) */
+  agentId?: string;
   /** The organization ID */
   organizationId?: string;
   /** Token authentication result */
@@ -118,9 +117,9 @@ export interface ArchestraContext {
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
   /**
-   * Delegation chain of prompt IDs (colon-separated).
+   * Delegation chain of agent IDs (colon-separated).
    * Used to track the path of delegated agent calls.
-   * E.g., "promptA:promptB" means promptA delegated to promptB.
+   * E.g., "agentA:agentB" means agentA delegated to agentB.
    */
   delegationChain?: string;
 }
@@ -133,7 +132,7 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  const { profile, promptId, organizationId, tokenAuth } = context;
+  const { profile, agentId, organizationId, tokenAuth } = context;
 
   // Handle dynamic agent tools (e.g., agent__research_bot)
   if (toolName.startsWith(AGENT_TOOL_PREFIX)) {
@@ -146,11 +145,9 @@ export async function executeArchestraTool(
       };
     }
 
-    if (!promptId) {
+    if (!agentId) {
       return {
-        content: [
-          { type: "text", text: "Error: No prompt context available." },
-        ],
+        content: [{ type: "text", text: "Error: No agent context available." }],
         isError: true,
       };
     }
@@ -164,22 +161,23 @@ export async function executeArchestraTool(
       };
     }
 
-    // Extract agent slug from tool name
-    const agentSlug = toolName.replace(AGENT_TOOL_PREFIX, "");
+    // Extract target agent slug from tool name
+    const targetAgentSlug = toolName.replace(AGENT_TOOL_PREFIX, "");
 
-    // Get all agents configured for this prompt
-    const allAgents =
-      await PromptAgentModel.findByPromptIdWithDetails(promptId);
+    // Get all delegation targets configured for this agent
+    const delegations = await ToolModel.getDelegationToolsByAgent(agentId);
 
-    // Find matching agent by slug
-    const agent = allAgents.find((a) => slugify(a.name) === agentSlug);
+    // Find matching delegation by slug
+    const delegation = delegations.find(
+      (d) => slugify(d.targetAgent.name) === targetAgentSlug,
+    );
 
-    if (!agent) {
+    if (!delegation) {
       return {
         content: [
           {
             type: "text",
-            text: `Error: Agent not found or not configured for this prompt.`,
+            text: `Error: Agent not found or not configured for delegation.`,
           },
         ],
         isError: true,
@@ -191,7 +189,7 @@ export async function executeArchestraTool(
     if (userId) {
       const userAccessibleAgentIds =
         await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
-      if (!userAccessibleAgentIds.includes(agent.profileId)) {
+      if (!userAccessibleAgentIds.includes(delegation.targetAgent.id)) {
         return {
           content: [
             {
@@ -210,24 +208,24 @@ export async function executeArchestraTool(
 
       logger.info(
         {
-          promptId,
-          agentPromptId: agent.agentPromptId,
-          agentName: agent.name,
+          agentId,
+          targetAgentId: delegation.targetAgent.id,
+          targetAgentName: delegation.targetAgent.name,
           organizationId,
           userId: userId || "system",
           sessionId,
         },
-        "Executing agent tool",
+        "Executing agent delegation tool",
       );
 
       const result = await executeA2AMessage({
-        promptId: agent.agentPromptId,
+        agentId: delegation.targetAgent.id,
         message,
         organizationId,
         userId: userId || "system",
         sessionId,
         // Pass the current delegation chain so the child can extend it
-        parentDelegationChain: context.delegationChain || context.promptId,
+        parentDelegationChain: context.delegationChain || context.agentId,
       });
 
       return {
@@ -236,8 +234,8 @@ export async function executeArchestraTool(
       };
     } catch (error) {
       logger.error(
-        { error, promptId, agentPromptId: agent.agentPromptId },
-        "Agent tool execution failed",
+        { error, agentId, targetAgentId: delegation.targetAgent.id },
+        "Agent delegation tool execution failed",
       );
       return {
         content: [
@@ -2551,22 +2549,22 @@ export function getArchestraMcpTools(): Tool[] {
 }
 
 /**
- * Get agent delegation tools for a prompt from the database
- * Each configured agent becomes a separate tool (e.g., agent__research_bot)
- * Note: Agent tools are separate from Archestra tools - they enable prompt-to-prompt delegation
+ * Get agent delegation tools for an agent from the database
+ * Each configured delegation becomes a separate tool (e.g., delegate_to_research_bot)
+ * Note: Agent tools are separate from Archestra tools - they enable agent-to-agent delegation
  */
 export async function getAgentTools(context: {
-  promptId: string;
+  agentId: string;
   organizationId: string;
   userId?: string;
   /** Skip user access check (for A2A/ChatOps flows where caller has elevated permissions) */
   skipAccessCheck?: boolean;
 }): Promise<Tool[]> {
-  const { promptId, organizationId, userId, skipAccessCheck } = context;
+  const { agentId, organizationId, userId, skipAccessCheck } = context;
 
-  // Get all agent delegation tools from the database with profile info
+  // Get all delegation tools assigned to this agent
   const allToolsWithDetails =
-    await ToolModel.getAgentDelegationToolsWithDetails(promptId);
+    await ToolModel.getDelegationToolsByAgent(agentId);
 
   // Filter by user access if user ID is provided (skip for A2A/ChatOps flows)
   let accessibleTools = allToolsWithDetails;
@@ -2582,13 +2580,13 @@ export async function getAgentTools(context: {
     const userAccessibleAgentIds =
       await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
     accessibleTools = allToolsWithDetails.filter((t) =>
-      userAccessibleAgentIds.includes(t.profileId),
+      userAccessibleAgentIds.includes(t.targetAgent.id),
     );
   }
 
   logger.debug(
     {
-      promptId,
+      agentId,
       organizationId,
       userId,
       allToolCount: allToolsWithDetails.length,
@@ -2600,13 +2598,13 @@ export async function getAgentTools(context: {
   // Convert DB tools to MCP Tool format
   return accessibleTools.map((t) => ({
     name: t.tool.name,
-    title: t.agentPromptName,
+    title: t.targetAgent.name,
     description:
       t.tool.description ||
-      t.agentPromptSystemPrompt?.substring(0, 500) ||
-      `Call the "${t.agentPromptName}" agent to perform tasks.`,
+      t.targetAgent.systemPrompt?.substring(0, 500) ||
+      `Call the "${t.targetAgent.name}" agent to perform tasks.`,
     inputSchema: t.tool.parameters as Tool["inputSchema"],
     annotations: {},
-    _meta: { agentPromptId: t.agentPromptId },
+    _meta: { targetAgentId: t.targetAgent.id },
   }));
 }

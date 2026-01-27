@@ -9,9 +9,10 @@ import type {
   ChatMessage,
   ChatMessageAttachment,
 } from "@microsoft/msgraph-sdk/models";
-// Register the chats and teams fluent API extensions
+// Register the chats, teams, and users fluent API extensions
 import "@microsoft/msgraph-sdk-chats";
 import "@microsoft/msgraph-sdk-teams";
+import "@microsoft/msgraph-sdk-users";
 import {
   ActivityTypes,
   CloudAdapter,
@@ -20,6 +21,7 @@ import {
   TurnContext,
 } from "botbuilder";
 import { PasswordServiceClientCredentialFactory } from "botframework-connector";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import type {
@@ -30,7 +32,7 @@ import type {
   IncomingChatMessage,
   ThreadHistoryParams,
 } from "@/types/chatops";
-import { CHATOPS_THREAD_HISTORY } from "./constants";
+import { CHATOPS_TEAM_CACHE, CHATOPS_THREAD_HISTORY } from "./constants";
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -149,11 +151,21 @@ class MSTeamsProvider implements ChatOpsProvider {
       replyToId?: string;
       serviceUrl?: string;
       channelData?: {
-        team?: { id?: string };
+        team?: { id?: string; aadGroupId?: string };
         channel?: { id?: string };
         tenant?: { id?: string };
       };
     };
+
+    logger.debug(
+      {
+        conversationType: activity.conversation?.conversationType,
+        teamId: activity.channelData?.team?.id,
+        aadGroupId: activity.channelData?.team?.aadGroupId,
+        isReply: Boolean(activity.replyToId),
+      },
+      "[MSTeamsProvider] Parsing activity",
+    );
 
     if (activity.type !== ActivityTypes.Message || !activity.text) {
       return null;
@@ -186,10 +198,14 @@ class MSTeamsProvider implements ChatOpsProvider {
       Boolean(activity.replyToId) ||
       Boolean(conversationId?.includes(";messageid="));
 
+    // Extract team ID - prefer aadGroupId (proper UUID) over team.id (may be conversation ID)
+    const teamData = activity.channelData?.team;
+    const workspaceId = teamData?.aadGroupId || teamData?.id || null;
+
     return {
       messageId: activity.id || `teams-${Date.now()}`,
       channelId,
-      workspaceId: activity.channelData?.team?.id || null,
+      workspaceId,
       threadId: extractThreadId(activity),
       senderId: activity.from?.aadObjectId || activity.from?.id || "unknown",
       senderName: activity.from?.name || "Unknown User",
@@ -232,14 +248,22 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     let messageId = "";
-    await this.adapter.continueConversationAsync(
-      config.chatops.msTeams.appId,
-      ref,
-      async (context) => {
-        const response = await context.sendActivity(replyText);
-        messageId = response?.id || "";
-      },
-    );
+    try {
+      await this.adapter.continueConversationAsync(
+        config.chatops.msTeams.appId,
+        ref,
+        async (context) => {
+          const response = await context.sendActivity(replyText);
+          messageId = response?.id || "";
+        },
+      );
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] continueConversationAsync failed",
+      );
+      throw error;
+    }
 
     return messageId;
   }
@@ -248,6 +272,9 @@ class MSTeamsProvider implements ChatOpsProvider {
     params: ThreadHistoryParams,
   ): Promise<ChatThreadMessage[]> {
     if (!this.graphClient) {
+      logger.warn(
+        "[MSTeamsProvider] Graph client not initialized, skipping thread history",
+      );
       return [];
     }
 
@@ -257,16 +284,63 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
 
     try {
-      const isGroupChat =
-        !params.workspaceId ||
-        params.workspaceId.startsWith("19:") ||
-        params.channelId.includes("@thread");
+      // Determine if this is a group chat vs team channel:
+      // - Group chats: no workspaceId, or workspaceId starts with "19:" (thread ID format)
+      // - Team channels: workspaceId is a UUID (the team's aadGroupId), channelId contains @thread.tacv2
+      let workspaceId = params.workspaceId;
+      const isValidTeamId =
+        workspaceId &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          workspaceId,
+        );
 
+      // If workspaceId isn't a valid UUID but channel looks like a team channel,
+      // try to look up the actual team ID
+      const looksLikeTeamChannel = params.channelId.includes("@thread.tacv2");
+      if (!isValidTeamId && looksLikeTeamChannel) {
+        logger.debug(
+          { channelId: params.channelId, teamChannelHint: workspaceId },
+          "[MSTeamsProvider] workspaceId not valid UUID, looking up team from channel",
+        );
+        // Pass the original workspaceId as a hint - it's often the team's General channel ID
+        const resolvedTeamId = await this.lookupTeamIdFromChannel(
+          params.channelId,
+          workspaceId || undefined,
+        );
+        if (resolvedTeamId) {
+          workspaceId = resolvedTeamId;
+        }
+      }
+
+      const isTeamIdValid =
+        workspaceId &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          workspaceId,
+        );
+      const isTeamChannel = isTeamIdValid && looksLikeTeamChannel;
+      const isGroupChat = !isTeamChannel;
+
+      logger.debug(
+        { isGroupChat, isTeamChannel, channelId: params.channelId },
+        "[MSTeamsProvider] Fetching thread history",
+      );
+
+      const effectiveParams = { ...params, workspaceId };
       const messages = isGroupChat
-        ? await this.fetchGroupChatHistory(params, limit)
-        : await this.fetchTeamChannelHistory(params, limit);
+        ? await this.fetchGroupChatHistory(effectiveParams, limit)
+        : await this.fetchTeamChannelHistory(effectiveParams, limit);
 
-      return this.convertToThreadMessages(messages, params.excludeMessageId);
+      const converted = this.convertToThreadMessages(
+        messages,
+        params.excludeMessageId,
+      );
+
+      logger.debug(
+        { historyCount: converted.length },
+        "[MSTeamsProvider] Thread history fetched",
+      );
+
+      return converted;
     } catch (error) {
       logger.error(
         { error: errorMessage(error), channelId: params.channelId },
@@ -278,6 +352,125 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   getAdapter(): CloudAdapter | null {
     return this.adapter;
+  }
+
+  /**
+   * Look up the team ID (UUID) from a channel ID using Graph API.
+   * This is needed when the Bot Framework doesn't provide the team's aadGroupId.
+   * Caches results to avoid repeated lookups.
+   *
+   * @param channelId - The specific channel ID where the message was sent
+   * @param teamChannelHint - Optional: the team.id from activity (often the General channel ID)
+   */
+  private teamIdCache = new LRUCacheManager<string | null>({
+    maxSize: CHATOPS_TEAM_CACHE.MAX_SIZE,
+    defaultTtl: CHATOPS_TEAM_CACHE.TTL_MS,
+  });
+
+  private async lookupTeamIdFromChannel(
+    channelId: string,
+    teamChannelHint?: string,
+  ): Promise<string | null> {
+    // Use composite cache key including hint to ensure we re-lookup when hint changes
+    const cacheKey = teamChannelHint
+      ? `${channelId}|${teamChannelHint}`
+      : channelId;
+
+    const cached = this.teamIdCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    if (!this.graphClient) {
+      logger.warn("[MSTeamsProvider] No graph client for team lookup");
+      return null;
+    }
+
+    try {
+      // List all teams the app has access to and find the one containing this channel
+      // Requires Team.ReadBasic.All and Channel.ReadBasic.All application permissions
+      const teamsResponse = await this.graphClient.teams.get();
+      const teams = teamsResponse?.value || [];
+
+      // Build set of channel IDs to match - both the specific channel and the team hint (often General channel)
+      const channelsToMatch = new Set([channelId]);
+      if (teamChannelHint && teamChannelHint !== channelId) {
+        channelsToMatch.add(teamChannelHint);
+      }
+
+      for (const team of teams) {
+        if (!team.id) continue;
+
+        try {
+          const channelsResponse = await this.graphClient.teams
+            .byTeamId(team.id)
+            .channels.get();
+          const channels = channelsResponse?.value || [];
+
+          // Check if any of the team's channels matches either channelId or teamChannelHint
+          const matchedChannel = channels.find(
+            (ch) => ch.id && channelsToMatch.has(ch.id),
+          );
+          if (matchedChannel) {
+            logger.info(
+              {
+                channelId,
+                matchedChannelId: matchedChannel.id,
+                teamId: team.id,
+                teamName: team.displayName,
+              },
+              "[MSTeamsProvider] Found team for channel",
+            );
+            this.teamIdCache.set(cacheKey, team.id);
+            return team.id;
+          }
+        } catch (err) {
+          logger.debug(
+            { teamId: team.id, error: errorMessage(err) },
+            "[MSTeamsProvider] Could not access team channels",
+          );
+        }
+      }
+
+      logger.warn(
+        { channelId },
+        "[MSTeamsProvider] Could not find team for channel - thread history may be limited",
+      );
+      this.teamIdCache.set(cacheKey, null);
+      return null;
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error), channelId },
+        "[MSTeamsProvider] Failed to lookup team from channel. " +
+          "Team.ReadBasic.All and Channel.ReadBasic.All permissions are required.",
+      );
+      this.teamIdCache.set(cacheKey, null);
+      return null;
+    }
+  }
+
+  /**
+   * Get user's email from their AAD Object ID using Microsoft Graph API.
+   * Requires User.ReadBasic.All application permission.
+   */
+  async getUserEmail(aadObjectId: string): Promise<string | null> {
+    if (!this.graphClient) {
+      logger.warn(
+        "[MSTeamsProvider] Graph client not configured, cannot resolve user email",
+      );
+      return null;
+    }
+
+    try {
+      const user = await this.graphClient.users.byUserId(aadObjectId).get();
+      return user?.mail || user?.userPrincipalName || null;
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error), aadObjectId },
+        "[MSTeamsProvider] Failed to fetch user email. User.ReadBasic.All permission may be missing.",
+      );
+      return null;
+    }
   }
 
   async processActivity(
@@ -441,7 +634,20 @@ export default MSTeamsProvider;
 // =============================================================================
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    return error.message;
+  }
+  // Handle objects that may not convert to string properly (e.g., MS Graph SDK errors)
+  try {
+    return String(error);
+  } catch {
+    // If String() fails, try JSON.stringify or return a generic message
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown error (could not serialize)";
+    }
+  }
 }
 
 function cleanBotMention(text: string, botName?: string): string {

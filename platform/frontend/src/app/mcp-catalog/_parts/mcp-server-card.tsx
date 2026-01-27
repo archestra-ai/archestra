@@ -13,8 +13,7 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import { useState } from "react";
-import { AssignProfileDialog } from "@/app/tools/_parts/assign-agent-dialog";
+import { useEffect, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
 import {
   WithoutPermissions,
@@ -43,10 +42,9 @@ import { useFeatureFlag } from "@/lib/features.hook";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
-import { BulkAssignProfileDialog } from "./bulk-assign-agent-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
+import { McpAssignmentsDialog } from "./mcp-assignments-dialog";
 import { McpLogsDialog } from "./mcp-logs-dialog";
-import { McpToolsDialog } from "./mcp-tools-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
@@ -59,24 +57,6 @@ export type CatalogItemWithOptionalLabel = CatalogItem & {
 
 export type InstalledServer =
   archestraApiTypes.GetMcpServersResponses["200"][number];
-
-type ToolForAssignment = {
-  id: string;
-  name: string;
-  description: string | null;
-  parameters: Record<string, unknown>;
-  createdAt: string;
-  mcpServerId: string | null;
-  mcpServerName: string | null;
-};
-
-type SimpleTool = {
-  id: string;
-  name: string;
-  description: string | null;
-  parameters: Record<string, unknown>;
-  createdAt: string;
-};
 
 export type McpServerCardProps = {
   item: CatalogItemWithOptionalLabel;
@@ -97,6 +77,10 @@ export type McpServerCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onCancelInstallation?: (serverId: string) => void;
+  /** When true, auto-opens the assignments dialog */
+  autoOpenAssignmentsDialog?: boolean;
+  /** Called when the auto-opened assignments dialog is closed */
+  onAssignmentsDialogClose?: () => void;
 };
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
@@ -119,18 +103,19 @@ export function McpServerCard({
   onEdit,
   onDelete,
   onCancelInstallation,
+  autoOpenAssignmentsDialog,
+  onAssignmentsDialogClose,
 }: McpServerCardBaseProps) {
   const isBuiltin = variant === "builtin";
 
   // For builtin servers, fetch tools by catalog ID
   // For regular MCP servers, fetch by server ID
-  const { data: mcpServerTools, isLoading: isLoadingMcpTools } =
-    useMcpServerTools(!isBuiltin ? (installedServer?.id ?? null) : null);
-  const { data: catalogTools, isLoading: isLoadingCatalogTools } =
-    useCatalogTools(isBuiltin ? item.id : null);
+  const { data: mcpServerTools } = useMcpServerTools(
+    !isBuiltin ? (installedServer?.id ?? null) : null,
+  );
+  const { data: catalogTools } = useCatalogTools(isBuiltin ? item.id : null);
 
   const tools = isBuiltin ? catalogTools : mcpServerTools;
-  const isLoadingTools = isBuiltin ? isLoadingCatalogTools : isLoadingMcpTools;
 
   const isByosEnabled = useFeatureFlag("byosEnabled");
   const session = authClient.useSession();
@@ -179,13 +164,29 @@ export function McpServerCard({
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
-  const [selectedToolForAssignment, setSelectedToolForAssignment] =
-    useState<ToolForAssignment | null>(null);
-  const [bulkAssignTools, setBulkAssignTools] = useState<SimpleTool[]>([]);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
     name: string;
   } | null>(null);
+
+  // Auto-open assignments dialog when requested by parent
+  // Ensure other dialogs are closed when auto-opening
+  useEffect(() => {
+    if (autoOpenAssignmentsDialog) {
+      setIsToolsDialogOpen(true);
+      setIsManageUsersDialogOpen(false);
+      setIsLogsDialogOpen(false);
+    }
+  }, [autoOpenAssignmentsDialog]);
+
+  // Handle assignments dialog close - notify parent if it was auto-opened
+  const handleToolsDialogOpenChange = (open: boolean) => {
+    setIsToolsDialogOpen(open);
+    if (!open && autoOpenAssignmentsDialog) {
+      onAssignmentsDialogClose?.();
+    }
+  };
+
   const mcpServerOfCurrentCatalogItem = allMcpServers?.filter(
     (s) => s.catalogId === item.id,
   );
@@ -420,15 +421,18 @@ export function McpServerCard({
     </>
   );
 
+  const assignedCount = getToolsAssignedCount();
+  const isZeroAssignments = assignedCount === 0 && toolsDiscoveredCount > 0;
+
   const toolsAssigned = (
     <>
       <div className="flex items-center gap-2">
         <Wrench className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
-          Assigned to profile:{" "}
+          Assignments:{" "}
           <span className="font-medium text-foreground">
-            {getToolsAssignedCount()}{" "}
-            {toolsDiscoveredCount ? `(out of ${toolsDiscoveredCount})` : ""}
+            {assignedCount}
+            {toolsDiscoveredCount ? `/${toolsDiscoveredCount}` : ""}
           </span>
         </span>
       </div>
@@ -437,9 +441,26 @@ export function McpServerCard({
           onClick={() => setIsToolsDialogOpen(true)}
           size="sm"
           variant="link"
-          className="h-7 text-xs"
+          className="h-7 text-xs gap-1"
           data-testid={`${E2eTestId.ManageToolsButton}-${installedServer?.catalogName}`}
         >
+          {isZeroAssignments && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <AlertTriangle className="h-4 w-4 text-amber-500 relative top-[-1px]" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    Click "Manage" button in order to assign tools to MCP
+                    Gateways and Agents
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           Manage
         </Button>
       )}
@@ -607,27 +628,12 @@ export function McpServerCard({
 
   const dialogs = (
     <>
-      <McpToolsDialog
+      <McpAssignmentsDialog
         open={isToolsDialogOpen}
-        onOpenChange={(open) => {
-          setIsToolsDialogOpen(open);
-          if (!open) {
-            setSelectedToolForAssignment(null);
-          }
-        }}
-        serverName={installedServer?.name ?? ""}
-        tools={tools ?? []}
-        isLoading={isLoadingTools}
-        onAssignTool={(tool) => {
-          setSelectedToolForAssignment({
-            ...tool,
-            mcpServerId: installedServer?.id ?? null,
-            mcpServerName: installedServer?.name ?? null,
-          });
-        }}
-        onBulkAssignTools={(tools) => {
-          setBulkAssignTools(tools);
-        }}
+        onOpenChange={handleToolsDialogOpenChange}
+        catalogId={item.id}
+        serverName={item.label || item.name}
+        isBuiltin={isBuiltin}
       />
 
       <McpLogsDialog
@@ -637,53 +643,9 @@ export function McpServerCard({
         installs={localInstalls}
       />
 
-      <BulkAssignProfileDialog
-        tools={bulkAssignTools.length > 0 ? bulkAssignTools : null}
-        open={bulkAssignTools.length > 0}
-        onOpenChange={(open) => {
-          if (!open) {
-            setBulkAssignTools([]);
-          }
-        }}
-        catalogId={item.id}
-      />
-
-      <AssignProfileDialog
-        tool={
-          selectedToolForAssignment
-            ? {
-                id: selectedToolForAssignment.id,
-                responseModifierTemplate: null,
-                credentialSourceMcpServerId: null,
-                executionSourceMcpServerId: null,
-                useDynamicTeamCredential: false,
-                tool: {
-                  id: selectedToolForAssignment.id,
-                  name: selectedToolForAssignment.name,
-                  description: selectedToolForAssignment.description,
-                  parameters: selectedToolForAssignment.parameters,
-                  createdAt: selectedToolForAssignment.createdAt,
-                  updatedAt: selectedToolForAssignment.createdAt,
-                  mcpServerId: selectedToolForAssignment.mcpServerId,
-                  mcpServerName: selectedToolForAssignment.mcpServerName,
-                  catalogId: item.id,
-                  mcpServerCatalogId: null,
-                },
-                agent: { id: "", name: "" },
-                createdAt: selectedToolForAssignment.createdAt,
-                updatedAt: selectedToolForAssignment.createdAt,
-              }
-            : null
-        }
-        open={!!selectedToolForAssignment}
-        onOpenChange={(open) => {
-          if (!open) setSelectedToolForAssignment(null);
-        }}
-      />
-
       <ManageUsersDialog
         catalogId={item.id}
-        isOpen={isManageUsersDialogOpen}
+        isOpen={isManageUsersDialogOpen && !isInstalling}
         onClose={() => setIsManageUsersDialogOpen(false)}
         label={item.label || item.name}
       />

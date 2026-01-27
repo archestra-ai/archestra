@@ -154,6 +154,30 @@ const cerebrasConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const mistralConfig: ToolPersistenceTestConfig = {
+  providerName: "Mistral",
+
+  endpoint: (agentId) => `/v1/mistral/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "mistral-large-latest",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 const vllmConfig: ToolPersistenceTestConfig = {
   providerName: "vLLM",
 
@@ -226,6 +250,30 @@ const zhipuaiConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const cohereConfig: ToolPersistenceTestConfig = {
+  providerName: "Cohere",
+
+  endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "command-r-plus-08-2024",
+    messages: [{ role: "user", content: [{ type: "text", text: content }] }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -234,7 +282,9 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
+  cohereConfig,
   cerebrasConfig,
+  mistralConfig,
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,

@@ -5,10 +5,7 @@ import { Check, ChevronDown, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import {
-  type ConnectionType,
-  ConnectionTypeSelector,
-} from "@/components/connection-type-selector";
+import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -18,7 +15,7 @@ import {
 } from "@/components/ui/popover";
 import config from "@/lib/config";
 
-const { externalProxyUrl, internalProxyUrl } = config.api;
+const { externalProxyUrls, internalProxyUrl } = config.api;
 
 type ProviderOption = SupportedProvider | "claude-code";
 
@@ -31,20 +28,18 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
-  const [connectionType, setConnectionType] =
-    useState<ConnectionType>("internal");
+  const [connectionUrl, setConnectionUrl] = useState<string>(
+    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
+  );
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
 
-  const baseUrl =
-    connectionType === "internal" ? internalProxyUrl : externalProxyUrl;
-
   const proxyUrl = agentId
-    ? `${baseUrl}/${getProviderPath(selectedProvider)}/${agentId}`
-    : `${baseUrl}/${getProviderPath(selectedProvider)}`;
+    ? `${connectionUrl}/${getProviderPath(selectedProvider)}/${agentId}`
+    : `${connectionUrl}/${getProviderPath(selectedProvider)}`;
 
-  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${baseUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
+  const claudeCodeCommand = `ANTHROPIC_BASE_URL=${connectionUrl}/anthropic${agentId ? `/${agentId}` : ""} claude`;
 
   return (
     <div className="space-y-3">
@@ -77,26 +72,27 @@ export function ProxyConnectionInstructions({
         >
           Cerebras
         </Button>
+        <Button
+          variant={selectedProvider === "claude-code" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedProvider("claude-code")}
+        >
+          Claude Code
+        </Button>
+        <Button
+          variant={selectedProvider === "mistral" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedProvider("mistral")}
+        >
+          Mistral
+        </Button>
         <Popover>
           <PopoverTrigger asChild>
-            <Button
-              variant={
-                selectedProvider === "claude-code" ? "default" : "outline"
-              }
-              size="sm"
-            >
+            <Button variant="outline" size="sm">
               <ChevronDown className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start"
-              onClick={() => setSelectedProvider("claude-code")}
-            >
-              Claude Code
-            </Button>
             <p className="text-xs text-muted-foreground px-2 py-1">
               More providers coming soon
             </p>
@@ -104,10 +100,9 @@ export function ProxyConnectionInstructions({
         </Popover>
       </ButtonGroup>
 
-      <ConnectionTypeSelector
-        value={connectionType}
-        onChange={setConnectionType}
-        gatewayName="LLM Gateway"
+      <ConnectionBaseUrlSelect
+        value={connectionUrl}
+        onChange={setConnectionUrl}
         idPrefix="llm"
       />
 

@@ -1744,6 +1744,530 @@ export type CerebrasChatCompletionResponseInput = {
     };
 };
 
+export type CohereChatRequestInput = {
+    model: string;
+    messages: Array<{
+        role: string;
+        content: string | Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+    } | {
+        role: string;
+        content?: string | Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: {
+                name: string;
+                arguments: string;
+            };
+        }>;
+    } | {
+        role: string;
+        content: string;
+    } | {
+        role: string;
+        tool_call_id: string;
+        content: string;
+    }>;
+    stream?: boolean;
+    temperature?: number;
+    max_tokens?: number;
+    tools?: Array<{
+        type: string;
+        function: {
+            name: string;
+            description?: string;
+            parameters?: {
+                type: string;
+                description?: string;
+                required?: Array<string>;
+                properties?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+    }>;
+    tool_choice?: 'REQUIRED' | 'NONE';
+    safety_mode?: 'CONTEXTUAL' | 'STRICT' | 'OFF';
+    response_format?: {
+        type: 'json_object' | 'text';
+        json_schema?: {
+            [key: string]: unknown;
+        };
+    };
+    frequency_penalty?: number;
+    presence_penalty?: number;
+    k?: number;
+    p?: number;
+    seed?: number;
+    stop_sequences?: Array<string>;
+    logprobs?: boolean;
+};
+
+export type CohereChatResponseInput = {
+    id: string;
+    message: {
+        role: string;
+        content?: Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: {
+                name: string;
+                arguments: string;
+            };
+        }>;
+    };
+    finish_reason: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALL' | 'ERROR';
+    usage?: {
+        billed_units?: {
+            input_tokens?: number;
+            output_tokens?: number;
+        };
+        tokens?: {
+            input_tokens?: number;
+            output_tokens?: number;
+        };
+    };
+};
+
+export type MistralChatCompletionRequestInput = {
+    model: string;
+    /**
+     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+     */
+    messages: Array<{
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'developer';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'system';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        } | {
+            type: 'input_audio';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+             */
+            input_audio: {
+                data: string;
+                format: 'wav' | 'mp3';
+            };
+        } | {
+            type: 'file';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+             */
+            file: {
+                file_data?: string;
+                file_id?: string;
+                filename?: string;
+            };
+        }>;
+        role: 'user';
+        name?: string;
+    } | {
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | unknown;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+         */
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | unknown;
+        name?: string;
+        refusal?: string | unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+    } | {
+        role: 'tool';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string | unknown;
+        name: string;
+    }>;
+    /**
+     *
+     * A function tool that can be used to generate a response.
+     *
+     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+     *
+     */
+    tools?: Array<{
+        type: 'function';
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * Your chosen grammar
+                 */
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    }>;
+    /**
+     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+     */
+    tool_choice?: 'none' | 'auto' | 'required' | {
+        type: 'allowed_tools';
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+         */
+        allowed_tools: {
+            /**
+             *
+             * Constrains the tools available to the model to a pre-defined set.
+             *
+             * auto allows the model to pick from among the allowed tools and generate a
+             * message.
+             *
+             * required requires the model to call one or more of the allowed tools.
+             *
+             */
+            mode: 'auto' | 'required';
+            /**
+             * A list of tool definitions that the model should be allowed to call
+             */
+            tools: Array<{
+                [key: string]: {
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object. See the
+                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                         * documentation about the format.
+                         *
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | unknown;
+                    };
+                };
+            }>;
+        };
+    } | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * Your chosen grammar
+                 */
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    };
+    temperature?: number | unknown;
+    max_tokens?: number | unknown;
+    stream?: boolean | unknown;
+};
+
+export type MistralChatCompletionResponseInput = {
+    id: string;
+    choices: Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        index: number;
+        logprobs: unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+         */
+        message: {
+            content: string | unknown;
+            refusal?: string | unknown;
+            role: 'assistant';
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: 'chat.completion';
+    server_tier?: string;
+    system_fingerprint?: string | unknown;
+    /**
+     * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+         */
+        completion_tokens_details?: unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+         */
+        prompt_tokens_details?: unknown;
+    };
+    [key: string]: unknown | string | Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        index: number;
+        logprobs: unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+         */
+        message: {
+            content: string | unknown;
+            refusal?: string | unknown;
+            role: 'assistant';
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        };
+    }> | number | 'chat.completion' | string | unknown | {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+         */
+        completion_tokens_details?: unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+         */
+        prompt_tokens_details?: unknown;
+    } | undefined;
+};
+
 export type VllmChatCompletionRequestInput = {
     model: string;
     /**
@@ -4368,6 +4892,530 @@ export type CerebrasChatCompletionResponse = {
     };
 };
 
+export type CohereChatRequest = {
+    model: string;
+    messages: Array<{
+        role: string;
+        content: string | Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+    } | {
+        role: string;
+        content?: string | Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: {
+                name: string;
+                arguments: string;
+            };
+        }>;
+    } | {
+        role: string;
+        content: string;
+    } | {
+        role: string;
+        tool_call_id: string;
+        content: string;
+    }>;
+    stream?: boolean;
+    temperature?: number;
+    max_tokens?: number;
+    tools?: Array<{
+        type: string;
+        function: {
+            name: string;
+            description?: string;
+            parameters?: {
+                type: string;
+                description?: string;
+                required?: Array<string>;
+                properties?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+    }>;
+    tool_choice?: 'REQUIRED' | 'NONE';
+    safety_mode?: 'CONTEXTUAL' | 'STRICT' | 'OFF';
+    response_format?: {
+        type: 'json_object' | 'text';
+        json_schema?: {
+            [key: string]: unknown;
+        };
+    };
+    frequency_penalty?: number;
+    presence_penalty?: number;
+    k?: number;
+    p?: number;
+    seed?: number;
+    stop_sequences?: Array<string>;
+    logprobs?: boolean;
+};
+
+export type CohereChatResponse = {
+    id: string;
+    message: {
+        role: string;
+        content?: Array<{
+            type: string;
+            text: string;
+        } | {
+            type: string;
+            tool_call_id: string;
+            content: string;
+        }>;
+        tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: {
+                name: string;
+                arguments: string;
+            };
+        }>;
+    };
+    finish_reason: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALL' | 'ERROR';
+    usage?: {
+        billed_units?: {
+            input_tokens?: number;
+            output_tokens?: number;
+        };
+        tokens?: {
+            input_tokens?: number;
+            output_tokens?: number;
+        };
+    };
+};
+
+export type MistralChatCompletionRequest = {
+    model: string;
+    /**
+     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+     */
+    messages: Array<{
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'developer';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'system';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        } | {
+            type: 'input_audio';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+             */
+            input_audio: {
+                data: string;
+                format: 'wav' | 'mp3';
+            };
+        } | {
+            type: 'file';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+             */
+            file: {
+                file_data?: string;
+                file_id?: string;
+                filename?: string;
+            };
+        }>;
+        role: 'user';
+        name?: string;
+    } | {
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | unknown;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+         */
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | unknown;
+        name?: string;
+        refusal?: string | unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+    } | {
+        role: 'tool';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string | unknown;
+        name: string;
+    }>;
+    /**
+     *
+     * A function tool that can be used to generate a response.
+     *
+     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+     *
+     */
+    tools?: Array<{
+        type: 'function';
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * Your chosen grammar
+                 */
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    }>;
+    /**
+     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+     */
+    tool_choice?: 'none' | 'auto' | 'required' | {
+        type: 'allowed_tools';
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+         */
+        allowed_tools: {
+            /**
+             *
+             * Constrains the tools available to the model to a pre-defined set.
+             *
+             * auto allows the model to pick from among the allowed tools and generate a
+             * message.
+             *
+             * required requires the model to call one or more of the allowed tools.
+             *
+             */
+            mode: 'auto' | 'required';
+            /**
+             * A list of tool definitions that the model should be allowed to call
+             */
+            tools: Array<{
+                [key: string]: {
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object. See the
+                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                         * documentation about the format.
+                         *
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | unknown;
+                    };
+                };
+            }>;
+        };
+    } | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * Your chosen grammar
+                 */
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    };
+    temperature?: number | unknown;
+    max_tokens?: number | unknown;
+    stream?: boolean | unknown;
+};
+
+export type MistralChatCompletionResponse = {
+    id: string;
+    choices: Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        index: number;
+        logprobs: unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+         */
+        message: {
+            content: string | unknown;
+            refusal?: string | unknown;
+            role: 'assistant';
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: 'chat.completion';
+    server_tier?: string;
+    system_fingerprint?: string | unknown;
+    /**
+     * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+         */
+        completion_tokens_details?: unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+         */
+        prompt_tokens_details?: unknown;
+    };
+    [key: string]: unknown | string | Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        index: number;
+        logprobs: unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+         */
+        message: {
+            content: string | unknown;
+            refusal?: string | unknown;
+            role: 'assistant';
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        };
+    }> | number | 'chat.completion' | string | unknown | {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+         */
+        completion_tokens_details?: unknown;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+         */
+        prompt_tokens_details?: unknown;
+    } | undefined;
+};
+
 export type VllmChatCompletionRequest = {
     model: string;
     /**
@@ -5272,16 +6320,16 @@ export type GetHealthResponses = {
 
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
-export type GetV1A2aByPromptIdWellKnownAgentJsonData = {
+export type GetV1A2aByAgentIdWellKnownAgentJsonData = {
     body?: never;
     path: {
-        promptId: string;
+        agentId: string;
     };
     query?: never;
-    url: '/v1/a2a/{promptId}/.well-known/agent.json';
+    url: '/v1/a2a/{agentId}/.well-known/agent.json';
 };
 
-export type GetV1A2aByPromptIdWellKnownAgentJsonResponses = {
+export type GetV1A2aByAgentIdWellKnownAgentJsonResponses = {
     /**
      * Default Response
      */
@@ -5308,9 +6356,9 @@ export type GetV1A2aByPromptIdWellKnownAgentJsonResponses = {
     };
 };
 
-export type GetV1A2aByPromptIdWellKnownAgentJsonResponse = GetV1A2aByPromptIdWellKnownAgentJsonResponses[keyof GetV1A2aByPromptIdWellKnownAgentJsonResponses];
+export type GetV1A2aByAgentIdWellKnownAgentJsonResponse = GetV1A2aByAgentIdWellKnownAgentJsonResponses[keyof GetV1A2aByAgentIdWellKnownAgentJsonResponses];
 
-export type PostV1A2aByPromptIdData = {
+export type PostV1A2aByAgentIdData = {
     body: {
         jsonrpc: '2.0';
         id: string | number;
@@ -5325,13 +6373,13 @@ export type PostV1A2aByPromptIdData = {
         };
     };
     path: {
-        promptId: string;
+        agentId: string;
     };
     query?: never;
-    url: '/v1/a2a/{promptId}';
+    url: '/v1/a2a/{agentId}';
 };
 
-export type PostV1A2aByPromptIdResponses = {
+export type PostV1A2aByAgentIdResponses = {
     /**
      * Default Response
      */
@@ -5358,7 +6406,7 @@ export type PostV1A2aByPromptIdResponses = {
     };
 };
 
-export type PostV1A2aByPromptIdResponse = PostV1A2aByPromptIdResponses[keyof PostV1A2aByPromptIdResponses];
+export type PostV1A2aByAgentIdResponse = PostV1A2aByAgentIdResponses[keyof PostV1A2aByAgentIdResponses];
 
 export type GetAgentsData = {
     body?: never;
@@ -5368,6 +6416,14 @@ export type GetAgentsData = {
          * Filter by agent name
          */
         name?: string;
+        /**
+         * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.
+         */
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        /**
+         * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
+         */
+        agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
@@ -5442,10 +6498,24 @@ export type GetAgentsResponses = {
     200: {
         data: Array<{
             id: string;
+            organizationId: string;
             name: string;
             isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            promptVersion: number | null;
+            promptHistory: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            allowedChatops: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -5453,7 +6523,7 @@ export type GetAgentsResponses = {
                 agentId: string | null;
                 catalogId: string | null;
                 mcpServerId: string | null;
-                promptAgentId: string | null;
+                delegateToAgentId: string | null;
                 name: string;
                 /**
                  *
@@ -5503,10 +6573,20 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 
 export type CreateAgentData = {
     body: {
+        organizationId?: string;
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt?: string | null;
+        userPrompt?: string | null;
+        allowedChatops?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain?: string | null;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -5585,10 +6665,24 @@ export type CreateAgentResponses = {
      */
     200: {
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5596,7 +6690,7 @@ export type CreateAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -5638,7 +6732,16 @@ export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponse
 export type GetAllAgentsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.
+         */
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        /**
+         * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
+         */
+        agentTypes?: Array<'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent'>;
+    };
     url: '/api/agents/all';
 };
 
@@ -5707,10 +6810,24 @@ export type GetAllAgentsResponses = {
      */
     200: Array<{
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5718,7 +6835,7 @@ export type GetAllAgentsResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -5757,14 +6874,14 @@ export type GetAllAgentsResponses = {
 
 export type GetAllAgentsResponse = GetAllAgentsResponses[keyof GetAllAgentsResponses];
 
-export type GetDefaultAgentData = {
+export type GetDefaultMcpGatewayData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/agents/default';
+    url: '/api/mcp-gateways/default';
 };
 
-export type GetDefaultAgentErrors = {
+export type GetDefaultMcpGatewayErrors = {
     /**
      * Default Response
      */
@@ -5821,18 +6938,32 @@ export type GetDefaultAgentErrors = {
     };
 };
 
-export type GetDefaultAgentError = GetDefaultAgentErrors[keyof GetDefaultAgentErrors];
+export type GetDefaultMcpGatewayError = GetDefaultMcpGatewayErrors[keyof GetDefaultMcpGatewayErrors];
 
-export type GetDefaultAgentResponses = {
+export type GetDefaultMcpGatewayResponses = {
     /**
      * Default Response
      */
     200: {
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -5840,7 +6971,7 @@ export type GetDefaultAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -5877,7 +7008,143 @@ export type GetDefaultAgentResponses = {
     };
 };
 
-export type GetDefaultAgentResponse = GetDefaultAgentResponses[keyof GetDefaultAgentResponses];
+export type GetDefaultMcpGatewayResponse = GetDefaultMcpGatewayResponses[keyof GetDefaultMcpGatewayResponses];
+
+export type GetDefaultLlmProxyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-proxy/default';
+};
+
+export type GetDefaultLlmProxyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetDefaultLlmProxyError = GetDefaultLlmProxyErrors[keyof GetDefaultLlmProxyErrors];
+
+export type GetDefaultLlmProxyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        isDemo: boolean;
+        isDefault: boolean;
+        considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            catalogId: string | null;
+            mcpServerId: string | null;
+            delegateToAgentId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+    };
+};
+
+export type GetDefaultLlmProxyResponse = GetDefaultLlmProxyResponses[keyof GetDefaultLlmProxyResponses];
 
 export type DeleteAgentData = {
     body?: never;
@@ -6032,10 +7299,24 @@ export type GetAgentResponses = {
      */
     200: {
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6043,7 +7324,7 @@ export type GetAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -6084,10 +7365,20 @@ export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 
 export type UpdateAgentData = {
     body?: {
+        organizationId?: string;
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
+        agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt?: string | null;
+        userPrompt?: string | null;
+        allowedChatops?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled?: boolean;
+        incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain?: string | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -6168,10 +7459,24 @@ export type UpdateAgentResponses = {
      */
     200: {
         id: string;
+        organizationId: string;
         name: string;
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6179,7 +7484,7 @@ export type UpdateAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
-            promptAgentId: string | null;
+            delegateToAgentId: string | null;
             name: string;
             /**
              *
@@ -6217,6 +7522,295 @@ export type UpdateAgentResponses = {
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetAgentVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/versions';
+};
+
+export type GetAgentVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAgentVersionsError = GetAgentVersionsErrors[keyof GetAgentVersionsErrors];
+
+export type GetAgentVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        current: {
+            id: string;
+            organizationId: string;
+            name: string;
+            isDemo: boolean;
+            isDefault: boolean;
+            considerContextUntrusted: boolean;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            promptVersion: number | null;
+            promptHistory: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            allowedChatops: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
+            createdAt: string;
+            updatedAt: string;
+            tools: Array<{
+                id: string;
+                agentId: string | null;
+                catalogId: string | null;
+                mcpServerId: string | null;
+                delegateToAgentId: string | null;
+                name: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                description: string | null;
+                policiesAutoConfiguredAt: string | null;
+                policiesAutoConfiguringStartedAt: string | null;
+                policiesAutoConfiguredReasoning: string | null;
+                createdAt: string;
+                updatedAt: string;
+            }>;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
+        };
+        history: Array<{
+            version: number;
+            userPrompt: string | null;
+            systemPrompt: string | null;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetAgentVersionsResponse = GetAgentVersionsResponses[keyof GetAgentVersionsResponses];
+
+export type RollbackAgentData = {
+    body: {
+        /**
+         * Version to rollback to
+         */
+        version: number;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/rollback';
+};
+
+export type RollbackAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RollbackAgentError = RollbackAgentErrors[keyof RollbackAgentErrors];
+
+export type RollbackAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        isDemo: boolean;
+        isDefault: boolean;
+        considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        userPrompt: string | null;
+        promptVersion: number | null;
+        promptHistory: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            catalogId: string | null;
+            mcpServerId: string | null;
+            delegateToAgentId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+    };
+};
+
+export type RollbackAgentResponse = RollbackAgentResponses[keyof RollbackAgentResponses];
 
 export type GetLabelKeysData = {
     body?: never;
@@ -6944,7 +8538,7 @@ export type GetAgentToolsResponses = {
         agentId: string | null;
         catalogId: string | null;
         mcpServerId: string | null;
-        promptAgentId: string | null;
+        delegateToAgentId: string | null;
         name: string;
         /**
          *
@@ -7063,6 +8657,337 @@ export type UpdateAgentToolResponses = {
 };
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
+
+export type GetAgentDelegationsData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/delegations';
+};
+
+export type GetAgentDelegationsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAgentDelegationsError = GetAgentDelegationsErrors[keyof GetAgentDelegationsErrors];
+
+export type GetAgentDelegationsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        systemPrompt: string | null;
+    }>;
+};
+
+export type GetAgentDelegationsResponse = GetAgentDelegationsResponses[keyof GetAgentDelegationsResponses];
+
+export type SyncAgentDelegationsData = {
+    body: {
+        targetAgentIds: Array<string>;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/delegations';
+};
+
+export type SyncAgentDelegationsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SyncAgentDelegationsError = SyncAgentDelegationsErrors[keyof SyncAgentDelegationsErrors];
+
+export type SyncAgentDelegationsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        added: Array<string>;
+        removed: Array<string>;
+    };
+};
+
+export type SyncAgentDelegationsResponse = SyncAgentDelegationsResponses[keyof SyncAgentDelegationsResponses];
+
+export type DeleteAgentDelegationData = {
+    body?: never;
+    path: {
+        agentId: string;
+        targetAgentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/delegations/{targetAgentId}';
+};
+
+export type DeleteAgentDelegationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteAgentDelegationError = DeleteAgentDelegationErrors[keyof DeleteAgentDelegationErrors];
+
+export type DeleteAgentDelegationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteAgentDelegationResponse = DeleteAgentDelegationResponses[keyof DeleteAgentDelegationResponses];
+
+export type GetAllDelegationConnectionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-delegations';
+};
+
+export type GetAllDelegationConnectionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAllDelegationConnectionsError = GetAllDelegationConnectionsErrors[keyof GetAllDelegationConnectionsErrors];
+
+export type GetAllDelegationConnectionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        connections: Array<{
+            sourceAgentId: string;
+            sourceAgentName: string;
+            targetAgentId: string;
+            targetAgentName: string;
+            toolId: string;
+        }>;
+        agents: Array<{
+            id: string;
+            name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        }>;
+    };
+};
+
+export type GetAllDelegationConnectionsResponse = GetAllDelegationConnectionsResponses[keyof GetAllDelegationConnectionsResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
@@ -8462,7 +10387,7 @@ export type BulkUpsertDefaultResultPolicyResponses = {
 export type BulkUpsertDefaultResultPolicyResponse = BulkUpsertDefaultResultPolicyResponses[keyof BulkUpsertDefaultResultPolicyResponses];
 
 export type CerebrasChatCompletionsWithDefaultAgentData = {
-    body?: CerebrasChatCompletionRequestInput;
+    body?: MistralChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -8547,7 +10472,7 @@ export type CerebrasChatCompletionsWithDefaultAgentResponses = {
 export type CerebrasChatCompletionsWithDefaultAgentResponse = CerebrasChatCompletionsWithDefaultAgentResponses[keyof CerebrasChatCompletionsWithDefaultAgentResponses];
 
 export type CerebrasChatCompletionsWithAgentData = {
-    body?: CerebrasChatCompletionRequestInput;
+    body?: MistralChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -8707,7 +10632,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8727,7 +10652,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -8806,7 +10731,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -8822,7 +10747,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -8894,7 +10819,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9066,7 +10991,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9166,7 +11091,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -9182,7 +11107,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
     };
     url: '/api/chat/models';
 };
@@ -9253,7 +11178,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         createdAt?: string;
     }>;
 };
@@ -9484,11 +11409,10 @@ export type GetChatConversationsResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -9499,6 +11423,9 @@ export type GetChatConversationsResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     }>;
@@ -9509,10 +11436,9 @@ export type GetChatConversationsResponse = GetChatConversationsResponses[keyof G
 export type CreateChatConversationData = {
     body: {
         agentId: string;
-        promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -9588,11 +11514,10 @@ export type CreateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -9603,6 +11528,9 @@ export type CreateChatConversationResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -9766,11 +11694,10 @@ export type GetChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -9781,6 +11708,9 @@ export type GetChatConversationResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -9792,7 +11722,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'cerebras' | 'gemini' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -9872,11 +11802,10 @@ export type UpdateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -9887,6 +11816,9 @@ export type UpdateChatConversationResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10059,11 +11991,10 @@ export type GenerateChatConversationTitleResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10074,6 +12005,9 @@ export type GenerateChatConversationTitleResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10162,11 +12096,10 @@ export type UpdateChatMessageResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
-        promptId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
+        selectedProvider: 'anthropic' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -10177,6 +12110,9 @@ export type UpdateChatMessageResponses = {
         agent: {
             id: string;
             name: string;
+            systemPrompt: string | null;
+            userPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         };
         messages: Array<unknown>;
     };
@@ -10625,7 +12561,7 @@ export type ListChatOpsBindingsResponses = {
         provider: 'ms-teams';
         channelId: string;
         workspaceId: string | null;
-        promptId: string;
+        agentId: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -10711,6 +12647,178 @@ export type DeleteChatOpsBindingResponses = {
 };
 
 export type DeleteChatOpsBindingResponse = DeleteChatOpsBindingResponses[keyof DeleteChatOpsBindingResponses];
+
+export type CohereChatWithDefaultAgentData = {
+    body?: CohereChatRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for API auth
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/cohere/chat';
+};
+
+export type CohereChatWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CohereChatWithDefaultAgentError = CohereChatWithDefaultAgentErrors[keyof CohereChatWithDefaultAgentErrors];
+
+export type CohereChatWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: CohereChatResponse;
+};
+
+export type CohereChatWithDefaultAgentResponse = CohereChatWithDefaultAgentResponses[keyof CohereChatWithDefaultAgentResponses];
+
+export type CohereChatWithAgentData = {
+    body?: CohereChatRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for API auth
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/cohere/{agentId}/chat';
+};
+
+export type CohereChatWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CohereChatWithAgentError = CohereChatWithAgentErrors[keyof CohereChatWithAgentErrors];
+
+export type CohereChatWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: CohereChatResponse;
+};
+
+export type CohereChatWithAgentResponse = CohereChatWithAgentResponses[keyof CohereChatWithAgentResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -11417,6 +13525,7 @@ export type GetFeaturesResponses = {
         geminiVertexAiEnabled: boolean;
         vllmEnabled: boolean;
         ollamaEnabled: boolean;
+        mistralEnabled: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
         browserStreamingEnabled: boolean;
         incomingEmail: {
@@ -11430,6 +13539,7 @@ export type GetFeaturesResponses = {
             provider?: 'lightrag';
             displayName?: string;
         };
+        mcpServerBaseImage: string;
     };
 };
 
@@ -11822,16 +13932,16 @@ export type PostApiWebhooksIncomingEmailResponses = {
 
 export type PostApiWebhooksIncomingEmailResponse = PostApiWebhooksIncomingEmailResponses[keyof PostApiWebhooksIncomingEmailResponses];
 
-export type GetPromptEmailAddressData = {
+export type GetAgentEmailAddressData = {
     body?: never;
     path: {
-        promptId: string;
+        agentId: string;
     };
     query?: never;
-    url: '/api/prompts/{promptId}/email-address';
+    url: '/api/agents/{agentId}/email-address';
 };
 
-export type GetPromptEmailAddressErrors = {
+export type GetAgentEmailAddressErrors = {
     /**
      * Default Response
      */
@@ -11888,19 +13998,22 @@ export type GetPromptEmailAddressErrors = {
     };
 };
 
-export type GetPromptEmailAddressError = GetPromptEmailAddressErrors[keyof GetPromptEmailAddressErrors];
+export type GetAgentEmailAddressError = GetAgentEmailAddressErrors[keyof GetAgentEmailAddressErrors];
 
-export type GetPromptEmailAddressResponses = {
+export type GetAgentEmailAddressResponses = {
     /**
      * Default Response
      */
     200: {
-        enabled: boolean;
+        providerEnabled: boolean;
         emailAddress: string | null;
+        agentIncomingEmailEnabled: boolean;
+        agentSecurityMode: 'private' | 'internal' | 'public';
+        agentAllowedDomain: string | null;
     };
 };
 
-export type GetPromptEmailAddressResponse = GetPromptEmailAddressResponses[keyof GetPromptEmailAddressResponses];
+export type GetAgentEmailAddressResponse = GetAgentEmailAddressResponses[keyof GetAgentEmailAddressResponses];
 
 export type GetIncomingEmailStatusData = {
     body?: never;
@@ -12332,8 +14445,8 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            request: CerebrasChatCompletionRequest;
-            processedRequest?: CerebrasChatCompletionRequest | null;
+            request: MistralChatCompletionRequest;
+            processedRequest?: MistralChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
             type: 'openai:chatCompletions';
             model: string | null;
@@ -12404,10 +14517,34 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            request: CerebrasChatCompletionRequest;
-            processedRequest?: CerebrasChatCompletionRequest | null;
+            request: MistralChatCompletionRequest;
+            processedRequest?: MistralChatCompletionRequest | null;
             response: CerebrasChatCompletionResponse;
             type: 'cerebras:chatCompletions';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason: string | null;
+            createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            request: MistralChatCompletionRequest;
+            processedRequest?: MistralChatCompletionRequest | null;
+            response: MistralChatCompletionResponse;
+            type: 'mistral:chatCompletions';
             model: string | null;
             baselineModel: string | null;
             inputTokens: number | null;
@@ -12472,6 +14609,30 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
+            request: CohereChatRequest;
+            processedRequest?: CohereChatRequest | null;
+            response: CohereChatResponse;
+            type: 'cohere:chat';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason: string | null;
+            createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: ZhipuaiChatCompletionRequest;
             processedRequest?: ZhipuaiChatCompletionRequest | null;
             response: ZhipuaiChatCompletionResponse;
@@ -12487,6 +14648,8 @@ export type GetInteractionsResponses = {
             toonCostSavings: string | null;
             toonSkipReason: string | null;
             createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -12711,7 +14874,10 @@ export type GetUniqueExternalAgentIdsResponses = {
     /**
      * Default Response
      */
-    200: Array<string>;
+    200: Array<{
+        id: string;
+        displayName: string;
+    }>;
 };
 
 export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
@@ -12873,8 +15039,8 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        request: CerebrasChatCompletionRequest;
-        processedRequest?: CerebrasChatCompletionRequest | null;
+        request: MistralChatCompletionRequest;
+        processedRequest?: MistralChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
         type: 'openai:chatCompletions';
         model: string | null;
@@ -12945,10 +15111,34 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        request: CerebrasChatCompletionRequest;
-        processedRequest?: CerebrasChatCompletionRequest | null;
+        request: MistralChatCompletionRequest;
+        processedRequest?: MistralChatCompletionRequest | null;
         response: CerebrasChatCompletionResponse;
         type: 'cerebras:chatCompletions';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason: string | null;
+        createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        request: MistralChatCompletionRequest;
+        processedRequest?: MistralChatCompletionRequest | null;
+        response: MistralChatCompletionResponse;
+        type: 'mistral:chatCompletions';
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
@@ -13013,6 +15203,30 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
+        request: CohereChatRequest;
+        processedRequest?: CohereChatRequest | null;
+        response: CohereChatResponse;
+        type: 'cohere:chat';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason: string | null;
+        createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: ZhipuaiChatCompletionRequest;
         processedRequest?: ZhipuaiChatCompletionRequest | null;
         response: ZhipuaiChatCompletionResponse;
@@ -13028,6 +15242,8 @@ export type GetInteractionResponses = {
         toonCostSavings: string | null;
         toonSkipReason: string | null;
         createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     };
 };
 
@@ -14056,89 +16272,6 @@ export type DeleteInternalMcpCatalogItemByNameResponses = {
 
 export type DeleteInternalMcpCatalogItemByNameResponse = DeleteInternalMcpCatalogItemByNameResponses[keyof DeleteInternalMcpCatalogItemByNameResponses];
 
-export type GetV1McpData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/mcp';
-};
-
-export type GetV1McpErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type GetV1McpError = GetV1McpErrors[keyof GetV1McpErrors];
-
-export type GetV1McpResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        name: string;
-        version: string;
-        agentId: string;
-        transport: string;
-        capabilities: {
-            tools: boolean;
-        };
-    };
-};
-
-export type GetV1McpResponse = GetV1McpResponses[keyof GetV1McpResponses];
-
-export type PostV1McpData = {
-    body?: {
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/mcp';
-};
-
-export type PostV1McpResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1McpSessionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/mcp/sessions';
-};
-
-export type DeleteV1McpSessionsErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type DeleteV1McpSessionsError = DeleteV1McpSessionsErrors[keyof DeleteV1McpSessionsErrors];
-
-export type DeleteV1McpSessionsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        message: string;
-        clearedCount: number;
-    };
-};
-
-export type DeleteV1McpSessionsResponse = DeleteV1McpSessionsResponses[keyof DeleteV1McpSessionsResponses];
-
 export type GetLimitsData = {
     body?: never;
     path?: never;
@@ -14597,6 +16730,101 @@ export type UpdateLimitResponses = {
 };
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
+
+export type GetV1McpByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type GetV1McpByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
+
+export type GetV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+        tokenAuth?: {
+            tokenId: string;
+            teamId: string | null;
+            isOrganizationToken: boolean;
+            isUserToken?: boolean;
+            userId?: string;
+        };
+    };
+};
+
+export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
+
+export type PostV1McpByProfileIdData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type PostV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1McpCacheByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/cache/{profileId}';
+};
+
+export type DeleteV1McpCacheByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type DeleteV1McpCacheByProfileIdError = DeleteV1McpCacheByProfileIdErrors[keyof DeleteV1McpCacheByProfileIdErrors];
+
+export type DeleteV1McpCacheByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        message: string;
+    };
+};
+
+export type DeleteV1McpCacheByProfileIdResponse = DeleteV1McpCacheByProfileIdResponses[keyof DeleteV1McpCacheByProfileIdResponses];
 
 export type GetMcpServerInstallationRequestsData = {
     body?: never;
@@ -17064,101 +19292,177 @@ export type GetMcpToolCallResponses = {
 
 export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
 
-export type GetV1McpByProfileIdData = {
-    body?: never;
-    path: {
-        profileId: string;
+export type MistralChatCompletionsWithDefaultAgentData = {
+    body?: MistralChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
     };
+    path?: never;
     query?: never;
-    url: '/v1/mcp/{profileId}';
+    url: '/v1/mistral/chat/completions';
 };
 
-export type GetV1McpByProfileIdErrors = {
+export type MistralChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
     /**
      * Default Response
      */
     401: {
-        error: string;
-        message: string;
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
     };
-};
-
-export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
-
-export type GetV1McpByProfileIdResponses = {
     /**
      * Default Response
      */
-    200: {
-        name: string;
-        version: string;
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type MistralChatCompletionsWithDefaultAgentError = MistralChatCompletionsWithDefaultAgentErrors[keyof MistralChatCompletionsWithDefaultAgentErrors];
+
+export type MistralChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: MistralChatCompletionResponse;
+};
+
+export type MistralChatCompletionsWithDefaultAgentResponse = MistralChatCompletionsWithDefaultAgentResponses[keyof MistralChatCompletionsWithDefaultAgentResponses];
+
+export type MistralChatCompletionsWithAgentData = {
+    body?: MistralChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
         agentId: string;
-        transport: string;
-        capabilities: {
-            tools: boolean;
-        };
-        tokenAuth?: {
-            tokenId: string;
-            teamId: string | null;
-            isOrganizationToken: boolean;
-            isUserToken?: boolean;
-            userId?: string;
-        };
-    };
-};
-
-export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
-
-export type PostV1McpByProfileIdData = {
-    body?: {
-        [key: string]: unknown;
-    };
-    path: {
-        profileId: string;
     };
     query?: never;
-    url: '/v1/mcp/{profileId}';
+    url: '/v1/mistral/{agentId}/chat/completions';
 };
 
-export type PostV1McpByProfileIdResponses = {
+export type MistralChatCompletionsWithAgentErrors = {
     /**
      * Default Response
      */
-    200: unknown;
-};
-
-export type DeleteV1McpSessionsByProfileIdData = {
-    body?: never;
-    path: {
-        profileId: string;
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
     };
-    query?: never;
-    url: '/v1/mcp/sessions/{profileId}';
-};
-
-export type DeleteV1McpSessionsByProfileIdErrors = {
     /**
      * Default Response
      */
     401: {
-        error: string;
-        message: string;
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
     };
-};
-
-export type DeleteV1McpSessionsByProfileIdError = DeleteV1McpSessionsByProfileIdErrors[keyof DeleteV1McpSessionsByProfileIdErrors];
-
-export type DeleteV1McpSessionsByProfileIdResponses = {
     /**
      * Default Response
      */
-    200: {
-        message: string;
-        clearedCount: number;
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
     };
 };
 
-export type DeleteV1McpSessionsByProfileIdResponse = DeleteV1McpSessionsByProfileIdResponses[keyof DeleteV1McpSessionsByProfileIdResponses];
+export type MistralChatCompletionsWithAgentError = MistralChatCompletionsWithAgentErrors[keyof MistralChatCompletionsWithAgentErrors];
+
+export type MistralChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: MistralChatCompletionResponse;
+};
+
+export type MistralChatCompletionsWithAgentResponse = MistralChatCompletionsWithAgentResponses[keyof MistralChatCompletionsWithAgentResponses];
 
 export type InitiateOAuthData = {
     body: {
@@ -17500,7 +19804,7 @@ export type OllamaChatCompletionsWithAgentResponses = {
 export type OllamaChatCompletionsWithAgentResponse = OllamaChatCompletionsWithAgentResponses[keyof OllamaChatCompletionsWithAgentResponses];
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
-    body?: CerebrasChatCompletionRequestInput;
+    body?: MistralChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -17585,7 +19889,7 @@ export type OpenAiChatCompletionsWithDefaultAgentResponses = {
 export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
 
 export type OpenAiChatCompletionsWithAgentData = {
-    body?: CerebrasChatCompletionRequestInput;
+    body?: MistralChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -17750,7 +20054,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -17770,7 +20074,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -17853,7 +20157,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -17952,7 +20256,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -18037,7 +20341,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -18919,1099 +21223,6 @@ export type GetPolicyConfigSubagentPromptResponses = {
 };
 
 export type GetPolicyConfigSubagentPromptResponse = GetPolicyConfigSubagentPromptResponses[keyof GetPolicyConfigSubagentPromptResponses];
-
-export type GetAllPromptAgentConnectionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/prompt-agents';
-};
-
-export type GetAllPromptAgentConnectionsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAllPromptAgentConnectionsError = GetAllPromptAgentConnectionsErrors[keyof GetAllPromptAgentConnectionsErrors];
-
-export type GetAllPromptAgentConnectionsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        promptId: string;
-        agentPromptId: string;
-    }>;
-};
-
-export type GetAllPromptAgentConnectionsResponse = GetAllPromptAgentConnectionsResponses[keyof GetAllPromptAgentConnectionsResponses];
-
-export type GetPromptAgentsData = {
-    body?: never;
-    path: {
-        promptId: string;
-    };
-    query?: never;
-    url: '/api/prompts/{promptId}/agents';
-};
-
-export type GetPromptAgentsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptAgentsError = GetPromptAgentsErrors[keyof GetPromptAgentsErrors];
-
-export type GetPromptAgentsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        promptId: string;
-        agentPromptId: string;
-        createdAt: string;
-        name: string;
-        systemPrompt: string | null;
-        profileId: string;
-        profileName: string;
-    }>;
-};
-
-export type GetPromptAgentsResponse = GetPromptAgentsResponses[keyof GetPromptAgentsResponses];
-
-export type SyncPromptAgentsData = {
-    body: {
-        agentPromptIds: Array<string>;
-    };
-    path: {
-        promptId: string;
-    };
-    query?: never;
-    url: '/api/prompts/{promptId}/agents';
-};
-
-export type SyncPromptAgentsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type SyncPromptAgentsError = SyncPromptAgentsErrors[keyof SyncPromptAgentsErrors];
-
-export type SyncPromptAgentsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        added: Array<string>;
-        removed: Array<string>;
-    };
-};
-
-export type SyncPromptAgentsResponse = SyncPromptAgentsResponses[keyof SyncPromptAgentsResponses];
-
-export type DeletePromptAgentData = {
-    body?: never;
-    path: {
-        promptId: string;
-        agentPromptId: string;
-    };
-    query?: never;
-    url: '/api/prompts/{promptId}/agents/{agentPromptId}';
-};
-
-export type DeletePromptAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeletePromptAgentError = DeletePromptAgentErrors[keyof DeletePromptAgentErrors];
-
-export type DeletePromptAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeletePromptAgentResponse = DeletePromptAgentResponses[keyof DeletePromptAgentResponses];
-
-export type GetPromptsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/prompts';
-};
-
-export type GetPromptsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptsError = GetPromptsErrors[keyof GetPromptsErrors];
-
-export type GetPromptsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetPromptsResponse = GetPromptsResponses[keyof GetPromptsResponses];
-
-export type CreatePromptData = {
-    body: {
-        name: string;
-        agentId: string;
-        userPrompt?: string | null;
-        systemPrompt?: string | null;
-        version?: number;
-        allowedChatops?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/prompts';
-};
-
-export type CreatePromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreatePromptError = CreatePromptErrors[keyof CreatePromptErrors];
-
-export type CreatePromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreatePromptResponse = CreatePromptResponses[keyof CreatePromptResponses];
-
-export type DeletePromptData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}';
-};
-
-export type DeletePromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeletePromptError = DeletePromptErrors[keyof DeletePromptErrors];
-
-export type DeletePromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeletePromptResponse = DeletePromptResponses[keyof DeletePromptResponses];
-
-export type GetPromptData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}';
-};
-
-export type GetPromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptError = GetPromptErrors[keyof GetPromptErrors];
-
-export type GetPromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
-
-export type UpdatePromptData = {
-    body?: {
-        name?: string;
-        agentId?: string;
-        userPrompt?: string | null;
-        systemPrompt?: string | null;
-        allowedChatops?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}';
-};
-
-export type UpdatePromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdatePromptError = UpdatePromptErrors[keyof UpdatePromptErrors];
-
-export type UpdatePromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdatePromptResponse = UpdatePromptResponses[keyof UpdatePromptResponses];
-
-export type GetPromptVersionsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}/versions';
-};
-
-export type GetPromptVersionsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptVersionsError = GetPromptVersionsErrors[keyof GetPromptVersionsErrors];
-
-export type GetPromptVersionsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        current: {
-            id: string;
-            organizationId: string;
-            name: string;
-            agentId: string;
-            userPrompt: string | null;
-            systemPrompt: string | null;
-            version: number;
-            history: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown>;
-            allowedChatops: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown>;
-            createdAt: string;
-            updatedAt: string;
-        };
-        history: Array<{
-            version: number;
-            userPrompt: string | null;
-            systemPrompt: string | null;
-            createdAt: string;
-        }>;
-    };
-};
-
-export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
-
-export type GetPromptToolsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}/tools';
-};
-
-export type GetPromptToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPromptToolsError = GetPromptToolsErrors[keyof GetPromptToolsErrors];
-
-export type GetPromptToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string | null;
-        catalogId: string | null;
-        mcpServerId: string | null;
-        promptAgentId: string | null;
-        name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description: string | null;
-        policiesAutoConfiguredAt: string | null;
-        policiesAutoConfiguringStartedAt: string | null;
-        policiesAutoConfiguredReasoning: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agentPromptId: string;
-    }>;
-};
-
-export type GetPromptToolsResponse = GetPromptToolsResponses[keyof GetPromptToolsResponses];
-
-export type RollbackPromptData = {
-    body: {
-        version: number;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/prompts/{id}/rollback';
-};
-
-export type RollbackPromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RollbackPromptError = RollbackPromptErrors[keyof RollbackPromptErrors];
-
-export type RollbackPromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        allowedChatops: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type RollbackPromptResponse = RollbackPromptResponses[keyof RollbackPromptResponses];
 
 export type GetSecretsTypeData = {
     body?: never;
@@ -21807,7 +23018,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21820,7 +23031,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -21895,7 +23106,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -22059,7 +23270,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -22072,7 +23283,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -22149,7 +23360,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'cerebras' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -22498,7 +23709,7 @@ export type GetToolsResponses = {
     200: Array<{
         id: string;
         catalogId: string | null;
-        promptAgentId: string | null;
+        delegateToAgentId: string | null;
         name: string;
         /**
          *

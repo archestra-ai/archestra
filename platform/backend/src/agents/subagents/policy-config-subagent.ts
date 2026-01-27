@@ -77,10 +77,20 @@ Examples:
   // Virtual agent representing the subagent for observability
   private static readonly VIRTUAL_AGENT: Agent = {
     id: PolicyConfigSubagent.SUBAGENT_ID,
+    organizationId: "",
     name: PolicyConfigSubagent.SUBAGENT_NAME,
     isDemo: false,
     isDefault: false,
     considerContextUntrusted: false,
+    agentType: "profile",
+    systemPrompt: null,
+    userPrompt: null,
+    promptVersion: 1,
+    promptHistory: [],
+    allowedChatops: [],
+    incomingEmailEnabled: false,
+    incomingEmailSecurityMode: "private",
+    incomingEmailAllowedDomain: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     tools: [],
@@ -228,11 +238,8 @@ Examples:
     );
 
     try {
-      // Get or create a dedicated system agent for subagent interactions
-      // This agent will show as empty/system in the UI
-      const systemAgent = await AgentModel.getAgentOrCreateDefault(
-        PolicyConfigSubagent.SUBAGENT_NAME,
-      );
+      // Get or create default LLM proxy agent for recording subagent interactions
+      const systemAgent = await AgentModel.getLLMProxyOrCreateDefault();
 
       await InteractionModel.create({
         profileId: systemAgent.id,

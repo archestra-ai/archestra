@@ -396,6 +396,39 @@ function parseGeminiError(responseBody: string): ParsedGeminiError | null {
   }
 }
 
+// Cohere Error Types and Parser
+
+interface ParsedCohereError {
+  message?: string;
+}
+
+/**
+ *
+ *  Errors in Cohere have this structure: { message: string }
+ * @see https://docs.cohere.com/reference/errors
+ */
+function parseCohereError(responseBody: string): ParsedCohereError | null {
+  try {
+    const parsed = JSON.parse(responseBody);
+    if (parsed?.message) {
+      return {
+        message: parsed.message,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function mapCohereErrorToCode(
+  statusCode: number | undefined,
+  _parsedError: ParsedCohereError | null,
+): ChatErrorCode {
+  // Cohere uses standard HTTP status codes
+  return mapStatusCodeToErrorCode(statusCode);
+}
+
 // =============================================================================
 // Provider-Specific Error Mappers
 // =============================================================================
@@ -722,6 +755,7 @@ type ParsedProviderError =
   | ParsedOpenAIError
   | ParsedAnthropicError
   | ParsedGeminiError
+  | ParsedCohereError
   | ParsedZhipuaiError;
 
 type ErrorParser = (responseBody: string) => ParsedProviderError | null;
@@ -760,6 +794,16 @@ function mapGeminiErrorWrapper(
   return mapGeminiErrorToCode(
     statusCode,
     parsedError as ParsedGeminiError | null,
+  );
+}
+
+function mapCohereErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapCohereErrorToCode(
+    statusCode,
+    parsedError as ParsedCohereError | null,
   );
 }
 
@@ -929,6 +973,8 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   anthropic: parseAnthropicError,
   gemini: parseGeminiError,
   cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
+  cohere: parseCohereError,
+  mistral: parseOpenAIError, // Mistral uses OpenAI-compatible API
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
@@ -944,6 +990,8 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   anthropic: mapAnthropicErrorWrapper,
   gemini: mapGeminiErrorWrapper,
   cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
+  cohere: mapCohereErrorWrapper,
+  mistral: mapOpenAIErrorWrapper, // Mistral uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,

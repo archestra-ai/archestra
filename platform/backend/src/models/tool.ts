@@ -1,10 +1,9 @@
 import {
   AGENT_TOOL_PREFIX,
+  DEFAULT_ARCHESTRA_TOOL_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   slugify,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
-  TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import {
   and,
@@ -259,7 +258,7 @@ class ToolModel {
         description: schema.toolsTable.description,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
-        promptAgentId: schema.toolsTable.promptAgentId,
+        delegateToAgentId: schema.toolsTable.delegateToAgentId,
         policiesAutoConfiguredAt: schema.toolsTable.policiesAutoConfiguredAt,
         policiesAutoConfiguringStartedAt:
           schema.toolsTable.policiesAutoConfiguringStartedAt,
@@ -387,8 +386,9 @@ class ToolModel {
       return [];
     }
 
-    // Return tools that are assigned via junction table AND have catalogId set
-    // This includes both regular MCP server tools and Archestra builtin tools
+    // Return tools that are assigned via junction table AND are either:
+    // - MCP tools (have catalogId set) - includes regular MCP server tools and Archestra builtin tools
+    // - Delegation tools (have delegateToAgentId set)
     // Excludes proxy-discovered tools which have agentId set and catalogId null
     const tools = await db
       .select()
@@ -396,7 +396,10 @@ class ToolModel {
       .where(
         and(
           inArray(schema.toolsTable.id, assignedToolIds),
-          isNotNull(schema.toolsTable.catalogId),
+          or(
+            isNotNull(schema.toolsTable.catalogId),
+            isNotNull(schema.toolsTable.delegateToAgentId),
+          ),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -604,29 +607,33 @@ class ToolModel {
 
   /**
    * Assign default Archestra tools to an agent.
-   * These tools are automatically assigned to new profiles:
+   *
+   * Default tools are those listed in {@link DEFAULT_ARCHESTRA_TOOL_NAMES}:
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
-   * - query_knowledge_graph: for querying the knowledge graph (only if configured)
+   * - query_knowledge_graph: for querying the knowledge graph (only if KG is configured)
+   *
+   * Only tools that have already been seeded (via {@link seedArchestraTools})
+   * will be assigned. If none of the default tools exist, this method skips assignment.
    */
   static async assignDefaultArchestraToolsToAgent(
     agentId: string,
   ): Promise<void> {
-    // Build the list of default tools
-    const defaultToolNames = [
-      TOOL_ARTIFACT_WRITE_FULL_NAME,
-      TOOL_TODO_WRITE_FULL_NAME,
-    ];
-
-    // Add query_knowledge_graph if knowledge graph provider is configured
-    if (getKnowledgeGraphProviderType()) {
-      defaultToolNames.push(TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME);
+    // Create a copy to avoid mutating the shared constant
+    const assignedDefaultTools = [...DEFAULT_ARCHESTRA_TOOL_NAMES];
+    if (!getKnowledgeGraphProviderType()) {
+      const index = assignedDefaultTools.indexOf(
+        TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+      );
+      if (index !== -1) {
+        assignedDefaultTools.splice(index, 1); // Remove query_knowledge_graph tool if knowledge graph is not configured
+      }
     }
 
     const defaultTools = await db
       .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, defaultToolNames));
+      .where(inArray(schema.toolsTable.name, assignedDefaultTools));
 
     if (defaultTools.length === 0) {
       // Tools not yet seeded, skip assignment
@@ -1038,36 +1045,42 @@ class ToolModel {
   }
 
   /**
-   * Create or get an agent delegation tool for a prompt agent
-   * These tools are NOT assigned to agents via agent_tools - they're prompt-specific
-   * @param params.promptAgentId - The prompt_agents.id
-   * @param params.agentName - The name of the delegated agent (used for tool name)
-   * @param params.description - Description from the delegated prompt's systemPrompt
+   * Find or create a delegation tool for a target agent.
+   * Delegation tools are used by internal agents to delegate tasks to other agents.
    */
-  static async createAgentDelegationTool(params: {
-    promptAgentId: string;
-    agentName: string;
-    description?: string | null;
-  }): Promise<Tool> {
-    const { promptAgentId, agentName, description } = params;
-
-    // Check if tool already exists for this prompt agent
+  static async findOrCreateDelegationTool(
+    targetAgentId: string,
+  ): Promise<Tool> {
+    // Check if delegation tool already exists
     const [existingTool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.promptAgentId, promptAgentId))
+      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId))
       .limit(1);
 
     if (existingTool) {
       return existingTool;
     }
 
-    // Create the tool (NOT assigned to agent_tools - it's prompt-specific)
+    // Get target agent for naming
+    const [targetAgent] = await db
+      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, targetAgentId))
+      .limit(1);
+
+    if (!targetAgent) {
+      throw new Error(`Target agent not found: ${targetAgentId}`);
+    }
+
+    // Create delegation tool
+    const toolName = `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`;
     const [tool] = await db
       .insert(schema.toolsTable)
       .values({
-        name: `${AGENT_TOOL_PREFIX}${slugify(agentName)}`,
-        promptAgentId,
+        name: toolName,
+        description: `Delegate task to agent: ${targetAgent.name}`,
+        delegateToAgentId: targetAgentId,
         agentId: null,
         catalogId: null,
         mcpServerId: null,
@@ -1076,12 +1089,11 @@ class ToolModel {
           properties: {
             message: {
               type: "string",
-              description: "The message to send to this agent",
+              description: "The task or message to send to the agent",
             },
           },
           required: ["message"],
         },
-        description: description || `Delegate to ${agentName}`,
       })
       .returning();
 
@@ -1089,109 +1101,95 @@ class ToolModel {
   }
 
   /**
-   * Get agent delegation tools for a prompt
-   * Fetches tools that are linked to prompt_agents for the given promptId
+   * Find a delegation tool by target agent ID
    */
-  static async getAgentDelegationToolsByPrompt(
-    promptId: string,
-  ): Promise<Tool[]> {
-    // Get prompt_agents for this prompt
-    const promptAgents = await db
-      .select({ id: schema.promptAgentsTable.id })
-      .from(schema.promptAgentsTable)
-      .where(eq(schema.promptAgentsTable.promptId, promptId));
-
-    if (promptAgents.length === 0) {
-      return [];
-    }
-
-    const promptAgentIds = promptAgents.map((pa) => pa.id);
-
-    // Get tools with promptAgentId in that list
-    const tools = await db
+  static async findDelegationTool(targetAgentId: string): Promise<Tool | null> {
+    const [tool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.promptAgentId, promptAgentIds));
+      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId))
+      .limit(1);
 
-    return tools;
+    return tool || null;
   }
 
   /**
-   * Get agent delegation tools with profile info for user access filtering
-   * Returns tools along with the profile ID of the delegated-to prompt
+   * Get delegation tools assigned to an agent with target agent details
    */
-  static async getAgentDelegationToolsWithDetails(promptId: string): Promise<
+  static async getDelegationToolsByAgent(agentId: string): Promise<
     Array<{
       tool: Tool;
-      profileId: string;
-      agentPromptId: string;
-      agentPromptName: string;
-      agentPromptSystemPrompt: string | null;
+      targetAgent: {
+        id: string;
+        name: string;
+        systemPrompt: string | null;
+      };
     }>
   > {
-    // Join tools with prompt_agents and prompts to get profile info
     const results = await db
       .select({
         tool: schema.toolsTable,
-        profileId: schema.agentsTable.id,
-        agentPromptId: schema.promptAgentsTable.agentPromptId,
-        agentPromptName: schema.promptsTable.name,
-        agentPromptSystemPrompt: schema.promptsTable.systemPrompt,
+        targetAgent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+          systemPrompt: schema.agentsTable.systemPrompt,
+        },
       })
-      .from(schema.toolsTable)
+      .from(schema.agentToolsTable)
       .innerJoin(
-        schema.promptAgentsTable,
-        eq(schema.toolsTable.promptAgentId, schema.promptAgentsTable.id),
-      )
-      .innerJoin(
-        schema.promptsTable,
-        eq(schema.promptAgentsTable.agentPromptId, schema.promptsTable.id),
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
       .innerJoin(
         schema.agentsTable,
-        eq(schema.promptsTable.agentId, schema.agentsTable.id),
+        eq(schema.toolsTable.delegateToAgentId, schema.agentsTable.id),
       )
-      .where(eq(schema.promptAgentsTable.promptId, promptId));
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          isNotNull(schema.toolsTable.delegateToAgentId),
+        ),
+      );
 
     return results;
   }
 
   /**
-   * Sync agent delegation tool names when a prompt is renamed
-   * Updates the tool name for all tools that delegate to this prompt
-   * @param agentPromptId - The prompt ID that was renamed (the delegated-to prompt)
-   * @param newName - The new name of the prompt
+   * Sync delegation tool names when an agent is renamed.
+   * Updates the tool name for all tools that delegate to this agent.
+   * @param targetAgentId - The agent ID that was renamed
+   * @param newName - The new name of the agent
    */
-  static async syncAgentDelegationToolNames(
-    agentPromptIds: string | string[],
+  static async syncDelegationToolNames(
+    targetAgentId: string,
     newName: string,
   ): Promise<void> {
-    const idsArray = Array.isArray(agentPromptIds)
-      ? agentPromptIds
-      : [agentPromptIds];
-
-    if (idsArray.length === 0) {
-      return;
-    }
-
-    // Find all prompt_agents that point to any of these prompts (agentPromptId)
-    const promptAgents = await db
-      .select({ id: schema.promptAgentsTable.id })
-      .from(schema.promptAgentsTable)
-      .where(inArray(schema.promptAgentsTable.agentPromptId, idsArray));
-
-    if (promptAgents.length === 0) {
-      return;
-    }
-
-    const promptAgentIds = promptAgents.map((pa) => pa.id);
     const newToolName = `${AGENT_TOOL_PREFIX}${slugify(newName)}`;
 
-    // Update all tools that reference these prompt_agents
     await db
       .update(schema.toolsTable)
-      .set({ name: newToolName })
-      .where(inArray(schema.toolsTable.promptAgentId, promptAgentIds));
+      .set({
+        name: newToolName,
+        description: `Delegate task to agent: ${newName}`,
+      })
+      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId));
+  }
+
+  /**
+   * Find all agent IDs that have delegation tools pointing to the target agent.
+   * Used to invalidate caches when target agent is renamed.
+   */
+  static async getParentAgentIds(targetAgentId: string): Promise<string[]> {
+    const results = await db
+      .selectDistinct({ agentId: schema.agentToolsTable.agentId })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId));
+
+    return results.map((r) => r.agentId);
   }
 
   /**
@@ -1328,16 +1326,7 @@ class ToolModel {
         schema.mcpServersTable,
         eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
       )
-      .where(
-        and(
-          toolWhereClause,
-          // Only tools with at least one assignment
-          sql`EXISTS (
-            SELECT 1 FROM ${schema.agentToolsTable}
-            WHERE ${assignmentConditions}
-          )`,
-        ),
-      )
+      .where(toolWhereClause)
       .orderBy(orderByClause)
       .limit(pagination.limit ?? 20)
       .offset(pagination.offset ?? 0);
@@ -1346,15 +1335,7 @@ class ToolModel {
     const [{ total }] = await db
       .select({ total: count() })
       .from(schema.toolsTable)
-      .where(
-        and(
-          toolWhereClause,
-          sql`EXISTS (
-            SELECT 1 FROM ${schema.agentToolsTable}
-            WHERE ${assignmentConditions}
-          )`,
-        ),
-      );
+      .where(toolWhereClause);
 
     if (toolsWithCount.length === 0) {
       return createPaginatedResult([], 0, {

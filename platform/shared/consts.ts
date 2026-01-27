@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
@@ -69,6 +71,9 @@ export const E2eTestId = {
   ChatApiKeyDefaultBadge: "chat-api-key-default-badge",
   BulkAssignChatApiKeysButton: "bulk-assign-chat-api-keys-button",
   BulkAssignChatApiKeysDialog: "bulk-assign-chat-api-keys-dialog",
+  // Chat Prompt Input
+  ChatFileUploadButton: "chat-file-upload-button",
+  ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
@@ -83,6 +88,8 @@ export const EMAIL_PLACEHOLDER = "admin@example.com";
 export const PASSWORD_PLACEHOLDER = "password";
 
 export const DEFAULT_PROFILE_NAME = "Default Profile";
+export const DEFAULT_MCP_GATEWAY_NAME = "Default MCP Gateway";
+export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -112,6 +119,12 @@ export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTR
 export const TOOL_ARTIFACT_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}artifact_write`;
 export const TOOL_TODO_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}todo_write`;
 export const TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`;
+
+export const DEFAULT_ARCHESTRA_TOOL_NAMES = [
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+];
 
 export const MCP_CATALOG_API_BASE_URL =
   process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||
@@ -165,3 +178,55 @@ export const TimeInMs = {
   Hour: 1_000 * 60 * 60,
   Day: 1_000 * 60 * 60 * 24,
 } as const;
+
+/**
+ * Incoming email security modes.
+ * - private: Requires sender email to match an Archestra user who has access to the agent
+ * - internal: Only allows emails from a specific domain
+ * - public: No sender restrictions (anyone can email the agent)
+ */
+export const IncomingEmailSecurityModeSchema = z.enum([
+  "private",
+  "internal",
+  "public",
+]);
+export type IncomingEmailSecurityMode = z.infer<
+  typeof IncomingEmailSecurityModeSchema
+>;
+export const IncomingEmailSecurityModes = Object.values(
+  IncomingEmailSecurityModeSchema.enum,
+);
+
+/**
+ * Constant object for incoming email security mode values.
+ * Use this for type-safe comparisons and UI selects.
+ */
+export const INCOMING_EMAIL_SECURITY_MODE = {
+  PRIVATE: "private",
+  INTERNAL: "internal",
+  PUBLIC: "public",
+} as const satisfies Record<string, IncomingEmailSecurityMode>;
+
+/**
+ * Check if a value is a valid incoming email security mode
+ */
+export function isValidIncomingEmailSecurityMode(
+  value: string,
+): value is IncomingEmailSecurityMode {
+  return IncomingEmailSecurityModes.includes(
+    value as IncomingEmailSecurityMode,
+  );
+}
+
+/**
+ * Regex pattern for validating domain format.
+ * Matches domains like: company.com, sub.company.com, my-company.co.uk
+ * Does not match: spaces, special characters (except hyphen), domains starting/ending with hyphen
+ */
+export const DOMAIN_VALIDATION_REGEX =
+  /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+
+/**
+ * Maximum domain length per DNS specification (RFC 1035).
+ */
+export const MAX_DOMAIN_LENGTH = 253;

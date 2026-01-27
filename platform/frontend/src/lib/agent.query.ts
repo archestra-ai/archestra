@@ -16,11 +16,14 @@ const {
   deleteAgent,
   getAgents,
   getAllAgents,
-  getDefaultAgent,
+  getDefaultMcpGateway,
+  getDefaultLlmProxy,
   getAgent,
   updateAgent,
   getLabelKeys,
   getLabelValues,
+  getAgentVersions,
+  rollbackAgent,
 } = archestraApiSdk;
 
 // For backward compatibility - returns all agents as an array (suspense version)
@@ -64,22 +67,34 @@ export function useProfilesPaginated(params?: {
   sortBy?: "name" | "createdAt" | "toolsCount" | "team";
   sortDirection?: "asc" | "desc";
   name?: string;
+  agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
 }) {
-  const { initialData, limit, offset, sortBy, sortDirection, name } =
-    params || {};
+  const {
+    initialData,
+    limit,
+    offset,
+    sortBy,
+    sortDirection,
+    name,
+    agentTypes,
+  } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
   // Only use it for the first page (offset 0), default sorting, no search filter,
-  // AND matching default page size (20)
+  // no agentTypes filter, AND matching default page size (20)
   const useInitialData =
     offset === 0 &&
     (sortBy === undefined || sortBy === DEFAULT_SORT_BY) &&
     (sortDirection === undefined || sortDirection === DEFAULT_SORT_DIRECTION) &&
     name === undefined &&
+    agentTypes === undefined &&
     (limit === undefined || limit === DEFAULT_AGENTS_PAGE_SIZE);
 
   return useSuspenseQuery({
-    queryKey: ["agents", { limit, offset, sortBy, sortDirection, name }],
+    queryKey: [
+      "agents",
+      { limit, offset, sortBy, sortDirection, name, agentTypes },
+    ],
     queryFn: async () =>
       (
         await getAgents({
@@ -89,6 +104,7 @@ export function useProfilesPaginated(params?: {
             sortBy,
             sortDirection,
             name,
+            agentTypes,
           },
         })
       ).data ?? null,
@@ -96,12 +112,25 @@ export function useProfilesPaginated(params?: {
   });
 }
 
-export function useDefaultProfile(params?: {
-  initialData?: archestraApiTypes.GetDefaultAgentResponses["200"];
+export function useDefaultMcpGateway(params?: {
+  initialData?: archestraApiTypes.GetDefaultMcpGatewayResponses["200"];
 }) {
   return useQuery({
-    queryKey: ["agents", "default"],
-    queryFn: async () => (await getDefaultAgent()).data ?? null,
+    queryKey: ["mcp-gateways", "default"],
+    queryFn: async () => (await getDefaultMcpGateway()).data ?? null,
+    initialData: params?.initialData,
+  });
+}
+
+export function useDefaultLlmProxy(params?: {
+  initialData?: archestraApiTypes.GetDefaultLlmProxyResponses["200"];
+}) {
+  return useQuery({
+    queryKey: ["llm-proxy", "default"],
+    queryFn: async () => {
+      const response = await getDefaultLlmProxy();
+      return response.data ?? null;
+    },
     initialData: params?.initialData,
   });
 }
@@ -191,5 +220,63 @@ export function useLabelValues(params?: { key?: string }) {
     queryFn: async () =>
       (await getLabelValues({ query: key ? { key } : {} })).data ?? [],
     enabled: key !== undefined,
+  });
+}
+
+// ============================================================================
+// Internal Agents (Prompt-based agents) - Version History & Rollback
+// ============================================================================
+
+/**
+ * Get internal agents only (agents with prompts).
+ * Non-suspense version for components that need loading states.
+ */
+export function useInternalAgents() {
+  return useQuery({
+    queryKey: ["agents", "all", { agentType: "agent" }],
+    queryFn: async () => {
+      const response = await getAllAgents({ query: { agentType: "agent" } });
+      return response.data ?? [];
+    },
+  });
+}
+
+/**
+ * Get version history for an internal agent.
+ * Only applicable to internal agents (agents with prompts).
+ */
+export function useAgentVersions(id: string | undefined) {
+  return useQuery({
+    queryKey: ["agents", id, "versions"],
+    queryFn: async () => {
+      if (!id) return null;
+      const response = await getAgentVersions({ path: { id } });
+      return response.data ?? null;
+    },
+    enabled: !!id,
+  });
+}
+
+/**
+ * Rollback an internal agent to a previous version.
+ * Only applicable to internal agents (agents with prompts).
+ */
+export function useRollbackAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      const response = await rollbackAgent({
+        path: { id },
+        body: { version },
+      });
+      return response.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: ["agents", variables.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["agents", variables.id, "versions"],
+      });
+    },
   });
 }

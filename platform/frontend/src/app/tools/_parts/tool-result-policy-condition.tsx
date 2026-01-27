@@ -54,7 +54,7 @@ export function ToolResultPolicyCondition({
       newAttributePath === CONTEXT_EXTERNAL_AGENT_ID &&
       externalAgentIds.length === 1
     ) {
-      autoValue = externalAgentIds[0];
+      autoValue = externalAgentIds[0].id;
     } else if (newAttributePath === CONTEXT_TEAM_IDS && teams?.length === 1) {
       autoValue = teams[0].id;
     }
@@ -126,7 +126,9 @@ export function ToolResultPolicyCondition({
         {attributePath === CONTEXT_EXTERNAL_AGENT_ID ? (
           externalAgentIds.length === 1 ? (
             <div className="flex items-center gap-2">
-              <span className="text-sm truncate">{externalAgentIds[0]}</span>
+              <span className="text-sm truncate">
+                {externalAgentIds[0].displayName}
+              </span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -146,12 +148,12 @@ export function ToolResultPolicyCondition({
               }
             >
               <SelectTrigger className="w-full h-9">
-                <SelectValue placeholder="Select agent ID" />
+                <SelectValue placeholder="Select agent" />
               </SelectTrigger>
               <SelectContent>
-                {externalAgentIds.map((agentId) => (
-                  <SelectItem key={agentId} value={agentId}>
-                    {agentId}
+                {externalAgentIds.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.displayName}
                   </SelectItem>
                 ))}
               </SelectContent>

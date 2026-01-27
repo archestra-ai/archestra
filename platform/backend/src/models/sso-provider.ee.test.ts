@@ -18,6 +18,32 @@ vi.mock("@/logging", () => ({
   },
 }));
 
+// Mock cacheManager for SSO groups caching tests (preserves LRUCacheManager, CacheKey exports)
+const mockCacheStore = new Map<string, unknown>();
+vi.mock("@/cache-manager", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/cache-manager")>();
+  return {
+    ...actual,
+    cacheManager: {
+      get: vi.fn(async (key: string) => mockCacheStore.get(key)),
+      set: vi.fn(async (key: string, value: unknown, _ttl?: number) => {
+        mockCacheStore.set(key, value);
+        return value;
+      }),
+      delete: vi.fn(async (key: string) => {
+        const existed = mockCacheStore.has(key);
+        mockCacheStore.delete(key);
+        return existed;
+      }),
+      getAndDelete: vi.fn(async (key: string) => {
+        const value = mockCacheStore.get(key);
+        mockCacheStore.delete(key);
+        return value;
+      }),
+    },
+  };
+});
+
 const mockProvider = {
   id: "test-provider-id",
   providerId: "TestOIDC",
@@ -1832,7 +1858,7 @@ describe("resolveSsoRole", () => {
       await SsoProviderModel.resolveSsoRole(params);
 
       // Verify groups were cached
-      const cachedData = retrieveSsoGroups(
+      const cachedData = await retrieveSsoGroups(
         provider.providerId,
         "groupuser@example.com",
       );
@@ -1858,7 +1884,7 @@ describe("resolveSsoRole", () => {
       await SsoProviderModel.resolveSsoRole(params);
 
       // Verify groups were cached even without role mapping
-      const cachedData = retrieveSsoGroups(
+      const cachedData = await retrieveSsoGroups(
         provider.providerId,
         "noroles@example.com",
       );
@@ -1904,7 +1930,7 @@ describe("resolveSsoRole", () => {
       await SsoProviderModel.resolveSsoRole(params);
 
       // Verify nothing was cached (no groups to cache)
-      const cachedData = retrieveSsoGroups(
+      const cachedData = await retrieveSsoGroups(
         provider.providerId,
         "nogroups@example.com",
       );
@@ -1938,7 +1964,7 @@ describe("resolveSsoRole", () => {
       await SsoProviderModel.resolveSsoRole(params);
 
       // Groups extracted from token (we only use ID token claims now)
-      const cachedData = retrieveSsoGroups(
+      const cachedData = await retrieveSsoGroups(
         provider.providerId,
         "tokenuser@example.com",
       );

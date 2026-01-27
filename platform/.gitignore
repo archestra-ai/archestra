@@ -60,7 +60,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .turbo
 
 # Previous version static assets (extracted during CI builds)
-prev-static-assets/
+# Keep .gitkeep but ignore everything else in this directory
+prev-static-assets/*
+!prev-static-assets/.gitkeep
 
 tsconfig.tsbuildinfo
 .playwright-mcp

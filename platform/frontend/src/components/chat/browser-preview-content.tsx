@@ -105,18 +105,27 @@ export function BrowserPreviewContent({
 
       let renderedWidth: number;
       let renderedHeight: number;
+      let offsetX = 0;
+      let offsetY = 0;
 
-      // No offset needed since image starts at (0,0) of container
+      // With object-contain object-top, we need to calculate offsets
+      // - No vertical offset needed (image aligns to top via object-top)
+      // - Horizontal offset needed when image is narrower than container (letterboxed on sides)
       if (naturalRatio > containerRatio) {
+        // Image is wider than container - fits width, letterboxed top/bottom
+        // With object-top, image starts at top, so no offsetY needed
         renderedWidth = imgRect.width;
         renderedHeight = imgRect.width / naturalRatio;
       } else {
+        // Image is taller than container - fits height, letterboxed left/right
+        // Image is centered horizontally, so we need offsetX
         renderedHeight = imgRect.height;
         renderedWidth = imgRect.height * naturalRatio;
+        offsetX = (imgRect.width - renderedWidth) / 2;
       }
 
-      const clickX = e.clientX - imgRect.left;
-      const clickY = e.clientY - imgRect.top;
+      const clickX = e.clientX - imgRect.left - offsetX;
+      const clickY = e.clientY - imgRect.top - offsetY;
 
       if (
         clickX < 0 ||

@@ -41,6 +41,27 @@ export function RightSidePanel({
     setIsResizing(true);
   }, []);
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const step = e.shiftKey ? 50 : 10; // Larger step with shift key
+      const minWidth = 300;
+      const maxWidth = window.innerWidth * 0.7;
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const newWidth = Math.min(maxWidth, width + step);
+        setWidth(newWidth);
+        localStorage.setItem("archestra-right-panel-width", newWidth.toString());
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const newWidth = Math.max(minWidth, width - step);
+        setWidth(newWidth);
+        localStorage.setItem("archestra-right-panel-width", newWidth.toString());
+      }
+    },
+    [width],
+  );
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
@@ -92,9 +113,10 @@ export function RightSidePanel({
       <div
         className="absolute left-0 top-0 bottom-0 w-1 hover:w-2 cursor-col-resize bg-transparent hover:bg-primary/10 transition-all z-10"
         onMouseDown={handleMouseDown}
+        onKeyDown={handleKeyDown}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize panel"
+        aria-label="Resize panel. Use arrow keys to resize, hold shift for larger steps."
         aria-valuenow={width}
         aria-valuemin={300}
         aria-valuemax={

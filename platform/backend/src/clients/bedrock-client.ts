@@ -88,7 +88,12 @@ export class BedrockClient {
         { status: response.status, errorBody },
         "[BedrockClient] converse error",
       );
-      throw new Error(`Bedrock API error: ${response.status} - ${errorBody}`);
+      const error = new Error(
+        errorBody || `Bedrock API error: ${response.status}`,
+      );
+      (error as Error & { statusCode: number }).statusCode = response.status;
+      (error as Error & { responseBody: string }).responseBody = errorBody;
+      throw error;
     }
 
     const result = await response.json();
@@ -125,7 +130,12 @@ export class BedrockClient {
         { status: response.status, errorBody },
         "[BedrockClient] converseStream error",
       );
-      throw new Error(`Bedrock API error: ${response.status} - ${errorBody}`);
+      const error = new Error(
+        errorBody || `Bedrock API error: ${response.status}`,
+      );
+      (error as Error & { statusCode: number }).statusCode = response.status;
+      (error as Error & { responseBody: string }).responseBody = errorBody;
+      throw error;
     }
 
     if (!response.body) {

@@ -516,7 +516,7 @@ async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
   // INFERENCE_PROFILE models (like Claude) require the prefix env var to be set
   const inferenceProfilePrefix = config.llm.bedrock.inferenceProfilePrefix;
 
-  return data.modelSummaries
+  const models = data.modelSummaries
     .filter((model) => {
       // Must support TEXT input modality
       if (!model.inputModalities?.includes("TEXT")) {
@@ -557,6 +557,16 @@ async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
         provider: "bedrock" as const,
       };
     });
+
+  logger.info(
+    {
+      modelCount: models.length,
+      models: models.map((m) => ({ id: m.id, displayName: m.displayName })),
+    },
+    "[fetchBedrockModels] filtered models returned for bedrock",
+  );
+
+  return models;
 }
 
 /**

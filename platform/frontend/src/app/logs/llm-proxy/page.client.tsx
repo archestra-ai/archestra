@@ -19,7 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import {
   useInteractionSessions,
@@ -228,18 +233,26 @@ function SessionRow({
       <TableCell className="font-mono text-xs py-3">
         {session.requestCount.toLocaleString()}
       </TableCell>
-      <TableCell className="py-3">
-        <div className="flex flex-wrap gap-1">
-          {session.models.map((model) => (
-            <Badge
-              key={model}
-              variant="secondary"
-              className="text-xs whitespace-nowrap"
-            >
-              {model}
-            </Badge>
-          ))}
-        </div>
+      <TableCell className="py-3 max-w-[200px]">
+        <TooltipProvider>
+          <div className="flex flex-wrap gap-1">
+            {session.models.map((model) => (
+              <Tooltip key={model}>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs max-w-[180px] cursor-default"
+                  >
+                    <span className="truncate">{model}</span>
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-mono text-xs">{model}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </TooltipProvider>
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
         {session.totalCost && session.totalBaselineCost && (

@@ -77,6 +77,22 @@ export const VllmErrorTypes = {
 } as const;
 
 /**
+ * AWS Bedrock Converse API exception types (from response body `__type` field)
+ * @see https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html
+ */
+export const BedrockErrorTypes = {
+  ACCESS_DENIED: "AccessDeniedException",
+  INTERNAL_SERVER: "InternalServerException",
+  MODEL_ERROR: "ModelErrorException",
+  MODEL_NOT_READY: "ModelNotReadyException",
+  MODEL_TIMEOUT: "ModelTimeoutException",
+  RESOURCE_NOT_FOUND: "ResourceNotFoundException",
+  SERVICE_UNAVAILABLE: "ServiceUnavailableException",
+  THROTTLING: "ThrottlingException",
+  VALIDATION: "ValidationException",
+} as const;
+
+/**
  * Ollama API error types
  * Ollama uses OpenAI-compatible error format, so types are similar to OpenAI.
  * @see https://github.com/ollama/ollama/blob/main/docs/openai.md

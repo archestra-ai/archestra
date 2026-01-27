@@ -35,8 +35,6 @@ export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
-export { default as promptAgentRoutes } from "./prompt-agents";
-export { default as promptRoutes } from "./prompts";
 // Proxy routes
 export const anthropicProxyRoutes = anthropicProxyRoutesV2;
 export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;

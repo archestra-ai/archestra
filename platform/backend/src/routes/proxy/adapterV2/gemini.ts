@@ -34,7 +34,6 @@ import type {
   UsageView,
 } from "@/types";
 import { MockGeminiClient } from "../mock-gemini-client";
-import { createGoogleGenAIClient } from "../utils/gemini-client";
 import {
   hasImageContent,
   isImageTooLarge,

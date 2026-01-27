@@ -1,6 +1,20 @@
 import { z } from "zod";
 
 // ============================================================================
+// Token Usage Types
+// ============================================================================
+
+/**
+ * Token usage data streamed from the backend after LLM response completes.
+ * Used by the chat UI to display actual token counts.
+ */
+export interface TokenUsage {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  totalTokens: number | undefined;
+}
+
+// ============================================================================
 // Zod Schemas for Model Modalities
 // ============================================================================
 

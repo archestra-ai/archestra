@@ -1,4 +1,9 @@
-import { type ChatErrorResponse, RouteId, SupportedProviders } from "@shared";
+import {
+  type ChatErrorResponse,
+  RouteId,
+  SupportedProviders,
+  type TokenUsage,
+} from "@shared";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -456,7 +461,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   inputTokens: usage.inputTokens,
                   outputTokens: usage.outputTokens,
                   totalTokens: usage.totalTokens,
-                },
+                } satisfies TokenUsage,
               });
             }
           },

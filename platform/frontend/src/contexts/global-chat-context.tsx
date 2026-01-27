@@ -5,6 +5,7 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+  type TokenUsage,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
@@ -21,13 +22,6 @@ import {
 import { useGenerateConversationTitle } from "@/lib/chat.query";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
-
-/** Token usage data received from the backend stream */
-export interface TokenUsage {
-  inputTokens: number | undefined;
-  outputTokens: number | undefined;
-  totalTokens: number | undefined;
-}
 
 interface ChatSession {
   conversationId: string;

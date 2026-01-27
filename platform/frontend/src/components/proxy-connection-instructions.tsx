@@ -1,6 +1,6 @@
 "use client";
 
-import type { SupportedProvider } from "@shared";
+import { providerDisplayNames, type SupportedProvider } from "@shared";
 import { Check, ChevronDown, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
@@ -24,21 +24,42 @@ const PROVIDER_CONFIG: Record<
   ProviderOption,
   { label: string; originalUrl: string } | { label: string; isCommand: true }
 > = {
-  openai: { label: "OpenAI", originalUrl: "https://api.openai.com/v1/" },
+  openai: {
+    label: providerDisplayNames.openai,
+    originalUrl: "https://api.openai.com/v1/",
+  },
   gemini: {
-    label: "Gemini",
+    label: providerDisplayNames.gemini,
     originalUrl: "https://generativelanguage.googleapis.com/v1/",
   },
   anthropic: {
-    label: "Anthropic",
+    label: providerDisplayNames.anthropic,
     originalUrl: "https://api.anthropic.com/v1/",
   },
-  cerebras: { label: "Cerebras", originalUrl: "https://api.cerebras.ai/v1/" },
-  mistral: { label: "Mistral", originalUrl: "https://api.mistral.ai/v1/" },
-  cohere: { label: "Cohere", originalUrl: "https://api.cohere.com/v2/" },
-  vllm: { label: "vLLM", originalUrl: "http://localhost:8000/v1/" },
-  ollama: { label: "Ollama", originalUrl: "http://localhost:11434/v1/" },
-  zhipuai: { label: "Zhipu AI", originalUrl: "https://open.bigmodel.cn/api/" },
+  cerebras: {
+    label: providerDisplayNames.cerebras,
+    originalUrl: "https://api.cerebras.ai/v1/",
+  },
+  mistral: {
+    label: providerDisplayNames.mistral,
+    originalUrl: "https://api.mistral.ai/v1/",
+  },
+  cohere: {
+    label: providerDisplayNames.cohere,
+    originalUrl: "https://api.cohere.com/v2/",
+  },
+  vllm: {
+    label: providerDisplayNames.vllm,
+    originalUrl: "http://localhost:8000/v1/",
+  },
+  ollama: {
+    label: providerDisplayNames.ollama,
+    originalUrl: "http://localhost:11434/v1/",
+  },
+  zhipuai: {
+    label: providerDisplayNames.zhipuai,
+    originalUrl: "https://open.bigmodel.cn/api/",
+  },
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 

@@ -304,6 +304,14 @@ export default function ChatPage() {
     return model?.capabilities?.contextLength ?? null;
   }, [conversation?.selectedModel, initialModel, chatModels]);
 
+  // Get selected model's input modalities for file upload filtering
+  const selectedModelInputModalities = useMemo(() => {
+    const modelId = conversation?.selectedModel ?? initialModel;
+    if (!modelId) return null;
+    const model = chatModels.find((m) => m.id === modelId);
+    return model?.capabilities?.inputModalities ?? null;
+  }, [conversation?.selectedModel, initialModel, chatModels]);
+
   // Mutation for updating conversation model
   const updateConversationMutation = useUpdateConversation();
 
@@ -1144,6 +1152,7 @@ export default function ChatPage() {
                   onEditAgent={() => openDialog("edit-agent")}
                   tokensUsed={estimatedTokens}
                   maxContextLength={selectedModelContextLength}
+                  inputModalities={selectedModelInputModalities}
                 />
                 <div className="text-center">
                   <Version inline />

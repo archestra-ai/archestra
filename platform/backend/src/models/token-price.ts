@@ -1,5 +1,5 @@
 import type { SupportedProvider } from "@shared";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
 import type { CreateTokenPrice, TokenPrice } from "@/types";
@@ -26,6 +26,23 @@ class TokenPriceModel {
       .select()
       .from(schema.tokenPricesTable)
       .where(eq(schema.tokenPricesTable.model, model));
+
+    return tokenPrice || null;
+  }
+
+  static async findByProviderAndModelId(
+    provider: SupportedProvider,
+    modelId: string,
+  ): Promise<TokenPrice | null> {
+    const [tokenPrice] = await db
+      .select()
+      .from(schema.tokenPricesTable)
+      .where(
+        and(
+          eq(schema.tokenPricesTable.provider, provider),
+          eq(schema.tokenPricesTable.model, modelId),
+        ),
+      );
 
     return tokenPrice || null;
   }
@@ -98,6 +115,10 @@ class TokenPriceModel {
       .where(eq(schema.tokenPricesTable.id, id));
 
     return true;
+  }
+
+  static async deleteAll(): Promise<void> {
+    await db.delete(schema.tokenPricesTable);
   }
 
   /**

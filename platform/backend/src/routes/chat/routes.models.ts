@@ -12,7 +12,7 @@ import {
   createGoogleGenAIClient,
   isVertexAiEnabled,
 } from "@/clients/gemini-client";
-import { openRouterModelRegistry } from "@/clients/openrouter-model-registry";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, ModelMetadataModel, TeamModel } from "@/models";
@@ -782,8 +782,8 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { provider } = query;
       const providersToFetch = provider ? [provider] : SupportedProviders;
 
-      // Trigger OpenRouter metadata sync in background if needed
-      openRouterModelRegistry.syncIfNeeded();
+      // Trigger models.dev metadata sync in background if needed
+      modelsDevClient.syncIfNeeded();
 
       // Cache key includes user ID since API keys can be personal, team, or org-wide
       const cacheKey =

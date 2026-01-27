@@ -1,25 +1,15 @@
-import { SupportedProvidersSchema } from "@shared";
+import {
+  ModelInputModalitySchema,
+  ModelOutputModalitySchema,
+  SupportedProvidersSchema,
+} from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
-/**
- * Zod schema for input modalities.
- * Matches the InputModality type from the database schema.
- */
-export const ModelInputModalitySchema = z.enum([
-  "text",
-  "image",
-  "audio",
-  "video",
-  "file",
-]);
-
-/**
- * Zod schema for output modalities.
- * Matches the OutputModality type from the database schema.
- */
-export const ModelOutputModalitySchema = z.enum(["text", "image", "audio"]);
+export type { ModelInputModality, ModelOutputModality } from "@shared";
+// Re-export modality schemas and types from @shared for convenience
+export { ModelInputModalitySchema, ModelOutputModalitySchema } from "@shared";
 
 /**
  * Fields to extend for drizzle-zod schema generation.
@@ -59,9 +49,6 @@ export const UpdateModelMetadataSchema = CreateModelMetadataSchema.partial();
 /**
  * Exported types
  */
-export type ModelInputModality = z.infer<typeof ModelInputModalitySchema>;
-export type ModelOutputModality = z.infer<typeof ModelOutputModalitySchema>;
-
 export type ModelMetadata = z.infer<typeof SelectModelMetadataSchema>;
 export type InsertModelMetadata = z.infer<typeof InsertModelMetadataSchema>;
 export type CreateModelMetadata = z.infer<typeof CreateModelMetadataSchema>;

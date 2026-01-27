@@ -11164,7 +11164,7 @@ export type GetChatModelsResponses = {
         createdAt?: string;
         capabilities?: {
             contextLength: number | null;
-            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'file'> | null;
+            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
             outputModalities: Array<'text' | 'image' | 'audio'> | null;
             supportsToolCalling: boolean | null;
             pricePerMillionInput: string | null;

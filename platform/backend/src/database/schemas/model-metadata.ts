@@ -15,20 +15,20 @@ import {
 import type { ModelInputModality, ModelOutputModality } from "@/types";
 
 /**
- * Model metadata table - stores capability and pricing metadata fetched from OpenRouter API.
+ * Model metadata table - stores capability and pricing metadata fetched from models.dev API.
  *
  * This table caches model information like input/output modalities, tool calling support,
- * context window size, and pricing. Data is synced periodically from OpenRouter.
+ * context window size, and pricing. Data is synced periodically from models.dev.
  */
 const modelMetadataTable = pgTable(
   "model_metadata",
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    /** OpenRouter's model ID format, e.g., "openai/gpt-4o" */
-    openrouterId: text("openrouter_id").notNull(),
+    /** External source model ID format, e.g., "anthropic/claude-3-opus" */
+    externalId: text("external_id").notNull(),
 
-    /** Archestra provider name (mapped from OpenRouter) */
+    /** Archestra provider name (mapped from external source) */
     provider: text("provider").$type<SupportedProvider>().notNull(),
 
     /** Model ID in Archestra format (without provider prefix) */
@@ -61,7 +61,7 @@ const modelMetadataTable = pgTable(
       scale: 12,
     }),
 
-    /** When this metadata was last synced from OpenRouter */
+    /** When this metadata was last synced from external source */
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" })
       .notNull()
       .defaultNow(),
@@ -83,10 +83,8 @@ const modelMetadataTable = pgTable(
       table.provider,
       table.modelId,
     ),
-    /** Index for lookups by openrouter_id */
-    openrouterIdIdx: index("model_metadata_openrouter_id_idx").on(
-      table.openrouterId,
-    ),
+    /** Index for lookups by external_id */
+    externalIdIdx: index("model_metadata_external_id_idx").on(table.externalId),
   }),
 );
 

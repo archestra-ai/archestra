@@ -5,7 +5,7 @@ describe("ModelMetadataModel", () => {
   describe("create", () => {
     test("can create model metadata", async () => {
       const metadata = await ModelMetadataModel.create({
-        openrouterId: "openai/gpt-4o",
+        externalId: "openai/gpt-4o",
         provider: "openai",
         modelId: "gpt-4o",
         description: "GPT-4o is a multimodal model",
@@ -19,7 +19,7 @@ describe("ModelMetadataModel", () => {
       });
 
       expect(metadata.id).toBeDefined();
-      expect(metadata.openrouterId).toBe("openai/gpt-4o");
+      expect(metadata.externalId).toBe("openai/gpt-4o");
       expect(metadata.provider).toBe("openai");
       expect(metadata.modelId).toBe("gpt-4o");
       expect(metadata.description).toBe("GPT-4o is a multimodal model");
@@ -43,7 +43,7 @@ describe("ModelMetadataModel", () => {
 
     test("can find metadata by provider and model ID", async () => {
       await ModelMetadataModel.create({
-        openrouterId: "anthropic/claude-3-5-sonnet",
+        externalId: "anthropic/claude-3-5-sonnet",
         provider: "anthropic",
         modelId: "claude-3-5-sonnet",
         description: "Claude 3.5 Sonnet",
@@ -75,7 +75,7 @@ describe("ModelMetadataModel", () => {
 
     test("returns metadata for matching keys", async () => {
       await ModelMetadataModel.create({
-        openrouterId: "openai/gpt-4o",
+        externalId: "openai/gpt-4o",
         provider: "openai",
         modelId: "gpt-4o",
         description: "GPT-4o",
@@ -89,7 +89,7 @@ describe("ModelMetadataModel", () => {
       });
 
       await ModelMetadataModel.create({
-        openrouterId: "anthropic/claude-3-opus",
+        externalId: "anthropic/claude-3-opus",
         provider: "anthropic",
         modelId: "claude-3-opus",
         description: "Claude 3 Opus",
@@ -118,7 +118,7 @@ describe("ModelMetadataModel", () => {
   describe("upsert", () => {
     test("creates new metadata if it does not exist", async () => {
       const metadata = await ModelMetadataModel.upsert({
-        openrouterId: "openai/gpt-4-turbo",
+        externalId: "openai/gpt-4-turbo",
         provider: "openai",
         modelId: "gpt-4-turbo",
         description: "GPT-4 Turbo",
@@ -138,7 +138,7 @@ describe("ModelMetadataModel", () => {
     test("updates existing metadata on conflict", async () => {
       // Create initial metadata
       const initial = await ModelMetadataModel.create({
-        openrouterId: "openai/gpt-4o-mini",
+        externalId: "openai/gpt-4o-mini",
         provider: "openai",
         modelId: "gpt-4o-mini",
         description: "Initial description",
@@ -153,7 +153,7 @@ describe("ModelMetadataModel", () => {
 
       // Upsert with updated data
       const updated = await ModelMetadataModel.upsert({
-        openrouterId: "openai/gpt-4o-mini",
+        externalId: "openai/gpt-4o-mini",
         provider: "openai",
         modelId: "gpt-4o-mini",
         description: "Updated description",
@@ -183,7 +183,7 @@ describe("ModelMetadataModel", () => {
     test("can bulk upsert multiple records", async () => {
       const results = await ModelMetadataModel.bulkUpsert([
         {
-          openrouterId: "google/gemini-pro",
+          externalId: "google/gemini-pro",
           provider: "gemini",
           modelId: "gemini-pro",
           description: "Gemini Pro",
@@ -196,7 +196,7 @@ describe("ModelMetadataModel", () => {
           lastSyncedAt: new Date(),
         },
         {
-          openrouterId: "google/gemini-flash",
+          externalId: "google/gemini-flash",
           provider: "gemini",
           modelId: "gemini-flash",
           description: "Gemini Flash",
@@ -226,7 +226,7 @@ describe("ModelMetadataModel", () => {
 
     test("can delete metadata by provider and model ID", async () => {
       await ModelMetadataModel.create({
-        openrouterId: "cohere/command-r",
+        externalId: "cohere/command-r",
         provider: "cohere",
         modelId: "command-r",
         description: "Command R",
@@ -264,7 +264,7 @@ describe("ModelMetadataModel", () => {
 
     test("converts metadata to capabilities format", async () => {
       const metadata = await ModelMetadataModel.create({
-        openrouterId: "openai/gpt-4o",
+        externalId: "openai/gpt-4o",
         provider: "openai",
         modelId: "gpt-4o",
         description: "GPT-4o",

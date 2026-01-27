@@ -1,5 +1,5 @@
 {
-  "id": "4a8d16fd-9e65-4bff-9f5c-a153b5765121",
+  "id": "5679e4a6-d493-41f4-a4f2-7ba518e40df5",
   "prevId": "a1326dd7-fe69-45c5-8cf8-3f78b9f8d5da",
   "version": "7",
   "dialect": "postgresql",
@@ -2994,8 +2994,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "openrouter_id": {
-          "name": "openrouter_id",
+        "external_id": {
+          "name": "external_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -3098,11 +3098,11 @@
           "method": "btree",
           "with": {}
         },
-        "model_metadata_openrouter_id_idx": {
-          "name": "model_metadata_openrouter_id_idx",
+        "model_metadata_external_id_idx": {
+          "name": "model_metadata_external_id_idx",
           "columns": [
             {
-              "expression": "openrouter_id",
+              "expression": "external_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

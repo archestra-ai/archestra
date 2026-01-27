@@ -1,6 +1,6 @@
 CREATE TABLE "model_metadata" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"openrouter_id" text NOT NULL,
+	"external_id" text NOT NULL,
 	"provider" text NOT NULL,
 	"model_id" text NOT NULL,
 	"description" text,
@@ -17,4 +17,4 @@ CREATE TABLE "model_metadata" (
 );
 --> statement-breakpoint
 CREATE INDEX "model_metadata_provider_model_idx" ON "model_metadata" USING btree ("provider","model_id");--> statement-breakpoint
-CREATE INDEX "model_metadata_openrouter_id_idx" ON "model_metadata" USING btree ("openrouter_id");
+CREATE INDEX "model_metadata_external_id_idx" ON "model_metadata" USING btree ("external_id");

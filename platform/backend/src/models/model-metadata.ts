@@ -62,15 +62,15 @@ class ModelMetadataModel {
   }
 
   /**
-   * Find model metadata by OpenRouter ID
+   * Find model metadata by external ID (e.g., "anthropic/claude-3-opus")
    */
-  static async findByOpenRouterId(
-    openrouterId: string,
+  static async findByExternalId(
+    externalId: string,
   ): Promise<ModelMetadata | null> {
     const [result] = await db
       .select()
       .from(schema.modelMetadataTable)
-      .where(eq(schema.modelMetadataTable.openrouterId, openrouterId));
+      .where(eq(schema.modelMetadataTable.externalId, externalId));
 
     return result || null;
   }
@@ -100,7 +100,7 @@ class ModelMetadataModel {
           schema.modelMetadataTable.modelId,
         ],
         set: {
-          openrouterId: data.openrouterId,
+          externalId: data.externalId,
           description: data.description,
           contextLength: data.contextLength,
           inputModalities: data.inputModalities,
@@ -142,7 +142,7 @@ class ModelMetadataModel {
               schema.modelMetadataTable.modelId,
             ],
             set: {
-              openrouterId: data.openrouterId,
+              externalId: data.externalId,
               description: data.description,
               contextLength: data.contextLength,
               inputModalities: data.inputModalities,

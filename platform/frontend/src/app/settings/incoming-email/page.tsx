@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { EmailNotConfiguredMessage } from "@/components/email-not-configured-message";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,34 +49,17 @@ export default function IncomingEmailSettingsPage() {
   if (!emailInfo?.enabled) {
     return (
       <div className="space-y-6">
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Incoming Email Not Configured</AlertTitle>
-          <AlertDescription>
-            <p>
-              Incoming email is not enabled. Configure the following environment
-              variables to enable this feature:
-            </p>
-            <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
-              <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER=outlook</li>
-              <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID</li>
-              <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID</li>
-              <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET</li>
-              <li>ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS</li>
-            </ul>
-            <p className="mt-3">
-              <Link
-                href="https://archestra.ai/docs/platform-agents#incoming-email"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                View setup guide
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            </p>
-          </AlertDescription>
-        </Alert>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Incoming Email
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <EmailNotConfiguredMessage />
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -118,6 +102,43 @@ export default function IncomingEmailSettingsPage() {
 
   return (
     <div className="space-y-6">
+      {/* How It Works Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>How It Works</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-2">
+          <p>
+            Incoming email allows external users to invoke agents by sending
+            emails to auto-generated addresses. Each prompt gets a unique email
+            address using plus-addressing.
+          </p>
+          <p>
+            Microsoft Graph subscriptions expire after 3 days. The system
+            automatically renews subscriptions 24 hours before expiration. You
+            can also manually renew or delete subscriptions from this page.
+          </p>
+          <p>
+            Alternatively, set{" "}
+            <code className="bg-muted px-1 py-0.5 rounded">
+              ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL
+            </code>{" "}
+            to automatically create a subscription on server startup.
+          </p>
+          <p className="mt-2">
+            <Link
+              href="https://archestra.ai/docs/platform-agents#incoming-email"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              Learn more in our documentation
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Provider Info Card */}
       <Card>
         <CardHeader>
@@ -264,43 +285,6 @@ export default function IncomingEmailSettingsPage() {
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Info Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>How It Works</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground space-y-2">
-          <p>
-            Incoming email allows external users to invoke agents by sending
-            emails to auto-generated addresses. Each prompt gets a unique email
-            address using plus-addressing.
-          </p>
-          <p>
-            Microsoft Graph subscriptions expire after 3 days. The system
-            automatically renews subscriptions 24 hours before expiration. You
-            can also manually renew or delete subscriptions from this page.
-          </p>
-          <p>
-            Alternatively, set{" "}
-            <code className="bg-muted px-1 py-0.5 rounded">
-              ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL
-            </code>{" "}
-            to automatically create a subscription on server startup.
-          </p>
-          <p className="mt-2">
-            <Link
-              href="https://archestra.ai/docs/platform-agents#incoming-email"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              Learn more in our documentation
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          </p>
         </CardContent>
       </Card>
     </div>

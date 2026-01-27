@@ -1,6 +1,10 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  archestraApiSdk,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import {
   Bot,
   Check,
@@ -15,6 +19,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
+import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -46,7 +51,7 @@ import {
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
-const { internalProxyUrl } = config.api;
+const { externalProxyUrls, internalProxyUrl } = config.api;
 
 interface McpConnectionInstructionsProps {
   agentId: string;
@@ -61,7 +66,9 @@ export function McpConnectionInstructions({
   agentId,
   hideProfileSelector = false,
 }: McpConnectionInstructionsProps) {
-  const { data: profiles } = useProfiles();
+  const { data: profiles } = useProfiles({
+    filters: { agentTypes: ["profile", "mcp_gateway"] },
+  });
   const { data: mcpServers } = useMcpServers();
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: userToken } = useUserToken();
@@ -73,6 +80,9 @@ export function McpConnectionInstructions({
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
+  const [connectionUrl, setConnectionUrl] = useState<string>(
+    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
+  );
 
   // Fetch tokens filtered by the selected profile's teams
   const { data: tokensData } = useTokens({ profileId: selectedProfileId });
@@ -102,8 +112,28 @@ export function McpConnectionInstructions({
   });
 
   // Group tools by MCP server for the selected profile
-  const mcpServerToolGroups = useMemo(() => {
-    if (!mcpServers || !assignedToolsData?.data) return new Map();
+  const { mcpServerToolGroups, archestraTools } = useMemo(() => {
+    if (!assignedToolsData?.data)
+      return {
+        mcpServerToolGroups: new Map<
+          string,
+          {
+            server: (typeof mcpServers)[0];
+            tools: Array<{
+              id: string;
+              name: string;
+              description?: string | null;
+            }>;
+            credentialSourceMcpServerId?: string | null;
+            useDynamicTeamCredential?: boolean;
+          }
+        >(),
+        archestraTools: [] as Array<{
+          id: string;
+          name: string;
+          description?: string | null;
+        }>,
+      };
 
     const groups = new Map<
       string,
@@ -115,13 +145,33 @@ export function McpConnectionInstructions({
       }
     >();
 
+    const archestraToolsList: Array<{
+      id: string;
+      name: string;
+      description?: string | null;
+    }> = [];
+
     assignedToolsData.data.forEach((agentTool) => {
       const tool = agentTool.tool;
-      if (tool.mcpServerId) {
+
+      // Check if this is an Archestra built-in tool
+      if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+        const toolName =
+          tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? tool.name;
+        archestraToolsList.push({
+          id: tool.id,
+          name: toolName,
+          description: tool.description,
+        });
+        return;
+      }
+
+      if (tool.mcpServerId && mcpServers) {
         const server = mcpServers.find((s) => s.id === tool.mcpServerId);
         if (server) {
           const existing = groups.get(tool.mcpServerId);
-          const toolName = tool.name.split("__").pop() ?? tool.name;
+          const toolName =
+            tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? tool.name;
           const toolData = {
             id: tool.id,
             name: toolName,
@@ -145,7 +195,7 @@ export function McpConnectionInstructions({
       }
     });
 
-    return groups;
+    return { mcpServerToolGroups: groups, archestraTools: archestraToolsList };
   }, [mcpServers, assignedToolsData]);
 
   const getToolsCountForProfile = useCallback(
@@ -163,8 +213,7 @@ export function McpConnectionInstructions({
     [mcpServers],
   );
 
-  // Use the new URL format with selected profile ID
-  const mcpUrl = `${internalProxyUrl}/mcp/${selectedProfileId}`;
+  const mcpUrl = `${connectionUrl}/mcp/${selectedProfileId}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -353,7 +402,7 @@ export function McpConnectionInstructions({
       {/* Profile Selector - hidden when opened from a specific profile's dialog */}
       {!hideProfileSelector && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Select Profile</Label>
+          <Label className="text-sm font-medium">Select MCP Gateway</Label>
           <Select
             value={selectedProfileId}
             onValueChange={setSelectedProfileId}
@@ -394,8 +443,13 @@ export function McpConnectionInstructions({
       {selectedProfile && (
         <div className="space-y-2">
           <Label className="text-sm font-medium">Tools</Label>
-          {mcpServerToolGroups.size > 0 ? (
+          {mcpServerToolGroups.size > 0 || archestraTools.length > 0 ? (
             <div className="flex flex-wrap gap-2">
+              {/* Archestra built-in tools */}
+              {archestraTools.length > 0 && (
+                <ReadOnlyArchestraPill tools={archestraTools} />
+              )}
+              {/* MCP server tools */}
               {Array.from(mcpServerToolGroups.entries()).map(
                 ([
                   serverId,
@@ -513,6 +567,12 @@ export function McpConnectionInstructions({
           </SelectContent>
         </Select>
       </div>
+
+      <ConnectionBaseUrlSelect
+        value={connectionUrl}
+        onChange={setConnectionUrl}
+        idPrefix="mcp"
+      />
 
       <div className="space-y-3">
         <div className="space-y-2">
@@ -646,7 +706,7 @@ function ReadOnlyMcpServerPill({
     : credentialServer
       ? (credentialServer.teamDetails?.name ??
         credentialServer.ownerEmail ??
-        "Unknown")
+        "Deleted user")
       : null;
 
   // Check if we should show credential section
@@ -776,11 +836,11 @@ function ReadOnlySubagentPill({ agent }: ReadOnlySubagentPillProps) {
         <Button
           variant="outline"
           size="sm"
-          className="h-8 px-3 gap-1.5 text-xs"
+          className="h-8 px-3 gap-1.5 text-xs max-w-[200px]"
         >
-          <span className="h-2 w-2 rounded-full bg-green-500" />
-          <Bot className="h-3 w-3" />
-          <span className="font-medium">{agent.name}</span>
+          <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+          <Bot className="h-3 w-3 shrink-0" />
+          <span className="font-medium truncate">{agent.name}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -791,8 +851,8 @@ function ReadOnlySubagentPill({ agent }: ReadOnlySubagentPillProps) {
         avoidCollisions
       >
         <div className="p-4 border-b flex items-start justify-between gap-2">
-          <div className="flex-1">
-            <h4 className="font-semibold">{agent.name}</h4>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold truncate">{agent.name}</h4>
             {agent.systemPrompt && (
               <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                 {agent.systemPrompt}
@@ -838,6 +898,101 @@ function ReadOnlySubagentPill({ agent }: ReadOnlySubagentPillProps) {
               </div>
             </div>
           )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Read-only Archestra Tools Pill with popover
+interface ReadOnlyArchestraPillProps {
+  tools: Array<{ id: string; name: string; description?: string | null }>;
+}
+
+function ReadOnlyArchestraPill({ tools }: ReadOnlyArchestraPillProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 gap-1.5 text-xs"
+        >
+          <span className="font-medium">Archestra</span>
+          <span className="text-muted-foreground">({tools.length})</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[420px] p-0"
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        avoidCollisions
+      >
+        <div className="p-4 border-b flex items-start justify-between gap-2">
+          <div>
+            <h4 className="font-semibold">Archestra Built-in Tools</h4>
+            <p className="text-sm text-muted-foreground mt-1">
+              Built-in tools for managing Archestra resources
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 shrink-0"
+            onClick={() => setOpen(false)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Tool List - Read Only */}
+        <div className="opacity-60">
+          <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30">
+            <span className="text-xs text-muted-foreground">
+              {tools.length} of {tools.length} selected
+            </span>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-6 px-2"
+                disabled
+              >
+                Select All
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-6 px-2"
+                disabled
+              >
+                Deselect All
+              </Button>
+            </div>
+          </div>
+          <div className="max-h-[350px] overflow-y-auto">
+            <div className="p-2 space-y-0.5">
+              {tools.map((tool) => (
+                <div
+                  key={tool.id}
+                  className="flex items-start gap-3 p-2 rounded-md bg-primary/10"
+                >
+                  <Checkbox checked disabled className="mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">{tool.name}</div>
+                    {tool.description && (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {tool.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </PopoverContent>
     </Popover>

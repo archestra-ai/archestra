@@ -71,6 +71,9 @@ export const E2eTestId = {
   ChatApiKeyDefaultBadge: "chat-api-key-default-badge",
   BulkAssignChatApiKeysButton: "bulk-assign-chat-api-keys-button",
   BulkAssignChatApiKeysDialog: "bulk-assign-chat-api-keys-dialog",
+  // Chat Prompt Input
+  ChatFileUploadButton: "chat-file-upload-button",
+  ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
@@ -85,6 +88,8 @@ export const EMAIL_PLACEHOLDER = "admin@example.com";
 export const PASSWORD_PLACEHOLDER = "password";
 
 export const DEFAULT_PROFILE_NAME = "Default Profile";
+export const DEFAULT_MCP_GATEWAY_NAME = "Default MCP Gateway";
+export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -114,6 +119,12 @@ export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTR
 export const TOOL_ARTIFACT_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}artifact_write`;
 export const TOOL_TODO_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}todo_write`;
 export const TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`;
+
+export const DEFAULT_ARCHESTRA_TOOL_NAMES = [
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+];
 
 export const MCP_CATALOG_API_BASE_URL =
   process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||

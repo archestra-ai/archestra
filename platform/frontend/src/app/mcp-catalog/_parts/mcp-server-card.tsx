@@ -13,7 +13,7 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
 import {
   WithoutPermissions,
@@ -77,6 +77,10 @@ export type McpServerCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onCancelInstallation?: (serverId: string) => void;
+  /** When true, auto-opens the assignments dialog */
+  autoOpenAssignmentsDialog?: boolean;
+  /** Called when the auto-opened assignments dialog is closed */
+  onAssignmentsDialogClose?: () => void;
 };
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
@@ -99,6 +103,8 @@ export function McpServerCard({
   onEdit,
   onDelete,
   onCancelInstallation,
+  autoOpenAssignmentsDialog,
+  onAssignmentsDialogClose,
 }: McpServerCardBaseProps) {
   const isBuiltin = variant === "builtin";
 
@@ -162,6 +168,25 @@ export function McpServerCard({
     id: string;
     name: string;
   } | null>(null);
+
+  // Auto-open assignments dialog when requested by parent
+  // Ensure other dialogs are closed when auto-opening
+  useEffect(() => {
+    if (autoOpenAssignmentsDialog) {
+      setIsToolsDialogOpen(true);
+      setIsManageUsersDialogOpen(false);
+      setIsLogsDialogOpen(false);
+    }
+  }, [autoOpenAssignmentsDialog]);
+
+  // Handle assignments dialog close - notify parent if it was auto-opened
+  const handleToolsDialogOpenChange = (open: boolean) => {
+    setIsToolsDialogOpen(open);
+    if (!open && autoOpenAssignmentsDialog) {
+      onAssignmentsDialogClose?.();
+    }
+  };
+
   const mcpServerOfCurrentCatalogItem = allMcpServers?.filter(
     (s) => s.catalogId === item.id,
   );
@@ -396,6 +421,9 @@ export function McpServerCard({
     </>
   );
 
+  const assignedCount = getToolsAssignedCount();
+  const isZeroAssignments = assignedCount === 0 && toolsDiscoveredCount > 0;
+
   const toolsAssigned = (
     <>
       <div className="flex items-center gap-2">
@@ -403,8 +431,8 @@ export function McpServerCard({
         <span className="text-muted-foreground">
           Assignments:{" "}
           <span className="font-medium text-foreground">
-            {getToolsAssignedCount()}{" "}
-            {toolsDiscoveredCount ? `(out of ${toolsDiscoveredCount})` : ""}
+            {assignedCount}
+            {toolsDiscoveredCount ? `/${toolsDiscoveredCount}` : ""}
           </span>
         </span>
       </div>
@@ -413,9 +441,26 @@ export function McpServerCard({
           onClick={() => setIsToolsDialogOpen(true)}
           size="sm"
           variant="link"
-          className="h-7 text-xs"
+          className="h-7 text-xs gap-1"
           data-testid={`${E2eTestId.ManageToolsButton}-${installedServer?.catalogName}`}
         >
+          {isZeroAssignments && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <AlertTriangle className="h-4 w-4 text-amber-500 relative top-[-1px]" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    Click "Manage" button in order to assign tools to MCP
+                    Gateways and Agents
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           Manage
         </Button>
       )}
@@ -585,7 +630,7 @@ export function McpServerCard({
     <>
       <McpAssignmentsDialog
         open={isToolsDialogOpen}
-        onOpenChange={setIsToolsDialogOpen}
+        onOpenChange={handleToolsDialogOpenChange}
         catalogId={item.id}
         serverName={item.label || item.name}
         isBuiltin={isBuiltin}
@@ -600,7 +645,7 @@ export function McpServerCard({
 
       <ManageUsersDialog
         catalogId={item.id}
-        isOpen={isManageUsersDialogOpen}
+        isOpen={isManageUsersDialogOpen && !isInstalling}
         onClose={() => setIsManageUsersDialogOpen(false)}
         label={item.label || item.name}
       />

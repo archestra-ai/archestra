@@ -9,7 +9,7 @@ export default function ToolsLayout({
 }) {
   return (
     <PageLayout
-      title="Tools"
+      title="Tool Policies"
       description="Tools displayed here are either detected from requests between agents and LLMs or sourced from installed MCP servers."
     >
       {children}

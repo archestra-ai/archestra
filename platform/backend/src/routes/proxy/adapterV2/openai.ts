@@ -74,7 +74,8 @@ type OpenAiToolResultContent = string | OpenAiToolResultContentBlock[];
 // REQUEST ADAPTER
 // =============================================================================
 
-class OpenAIRequestAdapter
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export class OpenAIRequestAdapter
   implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
 {
   readonly provider = "openai" as const;
@@ -512,7 +513,8 @@ class OpenAIRequestAdapter
   }
 }
 
-function convertMcpImageBlocksToOpenAi(
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export function convertMcpImageBlocksToOpenAi(
   content: unknown,
 ): OpenAiToolResultContent | null {
   if (!Array.isArray(content)) {
@@ -596,8 +598,9 @@ function convertMcpImageBlocksToOpenAi(
 /**
  * Strip image blocks from MCP content when model doesn't support images.
  * Keeps text blocks and replaces image blocks with a placeholder message.
+ * Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
  */
-function stripImageBlocksFromContent(content: unknown): string {
+export function stripImageBlocksFromContent(content: unknown): string {
   if (!Array.isArray(content)) {
     return typeof content === "string" ? content : JSON.stringify(content);
   }
@@ -638,7 +641,10 @@ function stripImageBlocksFromContent(content: unknown): string {
 // RESPONSE ADAPTER
 // =============================================================================
 
-class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export class OpenAIResponseAdapter
+  implements LLMResponseAdapter<OpenAiResponse>
+{
   readonly provider = "openai" as const;
   private response: OpenAiResponse;
 
@@ -736,7 +742,8 @@ class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
 // STREAM ADAPTER
 // =============================================================================
 
-class OpenAIStreamAdapter
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export class OpenAIStreamAdapter
   implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
 {
   readonly provider = "openai" as const;
@@ -965,7 +972,8 @@ class OpenAIStreamAdapter
 // TOON COMPRESSION (copied from utils/adapters/openai.ts)
 // =============================================================================
 
-async function convertToolResultsToToon(
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export async function convertToolResultsToToon(
   messages: OpenAiMessages,
   model: string,
 ): Promise<{

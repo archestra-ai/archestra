@@ -274,14 +274,20 @@ function SessionRow({
       </TableCell>
       <TableCell className="py-3">
         <div className="flex flex-wrap gap-1">
-          <Badge variant="secondary" className="text-xs">
-            <Layers className="h-3 w-3 mr-1" />
-            {agent?.name ?? session.profileName ?? "Unknown"}
+          <Badge variant="secondary" className="text-xs max-w-[200px]">
+            <Layers className="h-3 w-3 mr-1 shrink-0" />
+            <span className="truncate">
+              {agent?.name ?? session.profileName ?? "Unknown"}
+            </span>
           </Badge>
           {session.userNames.map((userName) => (
-            <Badge key={userName} variant="outline" className="text-xs">
-              <User className="h-3 w-3 mr-1" />
-              {userName}
+            <Badge
+              key={userName}
+              variant="outline"
+              className="text-xs max-w-[150px]"
+            >
+              <User className="h-3 w-3 mr-1 shrink-0" />
+              <span className="truncate">{userName}</span>
             </Badge>
           ))}
         </div>

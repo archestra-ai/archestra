@@ -1,4 +1,4 @@
-import { DEFAULT_PROFILE_NAME, isArchestraMcpServerTool } from "@shared";
+import { DEFAULT_LLM_PROXY_NAME, DEFAULT_MCP_GATEWAY_NAME } from "@shared";
 import {
   and,
   asc,
@@ -11,6 +11,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
 import type { AgentHistoryEntry } from "@/database/schemas/agent";
 import {
@@ -93,12 +94,15 @@ class AgentModel {
   }
 
   /**
-   * Find all agents with optional filtering by agentType
+   * Find all agents with optional filtering by agentType or agentTypes
    */
   static async findAll(
     userId?: string,
     isAgentAdmin?: boolean,
-    options?: { agentType?: "mcp_gateway" | "agent" },
+    options?: {
+      agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+      agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+    },
   ): Promise<Agent[]> {
     let query = db
       .select()
@@ -116,8 +120,14 @@ class AgentModel {
     // Build where conditions
     const whereConditions: SQL[] = [];
 
-    // Filter by agentType if specified
-    if (options?.agentType !== undefined) {
+    // Filter by agentTypes if specified (array of types)
+    if (options?.agentTypes && options.agentTypes.length > 0) {
+      whereConditions.push(
+        inArray(schema.agentsTable.agentType, options.agentTypes),
+      );
+    }
+    // Filter by agentType if specified (single type, backwards compatible)
+    else if (options?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
     }
 
@@ -187,7 +197,7 @@ class AgentModel {
    */
   static async findByOrganizationId(
     organizationId: string,
-    options?: { agentType?: "mcp_gateway" | "agent" },
+    options?: { agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent" },
   ): Promise<Agent[]> {
     const whereConditions: SQL[] = [
       eq(schema.agentsTable.organizationId, organizationId),
@@ -252,7 +262,7 @@ class AgentModel {
   static async findByOrganizationIdAndAccessibleTeams(
     organizationId: string,
     accessibleAgentIds: string[],
-    options?: { agentType?: "mcp_gateway" | "agent" },
+    options?: { agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent" },
   ): Promise<Agent[]> {
     if (accessibleAgentIds.length === 0) {
       return [];
@@ -345,7 +355,11 @@ class AgentModel {
   static async findAllPaginated(
     pagination: PaginationQuery,
     sorting?: SortingQuery,
-    filters?: { name?: string; agentType?: "mcp_gateway" | "agent" },
+    filters?: {
+      name?: string;
+      agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+      agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+    },
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<PaginatedResult<Agent>> {
@@ -360,8 +374,14 @@ class AgentModel {
       whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
     }
 
-    // Add agentType filter if provided
-    if (filters?.agentType !== undefined) {
+    // Add agentTypes filter if provided (array of types)
+    if (filters?.agentTypes && filters.agentTypes.length > 0) {
+      whereConditions.push(
+        inArray(schema.agentsTable.agentType, filters.agentTypes),
+      );
+    }
+    // Add agentType filter if provided (single type, backwards compatible)
+    else if (filters?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
     }
 
@@ -400,14 +420,6 @@ class AgentModel {
           toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
         })
         .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        // Double backslash needed: JS consumes one level, SQL gets the other
-        .where(
-          sql`NOT ${schema.toolsTable.name} LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
-        )
         .groupBy(schema.agentToolsTable.agentId)
         .as("toolsCounts");
 
@@ -496,8 +508,8 @@ class AgentModel {
         });
       }
 
-      // Add tool if it exists and is not an Archestra MCP tool (leftJoin returns null for agents with no tools)
-      if (tool && !isArchestraMcpServerTool(tool.name)) {
+      // Add tool if it exists (leftJoin returns null for agents with no tools)
+      if (tool) {
         agentsMap.get(agent.id)?.tools.push(tool);
       }
     }
@@ -610,10 +622,7 @@ class AgentModel {
     const agent = rows[0].agents;
     const tools = rows
       .map((row) => row.tools)
-      .filter(
-        (tool): tool is NonNullable<typeof tool> =>
-          tool !== null && !isArchestraMcpServerTool(tool.name),
-      );
+      .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
 
     const teams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const labels = await AgentLabelModel.getLabelsForAgent(id);
@@ -626,11 +635,32 @@ class AgentModel {
     };
   }
 
-  static async getAgentOrCreateDefault(
-    name?: string,
+  static async getMCPGatewayOrCreateDefault(
     organizationId?: string,
   ): Promise<Agent> {
-    // First, try to find an agent with isDefault=true
+    return AgentModel.getOrCreateDefaultByType(
+      "mcp_gateway",
+      DEFAULT_MCP_GATEWAY_NAME,
+      organizationId,
+    );
+  }
+
+  static async getLLMProxyOrCreateDefault(
+    organizationId?: string,
+  ): Promise<Agent> {
+    return AgentModel.getOrCreateDefaultByType(
+      "llm_proxy",
+      DEFAULT_LLM_PROXY_NAME,
+      organizationId,
+    );
+  }
+
+  /**
+   * Get the default profile (agentType: "profile" with isDefault: true).
+   * Returns null if no default profile exists.
+   * It's needed for backward compatibility with default profile which allowed llm proxy on without a uuid specified in the url.
+   */
+  static async getDefaultProfile(): Promise<Agent | null> {
     const rows = await db
       .select()
       .from(schema.agentsTable)
@@ -642,17 +672,60 @@ class AgentModel {
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
-      .where(eq(schema.agentsTable.isDefault, true));
+      .where(
+        and(
+          eq(schema.agentsTable.isDefault, true),
+          eq(schema.agentsTable.agentType, "profile"),
+        ),
+      );
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const agent = rows[0].agents;
+    const tools = rows
+      .map((row) => row.tools)
+      .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
+
+    return {
+      ...agent,
+      tools,
+      teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
+      labels: await AgentLabelModel.getLabelsForAgent(agent.id),
+    };
+  }
+
+  private static async getOrCreateDefaultByType(
+    agentType: "mcp_gateway" | "llm_proxy",
+    defaultName: string,
+    organizationId?: string,
+  ): Promise<Agent> {
+    // First, try to find an agent with isDefault=true and matching agentType
+    const rows = await db
+      .select()
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.agentToolsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .leftJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.isDefault, true),
+          eq(schema.agentsTable.agentType, agentType),
+        ),
+      );
 
     if (rows.length > 0) {
       // Default agent exists, return it
       const agent = rows[0].agents;
       const tools = rows
         .map((row) => row.tools)
-        .filter(
-          (tool): tool is NonNullable<typeof tool> =>
-            tool !== null && !isArchestraMcpServerTool(tool.name),
-        );
+        .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
 
       return {
         ...agent,
@@ -674,7 +747,8 @@ class AgentModel {
     }
 
     return AgentModel.create({
-      name: name || DEFAULT_PROFILE_NAME,
+      name: defaultName,
+      agentType,
       isDefault: true,
       organizationId: orgId || "",
       teams: [],
@@ -688,12 +762,27 @@ class AgentModel {
   ): Promise<Agent | null> {
     let updatedAgent: Omit<Agent, "tools" | "teams" | "labels"> | undefined;
 
-    // If setting isDefault to true, unset all other agents' isDefault first
+    // Fetch existing agent to check for name changes (needed for delegation tool sync)
+    const [existingAgent] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, id));
+
+    if (!existingAgent) {
+      return null;
+    }
+
+    // If setting isDefault to true, unset isDefault for other agents of the same type
     if (agent.isDefault === true) {
       await db
         .update(schema.agentsTable)
         .set({ isDefault: false })
-        .where(eq(schema.agentsTable.isDefault, true));
+        .where(
+          and(
+            eq(schema.agentsTable.isDefault, true),
+            eq(schema.agentsTable.agentType, existingAgent.agentType),
+          ),
+        );
     }
 
     // Only update agent table if there are fields to update
@@ -707,17 +796,18 @@ class AgentModel {
       if (!updatedAgent) {
         return null;
       }
-    } else {
-      // If only updating teams, fetch the existing agent
-      const [existingAgent] = await db
-        .select()
-        .from(schema.agentsTable)
-        .where(eq(schema.agentsTable.id, id));
 
-      if (!existingAgent) {
-        return null;
+      // If name changed, sync delegation tool names and invalidate parent caches
+      if (agent.name && agent.name !== existingAgent.name) {
+        await ToolModel.syncDelegationToolNames(id, agent.name);
+
+        // Invalidate tool cache for all parent agents so they pick up the new tool name
+        const parentAgentIds = await ToolModel.getParentAgentIds(id);
+        for (const parentAgentId of parentAgentIds) {
+          clearChatMcpClient(parentAgentId);
+        }
       }
-
+    } else {
       updatedAgent = existingAgent;
     }
 
@@ -792,6 +882,12 @@ class AgentModel {
     // Sync tool names if name changed
     if (input.name && input.name !== agent.name) {
       await ToolModel.syncDelegationToolNames(id, input.name);
+
+      // Invalidate tool cache for all parent agents so they pick up the new tool name
+      const parentAgentIds = await ToolModel.getParentAgentIds(id);
+      for (const parentAgentId of parentAgentIds) {
+        clearChatMcpClient(parentAgentId);
+      }
     }
 
     return AgentModel.findById(id);

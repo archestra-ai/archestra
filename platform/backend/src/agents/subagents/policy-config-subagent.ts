@@ -82,7 +82,7 @@ Examples:
     isDemo: false,
     isDefault: false,
     considerContextUntrusted: false,
-    agentType: "mcp_gateway",
+    agentType: "profile",
     systemPrompt: null,
     userPrompt: null,
     promptVersion: 1,
@@ -238,11 +238,8 @@ Examples:
     );
 
     try {
-      // Get or create a dedicated system agent for subagent interactions
-      // This agent will show as empty/system in the UI
-      const systemAgent = await AgentModel.getAgentOrCreateDefault(
-        PolicyConfigSubagent.SUBAGENT_NAME,
-      );
+      // Get or create default LLM proxy agent for recording subagent interactions
+      const systemAgent = await AgentModel.getLLMProxyOrCreateDefault();
 
       await InteractionModel.create({
         profileId: systemAgent.id,

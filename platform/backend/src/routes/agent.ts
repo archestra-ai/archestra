@@ -30,10 +30,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             name: z.string().optional().describe("Filter by agent name"),
             agentType: z
-              .enum(["mcp_gateway", "agent"])
+              .enum(["profile", "mcp_gateway", "llm_proxy", "agent"])
               .optional()
               .describe(
-                "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.",
+                "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.",
+              ),
+            agentTypes: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(
+                  z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
+                ),
+              )
+              .optional()
+              .describe(
+                "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
               ),
           })
           .merge(PaginationQuerySchema)
@@ -52,7 +63,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { name, agentType, limit, offset, sortBy, sortDirection },
+        query: {
+          name,
+          agentType,
+          agentTypes,
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+        },
         user,
         headers,
       },
@@ -68,7 +87,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { sortBy, sortDirection },
           {
             name,
-            agentType,
+            // agentTypes takes precedence over agentType
+            agentType: agentTypes ? undefined : agentType,
+            agentTypes,
           },
           user.id,
           isAgentAdmin,
@@ -86,40 +107,70 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Agents"],
         querystring: z.object({
           agentType: z
-            .enum(["mcp_gateway", "agent"])
+            .enum(["profile", "mcp_gateway", "llm_proxy", "agent"])
             .optional()
             .describe(
-              "Filter by agent type. 'agent' = internal agents with prompts, 'mcp_gateway' = external API gateway profiles.",
+              "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.",
+            ),
+          agentTypes: z
+            .preprocess(
+              (val) => (typeof val === "string" ? val.split(",") : val),
+              z.array(z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"])),
+            )
+            .optional()
+            .describe(
+              "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
             ),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
-    async ({ query: { agentType }, headers, user }, reply) => {
+    async ({ query: { agentType, agentTypes }, headers, user }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
         { profile: ["admin"] },
         headers,
       );
       return reply.send(
         await AgentModel.findAll(user.id, isAgentAdmin, {
-          agentType,
+          // agentTypes takes precedence over agentType
+          agentType: agentTypes ? undefined : agentType,
+          agentTypes,
         }),
       );
     },
   );
 
   fastify.get(
-    "/api/agents/default",
+    "/api/mcp-gateways/default",
     {
       schema: {
-        operationId: RouteId.GetDefaultAgent,
-        description: "Get or create default agent",
-        tags: ["Agents"],
+        operationId: RouteId.GetDefaultMcpGateway,
+        description: "Get or create default MCP Gateway",
+        tags: ["MCP Gateways"],
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async (_request, reply) => {
-      return reply.send(await AgentModel.getAgentOrCreateDefault());
+    async (request, reply) => {
+      return reply.send(
+        await AgentModel.getMCPGatewayOrCreateDefault(request.organizationId),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/llm-proxy/default",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultLlmProxy,
+        description: "Get or create default LLM Proxy",
+        tags: ["LLM Proxy"],
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async (request, reply) => {
+      return reply.send(
+        await AgentModel.getLLMProxyOrCreateDefault(request.organizationId),
+      );
     },
   );
 

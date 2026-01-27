@@ -33,6 +33,16 @@ export const CHATOPS_THREAD_HISTORY = {
 };
 
 /**
+ * Team ID cache configuration for MS Teams
+ */
+export const CHATOPS_TEAM_CACHE = {
+  /** Maximum number of channel-to-team mappings to cache */
+  MAX_SIZE: 500,
+  /** Cache TTL in milliseconds (1 hour) */
+  TTL_MS: 60 * 60 * 1000,
+};
+
+/**
  * Bot commands recognized by the chatops system
  */
 export const CHATOPS_COMMANDS = {

@@ -4,10 +4,20 @@ category: Archestra Platform
 subcategory: Concepts
 order: 1
 description: Agent invocation methods including A2A, incoming email, and ChatOps
-lastUpdated: 2026-01-20
+lastUpdated: 2026-01-25
 ---
 
-Agents in Archestra are invoked through Prompts. While the primary method is via the [Chat](/docs/platform-chat) interface or [API](/docs/platform-api-reference), agents can also be triggered through alternative channels like A2A (Agent-to-Agent), incoming email, and ChatOps integrations.
+<!--
+Check ../docs_writer_prompt.md before changing this file.
+-->
+
+![Agent Platform Swarm](/docs/platform-agents-swarm.png)
+
+Agents in Archestra provide a comprehensive no-code solution for building autonomous and semi-autonomous agents that can access your data and work together in swarms. Each agent consists of a User Prompt, System Prompt, assigned tools, and sub-agents, and can be triggered via:
+- Archestra Chat UI
+- A2A (Agent-to-Agent) protocol
+- Microsoft Teams
+- Email
 
 ## A2A (Agent-to-Agent)
 
@@ -195,16 +205,26 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 9. Set **Messaging endpoint** to `https://your-archestra-domain/api/webhooks/chatops/ms-teams`
 10. Go to **Channels** → add **Microsoft Teams**
 
-#### Graph API Permissions (Optional - for thread history)
+#### Graph API Permissions
 
-To include thread history in agent context, you need different permissions depending on where the bot is used:
+The MS Teams integration requires Graph API permissions for security and optional thread history:
 
 1. In Azure Portal, go to **App registrations** → find your bot's app
 2. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions**
 3. Add the following permissions:
-   - `ChannelMessage.Read.All` — for team channel messages
-   - `Chat.Read.All` — for group chat messages
-4. Click **Grant admin consent** for both permissions
+
+**Required:**
+- `User.ReadBasic.All` — **Required** for user identity verification. Without this permission, the bot cannot verify user identity and will reject all messages.
+
+**Optional (for thread history):**
+- `Team.ReadBasic.All` — For listing teams (resolves team ID from channel)
+- `Channel.ReadBasic.All` — For listing channels in teams (matches messages to teams)
+- `ChannelMessage.Read.All` — For reading team channel message history
+- `Chat.Read.All` — For reading group chat message history
+
+4. Click **Grant admin consent** for all permissions you add
+
+> **Note:** Without the optional thread history permissions, the bot still works but won't have conversation context from previous messages in the thread.
 
 #### Configure Archestra
 
@@ -316,17 +336,17 @@ Once set, the default agent processes all subsequent messages in that channel un
 
 #### Switching Agents Inline
 
-You can temporarily use a different agent for a single message by using the `>AgentName` syntax:
+You can temporarily use a different agent for a single message by using the `AgentName >` syntax:
 
 ```
-@Archestra >Sales what's our Q4 pipeline?
+@Archestra Sales > what's our Q4 pipeline?
 ```
 
 This routes the message to the "Sales" agent instead of the channel's default agent. The default binding remains unchanged—only this specific message uses the alternate agent.
 
 **Matching rules:**
 - Agent names are matched case-insensitively
-- Spaces in agent names are optional: `>AgentPeter` matches "Agent Peter"
+- Spaces in agent names are optional: `AgentPeter >` matches "Agent Peter"
 - If the agent name isn't found, the message falls back to the default agent with a notice
 
 **Examples:**
@@ -334,9 +354,9 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 | Message | Routed To |
 |---------|-----------|
 | `@Archestra hello` | Default agent |
-| `@Archestra >Sales check revenue` | Sales agent |
-| `@Archestra >support help me` | Support agent |
-| `@Archestra >Unknown test` | Default agent (with fallback notice) |
+| `@Archestra Sales > check revenue` | Sales agent |
+| `@Archestra support > help me` | Support agent |
+| `@Archestra Unknown > test` | Default agent (with fallback notice) |
 
 ### Troubleshooting
 
@@ -351,6 +371,6 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 
 **No thread history**
 - Ensure Graph API credentials are configured
-- For **team channels**: Verify `ChannelMessage.Read.All` permission is granted
-- For **group chats**: Verify `Chat.Read.All` permission is granted
-- Admin consent must be granted for both permissions
+- For **team channels**: Add `Team.ReadBasic.All`, `Channel.ReadBasic.All`, and `ChannelMessage.Read.All` permissions
+- For **group chats**: Add `Chat.Read.All` permission
+- Admin consent must be granted for all added permissions

@@ -1,4 +1,8 @@
 import type { SupportedProvider } from "@shared";
+import {
+  createDualLlmClient,
+  type DualLlmClient,
+} from "@/clients/dual-llm-client";
 import logger from "@/logging";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
 import type {
@@ -6,7 +10,6 @@ import type {
   DualLlmConfig,
   DualLlmMessage,
 } from "@/types";
-import { createDualLlmClient, type DualLlmClient } from "./dual-llm-client";
 
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely

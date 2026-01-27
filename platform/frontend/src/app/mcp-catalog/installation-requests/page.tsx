@@ -171,7 +171,7 @@ function RequestRow({ request }: { request: McpServerInstallationRequest }) {
               Custom:{" "}
               {request.customServerConfig.type === "remote"
                 ? request.customServerConfig.name
-                : "Local Server"}
+                : "Self-hosted Server"}
             </p>
           )}
         </div>

@@ -136,11 +136,16 @@ export function useAssignTool() {
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      // Invalidate all MCP server tools queries to update assigned agent counts
+      // Invalidate all MCP server queries (including nested tools queries for assignment counts)
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      // Invalidate chat MCP tools for this agent
+      // Invalidate all MCP catalog queries (including tools for assignment counts on cards)
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      // Invalidate chat MCP tools for this agent and all chat queries
       queryClient.invalidateQueries({
         queryKey: ["chat", "agents", agentId, "mcp-tools"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents"],
       });
     },
   });
@@ -191,18 +196,20 @@ export function useBulkAssignTools() {
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
 
-      // Invalidate the MCP servers list
+      // Invalidate all MCP server queries (including nested tools queries for assignment counts)
       queryClient.invalidateQueries({
         queryKey: ["mcp-servers"],
-        exact: true,
       });
 
-      // Invalidate the specific MCP server's tools if we know which server
-      if (result.mcpServerId) {
-        queryClient.invalidateQueries({
-          queryKey: ["mcp-servers", result.mcpServerId, "tools"],
-        });
-      }
+      // Invalidate all MCP catalog queries (including tools for assignment counts on cards)
+      queryClient.invalidateQueries({
+        queryKey: ["mcp-catalog"],
+      });
+
+      // Invalidate all chat agent queries as a fallback
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents"],
+      });
     },
   });
 }
@@ -230,11 +237,16 @@ export function useUnassignTool() {
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      // Invalidate all MCP server tools queries to update assigned agent counts
+      // Invalidate all MCP server queries (including nested tools queries for assignment counts)
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      // Invalidate chat MCP tools for this agent
+      // Invalidate all MCP catalog queries (including tools for assignment counts on cards)
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      // Invalidate chat MCP tools for this agent and all chat queries
       queryClient.invalidateQueries({
         queryKey: ["chat", "agents", agentId, "mcp-tools"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents"],
       });
     },
   });
@@ -260,6 +272,14 @@ export function useProfileToolPatchMutation() {
         queryKey: ["agent-tools"],
       });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Invalidate all MCP server queries (including nested tools queries for assignment counts)
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate all MCP catalog queries (including tools for assignment counts on cards)
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      // Invalidate all chat MCP tools queries (we don't know which agent was affected)
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents"],
+      });
     },
   });
 }
@@ -367,6 +387,12 @@ export function useSyncAgentDelegations() {
         path: { agentId },
         body: { targetAgentIds },
       });
+      if (response.error) {
+        throw new Error(
+          (response.error as { error?: { message?: string } })?.error
+            ?.message || "Failed to sync delegations",
+        );
+      }
       return response.data;
     },
     onSuccess: (_, variables) => {
@@ -385,12 +411,14 @@ export function useSyncAgentDelegations() {
       queryClient.invalidateQueries({
         queryKey: ["agents", variables.agentId, "tools"],
       });
+      // Invalidate agents list to update subagents count in table
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }
 
 /**
- * Remove a specific delegation from an internal agent.
+ * Remove a specific delegation from an agent.
  */
 export function useRemoveAgentDelegation() {
   const queryClient = useQueryClient();
@@ -405,6 +433,12 @@ export function useRemoveAgentDelegation() {
       const response = await deleteAgentDelegation({
         path: { agentId, targetAgentId },
       });
+      if (response.error) {
+        throw new Error(
+          (response.error as { error?: { message?: string } })?.error
+            ?.message || "Failed to remove delegation",
+        );
+      }
       return response.data;
     },
     onSuccess: (_, variables) => {
@@ -423,6 +457,8 @@ export function useRemoveAgentDelegation() {
       queryClient.invalidateQueries({
         queryKey: ["agents", variables.agentId, "tools"],
       });
+      // Invalidate agents list to update subagents count in table
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

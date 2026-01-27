@@ -58,7 +58,9 @@ import {
   Anthropic,
   ApiError,
   Cerebras,
+  Cohere,
   Gemini,
+  Mistral,
   Ollama,
   OpenAi,
   Vllm,
@@ -119,6 +121,18 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Cerebras.API.ChatCompletionResponseSchema, {
     id: "CerebrasChatCompletionResponse",
+  });
+  z.globalRegistry.add(Cohere.API.ChatRequestSchema, {
+    id: "CohereChatRequest",
+  });
+  z.globalRegistry.add(Cohere.API.ChatResponseSchema, {
+    id: "CohereChatResponse",
+  });
+  z.globalRegistry.add(Mistral.API.ChatCompletionRequestSchema, {
+    id: "MistralChatCompletionRequest",
+  });
+  z.globalRegistry.add(Mistral.API.ChatCompletionResponseSchema, {
+    id: "MistralChatCompletionResponse",
   });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",

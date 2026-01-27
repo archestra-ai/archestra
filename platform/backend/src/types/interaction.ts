@@ -5,7 +5,9 @@ import { schema } from "@/database";
 import {
   Anthropic,
   Cerebras,
+  Cohere,
   Gemini,
+  Mistral,
   Ollama,
   OpenAi,
   Vllm,
@@ -27,8 +29,10 @@ export const InteractionRequestSchema = z.union([
   Gemini.API.GenerateContentRequestSchema,
   Anthropic.API.MessagesRequestSchema,
   Cerebras.API.ChatCompletionRequestSchema,
+  Mistral.API.ChatCompletionRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
+  Cohere.API.ChatRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
 ]);
 
@@ -37,8 +41,10 @@ export const InteractionResponseSchema = z.union([
   Gemini.API.GenerateContentResponseSchema,
   Anthropic.API.MessagesResponseSchema,
   Cerebras.API.ChatCompletionResponseSchema,
+  Mistral.API.ChatCompletionResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
+  Cohere.API.ChatResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
 ]);
 
@@ -102,6 +108,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
+    type: z.enum(["mistral:chatCompletions"]),
+    request: Mistral.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Mistral.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Mistral.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
     type: z.enum(["vllm:chatCompletions"]),
     request: Vllm.API.ChatCompletionRequestSchema,
     processedRequest:
@@ -116,11 +132,23 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     response: Ollama.API.ChatCompletionResponseSchema,
   }),
   BaseSelectInteractionSchema.extend({
+    type: z.enum(["cohere:chat"]),
+    request: Cohere.API.ChatRequestSchema,
+    processedRequest: Cohere.API.ChatRequestSchema.nullable().optional(),
+    response: Cohere.API.ChatResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
     type: z.enum(["zhipuai:chatCompletions"]),
     request: Zhipuai.API.ChatCompletionRequestSchema,
     processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);
 

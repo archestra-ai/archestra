@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 
 // Mock the Vertex AI check
-vi.mock("@/routes/proxy/utils/gemini-client", () => ({
+vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: vi.fn(),
 }));
 
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { validateProviderAllowed } from "./routes.api-keys";
 
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);

@@ -24,7 +24,7 @@ export function TransportBadges({
             variant="outline"
             className="text-xs bg-emerald-700 text-white"
           >
-            Local
+            Self-hosted
           </Badge>
         )}
         <Badge variant="secondary" className="text-xs bg-gray-500 text-white">

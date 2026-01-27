@@ -15,12 +15,13 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
     case "anthropic":
       return new AnthropicTokenizer();
     case "cerebras":
+    case "cohere":
+    case "mistral":
     case "openai":
     case "vllm":
     case "ollama":
-      // vLLM and Ollama use tiktoken-compatible tokenization for most models
-      return new TiktokenTokenizer();
     case "zhipuai":
+      // These providers use tiktoken-compatible tokenization
       return new TiktokenTokenizer();
     default:
       // For any other provider including Gemini, use tiktoken as fallback

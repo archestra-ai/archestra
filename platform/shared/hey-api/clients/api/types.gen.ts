@@ -69,7 +69,7 @@ export type OpenAiChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -1450,7 +1450,7 @@ export type CerebrasChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -1913,7 +1913,7 @@ export type MistralChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -2324,7 +2324,7 @@ export type VllmChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         function_call?: {
             arguments: string;
             name: string;
@@ -2655,7 +2655,7 @@ export type OllamaChatCompletionRequestInput = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         function_call?: {
             arguments: string;
             name: string;
@@ -3208,7 +3208,7 @@ export type OpenAiChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -4589,7 +4589,7 @@ export type CerebrasChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -5052,7 +5052,7 @@ export type MistralChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
          */
@@ -5463,7 +5463,7 @@ export type VllmChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         function_call?: {
             arguments: string;
             name: string;
@@ -5794,7 +5794,7 @@ export type OllamaChatCompletionRequest = {
         }> | Array<{
             type: 'refusal';
             refusal: string;
-        }> | unknown;
+        }> | null;
         function_call?: {
             arguments: string;
             name: string;

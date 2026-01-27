@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { createClient, defineConfig } from "@hey-api/openapi-ts";
 import { MCP_CATALOG_API_BASE_URL } from "../consts";
@@ -50,7 +51,33 @@ const archestraCatalogConfig = await defineConfig({
   ],
 });
 
+/**
+ * Post-process generated types to fix hey-api's handling of nullable types.
+ *
+ * hey-api incorrectly generates `| unknown` instead of `| null` for OpenAPI
+ * schemas with `anyOf: [{...}, {type: "null"}]` patterns. This particularly
+ * affects tool_calls fields which should be `Array<...> | null` but get
+ * generated as `Array<...> | unknown`.
+ *
+ * This function fixes specific patterns where the nullable type is at the
+ * end of an array type definition (e.g., `}> | unknown` -> `}> | null`).
+ */
+function fixNullableTypes(filePath: string): void {
+  const content = readFileSync(filePath, "utf-8");
+  // Fix pattern: `}> | unknown;` at end of array definitions should be `}> | null;`
+  // This specifically targets nullable array types that hey-api incorrectly generates
+  const fixed = content.replace(/\}> \| unknown;/g, "}> | null;");
+  if (fixed !== content) {
+    writeFileSync(filePath, fixed, "utf-8");
+    // biome-ignore lint/suspicious/noConsole: Intentional info output during codegen
+    console.log(`[post-process] Fixed nullable types in ${filePath}`);
+  }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   await createClient(archestraApiConfig);
   await createClient(archestraCatalogConfig);
+
+  // Post-process to fix hey-api nullable type generation issues
+  fixNullableTypes("./hey-api/clients/api/types.gen.ts");
 }

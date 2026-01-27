@@ -67,14 +67,17 @@ jobs:
 
       - name: Extract previous version static assets
         run: |
-          mkdir -p "${{ inputs.image_directory }}/prev-static-assets"
-          PREV_IMAGE="docker.io/archestra/${{ inputs.image_name }}:latest"
+          mkdir -p "${INPUT_IMAGE_DIRECTORY}/prev-static-assets"
+          PREV_IMAGE="docker.io/archestra/${INPUT_IMAGE_NAME}:latest"
           docker pull "$PREV_IMAGE" || true
           CID=$(docker create "$PREV_IMAGE" 2>/dev/null) || true
           if [ -n "$CID" ]; then
-            docker cp "${CID}:/static-assets-source/." "${{ inputs.image_directory }}/prev-static-assets/" || true
+            docker cp "${CID}:/static-assets-source/." "${INPUT_IMAGE_DIRECTORY}/prev-static-assets/" || true
             docker rm "$CID"
           fi
+        env:
+          INPUT_IMAGE_DIRECTORY: ${{ inputs.image_directory }}
+          INPUT_IMAGE_NAME: ${{ inputs.image_name }}
 
       - name: Build Docker image
         id: build

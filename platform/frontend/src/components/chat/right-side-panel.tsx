@@ -51,12 +51,18 @@ export function RightSidePanel({
         e.preventDefault();
         const newWidth = Math.min(maxWidth, width + step);
         setWidth(newWidth);
-        localStorage.setItem("archestra-right-panel-width", newWidth.toString());
+        localStorage.setItem(
+          "archestra-right-panel-width",
+          newWidth.toString(),
+        );
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         const newWidth = Math.max(minWidth, width - step);
         setWidth(newWidth);
-        localStorage.setItem("archestra-right-panel-width", newWidth.toString());
+        localStorage.setItem(
+          "archestra-right-panel-width",
+          newWidth.toString(),
+        );
       }
     },
     [width],

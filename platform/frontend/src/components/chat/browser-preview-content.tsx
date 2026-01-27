@@ -106,7 +106,7 @@ export function BrowserPreviewContent({
       let renderedWidth: number;
       let renderedHeight: number;
       let offsetX = 0;
-      let offsetY = 0;
+      const offsetY = 0;
 
       // With object-contain object-top, we need to calculate offsets
       // - No vertical offset needed (image aligns to top via object-top)

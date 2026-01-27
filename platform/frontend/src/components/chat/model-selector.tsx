@@ -1,8 +1,21 @@
 "use client";
 
-import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { CheckIcon, ImageIcon, Loader2, Mic, Settings2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  type ModelInputModality,
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@shared";
+import {
+  CheckIcon,
+  FileText,
+  ImageIcon,
+  Loader2,
+  Mic,
+  Settings2,
+  Video,
+  XIcon,
+} from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -16,6 +29,8 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { DialogClose } from "@/components/ui/dialog";
+import { Toggle } from "@/components/ui/toggle";
 import {
   Tooltip,
   TooltipContent,
@@ -23,10 +38,57 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  type ChatModel,
   type ModelCapabilities,
   useModelsByProviderQuery,
 } from "@/lib/chat-models.query";
 import { cn } from "@/lib/utils";
+
+/** Modalities that can be filtered (excludes "text" since all models support it) */
+type FilterableModality = Exclude<ModelInputModality, "text">;
+
+/** Filter configuration for a modality */
+type ModalityFilterConfig = {
+  modality: FilterableModality;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  tooltip: string;
+};
+
+/** Available modality filters */
+const MODALITY_FILTERS: ModalityFilterConfig[] = [
+  {
+    modality: "image",
+    icon: ImageIcon,
+    label: "Vision",
+    tooltip: "Filter by models which support image input",
+  },
+  {
+    modality: "audio",
+    icon: Mic,
+    label: "Audio",
+    tooltip: "Filter by models which support audio input",
+  },
+  {
+    modality: "video",
+    icon: Video,
+    label: "Video",
+    tooltip: "Filter by models which support video input",
+  },
+  {
+    modality: "pdf",
+    icon: FileText,
+    label: "PDF",
+    tooltip: "Filter by models which support PDF input",
+  },
+];
+
+/** Tool calling filter config */
+const TOOL_CALLING_FILTER = {
+  icon: Settings2,
+  label: "Tools",
+  tooltip: "Filter by models which support tool calls",
+};
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -99,10 +161,12 @@ function ModelCapabilityBadges({
 
   const hasVision = capabilities.inputModalities?.includes("image");
   const hasAudio = capabilities.inputModalities?.includes("audio");
+  const hasVideo = capabilities.inputModalities?.includes("video");
+  const hasPdf = capabilities.inputModalities?.includes("pdf");
   const hasToolCalling = capabilities.supportsToolCalling;
 
   // Don't render if no capabilities to show
-  if (!hasVision && !hasAudio && !hasToolCalling) {
+  if (!hasVision && !hasAudio && !hasVideo && !hasPdf && !hasToolCalling) {
     return null;
   }
 
@@ -113,12 +177,170 @@ function ModelCapabilityBadges({
           <CapabilityIcon icon={ImageIcon} label="Supports vision (images)" />
         )}
         {hasAudio && <CapabilityIcon icon={Mic} label="Supports audio input" />}
+        {hasVideo && (
+          <CapabilityIcon icon={Video} label="Supports video input" />
+        )}
+        {hasPdf && (
+          <CapabilityIcon icon={FileText} label="Supports PDF input" />
+        )}
         {hasToolCalling && (
           <CapabilityIcon icon={Settings2} label="Supports tool calling" />
         )}
       </div>
     </TooltipProvider>
   );
+}
+
+/** Filter state type */
+type ModelFilters = {
+  modalities: Set<FilterableModality>;
+  toolCalling: boolean;
+};
+
+/** Initial filter state - no filters active */
+const INITIAL_FILTERS: ModelFilters = {
+  modalities: new Set(),
+  toolCalling: false,
+};
+
+/**
+ * Filter toggle button for capabilities.
+ * Shows a checkmark and highlighted styling when active.
+ */
+function FilterToggle({
+  icon: Icon,
+  label,
+  tooltip,
+  pressed,
+  onPressedChange,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  tooltip: string;
+  pressed: boolean;
+  onPressedChange: (pressed: boolean) => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Toggle
+          size="sm"
+          pressed={pressed}
+          onPressedChange={onPressedChange}
+          className={cn(
+            "h-7 px-2 gap-1.5 border transition-colors",
+            pressed
+              ? "bg-primary text-primary-foreground border-primary ring-2 ring-primary/20"
+              : "border-transparent hover:border-border",
+          )}
+        >
+          {pressed && <CheckIcon className="size-3" />}
+          <Icon className="size-3.5" />
+          <span className="text-xs">{label}</span>
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * Filter bar for model capabilities.
+ */
+function ModelFiltersBar({
+  filters,
+  onFiltersChange,
+  availableModalities,
+}: {
+  filters: ModelFilters;
+  onFiltersChange: (filters: ModelFilters) => void;
+  availableModalities: Set<FilterableModality>;
+}) {
+  const toggleModality = useCallback(
+    (modality: FilterableModality, pressed: boolean) => {
+      const newModalities = new Set(filters.modalities);
+      if (pressed) {
+        newModalities.add(modality);
+      } else {
+        newModalities.delete(modality);
+      }
+      onFiltersChange({ ...filters, modalities: newModalities });
+    },
+    [filters, onFiltersChange],
+  );
+
+  const toggleToolCalling = useCallback(
+    (pressed: boolean) => {
+      onFiltersChange({ ...filters, toolCalling: pressed });
+    },
+    [filters, onFiltersChange],
+  );
+
+  // Only show modality filters that are available in the model list
+  const visibleModalityFilters = MODALITY_FILTERS.filter((f) =>
+    availableModalities.has(f.modality),
+  );
+
+  // Don't render if no filters to show
+  if (visibleModalityFilters.length === 0) {
+    return null;
+  }
+
+  return (
+    <TooltipProvider delayDuration={500} skipDelayDuration={300}>
+      <div className="flex items-center gap-1 px-3 py-2 border-b">
+        <span className="text-xs text-muted-foreground mr-1">Filter:</span>
+        <div className="flex flex-wrap items-center gap-1 flex-1">
+          {visibleModalityFilters.map((config) => (
+            <FilterToggle
+              key={config.modality}
+              icon={config.icon}
+              label={config.label}
+              tooltip={config.tooltip}
+              pressed={filters.modalities.has(config.modality)}
+              onPressedChange={(pressed) =>
+                toggleModality(config.modality, pressed)
+              }
+            />
+          ))}
+          <FilterToggle
+            icon={TOOL_CALLING_FILTER.icon}
+            label={TOOL_CALLING_FILTER.label}
+            tooltip={TOOL_CALLING_FILTER.tooltip}
+            pressed={filters.toolCalling}
+            onPressedChange={toggleToolCalling}
+          />
+        </div>
+        <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+          <XIcon className="size-4" />
+          <span className="sr-only">Close</span>
+        </DialogClose>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Checks if a model matches the given filters.
+ */
+function modelMatchesFilters(model: ChatModel, filters: ModelFilters): boolean {
+  const capabilities = model.capabilities;
+
+  // Check modality filters (AND logic - model must support all selected modalities)
+  for (const modality of filters.modalities) {
+    if (!capabilities?.inputModalities?.includes(modality)) {
+      return false;
+    }
+  }
+
+  // Check tool calling filter
+  if (filters.toolCalling && !capabilities?.supportsToolCalling) {
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -135,9 +357,14 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   const { modelsByProvider, isLoading } = useModelsByProviderQuery();
   const [open, setOpen] = useState(false);
+  const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
+    // Reset filters when closing the dialog
+    if (!newOpen) {
+      setFilters(INITIAL_FILTERS);
+    }
     onOpenChangeProp?.(newOpen);
   };
 
@@ -145,6 +372,49 @@ export function ModelSelector({
   const availableProviders = useMemo(() => {
     return Object.keys(modelsByProvider) as SupportedProvider[];
   }, [modelsByProvider]);
+
+  // Calculate which modalities are available across all models
+  const availableModalities = useMemo(() => {
+    const modalities = new Set<FilterableModality>();
+    for (const provider of availableProviders) {
+      for (const model of modelsByProvider[provider] ?? []) {
+        const inputMods = model.capabilities?.inputModalities ?? [];
+        for (const mod of inputMods) {
+          if (mod !== "text") {
+            modalities.add(mod as FilterableModality);
+          }
+        }
+      }
+    }
+    return modalities;
+  }, [availableProviders, modelsByProvider]);
+
+  // Check if any filters are active
+  const hasActiveFilters = filters.modalities.size > 0 || filters.toolCalling;
+
+  // Filter models by provider based on active filters
+  const filteredModelsByProvider = useMemo(() => {
+    if (!hasActiveFilters) {
+      return modelsByProvider;
+    }
+
+    const filtered: Partial<Record<SupportedProvider, ChatModel[]>> = {};
+    for (const provider of availableProviders) {
+      const models = modelsByProvider[provider] ?? [];
+      const matchingModels = models.filter((model) =>
+        modelMatchesFilters(model, filters),
+      );
+      if (matchingModels.length > 0) {
+        filtered[provider] = matchingModels;
+      }
+    }
+    return filtered;
+  }, [modelsByProvider, availableProviders, filters, hasActiveFilters]);
+
+  // Get filtered providers (only those with matching models)
+  const filteredProviders = useMemo(() => {
+    return Object.keys(filteredModelsByProvider) as SupportedProvider[];
+  }, [filteredModelsByProvider]);
 
   // Find the provider for a given model
   const getProviderForModel = (model: string): SupportedProvider | null => {
@@ -235,10 +505,20 @@ export function ModelSelector({
         <ModelSelectorContent
           title="Select Model"
           onCloseAutoFocus={(e) => e.preventDefault()}
+          showCloseButton={false}
         >
+          <ModelFiltersBar
+            filters={filters}
+            onFiltersChange={setFilters}
+            availableModalities={availableModalities}
+          />
           <ModelSelectorInput placeholder="Search models..." />
           <ModelSelectorList>
-            <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+            <ModelSelectorEmpty>
+              {hasActiveFilters
+                ? "No models match the selected filters."
+                : "No models found."}
+            </ModelSelectorEmpty>
 
             {/* Show current model if not in available list */}
             {!isModelAvailable && selectedModel && (
@@ -257,12 +537,12 @@ export function ModelSelector({
               </ModelSelectorGroup>
             )}
 
-            {availableProviders.map((provider) => (
+            {filteredProviders.map((provider) => (
               <ModelSelectorGroup
                 key={provider}
                 heading={providerDisplayNames[provider]}
               >
-                {modelsByProvider[provider]?.map((model) => (
+                {filteredModelsByProvider[provider]?.map((model) => (
                   <ModelSelectorItem
                     key={model.id}
                     value={model.id}

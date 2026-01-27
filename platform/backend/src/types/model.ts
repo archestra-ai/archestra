@@ -23,42 +23,42 @@ const fieldsToExtend = {
 /**
  * Base database schema derived from Drizzle with strongly typed modalities.
  */
-export const SelectModelMetadataSchema = createSelectSchema(
-  schema.modelMetadataTable,
+export const SelectModelSchema = createSelectSchema(
+  schema.modelsTable,
   fieldsToExtend,
 );
-export const InsertModelMetadataSchema = createInsertSchema(
-  schema.modelMetadataTable,
+export const InsertModelSchema = createInsertSchema(
+  schema.modelsTable,
   fieldsToExtend,
 );
 
 /**
- * Schema for creating new model metadata (without auto-generated fields)
+ * Schema for creating new model (without auto-generated fields)
  */
-export const CreateModelMetadataSchema = InsertModelMetadataSchema.omit({
+export const CreateModelSchema = InsertModelSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
 /**
- * Schema for updating model metadata (all fields optional)
+ * Schema for updating model (all fields optional)
  */
-export const UpdateModelMetadataSchema = CreateModelMetadataSchema.partial();
+export const UpdateModelSchema = CreateModelSchema.partial();
 
 /**
  * Exported types
  */
-export type ModelMetadata = z.infer<typeof SelectModelMetadataSchema>;
-export type InsertModelMetadata = z.infer<typeof InsertModelMetadataSchema>;
-export type CreateModelMetadata = z.infer<typeof CreateModelMetadataSchema>;
-export type UpdateModelMetadata = z.infer<typeof UpdateModelMetadataSchema>;
+export type Model = z.infer<typeof SelectModelSchema>;
+export type InsertModel = z.infer<typeof InsertModelSchema>;
+export type CreateModel = z.infer<typeof CreateModelSchema>;
+export type UpdateModel = z.infer<typeof UpdateModelSchema>;
 
 /**
  * Model capabilities for API responses.
- * Derived from SelectModelMetadataSchema with computed price fields.
+ * Derived from SelectModelSchema with computed price fields.
  */
-export const ModelCapabilitiesSchema = SelectModelMetadataSchema.pick({
+export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   contextLength: true,
   inputModalities: true,
   outputModalities: true,

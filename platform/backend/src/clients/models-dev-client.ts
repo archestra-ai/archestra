@@ -1,9 +1,9 @@
 import { type SupportedProvider, TimeInMs } from "@shared";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { ModelMetadataModel, TokenPriceModel } from "@/models";
+import { ModelModel, TokenPriceModel } from "@/models";
 import {
-  type CreateModelMetadata,
+  type CreateModel,
   type ModelInputModality,
   ModelInputModalitySchema,
   type ModelOutputModality,
@@ -174,13 +174,13 @@ class ModelsDevClient {
   }
 
   /**
-   * Converts a models.dev model to our CreateModelMetadata format.
+   * Converts a models.dev model to our CreateModel format.
    * Returns null if the model's provider is not supported.
    */
-  convertToModelMetadata(
+  convertToModel(
     providerId: string,
     model: ModelsDevModel,
-  ): CreateModelMetadata | null {
+  ): CreateModel | null {
     const provider = this.mapProvider(providerId);
     if (!provider) {
       return null;
@@ -281,7 +281,7 @@ class ModelsDevClient {
       "Fetched providers from models.dev API",
     );
 
-    const metadataToSync: CreateModelMetadata[] = [];
+    const modelsToSync: CreateModel[] = [];
     const skippedProviders = new Set<string>();
     let totalModels = 0;
 
@@ -294,10 +294,10 @@ class ModelsDevClient {
       for (const modelId of Object.keys(provider.models)) {
         totalModels++;
         const model = provider.models[modelId];
-        const metadata = this.convertToModelMetadata(providerId, model);
+        const converted = this.convertToModel(providerId, model);
 
-        if (metadata) {
-          metadataToSync.push(metadata);
+        if (converted) {
+          modelsToSync.push(converted);
         } else {
           skippedProviders.add(providerId);
         }
@@ -307,25 +307,25 @@ class ModelsDevClient {
     logger.info(
       {
         totalModels,
-        modelsToSync: metadataToSync.length,
+        modelsToSync: modelsToSync.length,
         skippedProviders: Array.from(skippedProviders),
       },
       "Filtered models for sync",
     );
 
-    if (metadataToSync.length > 0) {
-      await ModelMetadataModel.bulkUpsert(metadataToSync);
-      await this.syncTokenPrices(metadataToSync);
+    if (modelsToSync.length > 0) {
+      await ModelModel.bulkUpsert(modelsToSync);
+      await this.syncTokenPrices(modelsToSync);
     }
 
     await this.updateSyncTimestamp();
 
     logger.info(
-      { syncedCount: metadataToSync.length },
+      { syncedCount: modelsToSync.length },
       "models.dev model metadata sync completed",
     );
 
-    return metadataToSync.length;
+    return modelsToSync.length;
   }
 
   /**
@@ -356,27 +356,25 @@ class ModelsDevClient {
    * Auto-populates token_price table with pricing from models.dev.
    * Only creates entries for models that don't already have pricing.
    */
-  private async syncTokenPrices(
-    metadataList: CreateModelMetadata[],
-  ): Promise<void> {
+  private async syncTokenPrices(models: CreateModel[]): Promise<void> {
     let createdCount = 0;
 
-    for (const metadata of metadataList) {
-      if (!metadata.promptPricePerToken || !metadata.completionPricePerToken) {
+    for (const model of models) {
+      if (!model.promptPricePerToken || !model.completionPricePerToken) {
         continue;
       }
 
-      const inputPrice = Number.parseFloat(metadata.promptPricePerToken);
-      const outputPrice = Number.parseFloat(metadata.completionPricePerToken);
+      const inputPrice = Number.parseFloat(model.promptPricePerToken);
+      const outputPrice = Number.parseFloat(model.completionPricePerToken);
 
       // Skip if either price is NaN (invalid numeric string)
       if (Number.isNaN(inputPrice) || Number.isNaN(outputPrice)) {
         logger.warn(
           {
-            modelId: metadata.modelId,
-            provider: metadata.provider,
-            promptPricePerToken: metadata.promptPricePerToken,
-            completionPricePerToken: metadata.completionPricePerToken,
+            modelId: model.modelId,
+            provider: model.provider,
+            promptPricePerToken: model.promptPricePerToken,
+            completionPricePerToken: model.completionPricePerToken,
           },
           "Skipping token price sync due to invalid pricing data",
         );
@@ -386,14 +384,11 @@ class ModelsDevClient {
       const pricePerMillionInput = (inputPrice * 1_000_000).toFixed(2);
       const pricePerMillionOutput = (outputPrice * 1_000_000).toFixed(2);
 
-      const created = await TokenPriceModel.createIfNotExists(
-        metadata.modelId,
-        {
-          provider: metadata.provider,
-          pricePerMillionInput,
-          pricePerMillionOutput,
-        },
-      );
+      const created = await TokenPriceModel.createIfNotExists(model.modelId, {
+        provider: model.provider,
+        pricePerMillionInput,
+        pricePerMillionOutput,
+      });
 
       if (created) {
         createdCount++;

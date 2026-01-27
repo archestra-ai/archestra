@@ -15,13 +15,13 @@ import {
 import type { ModelInputModality, ModelOutputModality } from "@/types";
 
 /**
- * Model metadata table - stores capability and pricing metadata fetched from models.dev API.
+ * Models table - stores capability and pricing metadata fetched from models.dev API.
  *
  * This table caches model information like input/output modalities, tool calling support,
  * context window size, and pricing. Data is synced periodically from models.dev.
  */
-const modelMetadataTable = pgTable(
-  "model_metadata",
+const modelsTable = pgTable(
+  "models",
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
@@ -74,18 +74,18 @@ const modelMetadataTable = pgTable(
   },
   (table) => ({
     /** Unique constraint on provider + model_id to prevent duplicates */
-    providerModelUnique: unique("model_metadata_provider_model_unique").on(
+    providerModelUnique: unique("models_provider_model_unique").on(
       table.provider,
       table.modelId,
     ),
     /** Index for fast lookups by provider + model_id */
-    providerModelIdx: index("model_metadata_provider_model_idx").on(
+    providerModelIdx: index("models_provider_model_idx").on(
       table.provider,
       table.modelId,
     ),
     /** Index for lookups by external_id */
-    externalIdIdx: index("model_metadata_external_id_idx").on(table.externalId),
+    externalIdIdx: index("models_external_id_idx").on(table.externalId),
   }),
 );
 
-export default modelMetadataTable;
+export default modelsTable;

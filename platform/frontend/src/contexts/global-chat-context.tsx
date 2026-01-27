@@ -22,6 +22,13 @@ import { useGenerateConversationTitle } from "@/lib/chat.query";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 
+/** Token usage data received from the backend stream */
+export interface TokenUsage {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  totalTokens: number | undefined;
+}
+
 interface ChatSession {
   conversationId: string;
   messages: UIMessage[];
@@ -40,6 +47,8 @@ interface ChatSession {
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
+  /** Token usage for the current/last response */
+  tokenUsage: TokenUsage | null;
 }
 
 interface ChatContextValue {
@@ -214,6 +223,7 @@ function ChatSessionHook({
   const queryClient = useQueryClient();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
@@ -268,6 +278,13 @@ function ChatSessionHook({
         }, 500);
       }
     },
+    onData: (dataPart) => {
+      // Handle token usage data from the backend stream
+      if (dataPart.type === "data-token-usage") {
+        const usage = dataPart.data as TokenUsage;
+        setTokenUsage(usage);
+      }
+    },
   } as Parameters<typeof useChat>[0]);
 
   // Auto-generate title after first assistant response
@@ -316,6 +333,7 @@ function ChatSessionHook({
       addToolResult,
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
+      tokenUsage,
     };
 
     sessionsRef.current.set(conversationId, session);
@@ -331,6 +349,7 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     pendingCustomServerToolCall,
+    tokenUsage,
     sessionsRef,
     notifySessionUpdate,
   ]);

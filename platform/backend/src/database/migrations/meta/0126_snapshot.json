@@ -1,5 +1,5 @@
 {
-  "id": "5679e4a6-d493-41f4-a4f2-7ba518e40df5",
+  "id": "6a5cbd65-de30-4d52-a0b4-e6bd9fabed89",
   "prevId": "a1326dd7-fe69-45c5-8cf8-3f78b9f8d5da",
   "version": "7",
   "dialect": "postgresql",
@@ -2983,8 +2983,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.model_metadata": {
-      "name": "model_metadata",
+    "public.models": {
+      "name": "models",
       "schema": "",
       "columns": {
         "id": {
@@ -3077,8 +3077,8 @@
         }
       },
       "indexes": {
-        "model_metadata_provider_model_idx": {
-          "name": "model_metadata_provider_model_idx",
+        "models_provider_model_idx": {
+          "name": "models_provider_model_idx",
           "columns": [
             {
               "expression": "provider",
@@ -3098,8 +3098,8 @@
           "method": "btree",
           "with": {}
         },
-        "model_metadata_external_id_idx": {
-          "name": "model_metadata_external_id_idx",
+        "models_external_id_idx": {
+          "name": "models_external_id_idx",
           "columns": [
             {
               "expression": "external_id",
@@ -3117,8 +3117,8 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "model_metadata_provider_model_unique": {
-          "name": "model_metadata_provider_model_unique",
+        "models_provider_model_unique": {
+          "name": "models_provider_model_unique",
           "nullsNotDistinct": false,
           "columns": [
             "provider",

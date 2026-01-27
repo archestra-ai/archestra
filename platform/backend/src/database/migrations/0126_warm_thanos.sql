@@ -1,4 +1,4 @@
-CREATE TABLE "model_metadata" (
+CREATE TABLE "models" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"external_id" text NOT NULL,
 	"provider" text NOT NULL,
@@ -13,8 +13,8 @@ CREATE TABLE "model_metadata" (
 	"last_synced_at" timestamp DEFAULT now() NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "model_metadata_provider_model_unique" UNIQUE("provider","model_id")
+	CONSTRAINT "models_provider_model_unique" UNIQUE("provider","model_id")
 );
 --> statement-breakpoint
-CREATE INDEX "model_metadata_provider_model_idx" ON "model_metadata" USING btree ("provider","model_id");--> statement-breakpoint
-CREATE INDEX "model_metadata_external_id_idx" ON "model_metadata" USING btree ("external_id");
+CREATE INDEX "models_provider_model_idx" ON "models" USING btree ("provider","model_id");--> statement-breakpoint
+CREATE INDEX "models_external_id_idx" ON "models" USING btree ("external_id");

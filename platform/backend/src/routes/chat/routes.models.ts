@@ -15,7 +15,7 @@ import {
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatApiKeyModel, ModelMetadataModel, TeamModel } from "@/models";
+import { ChatApiKeyModel, ModelModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   type Anthropic,
@@ -824,7 +824,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             modelId: m.id,
           }));
           const metadataMap =
-            await ModelMetadataModel.findByProviderModelIds(metadataKeys);
+            await ModelModel.findByProviderModelIds(metadataKeys);
 
           // Attach capabilities to each model
           return uniqueModels.map((model) => {
@@ -832,7 +832,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const metadata = metadataMap.get(key);
             return {
               ...model,
-              capabilities: ModelMetadataModel.toCapabilities(metadata ?? null),
+              capabilities: ModelModel.toCapabilities(metadata ?? null),
             };
           });
         },

@@ -78,7 +78,6 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/pending-tool-state";
-import { useTokenEstimate } from "@/lib/token-estimate";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -449,9 +448,10 @@ export default function ChatPage() {
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
+  const tokenUsage = chatSession?.tokenUsage;
 
-  // Estimate token usage from messages for context indicator
-  const estimatedTokens = useTokenEstimate(messages);
+  // Use actual token usage when available from the stream (no fallback to estimation)
+  const tokensUsed = tokenUsage?.totalTokens;
 
   useEffect(() => {
     if (
@@ -1150,7 +1150,7 @@ export default function ChatPage() {
                   allowFileUploads={organization?.allowChatFileUploads ?? false}
                   isModelsLoading={isModelsLoading}
                   onEditAgent={() => openDialog("edit-agent")}
-                  tokensUsed={estimatedTokens}
+                  tokensUsed={tokensUsed}
                   maxContextLength={selectedModelContextLength}
                   inputModalities={selectedModelInputModalities}
                 />

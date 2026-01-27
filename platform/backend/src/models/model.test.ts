@@ -1,10 +1,10 @@
 import { describe, expect, test } from "@/test";
-import ModelMetadataModel from "./model-metadata";
+import ModelModel from "./model";
 
-describe("ModelMetadataModel", () => {
+describe("ModelModel", () => {
   describe("create", () => {
-    test("can create model metadata", async () => {
-      const metadata = await ModelMetadataModel.create({
+    test("can create model", async () => {
+      const model = await ModelModel.create({
         externalId: "openai/gpt-4o",
         provider: "openai",
         modelId: "gpt-4o",
@@ -18,31 +18,31 @@ describe("ModelMetadataModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      expect(metadata.id).toBeDefined();
-      expect(metadata.externalId).toBe("openai/gpt-4o");
-      expect(metadata.provider).toBe("openai");
-      expect(metadata.modelId).toBe("gpt-4o");
-      expect(metadata.description).toBe("GPT-4o is a multimodal model");
-      expect(metadata.contextLength).toBe(128000);
-      expect(metadata.inputModalities).toEqual(["text", "image"]);
-      expect(metadata.outputModalities).toEqual(["text"]);
-      expect(metadata.supportsToolCalling).toBe(true);
-      expect(metadata.promptPricePerToken).toBe("0.000005000000");
-      expect(metadata.completionPricePerToken).toBe("0.000015000000");
+      expect(model.id).toBeDefined();
+      expect(model.externalId).toBe("openai/gpt-4o");
+      expect(model.provider).toBe("openai");
+      expect(model.modelId).toBe("gpt-4o");
+      expect(model.description).toBe("GPT-4o is a multimodal model");
+      expect(model.contextLength).toBe(128000);
+      expect(model.inputModalities).toEqual(["text", "image"]);
+      expect(model.outputModalities).toEqual(["text"]);
+      expect(model.supportsToolCalling).toBe(true);
+      expect(model.promptPricePerToken).toBe("0.000005000000");
+      expect(model.completionPricePerToken).toBe("0.000015000000");
     });
   });
 
   describe("findByProviderAndModelId", () => {
-    test("returns null when metadata does not exist", async () => {
-      const metadata = await ModelMetadataModel.findByProviderAndModelId(
+    test("returns null when model does not exist", async () => {
+      const model = await ModelModel.findByProviderAndModelId(
         "openai",
         "nonexistent-model",
       );
-      expect(metadata).toBeNull();
+      expect(model).toBeNull();
     });
 
-    test("can find metadata by provider and model ID", async () => {
-      await ModelMetadataModel.create({
+    test("can find model by provider and model ID", async () => {
+      await ModelModel.create({
         externalId: "anthropic/claude-3-5-sonnet",
         provider: "anthropic",
         modelId: "claude-3-5-sonnet",
@@ -56,25 +56,25 @@ describe("ModelMetadataModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      const metadata = await ModelMetadataModel.findByProviderAndModelId(
+      const model = await ModelModel.findByProviderAndModelId(
         "anthropic",
         "claude-3-5-sonnet",
       );
 
-      expect(metadata).not.toBeNull();
-      expect(metadata?.provider).toBe("anthropic");
-      expect(metadata?.modelId).toBe("claude-3-5-sonnet");
+      expect(model).not.toBeNull();
+      expect(model?.provider).toBe("anthropic");
+      expect(model?.modelId).toBe("claude-3-5-sonnet");
     });
   });
 
   describe("findByProviderModelIds", () => {
     test("returns empty map when no keys provided", async () => {
-      const map = await ModelMetadataModel.findByProviderModelIds([]);
+      const map = await ModelModel.findByProviderModelIds([]);
       expect(map.size).toBe(0);
     });
 
-    test("returns metadata for matching keys", async () => {
-      await ModelMetadataModel.create({
+    test("returns models for matching keys", async () => {
+      await ModelModel.create({
         externalId: "openai/gpt-4o",
         provider: "openai",
         modelId: "gpt-4o",
@@ -88,7 +88,7 @@ describe("ModelMetadataModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      await ModelMetadataModel.create({
+      await ModelModel.create({
         externalId: "anthropic/claude-3-opus",
         provider: "anthropic",
         modelId: "claude-3-opus",
@@ -102,7 +102,7 @@ describe("ModelMetadataModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      const map = await ModelMetadataModel.findByProviderModelIds([
+      const map = await ModelModel.findByProviderModelIds([
         { provider: "openai", modelId: "gpt-4o" },
         { provider: "anthropic", modelId: "claude-3-opus" },
         { provider: "openai", modelId: "nonexistent" },
@@ -116,7 +116,7 @@ describe("ModelMetadataModel", () => {
 
     test("only returns requested records via database-level filtering", async () => {
       // Create multiple records in the database
-      await ModelMetadataModel.create({
+      await ModelModel.create({
         externalId: "openai/gpt-4o",
         provider: "openai",
         modelId: "gpt-4o",
@@ -130,7 +130,7 @@ describe("ModelMetadataModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      await ModelMetadataModel.create({
+      await ModelModel.create({
         externalId: "openai/gpt-3.5-turbo",
         provider: "openai",
         modelId: "gpt-3.5-turbo",
@@ -144,7 +144,7 @@ describe("ModelMetadataModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      await ModelMetadataModel.create({
+      await ModelModel.create({
         externalId: "anthropic/claude-3-opus",
         provider: "anthropic",
         modelId: "claude-3-opus",
@@ -159,7 +159,7 @@ describe("ModelMetadataModel", () => {
       });
 
       // Request only one of the three records
-      const map = await ModelMetadataModel.findByProviderModelIds([
+      const map = await ModelModel.findByProviderModelIds([
         { provider: "openai", modelId: "gpt-4o" },
       ]);
 
@@ -172,8 +172,8 @@ describe("ModelMetadataModel", () => {
   });
 
   describe("upsert", () => {
-    test("creates new metadata if it does not exist", async () => {
-      const metadata = await ModelMetadataModel.upsert({
+    test("creates new model if it does not exist", async () => {
+      const model = await ModelModel.upsert({
         externalId: "openai/gpt-4-turbo",
         provider: "openai",
         modelId: "gpt-4-turbo",
@@ -187,13 +187,13 @@ describe("ModelMetadataModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      expect(metadata.id).toBeDefined();
-      expect(metadata.modelId).toBe("gpt-4-turbo");
+      expect(model.id).toBeDefined();
+      expect(model.modelId).toBe("gpt-4-turbo");
     });
 
-    test("updates existing metadata on conflict", async () => {
-      // Create initial metadata
-      const initial = await ModelMetadataModel.create({
+    test("updates existing model on conflict", async () => {
+      // Create initial model
+      const initial = await ModelModel.create({
         externalId: "openai/gpt-4o-mini",
         provider: "openai",
         modelId: "gpt-4o-mini",
@@ -208,7 +208,7 @@ describe("ModelMetadataModel", () => {
       });
 
       // Upsert with updated data
-      const updated = await ModelMetadataModel.upsert({
+      const updated = await ModelModel.upsert({
         externalId: "openai/gpt-4o-mini",
         provider: "openai",
         modelId: "gpt-4o-mini",
@@ -232,12 +232,12 @@ describe("ModelMetadataModel", () => {
 
   describe("bulkUpsert", () => {
     test("returns empty array when no data provided", async () => {
-      const results = await ModelMetadataModel.bulkUpsert([]);
+      const results = await ModelModel.bulkUpsert([]);
       expect(results).toEqual([]);
     });
 
     test("can bulk upsert multiple records", async () => {
-      const results = await ModelMetadataModel.bulkUpsert([
+      const results = await ModelModel.bulkUpsert([
         {
           externalId: "google/gemini-pro",
           provider: "gemini",
@@ -269,19 +269,19 @@ describe("ModelMetadataModel", () => {
       expect(results).toHaveLength(2);
 
       // Verify both were persisted
-      const all = await ModelMetadataModel.findAll();
+      const all = await ModelModel.findAll();
       expect(all).toHaveLength(2);
     });
   });
 
   describe("delete", () => {
-    test("returns false when metadata does not exist", async () => {
-      const result = await ModelMetadataModel.delete("openai", "nonexistent");
+    test("returns false when model does not exist", async () => {
+      const result = await ModelModel.delete("openai", "nonexistent");
       expect(result).toBe(false);
     });
 
-    test("can delete metadata by provider and model ID", async () => {
-      await ModelMetadataModel.create({
+    test("can delete model by provider and model ID", async () => {
+      await ModelModel.create({
         externalId: "cohere/command-r",
         provider: "cohere",
         modelId: "command-r",
@@ -295,20 +295,20 @@ describe("ModelMetadataModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      const result = await ModelMetadataModel.delete("cohere", "command-r");
+      const result = await ModelModel.delete("cohere", "command-r");
       expect(result).toBe(true);
 
-      const metadata = await ModelMetadataModel.findByProviderAndModelId(
+      const model = await ModelModel.findByProviderAndModelId(
         "cohere",
         "command-r",
       );
-      expect(metadata).toBeNull();
+      expect(model).toBeNull();
     });
   });
 
   describe("toCapabilities", () => {
-    test("returns null values when metadata is null", () => {
-      const capabilities = ModelMetadataModel.toCapabilities(null);
+    test("returns null values when model is null", () => {
+      const capabilities = ModelModel.toCapabilities(null);
 
       expect(capabilities.contextLength).toBeNull();
       expect(capabilities.inputModalities).toBeNull();
@@ -318,8 +318,8 @@ describe("ModelMetadataModel", () => {
       expect(capabilities.pricePerMillionOutput).toBeNull();
     });
 
-    test("converts metadata to capabilities format", async () => {
-      const metadata = await ModelMetadataModel.create({
+    test("converts model to capabilities format", async () => {
+      const model = await ModelModel.create({
         externalId: "openai/gpt-4o",
         provider: "openai",
         modelId: "gpt-4o",
@@ -333,7 +333,7 @@ describe("ModelMetadataModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      const capabilities = ModelMetadataModel.toCapabilities(metadata);
+      const capabilities = ModelModel.toCapabilities(model);
 
       expect(capabilities.contextLength).toBe(128000);
       expect(capabilities.inputModalities).toEqual(["text", "image"]);

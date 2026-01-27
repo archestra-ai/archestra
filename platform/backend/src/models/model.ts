@@ -1,34 +1,30 @@
 import type { SupportedProvider } from "@shared";
 import { and, eq, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type {
-  CreateModelMetadata,
-  ModelCapabilities,
-  ModelMetadata,
-} from "@/types";
+import type { CreateModel, Model, ModelCapabilities } from "@/types";
 
-class ModelMetadataModel {
+class ModelModel {
   /**
-   * Find all model metadata entries
+   * Find all models
    */
-  static async findAll(): Promise<ModelMetadata[]> {
-    return await db.select().from(schema.modelMetadataTable);
+  static async findAll(): Promise<Model[]> {
+    return await db.select().from(schema.modelsTable);
   }
 
   /**
-   * Find model metadata by provider and model ID
+   * Find model by provider and model ID
    */
   static async findByProviderAndModelId(
     provider: SupportedProvider,
     modelId: string,
-  ): Promise<ModelMetadata | null> {
+  ): Promise<Model | null> {
     const [result] = await db
       .select()
-      .from(schema.modelMetadataTable)
+      .from(schema.modelsTable)
       .where(
         and(
-          eq(schema.modelMetadataTable.provider, provider),
-          eq(schema.modelMetadataTable.modelId, modelId),
+          eq(schema.modelsTable.provider, provider),
+          eq(schema.modelsTable.modelId, modelId),
         ),
       );
 
@@ -36,11 +32,11 @@ class ModelMetadataModel {
   }
 
   /**
-   * Find model metadata for multiple provider:modelId combinations
+   * Find models for multiple provider:modelId combinations
    */
   static async findByProviderModelIds(
     keys: Array<{ provider: SupportedProvider; modelId: string }>,
-  ): Promise<Map<string, ModelMetadata>> {
+  ): Promise<Map<string, Model>> {
     if (keys.length === 0) {
       return new Map();
     }
@@ -48,17 +44,17 @@ class ModelMetadataModel {
     // Build OR conditions to filter at database level
     const conditions = keys.map((key) =>
       and(
-        eq(schema.modelMetadataTable.provider, key.provider),
-        eq(schema.modelMetadataTable.modelId, key.modelId),
+        eq(schema.modelsTable.provider, key.provider),
+        eq(schema.modelsTable.modelId, key.modelId),
       ),
     );
 
     const results = await db
       .select()
-      .from(schema.modelMetadataTable)
+      .from(schema.modelsTable)
       .where(or(...conditions));
 
-    const map = new Map<string, ModelMetadata>();
+    const map = new Map<string, Model>();
     for (const result of results) {
       const key = `${result.provider}:${result.modelId}`;
       map.set(key, result);
@@ -68,25 +64,23 @@ class ModelMetadataModel {
   }
 
   /**
-   * Find model metadata by external ID (e.g., "anthropic/claude-3-opus")
+   * Find model by external ID (e.g., "anthropic/claude-3-opus")
    */
-  static async findByExternalId(
-    externalId: string,
-  ): Promise<ModelMetadata | null> {
+  static async findByExternalId(externalId: string): Promise<Model | null> {
     const [result] = await db
       .select()
-      .from(schema.modelMetadataTable)
-      .where(eq(schema.modelMetadataTable.externalId, externalId));
+      .from(schema.modelsTable)
+      .where(eq(schema.modelsTable.externalId, externalId));
 
     return result || null;
   }
 
   /**
-   * Create new model metadata
+   * Create new model
    */
-  static async create(data: CreateModelMetadata): Promise<ModelMetadata> {
+  static async create(data: CreateModel): Promise<Model> {
     const [result] = await db
-      .insert(schema.modelMetadataTable)
+      .insert(schema.modelsTable)
       .values(data)
       .returning();
 
@@ -94,17 +88,14 @@ class ModelMetadataModel {
   }
 
   /**
-   * Upsert model metadata by provider and model ID
+   * Upsert model by provider and model ID
    */
-  static async upsert(data: CreateModelMetadata): Promise<ModelMetadata> {
+  static async upsert(data: CreateModel): Promise<Model> {
     const [result] = await db
-      .insert(schema.modelMetadataTable)
+      .insert(schema.modelsTable)
       .values(data)
       .onConflictDoUpdate({
-        target: [
-          schema.modelMetadataTable.provider,
-          schema.modelMetadataTable.modelId,
-        ],
+        target: [schema.modelsTable.provider, schema.modelsTable.modelId],
         set: {
           externalId: data.externalId,
           description: data.description,
@@ -124,29 +115,24 @@ class ModelMetadataModel {
   }
 
   /**
-   * Bulk upsert model metadata.
+   * Bulk upsert models.
    * Uses individual upserts within a transaction for simplicity and reliability.
    */
-  static async bulkUpsert(
-    dataArray: CreateModelMetadata[],
-  ): Promise<ModelMetadata[]> {
+  static async bulkUpsert(dataArray: CreateModel[]): Promise<Model[]> {
     if (dataArray.length === 0) {
       return [];
     }
 
-    const results: ModelMetadata[] = [];
+    const results: Model[] = [];
 
     // Use transaction for atomicity
     await db.transaction(async (tx) => {
       for (const data of dataArray) {
         const [result] = await tx
-          .insert(schema.modelMetadataTable)
+          .insert(schema.modelsTable)
           .values(data)
           .onConflictDoUpdate({
-            target: [
-              schema.modelMetadataTable.provider,
-              schema.modelMetadataTable.modelId,
-            ],
+            target: [schema.modelsTable.provider, schema.modelsTable.modelId],
             set: {
               externalId: data.externalId,
               description: data.description,
@@ -169,14 +155,14 @@ class ModelMetadataModel {
   }
 
   /**
-   * Delete model metadata by provider and model ID
+   * Delete model by provider and model ID
    */
   static async delete(
     provider: SupportedProvider,
     modelId: string,
   ): Promise<boolean> {
     // First check if the record exists (PGLite doesn't return rowCount reliably)
-    const existing = await ModelMetadataModel.findByProviderAndModelId(
+    const existing = await ModelModel.findByProviderAndModelId(
       provider,
       modelId,
     );
@@ -185,11 +171,11 @@ class ModelMetadataModel {
     }
 
     await db
-      .delete(schema.modelMetadataTable)
+      .delete(schema.modelsTable)
       .where(
         and(
-          eq(schema.modelMetadataTable.provider, provider),
-          eq(schema.modelMetadataTable.modelId, modelId),
+          eq(schema.modelsTable.provider, provider),
+          eq(schema.modelsTable.modelId, modelId),
         ),
       );
 
@@ -197,17 +183,17 @@ class ModelMetadataModel {
   }
 
   /**
-   * Delete all model metadata
+   * Delete all models
    */
   static async deleteAll(): Promise<void> {
-    await db.delete(schema.modelMetadataTable);
+    await db.delete(schema.modelsTable);
   }
 
   /**
    * Get model capabilities for API response
    */
-  static toCapabilities(metadata: ModelMetadata | null): ModelCapabilities {
-    if (!metadata) {
+  static toCapabilities(model: Model | null): ModelCapabilities {
+    if (!model) {
       return {
         contextLength: null,
         inputModalities: null,
@@ -219,24 +205,24 @@ class ModelMetadataModel {
     }
 
     // Convert per-token price to per-million-token price
-    const promptPricePerMillion = metadata.promptPricePerToken
-      ? (Number.parseFloat(metadata.promptPricePerToken) * 1_000_000).toFixed(2)
+    const promptPricePerMillion = model.promptPricePerToken
+      ? (Number.parseFloat(model.promptPricePerToken) * 1_000_000).toFixed(2)
       : null;
-    const completionPricePerMillion = metadata.completionPricePerToken
-      ? (
-          Number.parseFloat(metadata.completionPricePerToken) * 1_000_000
-        ).toFixed(2)
+    const completionPricePerMillion = model.completionPricePerToken
+      ? (Number.parseFloat(model.completionPricePerToken) * 1_000_000).toFixed(
+          2,
+        )
       : null;
 
     return {
-      contextLength: metadata.contextLength,
-      inputModalities: metadata.inputModalities,
-      outputModalities: metadata.outputModalities,
-      supportsToolCalling: metadata.supportsToolCalling,
+      contextLength: model.contextLength,
+      inputModalities: model.inputModalities,
+      outputModalities: model.outputModalities,
+      supportsToolCalling: model.supportsToolCalling,
       pricePerMillionInput: promptPricePerMillion,
       pricePerMillionOutput: completionPricePerMillion,
     };
   }
 }
 
-export default ModelMetadataModel;
+export default ModelModel;

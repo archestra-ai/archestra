@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { ModelMetadataModel, TokenPriceModel } from "@/models";
+import { ModelModel, TokenPriceModel } from "@/models";
 import type {
   ModelsDevApiResponse,
   ModelsDevModel,
@@ -106,7 +106,7 @@ describe("ModelsDevClient", () => {
   });
 
   afterEach(async () => {
-    await ModelMetadataModel.deleteAll();
+    await ModelModel.deleteAll();
     await TokenPriceModel.deleteAll();
   });
 
@@ -181,7 +181,7 @@ describe("ModelsDevClient", () => {
     });
   });
 
-  describe("convertToModelMetadata", () => {
+  describe("convertToModel", () => {
     test("converts model with all fields", () => {
       const model = createMockModel({
         id: "gpt-4o",
@@ -201,7 +201,7 @@ describe("ModelsDevClient", () => {
         },
       });
 
-      const result = modelsDevClient.convertToModelMetadata("openai", model);
+      const result = modelsDevClient.convertToModel("openai", model);
 
       expect(result).not.toBeNull();
       expect(result?.externalId).toBe("openai/gpt-4o");
@@ -218,10 +218,7 @@ describe("ModelsDevClient", () => {
 
     test("returns null for unsupported provider", () => {
       const model = createMockModel({ id: "test-model", name: "Test" });
-      const result = modelsDevClient.convertToModelMetadata(
-        "perplexity",
-        model,
-      );
+      const result = modelsDevClient.convertToModel("perplexity", model);
       expect(result).toBeNull();
     });
 
@@ -231,7 +228,7 @@ describe("ModelsDevClient", () => {
         modalities: { input: [], output: [] },
       });
 
-      const result = modelsDevClient.convertToModelMetadata("openai", model);
+      const result = modelsDevClient.convertToModel("openai", model);
 
       expect(result?.inputModalities).toEqual(["text"]);
       expect(result?.outputModalities).toEqual(["text"]);
@@ -246,7 +243,7 @@ describe("ModelsDevClient", () => {
         },
       });
 
-      const result = modelsDevClient.convertToModelMetadata("openai", model);
+      const result = modelsDevClient.convertToModel("openai", model);
 
       expect(result?.inputModalities).toEqual(["text", "image"]);
       expect(result?.outputModalities).toEqual(["text"]);
@@ -258,7 +255,7 @@ describe("ModelsDevClient", () => {
         cost: undefined,
       });
 
-      const result = modelsDevClient.convertToModelMetadata("openai", model);
+      const result = modelsDevClient.convertToModel("openai", model);
 
       expect(result?.promptPricePerToken).toBeNull();
       expect(result?.completionPricePerToken).toBeNull();
@@ -270,7 +267,7 @@ describe("ModelsDevClient", () => {
         limit: undefined,
       });
 
-      const result = modelsDevClient.convertToModelMetadata("openai", model);
+      const result = modelsDevClient.convertToModel("openai", model);
 
       expect(result?.contextLength).toBeNull();
     });
@@ -311,18 +308,17 @@ describe("ModelsDevClient", () => {
       // Should sync 2 models (openai + anthropic), not perplexity
       expect(count).toBe(2);
 
-      const openaiMetadata = await ModelMetadataModel.findByProviderAndModelId(
+      const openaiMetadata = await ModelModel.findByProviderAndModelId(
         "openai",
         "gpt-4o",
       );
       expect(openaiMetadata).not.toBeNull();
       expect(openaiMetadata?.description).toBe("GPT-4o");
 
-      const anthropicMetadata =
-        await ModelMetadataModel.findByProviderAndModelId(
-          "anthropic",
-          "claude-3-5-sonnet",
-        );
+      const anthropicMetadata = await ModelModel.findByProviderAndModelId(
+        "anthropic",
+        "claude-3-5-sonnet",
+      );
       expect(anthropicMetadata).not.toBeNull();
     });
 
@@ -343,7 +339,7 @@ describe("ModelsDevClient", () => {
 
       await modelsDevClient.syncModelMetadata(true);
 
-      const metadata = await ModelMetadataModel.findByProviderAndModelId(
+      const metadata = await ModelModel.findByProviderAndModelId(
         "gemini",
         "gemini-pro",
       );
@@ -382,7 +378,7 @@ describe("ModelsDevClient", () => {
 
       await modelsDevClient.syncModelMetadata(true);
 
-      const metadata = await ModelMetadataModel.findByProviderAndModelId(
+      const metadata = await ModelModel.findByProviderAndModelId(
         "anthropic",
         "claude-3-opus",
       );
@@ -412,17 +408,16 @@ describe("ModelsDevClient", () => {
 
       await modelsDevClient.syncModelMetadata(true);
 
-      const gpt4Metadata = await ModelMetadataModel.findByProviderAndModelId(
+      const gpt4Metadata = await ModelModel.findByProviderAndModelId(
         "openai",
         "gpt-4o",
       );
       expect(gpt4Metadata?.supportsToolCalling).toBe(true);
 
-      const instructMetadata =
-        await ModelMetadataModel.findByProviderAndModelId(
-          "openai",
-          "gpt-3.5-turbo-instruct",
-        );
+      const instructMetadata = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "gpt-3.5-turbo-instruct",
+      );
       expect(instructMetadata?.supportsToolCalling).toBe(false);
     });
   });
@@ -538,7 +533,7 @@ describe("ModelsDevClient", () => {
         cost: { input: 5, output: 15 },
       });
 
-      // Override convertToModelMetadata to simulate invalid pricing scenario
+      // Override convertToModel to simulate invalid pricing scenario
       // by directly calling syncModelMetadata with mocked response that will
       // produce NaN when converted (this shouldn't happen in real API but tests defense)
       const mockResponse = createMockApiResponse({

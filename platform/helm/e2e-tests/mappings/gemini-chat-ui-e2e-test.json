@@ -12,8 +12,9 @@
   "response": {
     "status": 200,
     "headers": {
-      "Content-Type": "application/json"
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache"
     },
-    "body": "[{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"This is a mocked response for the chat UI e2e test.\"}],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":50,\"candidatesTokenCount\":15,\"totalTokenCount\":65}}]"
+    "body": "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"\"}],\"role\":\"model\"},\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":50,\"candidatesTokenCount\":0,\"totalTokenCount\":50}}\n\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"This is a mocked response for the chat UI e2e test.\"}],\"role\":\"model\"},\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":50,\"candidatesTokenCount\":15,\"totalTokenCount\":65}}\n\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"\"}],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":50,\"candidatesTokenCount\":15,\"totalTokenCount\":65}}\n\n"
   }
 }

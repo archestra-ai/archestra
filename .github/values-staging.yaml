@@ -22,6 +22,10 @@ archestra:
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
+    ARCHESTRA_BEDROCK_BASE_URL: "https://bedrock-runtime.eu-north-1.amazonaws.com"
+    ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu" 
+
+  
 
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:

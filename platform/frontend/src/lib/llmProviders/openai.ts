@@ -96,7 +96,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 
     // Check the response for tool calls (tools that LLM wants to execute)
     for (const choice of this.response.choices) {
-      if (choice.message.tool_calls) {
+      if (Array.isArray(choice.message.tool_calls)) {
         for (const toolCall of choice.message.tool_calls) {
           if ("function" in toolCall) {
             toolsRequested.add(toolCall.function.name);
@@ -176,7 +176,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
        */
       const refusal = message.refusal as string;
 
-      if (toolCalls) {
+      if (Array.isArray(toolCalls)) {
         // Handle assistant messages with tool calls
 
         // Add text content if present
@@ -193,25 +193,23 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
         }
 
         // Add tool invocation parts
-        if (toolCalls) {
-          for (const toolCall of toolCalls) {
-            if (toolCall.type === "function") {
-              parts.push({
-                type: "dynamic-tool",
-                toolName: toolCall.function.name,
-                toolCallId: toolCall.id,
-                state: "input-available",
-                input: JSON.parse(toolCall.function.arguments),
-              });
-            } else if (toolCall.type === "custom") {
-              parts.push({
-                type: "dynamic-tool",
-                toolName: toolCall.custom.name,
-                toolCallId: toolCall.id,
-                state: "input-available",
-                input: JSON.parse(toolCall.custom.input),
-              });
-            }
+        for (const toolCall of toolCalls) {
+          if (toolCall.type === "function") {
+            parts.push({
+              type: "dynamic-tool",
+              toolName: toolCall.function.name,
+              toolCallId: toolCall.id,
+              state: "input-available",
+              input: JSON.parse(toolCall.function.arguments),
+            });
+          } else if (toolCall.type === "custom") {
+            parts.push({
+              type: "dynamic-tool",
+              toolName: toolCall.custom.name,
+              toolCallId: toolCall.id,
+              state: "input-available",
+              input: JSON.parse(toolCall.custom.input),
+            });
           }
         }
       } else if (refusal) {

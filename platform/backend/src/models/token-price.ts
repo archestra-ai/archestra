@@ -103,6 +103,30 @@ class TokenPriceModel {
     return result[0] || null;
   }
 
+  /**
+   * Bulk create token prices if they don't already exist.
+   * Uses a single INSERT with ON CONFLICT DO NOTHING for efficiency.
+   *
+   * @returns The number of rows actually inserted (excludes conflicts)
+   */
+  static async bulkCreateIfNotExists(
+    tokenPrices: CreateTokenPrice[],
+  ): Promise<number> {
+    if (tokenPrices.length === 0) {
+      return 0;
+    }
+
+    const result = await db
+      .insert(schema.tokenPricesTable)
+      .values(tokenPrices)
+      .onConflictDoNothing({
+        target: schema.tokenPricesTable.model,
+      })
+      .returning({ id: schema.tokenPricesTable.id });
+
+    return result.length;
+  }
+
   static async delete(id: string): Promise<boolean> {
     // First check if the token price exists
     const existing = await TokenPriceModel.findById(id);

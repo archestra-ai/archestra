@@ -64,18 +64,6 @@ class ModelModel {
   }
 
   /**
-   * Find model by external ID (e.g., "anthropic/claude-3-opus")
-   */
-  static async findByExternalId(externalId: string): Promise<Model | null> {
-    const [result] = await db
-      .select()
-      .from(schema.modelsTable)
-      .where(eq(schema.modelsTable.externalId, externalId));
-
-    return result || null;
-  }
-
-  /**
    * Create new model
    */
   static async create(data: CreateModel): Promise<Model> {

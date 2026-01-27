@@ -357,6 +357,166 @@ describe("TokenPriceModel", () => {
     });
   });
 
+  describe("bulkCreateIfNotExists", () => {
+    test("creates multiple token prices in a single operation", async () => {
+      const tokenPrices = [
+        {
+          model: "model-1",
+          provider: "openai" as const,
+          pricePerMillionInput: "10.00",
+          pricePerMillionOutput: "20.00",
+        },
+        {
+          model: "model-2",
+          provider: "anthropic" as const,
+          pricePerMillionInput: "15.00",
+          pricePerMillionOutput: "30.00",
+        },
+        {
+          model: "model-3",
+          provider: "gemini" as const,
+          pricePerMillionInput: "5.00",
+          pricePerMillionOutput: "10.00",
+        },
+      ];
+
+      const createdCount =
+        await TokenPriceModel.bulkCreateIfNotExists(tokenPrices);
+
+      expect(createdCount).toBe(3);
+
+      const allPrices = await TokenPriceModel.findAll();
+      expect(allPrices).toHaveLength(3);
+
+      const model1 = await TokenPriceModel.findByModel("model-1");
+      expect(model1?.pricePerMillionInput).toBe("10.00");
+
+      const model2 = await TokenPriceModel.findByModel("model-2");
+      expect(model2?.pricePerMillionInput).toBe("15.00");
+
+      const model3 = await TokenPriceModel.findByModel("model-3");
+      expect(model3?.pricePerMillionInput).toBe("5.00");
+    });
+
+    test("skips existing models without overwriting", async () => {
+      // Create an existing price
+      await TokenPriceModel.create({
+        model: "existing-model",
+        provider: "openai",
+        pricePerMillionInput: "100.00",
+        pricePerMillionOutput: "200.00",
+      });
+
+      const tokenPrices = [
+        {
+          model: "existing-model",
+          provider: "openai" as const,
+          pricePerMillionInput: "10.00",
+          pricePerMillionOutput: "20.00",
+        },
+        {
+          model: "new-model",
+          provider: "anthropic" as const,
+          pricePerMillionInput: "15.00",
+          pricePerMillionOutput: "30.00",
+        },
+      ];
+
+      const createdCount =
+        await TokenPriceModel.bulkCreateIfNotExists(tokenPrices);
+
+      // Only the new model should be created
+      expect(createdCount).toBe(1);
+
+      // Existing model should keep original prices
+      const existingModel = await TokenPriceModel.findByModel("existing-model");
+      expect(existingModel?.pricePerMillionInput).toBe("100.00");
+      expect(existingModel?.pricePerMillionOutput).toBe("200.00");
+
+      // New model should have new prices
+      const newModel = await TokenPriceModel.findByModel("new-model");
+      expect(newModel?.pricePerMillionInput).toBe("15.00");
+      expect(newModel?.pricePerMillionOutput).toBe("30.00");
+    });
+
+    test("returns 0 when given empty array", async () => {
+      const createdCount = await TokenPriceModel.bulkCreateIfNotExists([]);
+
+      expect(createdCount).toBe(0);
+
+      const allPrices = await TokenPriceModel.findAll();
+      expect(allPrices).toHaveLength(0);
+    });
+
+    test("returns 0 when all models already exist", async () => {
+      // Create existing prices
+      await TokenPriceModel.create({
+        model: "model-1",
+        provider: "openai",
+        pricePerMillionInput: "50.00",
+        pricePerMillionOutput: "100.00",
+      });
+      await TokenPriceModel.create({
+        model: "model-2",
+        provider: "anthropic",
+        pricePerMillionInput: "60.00",
+        pricePerMillionOutput: "120.00",
+      });
+
+      const tokenPrices = [
+        {
+          model: "model-1",
+          provider: "openai" as const,
+          pricePerMillionInput: "10.00",
+          pricePerMillionOutput: "20.00",
+        },
+        {
+          model: "model-2",
+          provider: "anthropic" as const,
+          pricePerMillionInput: "15.00",
+          pricePerMillionOutput: "30.00",
+        },
+      ];
+
+      const createdCount =
+        await TokenPriceModel.bulkCreateIfNotExists(tokenPrices);
+
+      expect(createdCount).toBe(0);
+
+      // Verify prices were not changed
+      const model1 = await TokenPriceModel.findByModel("model-1");
+      expect(model1?.pricePerMillionInput).toBe("50.00");
+
+      const model2 = await TokenPriceModel.findByModel("model-2");
+      expect(model2?.pricePerMillionInput).toBe("60.00");
+    });
+
+    test("is idempotent when called concurrently", async () => {
+      const tokenPrices = [
+        {
+          model: "concurrent-model",
+          provider: "openai" as const,
+          pricePerMillionInput: "10.00",
+          pricePerMillionOutput: "20.00",
+        },
+      ];
+
+      // Call concurrently - one should succeed, one should return 0
+      const [count1, count2] = await Promise.all([
+        TokenPriceModel.bulkCreateIfNotExists(tokenPrices),
+        TokenPriceModel.bulkCreateIfNotExists(tokenPrices),
+      ]);
+
+      // Total created should be 1 (one succeeds, one finds conflict)
+      expect(count1 + count2).toBe(1);
+
+      // Verify only one record exists
+      const allPrices = await TokenPriceModel.findAll();
+      const matches = allPrices.filter((p) => p.model === "concurrent-model");
+      expect(matches).toHaveLength(1);
+    });
+  });
+
   describe("getAllModelsFromInteractions", () => {
     test("returns empty array when no interactions exist", async () => {
       const models = await TokenPriceModel.getAllModelsFromInteractions();

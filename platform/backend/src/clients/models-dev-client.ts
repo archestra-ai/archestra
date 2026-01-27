@@ -488,9 +488,15 @@ class ModelsDevClient {
   /**
    * Auto-populates token_price table with pricing from models.dev.
    * Only creates entries for models that don't already have pricing.
+   * Uses bulk insert for efficiency.
    */
   private async syncTokenPrices(models: CreateModel[]): Promise<void> {
-    let createdCount = 0;
+    const tokenPricesToCreate: Array<{
+      model: string;
+      provider: typeof models[number]["provider"];
+      pricePerMillionInput: string;
+      pricePerMillionOutput: string;
+    }> = [];
 
     for (const model of models) {
       if (!model.promptPricePerToken || !model.completionPricePerToken) {
@@ -514,19 +520,20 @@ class ModelsDevClient {
         continue;
       }
 
-      const pricePerMillionInput = (inputPrice * 1_000_000).toFixed(2);
-      const pricePerMillionOutput = (outputPrice * 1_000_000).toFixed(2);
-
-      const created = await TokenPriceModel.createIfNotExists(model.modelId, {
+      tokenPricesToCreate.push({
+        model: model.modelId,
         provider: model.provider,
-        pricePerMillionInput,
-        pricePerMillionOutput,
+        pricePerMillionInput: (inputPrice * 1_000_000).toFixed(2),
+        pricePerMillionOutput: (outputPrice * 1_000_000).toFixed(2),
       });
-
-      if (created) {
-        createdCount++;
-      }
     }
+
+    if (tokenPricesToCreate.length === 0) {
+      return;
+    }
+
+    const createdCount =
+      await TokenPriceModel.bulkCreateIfNotExists(tokenPricesToCreate);
 
     if (createdCount > 0) {
       logger.info(

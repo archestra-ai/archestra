@@ -335,7 +335,6 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <span id="chunk-test" className="hidden" />
       <SidebarHeader className="flex flex-col gap-2">
         {isLoadingAppearance ? <div className="h-[20px]" /> : logoToShow}
       </SidebarHeader>

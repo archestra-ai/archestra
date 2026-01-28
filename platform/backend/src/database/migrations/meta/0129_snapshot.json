@@ -1,6 +1,6 @@
 {
-  "id": "f8582f48-4508-47c6-a8ec-d739aafb68b9",
-  "prevId": "5d3af8ff-dc3e-46f5-bcc6-403415a1f0ff",
+  "id": "ef7df9f9-a326-4c30-ac57-ce6808e3fbf1",
+  "prevId": "b3e17482-f44c-4ad6-a24c-7ed7521b6bd7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -486,13 +486,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "skills": {
-          "name": "skills",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'[]'::jsonb"
         },
         "incoming_email_enabled": {
           "name": "incoming_email_enabled",

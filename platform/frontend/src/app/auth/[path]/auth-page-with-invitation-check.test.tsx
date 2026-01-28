@@ -426,9 +426,7 @@ describe("AuthPageWithInvitationCheck", () => {
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
       expect(screen.getByTestId("auth-view")).toBeInTheDocument();
-      expect(
-        screen.queryByText("Connecting..."),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText("Connecting...")).not.toBeInTheDocument();
       expect(screen.queryByText("Unable to Connect")).not.toBeInTheDocument();
     });
   });

@@ -124,9 +124,7 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(
-      screen.getByText(/Server is still starting up/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Server is still starting up/)).toBeInTheDocument();
     expect(screen.getByText(/Network connectivity issue/)).toBeInTheDocument();
     expect(
       screen.getByText(/Server configuration problem/),
@@ -184,6 +182,8 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.queryByText("Report issue on GitHub")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Report issue on GitHub"),
+    ).not.toBeInTheDocument();
   });
 });

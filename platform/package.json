@@ -9,6 +9,7 @@
   "scripts": {
     "prepare": "cd .. && husky platform/.husky || true",
     "ci:check": "turbo check:ci",
+    "commit:check": "turbo check:commit",
     "dev": "turbo dev",
     "build": "turbo build",
     "start": "turbo start",

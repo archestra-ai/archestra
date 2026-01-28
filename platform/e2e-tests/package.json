@@ -12,6 +12,7 @@
     "test:e2e:ui": "pnpm exec playwright test --ui",
     "test:e2e:report": "pnpm exec playwright show-report",
     "check:ci": "pnpm type-check && pnpm knip && biome ci",
+    "check:commit": "pnpm type-check && pnpm knip && biome ci",
     "knip": "knip"
   },
   "keywords": [],

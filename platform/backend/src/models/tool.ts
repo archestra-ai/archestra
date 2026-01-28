@@ -922,6 +922,8 @@ class ToolModel {
       parameters: Record<string, unknown>;
       catalogId: string;
       mcpServerId: string;
+      /** The original tool name from the MCP server (e.g., "generate_text") */
+      rawToolName?: string;
     }>,
   ): Promise<{
     created: Tool[];
@@ -949,10 +951,51 @@ class ToolModel {
 
     // Create a map of existing tools by their RAW name (part after `__`)
     // This allows matching when catalog name changes
+    // WHY: We use the LAST part after `__` to handle server names that contain `__`
+    // e.g., "huggingface__remote-mcp__generate_text" -> raw name is "generate_text"
+    // WHY: We lowercase raw names for matching since slugifyName() lowercases tool names,
+    // but MCP servers may return tool names with different casing
+    //
+    // IMPORTANT: Handle duplicates gracefully. If multiple tools have the same raw name
+    // (from previous buggy reinstalls), prefer the one that matches the NEW tool name pattern.
+    // This ensures we update the correct tool and avoid cascade-deleting agent_tools.
+    const newToolNames = new Set(tools.map((t) => t.name.toLowerCase()));
     const existingToolsByRawName = new Map<string, Tool>();
     for (const tool of existingTools) {
-      const rawName = ToolModel.unslugifyName(tool.name);
-      existingToolsByRawName.set(rawName, tool);
+      // Extract the raw tool name by taking the part after the LAST `__`
+      // This handles cases where server names contain `__` (e.g., huggingface__remote-mcp)
+      const lastSeparatorIndex = tool.name.lastIndexOf(
+        MCP_SERVER_TOOL_NAME_SEPARATOR,
+      );
+      const rawName =
+        lastSeparatorIndex !== -1
+          ? tool.name.slice(
+              lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
+            )
+          : tool.name;
+      const rawNameLower = rawName.toLowerCase();
+
+      // Check if we already have a tool with this raw name
+      const existingEntry = existingToolsByRawName.get(rawNameLower);
+      if (existingEntry) {
+        // Duplicate found! Prefer the one whose name matches the new naming pattern
+        // This handles the case where old tools (old-name__tool) and new tools (new-name__tool) both exist
+        const existingMatchesNewPattern = newToolNames.has(
+          existingEntry.name.toLowerCase(),
+        );
+        const currentMatchesNewPattern = newToolNames.has(
+          tool.name.toLowerCase(),
+        );
+
+        if (!existingMatchesNewPattern && currentMatchesNewPattern) {
+          // Current tool matches new pattern, prefer it
+          existingToolsByRawName.set(rawNameLower, tool);
+        }
+        // Otherwise keep the existing entry (first one wins, or it already matches new pattern)
+      } else {
+        // Store with lowercase key for case-insensitive matching
+        existingToolsByRawName.set(rawNameLower, tool);
+      }
     }
 
     const created: Tool[] = [];
@@ -961,9 +1004,25 @@ class ToolModel {
     const toolsToInsert: InsertTool[] = [];
 
     for (const tool of tools) {
-      // Extract raw name from the new tool name to find matching existing tool
-      const rawName = ToolModel.unslugifyName(tool.name);
-      const existingTool = existingToolsByRawName.get(rawName);
+      // Use rawToolName if provided, otherwise extract from the slugified name
+      // rawToolName is the original name from the MCP server (e.g., "generate_text")
+      let rawName: string;
+      if (tool.rawToolName) {
+        rawName = tool.rawToolName;
+      } else {
+        // Fallback: extract from the slugified name using last separator
+        const lastSeparatorIndex = tool.name.lastIndexOf(
+          MCP_SERVER_TOOL_NAME_SEPARATOR,
+        );
+        rawName =
+          lastSeparatorIndex !== -1
+            ? tool.name.slice(
+                lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
+              )
+            : tool.name;
+      }
+      // Lookup with lowercase key for case-insensitive matching
+      const existingTool = existingToolsByRawName.get(rawName.toLowerCase());
 
       if (existingTool) {
         // Check what needs updating
@@ -1031,8 +1090,79 @@ class ToolModel {
       ...unchanged.map((t) => t.id),
     ]);
 
+    // Build a map of synced tools by raw name for transferring assignments
+    const syncedToolsByRawName = new Map<string, Tool>();
+    for (const tool of [...created, ...updated, ...unchanged]) {
+      const lastSeparatorIndex = tool.name.lastIndexOf(
+        MCP_SERVER_TOOL_NAME_SEPARATOR,
+      );
+      const rawName =
+        lastSeparatorIndex !== -1
+          ? tool.name
+              .slice(lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length)
+              .toLowerCase()
+          : tool.name.toLowerCase();
+      syncedToolsByRawName.set(rawName, tool);
+    }
+
     const orphanedTools = existingTools.filter((t) => !syncedToolIds.has(t.id));
+
     if (orphanedTools.length > 0) {
+      // Transfer agent_tools and policies from orphaned tools to their matching synced tools
+      // This preserves profile assignments when duplicate tools exist from previous buggy reinstalls
+      for (const orphanedTool of orphanedTools) {
+        const lastSeparatorIndex = orphanedTool.name.lastIndexOf(
+          MCP_SERVER_TOOL_NAME_SEPARATOR,
+        );
+        const rawName =
+          lastSeparatorIndex !== -1
+            ? orphanedTool.name
+                .slice(
+                  lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
+                )
+                .toLowerCase()
+            : orphanedTool.name.toLowerCase();
+
+        const targetTool = syncedToolsByRawName.get(rawName);
+        if (targetTool && targetTool.id !== orphanedTool.id) {
+          // Transfer agent_tools: update toolId to point to the synced tool
+          // Use ON CONFLICT DO NOTHING to handle cases where assignment already exists
+          const agentToolsToTransfer = await db
+            .select()
+            .from(schema.agentToolsTable)
+            .where(eq(schema.agentToolsTable.toolId, orphanedTool.id));
+
+          for (const agentTool of agentToolsToTransfer) {
+            // Check if the target tool already has an assignment for this agent
+            const existingAssignment = await db
+              .select()
+              .from(schema.agentToolsTable)
+              .where(
+                and(
+                  eq(schema.agentToolsTable.agentId, agentTool.agentId),
+                  eq(schema.agentToolsTable.toolId, targetTool.id),
+                ),
+              )
+              .limit(1);
+
+            if (existingAssignment.length === 0) {
+              // No existing assignment, create one for the target tool
+              await db.insert(schema.agentToolsTable).values({
+                agentId: agentTool.agentId,
+                toolId: targetTool.id,
+                responseModifierTemplate: agentTool.responseModifierTemplate,
+                credentialSourceMcpServerId:
+                  agentTool.credentialSourceMcpServerId,
+                executionSourceMcpServerId:
+                  agentTool.executionSourceMcpServerId,
+                useDynamicTeamCredential: agentTool.useDynamicTeamCredential,
+              });
+            }
+          }
+        }
+      }
+
+      // Now safe to delete orphaned tools - agent_tools have been transferred
       await db.delete(schema.toolsTable).where(
         inArray(
           schema.toolsTable.id,

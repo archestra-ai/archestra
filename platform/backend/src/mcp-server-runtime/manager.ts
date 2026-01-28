@@ -289,7 +289,11 @@ export class McpServerRuntimeManager {
           if (!effectiveEnvironmentValues) {
             effectiveEnvironmentValues = secretData;
             logger.info(
-              { mcpServerId: id, secretId: mcpServer.secretId, keys: Object.keys(secretData) },
+              {
+                mcpServerId: id,
+                secretId: mcpServer.secretId,
+                keys: Object.keys(secretData),
+              },
               "Using secret values as environment values for deployment",
             );
           }

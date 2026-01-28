@@ -2839,6 +2839,7 @@ export async function getAgentTools(context: {
     title: t.targetAgent.name,
     description:
       t.tool.description ||
+      t.targetAgent.description?.substring(0, 500) ||
       t.targetAgent.systemPrompt?.substring(0, 500) ||
       `Call the "${t.targetAgent.name}" agent to perform tasks.`,
     inputSchema: t.tool.parameters as Tool["inputSchema"],

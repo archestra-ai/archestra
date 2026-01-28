@@ -1122,6 +1122,7 @@ class ToolModel {
       targetAgent: {
         id: string;
         name: string;
+        description: string | null;
         systemPrompt: string | null;
       };
     }>
@@ -1132,6 +1133,7 @@ class ToolModel {
         targetAgent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
+          description: schema.agentsTable.description,
           systemPrompt: schema.agentsTable.systemPrompt,
         },
       })

@@ -33,7 +33,7 @@ class SystemKeyManager {
   private readonly keylessProviders: KeylessProviderConfig[] = [
     {
       provider: "gemini",
-      name: "Vertex AI (System)",
+      name: "Vertex AI",
       isEnabled: () => isVertexAiEnabled(),
       // Vertex AI uses ADC, not API keys - we'll use a custom fetch via dynamic import
       customFetch: async () => {

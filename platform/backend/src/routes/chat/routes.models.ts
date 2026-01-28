@@ -900,9 +900,34 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
       );
 
+      logger.info(
+        {
+          organizationId,
+          provider,
+          apiKeyCount: apiKeys.length,
+          apiKeys: apiKeys.map((k) => ({
+            id: k.id,
+            name: k.name,
+            provider: k.provider,
+            isSystem: k.isSystem,
+          })),
+        },
+        "Available API keys for user",
+      );
+
       // Get models from database based on user's API keys
       const apiKeyIds = apiKeys.map((k) => k.id);
       const dbModels = await ApiKeyModelModel.getModelsForApiKeyIds(apiKeyIds);
+
+      logger.info(
+        {
+          organizationId,
+          provider,
+          apiKeyIds,
+          modelCount: dbModels.length,
+        },
+        "Models fetched from database",
+      );
 
       // Filter by provider if specified
       const filteredModels = provider
@@ -917,7 +942,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         capabilities: ModelModel.toCapabilities(model),
       }));
 
-      logger.debug(
+      logger.info(
         { organizationId, provider, totalModels: models.length },
         "Returning chat models from database",
       );

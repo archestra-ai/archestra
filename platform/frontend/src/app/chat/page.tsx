@@ -206,6 +206,28 @@ export default function ChatPage() {
     localStorage.setItem("selected-chat-model", modelId);
   }, []);
 
+  // Handle provider change from API key selector - auto-select a model from new provider
+  const handleInitialProviderChange = useCallback(
+    (newProvider: SupportedChatProvider) => {
+      const providerModels = modelsByProvider[newProvider];
+      if (providerModels && providerModels.length > 0) {
+        // Try to restore from localStorage for this provider
+        const savedModelKey = `selected-chat-model-${newProvider}`;
+        const savedModelId = localStorage.getItem(savedModelKey);
+        if (savedModelId && providerModels.some((m) => m.id === savedModelId)) {
+          setInitialModel(savedModelId);
+          localStorage.setItem("selected-chat-model", savedModelId);
+          return;
+        }
+        // Fall back to first model for this provider
+        const firstModel = providerModels[0];
+        setInitialModel(firstModel.id);
+        localStorage.setItem("selected-chat-model", firstModel.id);
+      }
+    },
+    [modelsByProvider],
+  );
+
   // Derive provider from initial model for API key filtering
   const initialProvider = useMemo((): SupportedChatProvider | undefined => {
     if (!initialModel) return undefined;
@@ -355,6 +377,34 @@ export default function ChatPage() {
       );
     },
     [conversation, chatModels, updateConversationMutation],
+  );
+
+  // Handle provider change from API key selector - auto-select a model from new provider
+  const handleProviderChange = useCallback(
+    (newProvider: SupportedChatProvider) => {
+      if (!conversation) return;
+
+      const providerModels = modelsByProvider[newProvider];
+      if (providerModels && providerModels.length > 0) {
+        // Select first model from the new provider
+        const firstModel = providerModels[0];
+        updateConversationMutation.mutate(
+          {
+            id: conversation.id,
+            selectedModel: firstModel.id,
+            selectedProvider: newProvider,
+          },
+          {
+            onError: (error) => {
+              toast.error(
+                `Failed to change model: ${error instanceof Error ? error.message : "Unknown error"}`,
+              );
+            },
+          },
+        );
+      }
+    },
+    [conversation, modelsByProvider, updateConversationMutation],
   );
 
   // Find the specific internal agent for this conversation (if any)
@@ -1171,6 +1221,11 @@ export default function ChatPage() {
                     conversationId && conversation?.agent.id
                       ? undefined
                       : setInitialApiKeyId
+                  }
+                  onProviderChange={
+                    conversationId && conversation?.agent.id
+                      ? handleProviderChange
+                      : handleInitialProviderChange
                   }
                   allowFileUploads={organization?.allowChatFileUploads ?? false}
                   isModelsLoading={isModelsLoading}

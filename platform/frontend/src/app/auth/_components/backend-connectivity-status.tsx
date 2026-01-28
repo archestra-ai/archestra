@@ -8,7 +8,7 @@ import {
   RefreshCcw,
   ServerOff,
 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useBackendConnectivity } from "@/lib/backend-connectivity";
-import { authClient } from "@/lib/clients/auth/auth-client";
-import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
 interface BackendConnectivityStatusProps {
   /**
@@ -41,17 +39,12 @@ interface BackendConnectivityStatusProps {
 export function BackendConnectivityStatus({
   children,
 }: BackendConnectivityStatusProps) {
-  const router = useRouter();
   const { status, attemptCount, retry } = useBackendConnectivity();
-  const { data: session, isPending: isSessionPending } =
-    authClient.useSession();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
   const [showConnectedMessage, setShowConnectedMessage] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
   const hadConnectionIssuesRef = useRef(false);
-
-  const isLoggedIn = !!session?.user;
+  const hasInitiatedRefreshRef = useRef(false);
 
   // Track if we had connection issues (were in "connecting" state with attempts)
   useEffect(() => {
@@ -61,22 +54,20 @@ export function BackendConnectivityStatus({
   }, [status, attemptCount]);
 
   // When connected after having connection issues, show the connected message
-  // If user is logged in and there's a redirectTo, perform the redirect
+  // and refresh the page if there's a redirectTo param
   useEffect(() => {
     if (status === "connected" && hadConnectionIssuesRef.current) {
       setShowConnectedMessage(true);
 
-      // Wait for session check to complete
-      if (!isSessionPending) {
-        if (isLoggedIn && redirectTo) {
-          // User is logged in and has a redirect destination
-          setIsRedirecting(true);
-          const timer = setTimeout(() => {
-            router.push(getValidatedRedirectPath(redirectTo));
-          }, 1000);
-          return () => clearTimeout(timer);
-        }
-        // User is not logged in, just show connected message briefly
+      // If there's a redirectTo param, refresh the page after showing the message
+      // The normal auth flow will handle the redirect
+      if (redirectTo && !hasInitiatedRefreshRef.current) {
+        hasInitiatedRefreshRef.current = true;
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else if (!redirectTo) {
+        // No redirectTo, just show connected message briefly then show children
         const timer = setTimeout(() => {
           setShowConnectedMessage(false);
           hadConnectionIssuesRef.current = false;
@@ -84,7 +75,7 @@ export function BackendConnectivityStatus({
         return () => clearTimeout(timer);
       }
     }
-  }, [status, isSessionPending, isLoggedIn, redirectTo, router]);
+  }, [status, redirectTo]);
 
   // During "initializing" or "checking" (first health check in progress),
   // don't show any UI to avoid flashing the connecting dialog when backend is up
@@ -94,13 +85,7 @@ export function BackendConnectivityStatus({
 
   // Show "Connected" message briefly after recovering from connection issues
   if (status === "connected" && showConnectedMessage) {
-    return (
-      <ConnectedSuccessView
-        isRedirecting={isRedirecting}
-        redirectPath={redirectTo}
-        isCheckingSession={isSessionPending}
-      />
-    );
+    return <ConnectedSuccessView hasRedirectTo={!!redirectTo} />;
   }
 
   // When connected, render children (the login form)
@@ -118,15 +103,7 @@ export function BackendConnectivityStatus({
   );
 }
 
-function ConnectedSuccessView({
-  isRedirecting,
-  redirectPath,
-  isCheckingSession,
-}: {
-  isRedirecting: boolean;
-  redirectPath: string | null;
-  isCheckingSession: boolean;
-}) {
+function ConnectedSuccessView({ hasRedirectTo }: { hasRedirectTo: boolean }) {
   return (
     <main className="h-full flex items-center justify-center p-4">
       <Card className="max-w-md w-full">
@@ -138,11 +115,9 @@ function ConnectedSuccessView({
             Connected
           </CardTitle>
           <CardDescription>
-            {isCheckingSession
-              ? "Checking session..."
-              : isRedirecting
-                ? `Redirecting to ${redirectPath}...`
-                : "Successfully connected to the backend server."}
+            {hasRedirectTo
+              ? "Refreshing..."
+              : "Successfully connected to the backend server."}
           </CardDescription>
         </CardHeader>
       </Card>

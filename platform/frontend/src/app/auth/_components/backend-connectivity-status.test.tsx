@@ -7,21 +7,12 @@ vi.mock("@/lib/backend-connectivity", () => ({
   useBackendConnectivity: vi.fn(),
 }));
 
-const mockPush = vi.fn();
 vi.mock("next/navigation", () => ({
   useSearchParams: vi.fn(() => new URLSearchParams()),
-  useRouter: vi.fn(() => ({ push: mockPush })),
-}));
-
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    useSession: vi.fn(() => ({ data: null, isPending: false })),
-  },
 }));
 
 import { useSearchParams } from "next/navigation";
 import { useBackendConnectivity } from "@/lib/backend-connectivity";
-import { authClient } from "@/lib/clients/auth/auth-client";
 
 describe("BackendConnectivityStatus", () => {
   const mockRetry = vi.fn();
@@ -241,12 +232,6 @@ describe("BackendConnectivityStatus", () => {
   });
 
   it("should show Connected message after recovering from connection issues", async () => {
-    // Mock session as not logged in
-    vi.mocked(authClient.useSession).mockReturnValue({
-      data: null,
-      isPending: false,
-    } as ReturnType<typeof authClient.useSession>);
-
     // Start with connection issues
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
@@ -286,13 +271,7 @@ describe("BackendConnectivityStatus", () => {
     expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
   });
 
-  it("should show redirect message when user is logged in and redirectTo param is present", async () => {
-    // Mock user as logged in
-    vi.mocked(authClient.useSession).mockReturnValue({
-      data: { user: { id: "1", email: "test@example.com" } },
-      isPending: false,
-    } as unknown as ReturnType<typeof authClient.useSession>);
-
+  it("should show refreshing message when redirectTo param is present after connection recovery", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("redirectTo=/agents") as unknown as ReturnType<
         typeof useSearchParams
@@ -327,9 +306,9 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    // Should show redirect message with path
+    // Should show refreshing message since there's a redirectTo param
     expect(screen.getByText("Connected")).toBeInTheDocument();
-    expect(screen.getByText("Redirecting to /agents...")).toBeInTheDocument();
+    expect(screen.getByText("Refreshing...")).toBeInTheDocument();
   });
 
   it("should render children directly when connected without prior issues", () => {

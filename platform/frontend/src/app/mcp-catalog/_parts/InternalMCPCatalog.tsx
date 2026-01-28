@@ -18,9 +18,9 @@ import { useDialogs } from "@/lib/dialog.hook";
 import { useMcpRegistryServer } from "@/lib/external-mcp-catalog.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
-  useDeleteMcpServer,
   useInstallMcpServer,
   useMcpServers,
+  useReinstallMcpServer,
   useRestartAllMcpServerInstallations,
 } from "@/lib/mcp-server.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -74,7 +74,7 @@ export function InternalMCPCatalog({
     hasInstallingServers: installingServerIds.size > 0,
   });
   const installMutation = useInstallMcpServer();
-  const deleteMutation = useDeleteMcpServer();
+  const reinstallMutation = useReinstallMcpServer();
   const restartAllMutation = useRestartAllMcpServerInstallations();
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
@@ -116,6 +116,10 @@ export function InternalMCPCatalog({
     useState<CatalogItem | null>(null);
   const [localServerCatalogItem, setLocalServerCatalogItem] =
     useState<CatalogItem | null>(null);
+  // Track server ID when reinstalling (vs new installation)
+  const [reinstallServerId, setReinstallServerId] = useState<string | null>(
+    null,
+  );
   const [detailsServerName, setDetailsServerName] = useState<string | null>(
     null,
   );
@@ -285,6 +289,26 @@ export function InternalMCPCatalog({
   ) => {
     if (!localServerCatalogItem) return;
 
+    // Check if this is a reinstall (updating existing server) vs new installation
+    if (reinstallServerId) {
+      // Reinstall mode - call reinstall endpoint with new environment values
+      setInstallingItemId(localServerCatalogItem.id);
+      await reinstallMutation.mutateAsync({
+        id: reinstallServerId,
+        name: localServerCatalogItem.name,
+        environmentValues: installResult.environmentValues,
+        isByosVault: installResult.isByosVault,
+        serviceAccount: installResult.serviceAccount,
+      });
+
+      closeDialog("local-install");
+      setLocalServerCatalogItem(null);
+      setReinstallServerId(null);
+      setInstallingItemId(null);
+      return;
+    }
+
+    // New installation flow
     // Check if this is the first installation for this catalog item
     const isFirstInstallation = !installedServers?.some(
       (s) => s.catalogId === localServerCatalogItem.id,
@@ -498,17 +522,33 @@ export function InternalMCPCatalog({
 
     closeDialog("reinstall");
 
-    // Delete the installed server using its server ID
-    await deleteMutation.mutateAsync({
-      id: installedServer.id,
-      name: catalogItemForReinstall.name,
-    });
-
-    // Then reinstall (for local servers, this will prompt for credentials again)
+    // Check if this catalog item has new prompted env vars that require user input
+    // For local servers: open the install dialog in reinstall mode to collect new values
+    // For remote servers: call reinstall directly (no new user input needed typically)
     if (catalogItemForReinstall.serverType === "local") {
-      await handleInstallLocalServer(catalogItemForReinstall);
+      const promptedEnvVars =
+        catalogItemForReinstall.localConfig?.environment?.filter(
+          (env) => env.promptOnInstallation === true,
+        ) || [];
+
+      if (promptedEnvVars.length > 0) {
+        // Has prompted env vars - open dialog to collect values (reinstall mode)
+        setLocalServerCatalogItem(catalogItemForReinstall);
+        setReinstallServerId(installedServer.id);
+        openDialog("local-install");
+      } else {
+        // No prompted env vars - reinstall directly
+        await reinstallMutation.mutateAsync({
+          id: installedServer.id,
+          name: catalogItemForReinstall.name,
+        });
+      }
     } else {
-      await handleInstallRemoteServer(catalogItemForReinstall, false);
+      // Remote server - reinstall directly without delete
+      await reinstallMutation.mutateAsync({
+        id: installedServer.id,
+        name: catalogItemForReinstall.name,
+      });
     }
 
     setCatalogItemForReinstall(null);
@@ -771,7 +811,7 @@ export function InternalMCPCatalog({
         isRemoteServer={catalogItemForReinstall?.serverType === "remote"}
         onConfirm={handleReinstallConfirm}
         serverName={catalogItemForReinstall?.name || ""}
-        isReinstalling={installMutation.isPending}
+        isReinstalling={reinstallMutation.isPending}
       />
 
       <NoAuthInstallDialog
@@ -791,10 +831,14 @@ export function InternalMCPCatalog({
           onClose={() => {
             closeDialog("local-install");
             setLocalServerCatalogItem(null);
+            setReinstallServerId(null);
           }}
           onConfirm={handleLocalServerInstallConfirm}
           catalogItem={localServerCatalogItem}
-          isInstalling={installMutation.isPending}
+          isInstalling={
+            installMutation.isPending || reinstallMutation.isPending
+          }
+          isReinstall={!!reinstallServerId}
         />
       )}
     </div>

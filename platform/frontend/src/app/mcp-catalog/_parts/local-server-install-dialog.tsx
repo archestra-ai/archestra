@@ -80,6 +80,8 @@ interface LocalServerInstallDialogProps {
   onConfirm: (result: LocalServerInstallResult) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
+  /** When true, shows "Reinstall" instead of "Install" in the dialog */
+  isReinstall?: boolean;
 }
 
 export function LocalServerInstallDialog({
@@ -88,6 +90,7 @@ export function LocalServerInstallDialog({
   onConfirm,
   catalogItem,
   isInstalling,
+  isReinstall = false,
 }: LocalServerInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [credentialType, setCredentialType] = useState<"personal" | "team">(
@@ -267,7 +270,9 @@ export function LocalServerInstallDialog({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Install - {catalogItem?.name}</DialogTitle>
+          <DialogTitle>
+            {isReinstall ? "Reinstall" : "Install"} - {catalogItem?.name}
+          </DialogTitle>
           <DialogDescription asChild>
             <div className="text-sm text-muted-foreground prose prose-sm max-w-none">
               <ReactMarkdown
@@ -538,7 +543,13 @@ export function LocalServerInstallDialog({
             Cancel
           </Button>
           <Button onClick={handleInstall} disabled={!isValid || isInstalling}>
-            {isInstalling ? "Installing..." : "Install"}
+            {isInstalling
+              ? isReinstall
+                ? "Reinstalling..."
+                : "Installing..."
+              : isReinstall
+                ? "Reinstall"
+                : "Install"}
           </Button>
         </DialogFooter>
       </DialogContent>

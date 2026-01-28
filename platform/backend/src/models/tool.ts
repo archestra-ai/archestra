@@ -904,6 +904,111 @@ class ToolModel {
   }
 
   /**
+   * Sync tools for a catalog item - updates existing tools and creates new ones.
+   * Unlike bulkCreateToolsIfNotExists, this method updates existing tools' description and parameters
+   * when they change, preserving tool IDs, policies, and profile assignments.
+   *
+   * Used during reinstall to sync tools without losing policy configurations.
+   *
+   * @returns Object with created, updated, and unchanged tool arrays for logging
+   */
+  static async syncToolsForCatalog(
+    tools: Array<{
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown>;
+      catalogId: string;
+      mcpServerId: string;
+    }>,
+  ): Promise<{ created: Tool[]; updated: Tool[]; unchanged: Tool[] }> {
+    if (tools.length === 0) {
+      return { created: [], updated: [], unchanged: [] };
+    }
+
+    const catalogId = tools[0].catalogId;
+    const toolNames = tools.map((t) => t.name);
+
+    // Fetch all existing tools for this catalog in a single query
+    const existingTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          isNull(schema.toolsTable.agentId),
+          eq(schema.toolsTable.catalogId, catalogId),
+          inArray(schema.toolsTable.name, toolNames),
+        ),
+      );
+
+    const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
+
+    const created: Tool[] = [];
+    const updated: Tool[] = [];
+    const unchanged: Tool[] = [];
+    const toolsToInsert: InsertTool[] = [];
+
+    for (const tool of tools) {
+      const existingTool = existingToolsByName.get(tool.name);
+
+      if (existingTool) {
+        // Check if tool needs updating (description or parameters changed)
+        const descriptionChanged =
+          existingTool.description !== tool.description;
+        const parametersChanged =
+          JSON.stringify(existingTool.parameters) !==
+          JSON.stringify(tool.parameters);
+
+        if (descriptionChanged || parametersChanged) {
+          // Update existing tool
+          const [updatedTool] = await db
+            .update(schema.toolsTable)
+            .set({
+              description: tool.description,
+              parameters: tool.parameters,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.toolsTable.id, existingTool.id))
+            .returning();
+
+          if (updatedTool) {
+            updated.push(updatedTool);
+          }
+        } else {
+          unchanged.push(existingTool);
+        }
+      } else {
+        // New tool - prepare for bulk insert
+        toolsToInsert.push({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+          catalogId: tool.catalogId,
+          mcpServerId: tool.mcpServerId,
+          agentId: null,
+        });
+      }
+    }
+
+    // Bulk insert new tools if any
+    if (toolsToInsert.length > 0) {
+      const insertedTools = await db
+        .insert(schema.toolsTable)
+        .values(toolsToInsert)
+        .onConflictDoNothing()
+        .returning();
+
+      // Create default policies for newly inserted tools
+      for (const tool of insertedTools) {
+        await ToolModel.createDefaultPolicies(tool.id);
+      }
+
+      created.push(...insertedTools);
+    }
+
+    return { created, updated, unchanged };
+  }
+
+  /**
    * Delete a tool by ID.
    * Only allows deletion of auto-discovered tools (no mcpServerId).
    */

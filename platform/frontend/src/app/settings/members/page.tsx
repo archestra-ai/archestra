@@ -2,11 +2,11 @@
 
 import { OrganizationMembersCard } from "@daveyplate/better-auth-ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { InvitationsList } from "@/components/invitations-list";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import {
   Card,
   CardContent,
@@ -29,7 +29,7 @@ import {
 
 function MembersSettingsContent() {
   const queryClient = useQueryClient();
-  const { data: activeOrg } = useActiveOrganization();
+  const { data: activeOrg, isPending } = useActiveOrganization();
   const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -96,15 +96,17 @@ function MembersSettingsContent() {
     </Card>
   );
 
-  return members;
+  return (
+    <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
+      {members}
+    </LoadingWrapper>
+  );
 }
 
 export default function MembersSettingsPage() {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingSpinner />}>
-        <MembersSettingsContent />
-      </Suspense>
+      <MembersSettingsContent />
     </ErrorBoundary>
   );
 }

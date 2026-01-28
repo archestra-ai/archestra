@@ -1,10 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 const {
@@ -15,21 +10,10 @@ const {
   updateInternalMcpCatalogItem,
 } = archestraApiSdk;
 
-/** Non-suspense version */
 export function useInternalMcpCatalog(params?: {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
 }) {
   return useQuery({
-    queryKey: ["mcp-catalog"],
-    queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
-    initialData: params?.initialData,
-  });
-}
-
-export function useInternalMcpCatalogSuspense(params?: {
-  initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
-}) {
-  return useSuspenseQuery({
     queryKey: ["mcp-catalog"],
     queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
     initialData: params?.initialData,

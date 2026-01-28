@@ -2,8 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Suspense, useEffect, useState } from "react";
-import { LoadingSpinner } from "@/components/loading";
+import { useEffect, useState } from "react";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
@@ -32,9 +31,7 @@ export function ToolsClient({
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner className="mt-[30vh]" />}>
-          <ToolsList initialData={initialData} />
-        </Suspense>
+        <ToolsList initialData={initialData} />
       </ErrorBoundary>
     </div>
   );
@@ -78,21 +75,13 @@ function ToolsList({ initialData }: { initialData?: ToolsInitialData }) {
         initialData={initialData}
       />
 
-      <Suspense
-        fallback={
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
-            <LoadingSpinner />
-          </div>
+      <ToolDetailsDialog
+        tool={selectedToolForDialog}
+        open={!!selectedToolForDialog}
+        onOpenChange={(open: boolean) =>
+          !open && setSelectedToolForDialog(null)
         }
-      >
-        <ToolDetailsDialog
-          tool={selectedToolForDialog}
-          open={!!selectedToolForDialog}
-          onOpenChange={(open: boolean) =>
-            !open && setSelectedToolForDialog(null)
-          }
-        />
-      </Suspense>
+      />
     </div>
   );
 }

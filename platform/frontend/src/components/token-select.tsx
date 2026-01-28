@@ -47,8 +47,7 @@ export function TokenSelect({
   // Get credentials for this catalogId from the grouped response
   const mcpServers = groupedCredentials?.[catalogId] ?? [];
 
-  // useMcpServersGroupedByCatalog uses useSuspenseQuery, so no loading state needed
-  const isLoading = false;
+  const isLoading = !groupedCredentials;
 
   const staticCredentialOutsideOfGroupedCredentials =
     value &&

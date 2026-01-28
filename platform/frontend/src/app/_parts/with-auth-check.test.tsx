@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { render, screen } from "@testing-library/react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -15,7 +15,6 @@ vi.mock("@sentry/nextjs", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(),
   usePathname: vi.fn(),
-  useSearchParams: vi.fn(),
 }));
 
 // Mock auth client
@@ -43,9 +42,16 @@ const MockChild = () => (
   <div data-testid="protected-content">Protected Content</div>
 );
 
-const mockSearchParams = {
-  toString: vi.fn().mockReturnValue(""),
-  get: vi.fn().mockReturnValue(null),
+// Helper to set window.location for tests
+const setWindowLocation = (pathname: string, search = "") => {
+  Object.defineProperty(window, "location", {
+    value: {
+      pathname,
+      search,
+      href: `http://localhost${pathname}${search}`,
+    },
+    writable: true,
+  });
 };
 
 describe("WithAuthCheck", () => {
@@ -54,13 +60,12 @@ describe("WithAuthCheck", () => {
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
-    vi.mocked(useSearchParams).mockReturnValue(
-      mockSearchParams as unknown as ReturnType<typeof useSearchParams>,
-    );
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
     } as ReturnType<typeof useHasPermissions>);
+    // Reset window.location to default state
+    setWindowLocation("/", "");
   });
 
   describe("when user is not authenticated", () => {
@@ -101,7 +106,7 @@ describe("WithAuthCheck", () => {
 
     it("should preserve query parameters in redirectTo param", () => {
       vi.mocked(usePathname).mockReturnValue("/search");
-      mockSearchParams.toString.mockReturnValue("q=hello&filter=active");
+      setWindowLocation("/search", "?q=hello&filter=active");
 
       render(
         <WithAuthCheck>
@@ -116,7 +121,7 @@ describe("WithAuthCheck", () => {
 
     it("should not add ? when there are no query parameters", () => {
       vi.mocked(usePathname).mockReturnValue("/dashboard");
-      mockSearchParams.toString.mockReturnValue("");
+      setWindowLocation("/dashboard", "");
 
       render(
         <WithAuthCheck>
@@ -170,7 +175,7 @@ describe("WithAuthCheck", () => {
 
     it("should redirect to home when accessing auth pages without redirectTo", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
-      mockSearchParams.get = vi.fn().mockReturnValue(null);
+      setWindowLocation("/auth/sign-in", "");
 
       render(
         <WithAuthCheck>
@@ -183,7 +188,7 @@ describe("WithAuthCheck", () => {
 
     it("should redirect to home when redirectTo is empty string", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
-      mockSearchParams.get = vi.fn().mockReturnValue("");
+      setWindowLocation("/auth/sign-in", "?redirectTo=");
 
       render(
         <WithAuthCheck>
@@ -196,7 +201,7 @@ describe("WithAuthCheck", () => {
 
     it("should redirect to redirectTo param when accessing auth pages after login", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
-      mockSearchParams.get = vi.fn().mockReturnValue("%2Flogs%2Fllm-proxy");
+      setWindowLocation("/auth/sign-in", "?redirectTo=%2Flogs%2Fllm-proxy");
 
       render(
         <WithAuthCheck>
@@ -209,9 +214,8 @@ describe("WithAuthCheck", () => {
 
     it("should ignore malicious redirectTo param and redirect to home", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
-      mockSearchParams.get = vi
-        .fn()
-        .mockReturnValue(encodeURIComponent("https://evil.com/phishing"));
+      const maliciousUrl = encodeURIComponent("https://evil.com/phishing");
+      setWindowLocation("/auth/sign-in", `?redirectTo=${maliciousUrl}`);
 
       render(
         <WithAuthCheck>

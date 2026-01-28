@@ -18,12 +18,12 @@ import {
   Tag,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentDialog } from "@/components/agent-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
@@ -67,9 +67,7 @@ export default function McpGatewaysPage({
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <McpGateways initialData={initialData} />
-        </Suspense>
+        <McpGateways initialData={initialData} />
       </ErrorBoundary>
     </div>
   );
@@ -168,7 +166,7 @@ function McpGateways({
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
-  const { data: agentsResponse } = useProfilesPaginated({
+  const { data: agentsResponse, isPending } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -177,9 +175,6 @@ function McpGateways({
     name: nameFilter || undefined,
     agentTypes: ["mcp_gateway", "profile"],
   });
-
-  const agents = agentsResponse?.data || [];
-  const pagination = agentsResponse?.pagination;
 
   const { data: _teams } = useQuery({
     queryKey: ["teams"],
@@ -200,6 +195,9 @@ function McpGateways({
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
 
+  type GatewayData =
+    archestraApiTypes.GetAgentsResponses["200"]["data"][number];
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingGateway, setConnectingGateway] = useState<{
     id: string;
@@ -212,9 +210,6 @@ function McpGateways({
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
-
-  type GatewayData =
-    archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -263,6 +258,10 @@ function McpGateways({
     },
     [searchParams, router, pathname],
   );
+
+  const agents = agentsResponse?.data || [];
+  const pagination = agentsResponse?.pagination;
+  const showLoading = isPending && !initialData?.agents;
 
   const columns: ColumnDef<GatewayData>[] = [
     {
@@ -427,107 +426,112 @@ function McpGateways({
   ];
 
   return (
-    <PageLayout
-      title="MCP Gateways"
-      description={
-        <p className="text-sm text-muted-foreground">
-          MCP Gateways provide a unified MCP endpoint for your AI agents to
-          access tools and subagents.{" "}
-          <a
-            href="https://archestra.ai/docs/platform-agents"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
-          >
-            Read more in the docs
-          </a>
-        </p>
-      }
-      actionButton={
-        <PermissionButton
-          permissions={{ profile: ["create"] }}
-          onClick={() => setIsCreateDialogOpen(true)}
-          data-testid={E2eTestId.CreateAgentButton}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create MCP Gateway
-        </PermissionButton>
-      }
+    <LoadingWrapper
+      isPending={showLoading}
+      loadingFallback={<LoadingSpinner />}
     >
-      <div>
+      <PageLayout
+        title="MCP Gateways"
+        description={
+          <p className="text-sm text-muted-foreground">
+            MCP Gateways provide a unified MCP endpoint for your AI agents to
+            access tools and subagents.{" "}
+            <a
+              href="https://archestra.ai/docs/platform-agents"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              Read more in the docs
+            </a>
+          </p>
+        }
+        actionButton={
+          <PermissionButton
+            permissions={{ profile: ["create"] }}
+            onClick={() => setIsCreateDialogOpen(true)}
+            data-testid={E2eTestId.CreateAgentButton}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create MCP Gateway
+          </PermissionButton>
+        }
+      >
         <div>
-          <div className="mb-6">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <DebouncedInput
-                placeholder="Search gateways by name..."
-                initialValue={searchQuery}
-                onChange={handleSearchChange}
-                className="pl-9"
-              />
+          <div>
+            <div className="mb-6">
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <DebouncedInput
+                  placeholder="Search gateways by name..."
+                  initialValue={searchQuery}
+                  onChange={handleSearchChange}
+                  className="pl-9"
+                />
+              </div>
             </div>
+
+            {!agents || agents.length === 0 ? (
+              <div className="text-muted-foreground">
+                {nameFilter
+                  ? "No MCP gateways found matching your search"
+                  : "No MCP gateways found"}
+              </div>
+            ) : (
+              <div data-testid={E2eTestId.AgentsTable}>
+                <DataTable
+                  columns={columns}
+                  data={agents}
+                  sorting={sorting}
+                  onSortingChange={handleSortingChange}
+                  manualSorting={true}
+                  manualPagination={true}
+                  pagination={{
+                    pageIndex,
+                    pageSize,
+                    total: pagination?.total || 0,
+                  }}
+                  onPaginationChange={handlePaginationChange}
+                />
+              </div>
+            )}
+
+            <AgentDialog
+              open={isCreateDialogOpen}
+              onOpenChange={setIsCreateDialogOpen}
+              agentType="mcp_gateway"
+              onCreated={(gateway) => {
+                setIsCreateDialogOpen(false);
+                setConnectingGateway({ ...gateway, agentType: "mcp_gateway" });
+              }}
+            />
+
+            {connectingGateway && (
+              <ConnectGatewayDialog
+                agent={connectingGateway}
+                open={!!connectingGateway}
+                onOpenChange={(open) => !open && setConnectingGateway(null)}
+              />
+            )}
+
+            <AgentDialog
+              open={!!editingGateway}
+              onOpenChange={(open) => !open && setEditingGateway(null)}
+              agent={editingGateway}
+              agentType={editingGateway?.agentType || "mcp_gateway"}
+            />
+
+            {deletingGatewayId && (
+              <DeleteGatewayDialog
+                agentId={deletingGatewayId}
+                open={!!deletingGatewayId}
+                onOpenChange={(open) => !open && setDeletingGatewayId(null)}
+              />
+            )}
           </div>
-
-          {!agents || agents.length === 0 ? (
-            <div className="text-muted-foreground">
-              {nameFilter
-                ? "No MCP gateways found matching your search"
-                : "No MCP gateways found"}
-            </div>
-          ) : (
-            <div data-testid={E2eTestId.AgentsTable}>
-              <DataTable
-                columns={columns}
-                data={agents}
-                sorting={sorting}
-                onSortingChange={handleSortingChange}
-                manualSorting={true}
-                manualPagination={true}
-                pagination={{
-                  pageIndex,
-                  pageSize,
-                  total: pagination?.total || 0,
-                }}
-                onPaginationChange={handlePaginationChange}
-              />
-            </div>
-          )}
-
-          <AgentDialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-            agentType="mcp_gateway"
-            onCreated={(gateway) => {
-              setIsCreateDialogOpen(false);
-              setConnectingGateway({ ...gateway, agentType: "mcp_gateway" });
-            }}
-          />
-
-          {connectingGateway && (
-            <ConnectGatewayDialog
-              agent={connectingGateway}
-              open={!!connectingGateway}
-              onOpenChange={(open) => !open && setConnectingGateway(null)}
-            />
-          )}
-
-          <AgentDialog
-            open={!!editingGateway}
-            onOpenChange={(open) => !open && setEditingGateway(null)}
-            agent={editingGateway}
-            agentType={editingGateway?.agentType || "mcp_gateway"}
-          />
-
-          {deletingGatewayId && (
-            <DeleteGatewayDialog
-              agentId={deletingGatewayId}
-              open={!!deletingGatewayId}
-              onOpenChange={(open) => !open && setDeletingGatewayId(null)}
-            />
-          )}
         </div>
-      </div>
-    </PageLayout>
+      </PageLayout>
+    </LoadingWrapper>
   );
 }
 
@@ -606,18 +610,7 @@ function GatewayConnectionColumns({
       <div className="relative">
         <div className={activeTab === "mcp" ? "block" : "hidden"}>
           <div className="p-4 rounded-lg border bg-card">
-            <Suspense
-              fallback={
-                <div className="flex items-center justify-center py-8">
-                  <LoadingSpinner />
-                </div>
-              }
-            >
-              <McpConnectionInstructions
-                agentId={agentId}
-                hideProfileSelector
-              />
-            </Suspense>
+            <McpConnectionInstructions agentId={agentId} hideProfileSelector />
           </div>
         </div>
         {agentType === "profile" && (

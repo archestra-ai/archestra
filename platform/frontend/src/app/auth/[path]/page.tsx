@@ -19,7 +19,9 @@ export default async function AuthPage({
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingSpinner />}>
+      <Suspense
+        fallback={<LoadingSpinner className="top-1/2 left-1/2 absolute" />}
+      >
         <AuthPageWithInvitationCheck path={path} />
       </Suspense>
     </ErrorBoundary>

@@ -5,7 +5,7 @@ import {
   type archestraApiTypes,
   type StatisticsTimeFrame,
 } from "@shared";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 const {
   getTeamStatistics,
@@ -22,7 +22,7 @@ export function useTeamStatistics({
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetTeamStatisticsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["statistics", "teams", timeframe],
     queryFn: async () => {
       const response = await getTeamStatistics({
@@ -42,7 +42,7 @@ export function useProfileStatistics({
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetAgentStatisticsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["statistics", "agents", timeframe],
     queryFn: async () => {
       const response = await getAgentStatistics({
@@ -62,7 +62,7 @@ export function useModelStatistics({
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetModelStatisticsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["statistics", "models", timeframe],
     queryFn: async () => {
       const response = await getModelStatistics({
@@ -82,7 +82,7 @@ export function useOverviewStatistics({
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetOverviewStatisticsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["statistics", "overview", timeframe],
     queryFn: async () => {
       const response = await getOverviewStatistics({
@@ -102,7 +102,7 @@ export function useCostSavingsStatistics({
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetCostSavingsStatisticsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["statistics", "cost-savings", timeframe],
     queryFn: async () => {
       const response = await getCostSavingsStatistics({

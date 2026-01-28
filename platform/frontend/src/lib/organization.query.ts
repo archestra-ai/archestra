@@ -3,12 +3,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
 } from "@shared";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -35,7 +30,7 @@ export const organizationKeys = {
  */
 export function useInvitation(invitationId: string) {
   const session = authClient.useSession();
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: organizationKeys.invitation(invitationId),
     queryFn: async () => {
       if (!session) {
@@ -104,7 +99,7 @@ export function useAcceptInvitation() {
  * List all pending invitations for an organization
  */
 export function useInvitationsList(organizationId: string | undefined) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: [...organizationKeys.invitations(), organizationId],
     queryFn: async () => {
       if (!organizationId) return [];

@@ -353,20 +353,14 @@ export function ChatSidebarSection() {
                               }
                             >
                               <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  onClick={(e) => e.stopPropagation()}
+                                <MoreHorizontal
                                   className={cn(
-                                    "h-6 w-6 p-0 shrink-0 transition-opacity",
+                                    "h-4 w-4 p-0 shrink-0 transition-opacity",
                                     isMenuOpen
                                       ? "opacity-100"
                                       : "opacity-0 group-hover/menu-item:opacity-100",
                                   )}
-                                >
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
+                                />
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start" side="right">
                                 {canUpdateConversation && (

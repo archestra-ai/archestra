@@ -61,10 +61,7 @@ import {
   useUpdateConversation,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
-import {
-  useChatModelsQuery,
-  useModelsByProviderQuery,
-} from "@/lib/chat-models.query";
+import { useChatModels, useModelsByProvider } from "@/lib/chat-models.query";
 import {
   type SupportedChatProvider,
   useChatApiKeys,
@@ -132,9 +129,8 @@ export default function ChatPage() {
     useInternalAgents();
 
   // Fetch profiles and models for initial chat (no conversation)
-  // Using non-suspense queries to avoid blocking page render
-  const { modelsByProvider, isLoading: isModelsLoading } =
-    useModelsByProviderQuery();
+  const { modelsByProvider, isPending: isModelsLoading } =
+    useModelsByProvider();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
@@ -228,7 +224,7 @@ export default function ChatPage() {
     useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
   const { data: organization } = useOrganization();
-  const { data: chatModels = [] } = useChatModelsQuery();
+  const { data: chatModels = [] } = useChatModels();
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   // vLLM/Ollama may not require an API key either
   const hasAnyApiKey =

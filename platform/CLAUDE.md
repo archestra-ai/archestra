@@ -364,7 +364,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Frontend**:
 
-- Use TanStack Query for data fetching
+- Use TanStack Query for data fetching (prefer `useQuery` over `useSuspenseQuery` with explicit loading states)
 - Use shadcn/ui components only
 - **Use components from `frontend/src/components/ui` over plain HTML elements**: Never use raw `<button>`, `<input>`, `<select>`, etc. when a component exists in `frontend/src/components/ui` (Button over button, Input over input, etc.)
 - **Handle toasts in .query.ts files, not in components**: Toast notifications for mutations (success/error) should be defined in the mutation's `onSuccess`/`onError` callbacks within `.query.ts` files, not in components
@@ -523,11 +523,14 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Tools must be explicitly assigned to profiles (not auto-injected)
 - Tools prefixed with `archestra__` to avoid conflicts
 - Available tools:
-  - Profile management: `whoami`, `create_profile`, `get_profile`
-  - Limits: `create_limit`, `get_limits`, `update_limit`, `delete_limit`, `get_profile_token_usage`
+  - Identity: `whoami`
+  - Agents: `create_agent`, `get_agent`
+  - LLM Proxies: `create_llm_proxy`, `get_llm_proxy`
+  - MCP Gateways: `create_mcp_gateway`, `get_mcp_gateway`
+  - Limits: `create_limit`, `get_limits`, `update_limit`, `delete_limit`, `get_agent_token_usage`, `get_llm_proxy_token_usage`
   - Policies: `get/create/update/delete_tool_invocation_policy`, `get/create/update/delete_trusted_data_policy`
   - MCP servers: `search_private_mcp_registry`, `get_mcp_servers`, `get_mcp_server_tools`
-  - Tool assignment: `bulk_assign_tools_to_profiles`
+  - Tool assignment: `bulk_assign_tools_to_agents`, `bulk_assign_tools_to_mcp_gateways`
   - Operators: `get_autonomy_policy_operators`
 - Implementation: `backend/src/archestra-mcp-server.ts`
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`

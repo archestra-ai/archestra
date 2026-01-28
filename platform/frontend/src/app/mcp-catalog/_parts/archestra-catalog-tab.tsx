@@ -28,7 +28,7 @@ import {
 } from "@/lib/external-mcp-catalog.query";
 import {
   useCreateInternalMcpCatalogItem,
-  useInternalMcpCatalogSuspense,
+  useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
@@ -64,7 +64,7 @@ export function ArchestraCatalogTab({
   });
 
   // Get catalog items for filtering (with live updates)
-  const { data: catalogItems } = useInternalMcpCatalogSuspense({
+  const { data: catalogItems } = useInternalMcpCatalog({
     initialData: initialCatalogItems,
   });
 

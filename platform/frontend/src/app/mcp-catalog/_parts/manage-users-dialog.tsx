@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 
@@ -47,8 +47,8 @@ export function ManageUsersDialog({
   catalogId,
 }: ManageUsersDialogProps) {
   // Subscribe to live mcp-servers query to get fresh data
-  const { data: allServers } = useMcpServers({ catalogId });
-  const { data: catalogItems } = useInternalMcpCatalogSuspense({});
+  const { data: allServers = [] } = useMcpServers({ catalogId });
+  const { data: catalogItems } = useInternalMcpCatalog({});
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
 

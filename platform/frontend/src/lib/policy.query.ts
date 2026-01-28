@@ -2,8 +2,8 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   type QueryClient,
   useMutation,
+  useQuery,
   useQueryClient,
-  useSuspenseQuery,
 } from "@tanstack/react-query";
 import type { PolicyCondition } from "@/app/tools/_parts/tool-call-policy-condition";
 
@@ -31,7 +31,7 @@ import {
 export function useToolInvocationPolicies(
   initialData?: ReturnType<typeof transformToolInvocationPolicies>,
 ) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
@@ -42,7 +42,7 @@ export function useToolInvocationPolicies(
 }
 
 export function useOperators() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["operators"],
     queryFn: async () => (await getOperators()).data ?? [],
   });
@@ -115,7 +115,7 @@ export function useToolInvocationPolicyUpdateMutation() {
 export function useToolResultPolicies(
   initialData?: ReturnType<typeof transformToolResultPolicies>,
 ) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];

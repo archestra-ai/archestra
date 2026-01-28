@@ -268,14 +268,11 @@ export async function executeArchestraTool(
       "whoami tool called",
     );
 
-    const agentRecord = await AgentModel.findById(contextAgent.id);
-    const agentType = agentRecord?.agentType ?? "unknown";
-
     return {
       content: [
         {
           type: "text",
-          text: `Agent Name: ${contextAgent.name}\nAgent ID: ${contextAgent.id}\nAgent Type: ${agentType}`,
+          text: `Agent Name: ${contextAgent.name}\nAgent ID: ${contextAgent.id}`,
         },
       ],
       isError: false,
@@ -1949,7 +1946,7 @@ export function getArchestraMcpTools(): Tool[] {
     {
       name: TOOL_WHOAMI_FULL_NAME,
       title: "Who Am I",
-      description: "Returns the name, ID, and type of the current agent",
+      description: "Returns the name and ID of the current agent",
       inputSchema: {
         type: "object",
         properties: {},

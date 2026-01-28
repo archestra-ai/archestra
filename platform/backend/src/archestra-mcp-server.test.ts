@@ -180,7 +180,6 @@ describe("executeArchestraTool", () => {
       expect((result.content[0] as any).text).toContain("Test Agent");
       expect((result.content[0] as any).text).toContain("Agent ID:");
       expect((result.content[0] as any).text).toContain(testAgent.id);
-      expect((result.content[0] as any).text).toContain("Agent Type:");
     });
   });
 

@@ -137,34 +137,21 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const host = request.headers.host || "localhost:9000";
       const baseUrl = `${protocol}://${host}`;
 
-      // Build skills array from agent.skills, or fall back to a single skill with agent name
-      const agentSkills = agent.skills as
-        | Array<{ name: string }>
-        | null
-        | undefined;
-      const skills =
-        agentSkills && agentSkills.length > 0
-          ? agentSkills.map((skill) => ({
-              id: skill.name
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, "_")
-                .replace(/^_|_$/g, ""),
-              name: skill.name,
-              description: "",
-              tags: [],
-              inputModes: ["text"],
-              outputModes: ["text"],
-            }))
-          : [
-              {
-                id: `${agent.id}-skill`,
-                name: agent.name,
-                description: agent.userPrompt || "",
-                tags: [],
-                inputModes: ["text"],
-                outputModes: ["text"],
-              },
-            ];
+      // Build skills array with a single skill representing the agent
+      const skillId = agent.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "");
+      const skills = [
+        {
+          id: skillId,
+          name: agent.name,
+          description: agent.description || agent.userPrompt || "",
+          tags: [],
+          inputModes: ["text"],
+          outputModes: ["text"],
+        },
+      ];
 
       return reply.send({
         name: agent.name,

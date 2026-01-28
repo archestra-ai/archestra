@@ -26071,8 +26071,10 @@ export type GetToolsWithAssignmentsResponses = {
                 };
                 credentialSourceMcpServerId: string | null;
                 credentialOwnerEmail: string | null;
+                credentialOwnerDeleted?: boolean;
                 executionSourceMcpServerId: string | null;
                 executionOwnerEmail: string | null;
+                executionOwnerDeleted?: boolean;
                 useDynamicTeamCredential: boolean;
                 responseModifierTemplate: string | null;
             }>;

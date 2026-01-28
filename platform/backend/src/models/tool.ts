@@ -1423,8 +1423,10 @@ class ToolModel {
         agent: { id: string; name: string };
         credentialSourceMcpServerId: string | null;
         credentialOwnerEmail: string | null;
+        credentialOwnerDeleted?: boolean;
         executionSourceMcpServerId: string | null;
         executionOwnerEmail: string | null;
+        executionOwnerDeleted?: boolean;
         useDynamicTeamCredential: boolean;
         responseModifierTemplate: string | null;
       }>
@@ -1444,6 +1446,16 @@ class ToolModel {
         !assignment.executionSourceMcpServerId ||
         accessibleMcpServerIds.has(assignment.executionSourceMcpServerId);
 
+      // When user has access but owner email is null, owner was deleted (LEFT JOIN returned no user row)
+      const credentialOwnerDeleted =
+        !!credentialServerAccessible &&
+        !!assignment.credentialSourceMcpServerId &&
+        assignment.credentialOwnerEmail == null;
+      const executionOwnerDeleted =
+        !!executionServerAccessible &&
+        !!assignment.executionSourceMcpServerId &&
+        assignment.executionOwnerEmail == null;
+
       existing.push({
         agentToolId: assignment.agentToolId,
         agent: {
@@ -1454,10 +1466,12 @@ class ToolModel {
         credentialOwnerEmail: credentialServerAccessible
           ? assignment.credentialOwnerEmail
           : null,
+        ...(credentialOwnerDeleted && { credentialOwnerDeleted: true }),
         executionSourceMcpServerId: assignment.executionSourceMcpServerId,
         executionOwnerEmail: executionServerAccessible
           ? assignment.executionOwnerEmail
           : null,
+        ...(executionOwnerDeleted && { executionOwnerDeleted: true }),
         useDynamicTeamCredential: assignment.useDynamicTeamCredential,
         responseModifierTemplate: assignment.responseModifierTemplate,
       });

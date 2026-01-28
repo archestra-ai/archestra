@@ -62,8 +62,10 @@ export const ToolAssignmentSchema = z.object({
   }),
   credentialSourceMcpServerId: z.string().nullable(),
   credentialOwnerEmail: z.string().nullable(),
+  credentialOwnerDeleted: z.boolean().optional(),
   executionSourceMcpServerId: z.string().nullable(),
   executionOwnerEmail: z.string().nullable(),
+  executionOwnerDeleted: z.boolean().optional(),
   useDynamicTeamCredential: z.boolean(),
   responseModifierTemplate: z.string().nullable(),
 });

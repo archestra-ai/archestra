@@ -52,8 +52,8 @@ export function ToolDetailsDialog({
 
   // Check if this is a built-in Archestra tool (no credentials required)
   // Helper to get credential display text
-  // Backend returns null for emails when user doesn't have access to the credential's MCP server
-  // Returns null when there's no credential to display
+  // Backend returns null for emails when user doesn't have access to the credential's MCP server,
+  // or when the owner was deleted. credentialOwnerDeleted/executionOwnerDeleted flags distinguish.
   const getCredentialDisplay = (
     assignment: (typeof tool.assignments)[0],
   ): string | null => {
@@ -71,11 +71,17 @@ export function ToolDetailsDialog({
       return null;
     }
 
-    // Backend returns email if user has access, null if not
+    // Backend returns email if user has access and owner exists, null otherwise
     const email =
       assignment.credentialOwnerEmail || assignment.executionOwnerEmail;
 
     if (!email) {
+      // Owner was deleted (backend sets credentialOwnerDeleted/executionOwnerDeleted when accessible but email null)
+      if (
+        assignment.credentialOwnerDeleted ?? assignment.executionOwnerDeleted
+      ) {
+        return "Deleted user";
+      }
       // Credential server exists but user doesn't have access
       return "Owner outside your team";
     }

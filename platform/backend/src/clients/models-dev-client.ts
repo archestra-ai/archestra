@@ -393,28 +393,43 @@ class ModelsDevClient {
       }
     }
 
+    // Deduplicate models by (provider, modelId) key - this can happen when
+    // multiple models.dev providers map to the same Archestra provider
+    // (e.g., both google and google-vertex map to gemini)
+    const deduplicatedModels = new Map<string, CreateModel>();
+    for (const model of modelsToSync) {
+      const key = `${model.provider}:${model.modelId}`;
+      // Keep the first occurrence (or could prefer one with more data)
+      if (!deduplicatedModels.has(key)) {
+        deduplicatedModels.set(key, model);
+      }
+    }
+    const uniqueModelsToSync = Array.from(deduplicatedModels.values());
+
     logger.info(
       {
         totalModels,
         modelsToSync: modelsToSync.length,
+        uniqueModelsToSync: uniqueModelsToSync.length,
+        duplicatesRemoved: modelsToSync.length - uniqueModelsToSync.length,
         skippedProviders: Array.from(skippedProviders),
       },
       "Filtered models for sync",
     );
 
-    if (modelsToSync.length > 0) {
-      await ModelModel.bulkUpsert(modelsToSync);
-      await this.syncTokenPrices(modelsToSync);
+    if (uniqueModelsToSync.length > 0) {
+      await ModelModel.bulkUpsert(uniqueModelsToSync);
+      await this.syncTokenPrices(uniqueModelsToSync);
     }
 
     await this.updateSyncTimestamp();
 
     logger.info(
-      { syncedCount: modelsToSync.length },
+      { syncedCount: uniqueModelsToSync.length },
       "models.dev model metadata sync completed",
     );
 
-    return modelsToSync.length;
+    return uniqueModelsToSync.length;
   }
 
   /**

@@ -85928,6 +85928,9 @@
                       "agentName": {
                         "type": "string"
                       },
+                      "agentType": {
+                        "type": "string"
+                      },
                       "teamName": {
                         "type": "string"
                       },
@@ -85966,6 +85969,7 @@
                     "required": [
                       "agentId",
                       "agentName",
+                      "agentType",
                       "teamName",
                       "requests",
                       "inputTokens",

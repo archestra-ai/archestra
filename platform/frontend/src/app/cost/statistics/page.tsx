@@ -272,13 +272,23 @@ export default function StatisticsPage() {
     return config;
   }, [teamStatistics]);
 
-  // Convert profile statistics to recharts format
-  const profileChartData = useMemo(() => {
-    if (agentStatistics.length === 0) return [];
+  // Filter agent statistics by type
+  const chatAgentStatistics = useMemo(
+    () => agentStatistics.filter((stat) => stat.agentType === "agent"),
+    [agentStatistics],
+  );
+  const llmProxyStatistics = useMemo(
+    () => agentStatistics.filter((stat) => stat.agentType === "llm_proxy"),
+    [agentStatistics],
+  );
+
+  // Convert agent statistics to recharts format
+  const agentChartData = useMemo(() => {
+    if (chatAgentStatistics.length === 0) return [];
 
     const allTimestamps = [
       ...new Set(
-        agentStatistics.flatMap((stat) =>
+        chatAgentStatistics.flatMap((stat) =>
           stat.timeSeries.map((point) => point.timestamp),
         ),
       ),
@@ -289,24 +299,60 @@ export default function StatisticsPage() {
         timestamp,
         label: formatTimestamp(timestamp),
       };
-      agentStatistics.slice(0, 5).forEach((agent) => {
+      chatAgentStatistics.slice(0, 5).forEach((agent) => {
         const point = agent.timeSeries.find((p) => p.timestamp === timestamp);
         dataPoint[agent.agentId] = point ? point.value : 0;
       });
       return dataPoint;
     });
-  }, [agentStatistics, formatTimestamp]);
+  }, [chatAgentStatistics, formatTimestamp]);
 
-  const profileChartConfig = useMemo(() => {
+  const agentChartConfig = useMemo(() => {
     const config: ChartConfig = {};
-    agentStatistics.slice(0, 5).forEach((agent, index) => {
+    chatAgentStatistics.slice(0, 5).forEach((agent, index) => {
       config[agent.agentId] = {
         label: agent.agentName,
         color: `var(--chart-${index + 1})`,
       };
     });
     return config;
-  }, [agentStatistics]);
+  }, [chatAgentStatistics]);
+
+  // Convert LLM proxy statistics to recharts format
+  const llmProxyChartData = useMemo(() => {
+    if (llmProxyStatistics.length === 0) return [];
+
+    const allTimestamps = [
+      ...new Set(
+        llmProxyStatistics.flatMap((stat) =>
+          stat.timeSeries.map((point) => point.timestamp),
+        ),
+      ),
+    ].sort();
+
+    return allTimestamps.map((timestamp) => {
+      const dataPoint: Record<string, string | number> = {
+        timestamp,
+        label: formatTimestamp(timestamp),
+      };
+      llmProxyStatistics.slice(0, 5).forEach((agent) => {
+        const point = agent.timeSeries.find((p) => p.timestamp === timestamp);
+        dataPoint[agent.agentId] = point ? point.value : 0;
+      });
+      return dataPoint;
+    });
+  }, [llmProxyStatistics, formatTimestamp]);
+
+  const llmProxyChartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    llmProxyStatistics.slice(0, 5).forEach((agent, index) => {
+      config[agent.agentId] = {
+        label: agent.agentName,
+        color: `var(--chart-${index + 1})`,
+      };
+    });
+    return config;
+  }, [llmProxyStatistics]);
 
   // Convert model statistics to recharts format
   const modelChartData = useMemo(() => {
@@ -395,9 +441,13 @@ export default function StatisticsPage() {
     () => [...teamStatistics].sort((a, b) => b.cost - a.cost),
     [teamStatistics],
   );
-  const sortedAgentStatistics = useMemo(
-    () => [...agentStatistics].sort((a, b) => b.cost - a.cost),
-    [agentStatistics],
+  const sortedChatAgentStatistics = useMemo(
+    () => [...chatAgentStatistics].sort((a, b) => b.cost - a.cost),
+    [chatAgentStatistics],
+  );
+  const sortedLlmProxyStatistics = useMemo(
+    () => [...llmProxyStatistics].sort((a, b) => b.cost - a.cost),
+    [llmProxyStatistics],
   );
   const sortedModelStatistics = useMemo(
     () => [...modelStatistics].sort((a, b) => b.cost - a.cost),
@@ -764,19 +814,19 @@ export default function StatisticsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Profiles</CardTitle>
+          <CardTitle>Agents</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
               <ChartContainerWrapper
-                config={profileChartConfig}
-                data={profileChartData}
-                emptyMessage="No profile data available"
+                config={agentChartConfig}
+                data={agentChartData}
+                emptyMessage="No agent data available"
               >
                 <LineChart
                   accessibilityLayer
-                  data={profileChartData}
+                  data={agentChartData}
                   margin={{ top: 12, left: 12, right: 12 }}
                 >
                   <CartesianGrid vertical={false} />
@@ -794,7 +844,7 @@ export default function StatisticsPage() {
                   />
                   <ChartTooltip content={CostChartTooltip} />
                   <ChartLegend content={<ChartLegendContent />} />
-                  {agentStatistics.slice(0, 5).map((agent) => (
+                  {chatAgentStatistics.slice(0, 5).map((agent) => (
                     <Line
                       key={agent.agentId}
                       dataKey={agent.agentId}
@@ -811,7 +861,7 @@ export default function StatisticsPage() {
                   ))}
                 </LineChart>
               </ChartContainerWrapper>
-              {agentStatistics.length > 5 && (
+              {chatAgentStatistics.length > 5 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   Chart shows top 5 by cost
                 </p>
@@ -822,7 +872,7 @@ export default function StatisticsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Profile Name</TableHead>
+                    <TableHead>Name</TableHead>
                     <TableHead>Team</TableHead>
                     <TableHead>Requests</TableHead>
                     <TableHead>Tokens</TableHead>
@@ -830,32 +880,133 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedAgentStatistics.length === 0 ? (
+                  {sortedChatAgentStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
                         className="text-center py-8 text-muted-foreground"
                       >
-                        No profile data available for the selected timeframe
+                        No agent data available for the selected timeframe
                       </TableCell>
                     </TableRow>
                   ) : (
-                    sortedAgentStatistics.map((profile) => (
-                      <TableRow key={profile.agentId}>
+                    sortedChatAgentStatistics.map((agent) => (
+                      <TableRow key={agent.agentId}>
                         <TableCell className="font-medium">
-                          {profile.agentName}
+                          {agent.agentName}
                         </TableCell>
-                        <TableCell>{profile.teamName}</TableCell>
-                        <TableCell>
-                          {profile.requests.toLocaleString()}
-                        </TableCell>
+                        <TableCell>{agent.teamName}</TableCell>
+                        <TableCell>{agent.requests.toLocaleString()}</TableCell>
                         <TableCell>
                           {(
-                            profile.inputTokens + profile.outputTokens
+                            agent.inputTokens + agent.outputTokens
                           ).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          ${profile.cost.toFixed(2)}
+                          ${agent.cost.toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>LLM Proxies</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="order-2 lg:order-1">
+              <ChartContainerWrapper
+                config={llmProxyChartConfig}
+                data={llmProxyChartData}
+                emptyMessage="No LLM proxy data available"
+              >
+                <LineChart
+                  accessibilityLayer
+                  data={llmProxyChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip content={CostChartTooltip} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  {llmProxyStatistics.slice(0, 5).map((proxy) => (
+                    <Line
+                      key={proxy.agentId}
+                      dataKey={proxy.agentId}
+                      type="monotone"
+                      stroke={`var(--color-${proxy.agentId})`}
+                      strokeWidth={2}
+                      dot={{
+                        strokeWidth: 0,
+                        r: 3,
+                        fill: `var(--color-${proxy.agentId})`,
+                      }}
+                      activeDot={{ strokeWidth: 0, r: 5 }}
+                    />
+                  ))}
+                </LineChart>
+              </ChartContainerWrapper>
+              {llmProxyStatistics.length > 5 && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Chart shows top 5 by cost
+                </p>
+              )}
+            </div>
+
+            <div className="order-1 lg:order-2">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Team</TableHead>
+                    <TableHead>Requests</TableHead>
+                    <TableHead>Tokens</TableHead>
+                    <TableHead className="text-right">Cost</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedLlmProxyStatistics.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-center py-8 text-muted-foreground"
+                      >
+                        No LLM proxy data available for the selected timeframe
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    sortedLlmProxyStatistics.map((proxy) => (
+                      <TableRow key={proxy.agentId}>
+                        <TableCell className="font-medium">
+                          {proxy.agentName}
+                        </TableCell>
+                        <TableCell>{proxy.teamName}</TableCell>
+                        <TableCell>{proxy.requests.toLocaleString()}</TableCell>
+                        <TableCell>
+                          {(
+                            proxy.inputTokens + proxy.outputTokens
+                          ).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          ${proxy.cost.toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))

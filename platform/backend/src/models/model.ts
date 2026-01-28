@@ -124,6 +124,9 @@ class ModelModel {
       "Starting batched model upsert",
     );
 
+    // Create timestamp once to ensure consistency across all batches
+    const now = new Date();
+
     // Wrap all batches in a transaction to ensure atomicity
     const results = await db.transaction(async (tx) => {
       const batchResults: Model[] = [];
@@ -151,8 +154,8 @@ class ModelModel {
               supportsToolCalling: sql`excluded.supports_tool_calling`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
-              lastSyncedAt: new Date(),
-              updatedAt: new Date(),
+              lastSyncedAt: now,
+              updatedAt: now,
             },
           })
           .returning();

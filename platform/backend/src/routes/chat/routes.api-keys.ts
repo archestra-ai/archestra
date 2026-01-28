@@ -4,7 +4,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
@@ -233,9 +232,6 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           });
       }
-
-      // Invalidate models cache so users see models from the new provider key
-      await cacheManager.deleteByPrefix(CacheKey.GetChatModels);
 
       return reply.send(createdApiKey);
     },
@@ -485,9 +481,6 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       await ChatApiKeyModel.delete(params.id);
-
-      // Invalidate models cache so users no longer see models from the deleted key
-      await cacheManager.deleteByPrefix(CacheKey.GetChatModels);
 
       return reply.send({ success: true });
     },

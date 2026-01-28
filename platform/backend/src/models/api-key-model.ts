@@ -232,6 +232,35 @@ class ApiKeyModelModel {
 
     return result?.count ?? 0;
   }
+
+  /**
+   * Get unique models for a list of API key IDs.
+   * Returns models with their data, ordered by provider and modelId.
+   */
+  static async getModelsForApiKeyIds(apiKeyIds: string[]): Promise<Model[]> {
+    if (apiKeyIds.length === 0) {
+      return [];
+    }
+
+    // Get unique models linked to any of the provided API keys
+    const results = await db
+      .selectDistinctOn([schema.modelsTable.id], {
+        model: schema.modelsTable,
+      })
+      .from(schema.apiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.apiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(inArray(schema.apiKeyModelsTable.apiKeyId, apiKeyIds))
+      .orderBy(
+        schema.modelsTable.id,
+        asc(schema.modelsTable.provider),
+        asc(schema.modelsTable.modelId),
+      );
+
+    return results.map((r) => r.model);
+  }
 }
 
 export default ApiKeyModelModel;

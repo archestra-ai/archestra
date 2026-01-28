@@ -567,6 +567,43 @@ function ChatSettingsContent() {
 }
 
 /**
+ * Check if a model has unknown capabilities (no data available)
+ */
+function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
+  const capabilities = model.capabilities;
+  if (!capabilities) return true;
+
+  const hasInputModalities =
+    capabilities.inputModalities && capabilities.inputModalities.length > 0;
+  const hasOutputModalities =
+    capabilities.outputModalities && capabilities.outputModalities.length > 0;
+  const hasToolCalling = capabilities.supportsToolCalling !== null;
+  const hasContextLength = capabilities.contextLength !== null;
+  const hasPricing =
+    capabilities.pricePerMillionInput !== null ||
+    capabilities.pricePerMillionOutput !== null;
+
+  return (
+    !hasInputModalities &&
+    !hasOutputModalities &&
+    !hasToolCalling &&
+    !hasContextLength &&
+    !hasPricing
+  );
+}
+
+/**
+ * Badge for models with unknown capabilities
+ */
+function UnknownCapabilitiesBadge() {
+  return (
+    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
+      capabilities unknown
+    </span>
+  );
+}
+
+/**
  * Models table showing all models with their linked API keys
  */
 function ModelsTable() {
@@ -643,21 +680,30 @@ function ModelsTable() {
       {
         accessorKey: "capabilities.contextLength",
         header: "Context",
-        cell: ({ row }) => (
-          <span className="text-sm">
-            {formatContextLength(
-              row.original.capabilities?.contextLength ?? null,
-            )}
-          </span>
-        ),
+        cell: ({ row }) => {
+          // Show "capabilities unknown" badge if model has no capability data at all
+          if (hasUnknownCapabilities(row.original)) {
+            return <UnknownCapabilitiesBadge />;
+          }
+          return (
+            <span className="text-sm">
+              {formatContextLength(
+                row.original.capabilities?.contextLength ?? null,
+              )}
+            </span>
+          );
+        },
       },
       {
         accessorKey: "capabilities.inputModalities",
         header: "Input",
         cell: ({ row }) => {
+          if (hasUnknownCapabilities(row.original)) {
+            return null;
+          }
           const modalities = row.original.capabilities?.inputModalities;
           if (!modalities || modalities.length === 0) {
-            return <span className="text-sm text-muted-foreground">-</span>;
+            return null;
           }
           return (
             <div className="flex flex-wrap gap-1">
@@ -674,9 +720,12 @@ function ModelsTable() {
         accessorKey: "capabilities.outputModalities",
         header: "Output",
         cell: ({ row }) => {
+          if (hasUnknownCapabilities(row.original)) {
+            return null;
+          }
           const modalities = row.original.capabilities?.outputModalities;
           if (!modalities || modalities.length === 0) {
-            return <span className="text-sm text-muted-foreground">-</span>;
+            return null;
           }
           return (
             <div className="flex flex-wrap gap-1">
@@ -693,24 +742,28 @@ function ModelsTable() {
         accessorKey: "capabilities.supportsToolCalling",
         header: "Tools",
         cell: ({ row }) => {
+          if (hasUnknownCapabilities(row.original)) {
+            return null;
+          }
           const supportsTools = row.original.capabilities?.supportsToolCalling;
           if (supportsTools === null || supportsTools === undefined) {
-            return <span className="text-sm text-muted-foreground">-</span>;
+            return null;
           }
           return supportsTools ? (
             <Check className="h-4 w-4 text-green-500" />
-          ) : (
-            <span className="text-sm text-muted-foreground">-</span>
-          );
+          ) : null;
         },
       },
       {
         accessorKey: "capabilities.pricePerMillionInput",
         header: "$/M Input",
         cell: ({ row }) => {
+          if (hasUnknownCapabilities(row.original)) {
+            return null;
+          }
           const price = row.original.capabilities?.pricePerMillionInput;
           if (!price) {
-            return <span className="text-sm text-muted-foreground">-</span>;
+            return null;
           }
           return <span className="text-sm font-mono">${price}</span>;
         },
@@ -719,9 +772,12 @@ function ModelsTable() {
         accessorKey: "capabilities.pricePerMillionOutput",
         header: "$/M Output",
         cell: ({ row }) => {
+          if (hasUnknownCapabilities(row.original)) {
+            return null;
+          }
           const price = row.original.capabilities?.pricePerMillionOutput;
           if (!price) {
-            return <span className="text-sm text-muted-foreground">-</span>;
+            return null;
           }
           return <span className="text-sm font-mono">${price}</span>;
         },

@@ -166,19 +166,22 @@ function ModelCapabilityBadges({
 }: {
   capabilities?: ModelCapabilities;
 }) {
-  if (!capabilities) {
-    return null;
-  }
+  const hasVision = capabilities?.inputModalities?.includes("image");
+  const hasAudio = capabilities?.inputModalities?.includes("audio");
+  const hasVideo = capabilities?.inputModalities?.includes("video");
+  const hasPdf = capabilities?.inputModalities?.includes("pdf");
+  const hasToolCalling = capabilities?.supportsToolCalling;
 
-  const hasVision = capabilities.inputModalities?.includes("image");
-  const hasAudio = capabilities.inputModalities?.includes("audio");
-  const hasVideo = capabilities.inputModalities?.includes("video");
-  const hasPdf = capabilities.inputModalities?.includes("pdf");
-  const hasToolCalling = capabilities.supportsToolCalling;
+  const hasAnyCapability =
+    hasVision || hasAudio || hasVideo || hasPdf || hasToolCalling;
 
-  // Don't render if no capabilities to show
-  if (!hasVision && !hasAudio && !hasVideo && !hasPdf && !hasToolCalling) {
-    return null;
+  // Show "unknown" badge if no capabilities data at all
+  if (!capabilities || !hasAnyCapability) {
+    return (
+      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+        capabilities unknown
+      </span>
+    );
   }
 
   return (
@@ -449,9 +452,31 @@ function ModelFiltersBar({
 }
 
 /**
+ * Checks if a model has unknown capabilities (no data available).
+ */
+function hasUnknownCapabilities(model: ChatModel): boolean {
+  const capabilities = model.capabilities;
+  if (!capabilities) return true;
+
+  const hasVision = capabilities.inputModalities?.includes("image");
+  const hasAudio = capabilities.inputModalities?.includes("audio");
+  const hasVideo = capabilities.inputModalities?.includes("video");
+  const hasPdf = capabilities.inputModalities?.includes("pdf");
+  const hasToolCalling = capabilities.supportsToolCalling;
+
+  return !hasVision && !hasAudio && !hasVideo && !hasPdf && !hasToolCalling;
+}
+
+/**
  * Checks if a model matches the given filters.
+ * Models with unknown capabilities are always shown.
  */
 function modelMatchesFilters(model: ChatModel, filters: ModelFilters): boolean {
+  // Always show models with unknown capabilities
+  if (hasUnknownCapabilities(model)) {
+    return true;
+  }
+
   const capabilities = model.capabilities;
 
   // Check modality filters (AND logic - model must support all selected modalities)

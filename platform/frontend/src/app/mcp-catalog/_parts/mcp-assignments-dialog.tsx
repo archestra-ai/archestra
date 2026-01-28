@@ -27,7 +27,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useProfilesQuery } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import {
   useAllProfileTools,
   useBulkAssignTools,
@@ -86,8 +86,8 @@ export function McpAssignmentsDialog({
   }, [assignedToolsData, catalogId]);
 
   // Fetch all profiles
-  const { data: allProfiles = [], isLoading: isLoadingProfiles } =
-    useProfilesQuery();
+  const { data: allProfiles = [], isPending: isLoadingProfiles } =
+    useProfiles();
 
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({ catalogId });

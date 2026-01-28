@@ -1,9 +1,7 @@
 "use client";
 
-import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
-import { LoadingSpinner } from "@/components/loading";
 import config from "@/lib/config";
 
 const { SsoProvidersSettingsContent } = config.enterpriseLicenseActivated
@@ -18,9 +16,7 @@ const { SsoProvidersSettingsContent } = config.enterpriseLicenseActivated
 export default function SsoProvidersSettingsPage() {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingSpinner />}>
-        <SsoProvidersSettingsContent />
-      </Suspense>
+      <SsoProvidersSettingsContent />
     </ErrorBoundary>
   );
 }

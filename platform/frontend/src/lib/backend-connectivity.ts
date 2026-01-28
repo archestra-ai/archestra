@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const { getHealth } = archestraApiSdk;
 
 export type BackendConnectionStatus =
+  | "initializing"
   | "connecting"
   | "connected"
   | "unreachable";
@@ -83,7 +84,7 @@ export function useBackendConnectivity(
     checkHealthFn = defaultCheckHealth,
   } = options;
 
-  const [status, setStatus] = useState<BackendConnectionStatus>("connecting");
+  const [status, setStatus] = useState<BackendConnectionStatus>("initializing");
   const [attemptCount, setAttemptCount] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
 

@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useInternalAgents, useProfilesQuery } from "@/lib/agent.query";
+import { useInternalAgents, useProfiles } from "@/lib/agent.query";
 
 interface ConnectionOptionsProps {
   mcpGatewayId?: string;
@@ -38,7 +38,7 @@ export function ConnectionOptions({
   onTabChange,
 }: ConnectionOptionsProps) {
   const { data: internalAgents } = useInternalAgents();
-  const { data: llmProxies } = useProfilesQuery({
+  const { data: llmProxies } = useProfiles({
     filters: { agentTypes: ["profile", "llm_proxy"] },
   });
   const [selectedA2aAgentId, setSelectedA2aAgentId] = useState<string | null>(

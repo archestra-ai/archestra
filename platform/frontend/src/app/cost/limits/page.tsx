@@ -58,7 +58,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useCreateLimit,
   useDeleteLimit,
@@ -606,7 +606,7 @@ export default function LimitsPage() {
 
   // Data fetching hooks
   const { data: limits = [], isLoading: limitsLoading } = useLimits();
-  const { data: mcpServers = [] } = useInternalMcpCatalogSuspense();
+  const { data: mcpServers = [] } = useInternalMcpCatalog();
   const { data: teams = [] } = useTeams();
   const { data: organizationDetails } = useOrganization();
   const { data: tokenPrices = [] } = useTokenPrices();

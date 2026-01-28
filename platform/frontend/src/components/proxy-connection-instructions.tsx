@@ -1,18 +1,20 @@
 "use client";
 
 import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { Check, ChevronDown, Copy } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { Label } from "@/components/ui/label";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import config from "@/lib/config";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
@@ -67,17 +69,10 @@ const PROVIDER_CONFIG: Record<
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 
-/** Providers to show as primary buttons */
-const PRIMARY_PROVIDERS: ProviderOption[] = [
-  "openai",
-  "anthropic",
-  "gemini",
-  "bedrock",
-  "claude-code",
-];
-
-/** Providers to show in the overflow dropdown */
-const DROPDOWN_PROVIDERS: ProviderOption[] = ["cerebras", "mistral"];
+/** All providers in the order they should appear in the dropdown */
+const ALL_PROVIDERS: ProviderOption[] = Object.keys(
+  PROVIDER_CONFIG,
+) as ProviderOption[];
 
 interface ProxyConnectionInstructionsProps {
   agentId?: string;
@@ -105,48 +100,30 @@ export function ProxyConnectionInstructions({
 
   return (
     <div className="space-y-3">
-      <ButtonGroup>
-        {PRIMARY_PROVIDERS.map((provider) => (
-          <Button
-            key={provider}
-            variant={selectedProvider === provider ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedProvider(provider)}
-          >
-            {PROVIDER_CONFIG[provider].label}
-          </Button>
-        ))}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant={
-                DROPDOWN_PROVIDERS.includes(selectedProvider)
-                  ? "default"
-                  : "outline"
-              }
-              size="sm"
-            >
-              {DROPDOWN_PROVIDERS.includes(selectedProvider)
-                ? PROVIDER_CONFIG[selectedProvider].label
-                : null}
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-1">
-            {DROPDOWN_PROVIDERS.map((provider) => (
-              <Button
-                key={provider}
-                variant={selectedProvider === provider ? "default" : "ghost"}
-                size="sm"
-                className="w-full justify-start"
-                onClick={() => setSelectedProvider(provider)}
-              >
+      <div className="space-y-2">
+        <Label htmlFor="provider-select" className="text-sm font-medium">
+          Provider
+        </Label>
+        <Select
+          value={selectedProvider}
+          onValueChange={(value) =>
+            setSelectedProvider(value as ProviderOption)
+          }
+        >
+          <SelectTrigger id="provider-select" className="w-full">
+            <SelectValue placeholder="Select a provider">
+              {PROVIDER_CONFIG[selectedProvider].label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent position="popper" className="max-h-[250px]">
+            {ALL_PROVIDERS.map((provider) => (
+              <SelectItem key={provider} value={provider}>
                 {PROVIDER_CONFIG[provider].label}
-              </Button>
+              </SelectItem>
             ))}
-          </PopoverContent>
-        </Popover>
-      </ButtonGroup>
+          </SelectContent>
+        </Select>
+      </div>
 
       <ConnectionBaseUrlSelect
         value={connectionUrl}
@@ -160,7 +137,7 @@ export function ProxyConnectionInstructions({
             Run Claude Code with the Archestra proxy:
           </p>
           <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-            <CodeText className="text-xs text-primary flex-1">
+            <CodeText className="text-xs text-primary flex-1 break-all">
               {claudeCodeCommand}
             </CodeText>
             <CopyButton

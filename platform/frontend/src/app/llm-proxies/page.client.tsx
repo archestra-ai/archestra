@@ -18,12 +18,12 @@ import {
   Tag,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentDialog } from "@/components/agent-dialog";
 import { DebouncedInput } from "@/components/debounced-input";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
@@ -66,9 +66,7 @@ export default function LlmProxiesPage({
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <LlmProxies initialData={initialData} />
-        </Suspense>
+        <LlmProxies initialData={initialData} />
       </ErrorBoundary>
     </div>
   );
@@ -163,7 +161,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
-  const { data: agentsResponse } = useProfilesPaginated({
+  const { data: agentsResponse, isPending } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -172,9 +170,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     name: nameFilter || undefined,
     agentTypes: ["llm_proxy", "profile"],
   });
-
-  const agents = agentsResponse?.data || [];
-  const pagination = agentsResponse?.pagination;
 
   const { data: _teams } = useQuery({
     queryKey: ["teams"],
@@ -195,6 +190,8 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
 
+  type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingProxy, setConnectingProxy] = useState<{
     id: string;
@@ -203,8 +200,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   } | null>(null);
   const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
-
-  type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -253,6 +248,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     },
     [searchParams, router, pathname],
   );
+
+  const agents = agentsResponse?.data || [];
+  const pagination = agentsResponse?.pagination;
+  const showLoading = isPending && !initialData?.agents;
 
   // LLM Proxies table columns - no Tools or Subagents
   const columns: ColumnDef<ProxyData>[] = [
@@ -388,107 +387,112 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   ];
 
   return (
-    <PageLayout
-      title="LLM Proxies"
-      description={
-        <p className="text-sm text-muted-foreground">
-          LLM Proxies provide security, observability, and cost management for
-          your LLM API calls.{" "}
-          <a
-            href="https://archestra.ai/docs/platform-agents"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
-          >
-            Read more in the docs
-          </a>
-        </p>
-      }
-      actionButton={
-        <PermissionButton
-          permissions={{ profile: ["create"] }}
-          onClick={() => setIsCreateDialogOpen(true)}
-          data-testid={E2eTestId.CreateAgentButton}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create LLM Proxy
-        </PermissionButton>
-      }
+    <LoadingWrapper
+      isPending={showLoading}
+      loadingFallback={<LoadingSpinner />}
     >
-      <div>
+      <PageLayout
+        title="LLM Proxies"
+        description={
+          <p className="text-sm text-muted-foreground">
+            LLM Proxies provide security, observability, and cost management for
+            your LLM API calls.{" "}
+            <a
+              href="https://archestra.ai/docs/platform-agents"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              Read more in the docs
+            </a>
+          </p>
+        }
+        actionButton={
+          <PermissionButton
+            permissions={{ profile: ["create"] }}
+            onClick={() => setIsCreateDialogOpen(true)}
+            data-testid={E2eTestId.CreateAgentButton}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create LLM Proxy
+          </PermissionButton>
+        }
+      >
         <div>
-          <div className="mb-6">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <DebouncedInput
-                placeholder="Search proxies by name..."
-                initialValue={searchQuery}
-                onChange={handleSearchChange}
-                className="pl-9"
-              />
+          <div>
+            <div className="mb-6">
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <DebouncedInput
+                  placeholder="Search proxies by name..."
+                  initialValue={searchQuery}
+                  onChange={handleSearchChange}
+                  className="pl-9"
+                />
+              </div>
             </div>
+
+            {!agents || agents.length === 0 ? (
+              <div className="text-muted-foreground">
+                {nameFilter
+                  ? "No LLM proxies found matching your search"
+                  : "No LLM proxies found"}
+              </div>
+            ) : (
+              <div data-testid={E2eTestId.AgentsTable}>
+                <DataTable
+                  columns={columns}
+                  data={agents}
+                  sorting={sorting}
+                  onSortingChange={handleSortingChange}
+                  manualSorting={true}
+                  manualPagination={true}
+                  pagination={{
+                    pageIndex,
+                    pageSize,
+                    total: pagination?.total || 0,
+                  }}
+                  onPaginationChange={handlePaginationChange}
+                />
+              </div>
+            )}
+
+            <AgentDialog
+              open={isCreateDialogOpen}
+              onOpenChange={setIsCreateDialogOpen}
+              agentType="llm_proxy"
+              onCreated={(proxy) => {
+                setIsCreateDialogOpen(false);
+                setConnectingProxy({ ...proxy, agentType: "llm_proxy" });
+              }}
+            />
+
+            {connectingProxy && (
+              <ConnectProxyDialog
+                agent={connectingProxy}
+                open={!!connectingProxy}
+                onOpenChange={(open) => !open && setConnectingProxy(null)}
+              />
+            )}
+
+            <AgentDialog
+              open={!!editingProxy}
+              onOpenChange={(open) => !open && setEditingProxy(null)}
+              agent={editingProxy}
+              agentType={editingProxy?.agentType || "llm_proxy"}
+            />
+
+            {deletingProxyId && (
+              <DeleteProxyDialog
+                agentId={deletingProxyId}
+                open={!!deletingProxyId}
+                onOpenChange={(open) => !open && setDeletingProxyId(null)}
+              />
+            )}
           </div>
-
-          {!agents || agents.length === 0 ? (
-            <div className="text-muted-foreground">
-              {nameFilter
-                ? "No LLM proxies found matching your search"
-                : "No LLM proxies found"}
-            </div>
-          ) : (
-            <div data-testid={E2eTestId.AgentsTable}>
-              <DataTable
-                columns={columns}
-                data={agents}
-                sorting={sorting}
-                onSortingChange={handleSortingChange}
-                manualSorting={true}
-                manualPagination={true}
-                pagination={{
-                  pageIndex,
-                  pageSize,
-                  total: pagination?.total || 0,
-                }}
-                onPaginationChange={handlePaginationChange}
-              />
-            </div>
-          )}
-
-          <AgentDialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-            agentType="llm_proxy"
-            onCreated={(proxy) => {
-              setIsCreateDialogOpen(false);
-              setConnectingProxy({ ...proxy, agentType: "llm_proxy" });
-            }}
-          />
-
-          {connectingProxy && (
-            <ConnectProxyDialog
-              agent={connectingProxy}
-              open={!!connectingProxy}
-              onOpenChange={(open) => !open && setConnectingProxy(null)}
-            />
-          )}
-
-          <AgentDialog
-            open={!!editingProxy}
-            onOpenChange={(open) => !open && setEditingProxy(null)}
-            agent={editingProxy}
-            agentType={editingProxy?.agentType || "llm_proxy"}
-          />
-
-          {deletingProxyId && (
-            <DeleteProxyDialog
-              agentId={deletingProxyId}
-              open={!!deletingProxyId}
-              onOpenChange={(open) => !open && setDeletingProxyId(null)}
-            />
-          )}
         </div>
-      </div>
-    </PageLayout>
+      </PageLayout>
+    </LoadingWrapper>
   );
 }
 

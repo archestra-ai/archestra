@@ -3,11 +3,10 @@
 import type { archestraApiTypes } from "@shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import {
   Accordion,
   AccordionContent,
@@ -33,9 +32,7 @@ export function McpToolCallDetailPage({
   return (
     <div className="w-full h-full overflow-y-auto">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <McpToolCallDetail initialData={initialData} id={id} />
-        </Suspense>
+        <McpToolCallDetail initialData={initialData} id={id} />
       </ErrorBoundary>
     </div>
   );
@@ -51,7 +48,7 @@ function McpToolCallDetail({
   };
   id: string;
 }) {
-  const { data: mcpToolCall } = useMcpToolCall({
+  const { data: mcpToolCall, isPending } = useMcpToolCall({
     mcpToolCallId: id,
     initialData: initialData?.mcpToolCall,
   });
@@ -59,6 +56,10 @@ function McpToolCallDetail({
   const { data: agents } = useProfiles({
     initialData: initialData?.agents,
   });
+
+  if (isPending) {
+    return <LoadingSpinner />;
+  }
 
   if (!mcpToolCall) {
     return (
@@ -86,7 +87,7 @@ function McpToolCallDetail({
     toolResult.isError;
 
   return (
-    <>
+    <LoadingWrapper isPending={isPending}>
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-2">
           <Button variant="ghost" size="icon" asChild>
@@ -205,6 +206,6 @@ function McpToolCallDetail({
           </AccordionItem>
         </Accordion>
       </div>
-    </>
+    </LoadingWrapper>
   );
 }

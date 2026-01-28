@@ -1,7 +1,7 @@
 "use client";
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "./utils";
 
 const {
@@ -39,7 +39,7 @@ export function useInteractions({
   sortDirection?: "asc" | "desc";
   initialData?: archestraApiTypes.GetInteractionsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: [
       "interactions",
       profileId,
@@ -105,7 +105,7 @@ export function useInteraction({
   initialData?: archestraApiTypes.GetInteractionResponses["200"];
   refetchInterval?: number | null;
 }) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
       const response = await getInteraction({ path: { interactionId } });
@@ -125,7 +125,7 @@ export function useInteraction({
 }
 
 export function useUniqueExternalAgentIds() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["interactions", "externalAgentIds"],
     queryFn: async () => {
       const response = await getUniqueExternalAgentIds();
@@ -143,7 +143,7 @@ export function useUniqueExternalAgentIds() {
 }
 
 export function useUniqueUserIds() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["interactions", "userIds"],
     queryFn: async () => {
       const response = await getUniqueUserIds();
@@ -181,7 +181,7 @@ export function useInteractionSessions({
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
 } = {}) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: [
       "interactions",
       "sessions",

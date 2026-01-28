@@ -8,7 +8,6 @@ import { useQueries } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import {
   forwardRef,
-  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -79,23 +78,14 @@ export const AgentToolsEditor = forwardRef<
   ref,
 ) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Loading tools...</span>
-        </div>
-      }
-    >
-      <AgentToolsEditorContent
-        agentId={agentId}
-        searchQuery={searchQuery}
-        showAll={showAll}
-        onShowMore={onShowMore}
-        onSelectedCountChange={onSelectedCountChange}
-        ref={ref}
-      />
-    </Suspense>
+    <AgentToolsEditorContent
+      agentId={agentId}
+      searchQuery={searchQuery}
+      showAll={showAll}
+      onShowMore={onShowMore}
+      onSelectedCountChange={onSelectedCountChange}
+      ref={ref}
+    />
   );
 });
 
@@ -116,7 +106,7 @@ const AgentToolsEditorContent = forwardRef<
   const unassignTool = useUnassignTool();
 
   // Fetch catalog items (MCP servers in registry)
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
 
   // Fetch tool counts for all catalog items to enable sorting
   const toolCountQueries = useQueries({
@@ -271,6 +261,15 @@ const AgentToolsEditorContent = forwardRef<
       pendingChangesRef.current.clear();
     },
   }));
+
+  if (isPending) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        <span>Loading tools...</span>
+      </div>
+    );
+  }
 
   if (catalogItems.length === 0) {
     return (

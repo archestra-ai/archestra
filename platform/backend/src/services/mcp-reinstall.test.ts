@@ -1,6 +1,30 @@
-import { describe, expect, test } from "@/test";
-import type { InternalMcpCatalog } from "@/types";
-import { requiresNewUserInputForReinstall } from "./mcp-reinstall";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { McpServerModel, ToolModel } from "@/models";
+import { beforeEach, describe, expect, test, vi } from "@/test";
+import type { InternalMcpCatalog, McpServer } from "@/types";
+import {
+  autoReinstallServer,
+  requiresNewUserInputForReinstall,
+} from "./mcp-reinstall";
+
+// Mock dependencies
+vi.mock("@/mcp-server-runtime", () => ({
+  McpServerRuntimeManager: {
+    restartServer: vi.fn(),
+    getOrLoadDeployment: vi.fn(),
+  },
+}));
+
+vi.mock("@/models", () => ({
+  McpServerModel: {
+    getToolsFromServer: vi.fn(),
+    update: vi.fn(),
+  },
+  ToolModel: {
+    slugifyName: vi.fn((prefix, name) => `${prefix}__${name}`),
+    syncToolsForCatalog: vi.fn(),
+  },
+}));
 
 describe("mcp-reinstall", () => {
   describe("requiresNewUserInputForReinstall", () => {
@@ -203,6 +227,191 @@ describe("mcp-reinstall", () => {
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
         expect(result).toBe(false);
+      });
+    });
+  });
+
+  describe("autoReinstallServer", () => {
+    // Helper to create a minimal server
+    const createServer = (
+      overrides: Partial<McpServer> = {},
+    ): McpServer =>
+      ({
+        id: "server-123",
+        name: "Test Server",
+        ownerId: "user-123",
+        catalogId: "catalog-123",
+        serverType: "local",
+        ...overrides,
+      }) as McpServer;
+
+    // Helper to create a minimal catalog item
+    const createCatalog = (
+      overrides: Partial<InternalMcpCatalog> = {},
+    ): InternalMcpCatalog =>
+      ({
+        id: "catalog-123",
+        name: "Test Catalog",
+        serverType: "local",
+        localConfig: {
+          command: "npm",
+          arguments: ["start"],
+        },
+        ...overrides,
+      }) as InternalMcpCatalog;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    test("throws error when restartServer fails for local server", async () => {
+      const server = createServer({ serverType: "local" });
+      const catalog = createCatalog({ serverType: "local" });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockRejectedValue(
+        new Error("K8s deployment failed"),
+      );
+
+      await expect(autoReinstallServer(server, catalog)).rejects.toThrow(
+        "K8s deployment failed",
+      );
+
+      // Verify restartServer was called
+      expect(McpServerRuntimeManager.restartServer).toHaveBeenCalledWith(
+        server.id,
+      );
+
+      // Verify update was NOT called since we threw before getting there
+      expect(McpServerModel.update).not.toHaveBeenCalled();
+    });
+
+    test("throws error when getToolsFromServer fails", async () => {
+      const server = createServer({ serverType: "remote" });
+      const catalog = createCatalog({ serverType: "remote" });
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockRejectedValue(
+        new Error("Failed to fetch tools from MCP server"),
+      );
+
+      await expect(autoReinstallServer(server, catalog)).rejects.toThrow(
+        "Failed to fetch tools from MCP server",
+      );
+
+      // Verify update was NOT called since we threw before completing
+      expect(McpServerModel.update).not.toHaveBeenCalled();
+    });
+
+    test("throws error when syncToolsForCatalog fails", async () => {
+      const server = createServer({ serverType: "remote" });
+      const catalog = createCatalog({ serverType: "remote" });
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "test-tool", description: "A test tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockRejectedValue(
+        new Error("Database constraint violation"),
+      );
+
+      await expect(autoReinstallServer(server, catalog)).rejects.toThrow(
+        "Database constraint violation",
+      );
+
+      // Verify update was NOT called since we threw before completing
+      expect(McpServerModel.update).not.toHaveBeenCalled();
+    });
+
+    test("throws error when deployment waitForDeploymentReady times out", async () => {
+      const server = createServer({ serverType: "local" });
+      const catalog = createCatalog({ serverType: "local" });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi
+          .fn()
+          .mockRejectedValue(new Error("Deployment timeout")),
+      } as never);
+
+      await expect(autoReinstallServer(server, catalog)).rejects.toThrow(
+        "Deployment timeout",
+      );
+
+      // Verify update was NOT called since we threw before completing
+      expect(McpServerModel.update).not.toHaveBeenCalled();
+    });
+
+    test("succeeds for remote server and clears reinstall flag", async () => {
+      const server = createServer({ serverType: "remote" });
+      const catalog = createCatalog({ serverType: "remote" });
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "test-tool", description: "A test tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      });
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Verify reinstall flag was cleared
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
+      });
+    });
+
+    test("succeeds for local server with full flow", async () => {
+      const server = createServer({ serverType: "local" });
+      const catalog = createCatalog({ serverType: "local" });
+
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      } as never);
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        { name: "tool1", description: "First tool", inputSchema: {} },
+        { name: "tool2", description: "Second tool", inputSchema: {} },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [{ id: "new-tool" }],
+        updated: [{ id: "existing-tool" }],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      // Verify restart was called
+      expect(McpServerRuntimeManager.restartServer).toHaveBeenCalledWith(
+        server.id,
+      );
+
+      // Verify tools were synced with correct data
+      expect(ToolModel.syncToolsForCatalog).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: "Test Catalog__tool1",
+          catalogId: catalog.id,
+          mcpServerId: server.id,
+          rawToolName: "tool1",
+        }),
+        expect.objectContaining({
+          name: "Test Catalog__tool2",
+          catalogId: catalog.id,
+          mcpServerId: server.id,
+          rawToolName: "tool2",
+        }),
+      ]);
+
+      // Verify reinstall flag was cleared
+      expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        reinstallRequired: false,
       });
     });
   });

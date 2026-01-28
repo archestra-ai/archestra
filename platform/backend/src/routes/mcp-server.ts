@@ -1061,17 +1061,51 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
-      // Check permissions for reinstall (same as update)
-      const { success: hasMcpServerUpdate } = await hasPermission(
-        { mcpServer: ["update"] },
-        headers,
-      );
-
-      if (!hasMcpServerUpdate) {
-        throw new ApiError(
-          403,
-          "You don't have permission to reinstall MCP servers",
+      // Check permissions for reinstall (same logic as re-authenticate)
+      // For personal servers, only owner can reinstall
+      if (!mcpServer.teamId) {
+        if (mcpServer.ownerId !== user.id) {
+          throw new ApiError(
+            403,
+            "Only the server owner can reinstall this MCP server",
+          );
+        }
+      } else {
+        // For team servers: user must have team:admin OR (mcpServer:update AND team membership)
+        // WHY: This matches the team installation permission requirements - only editors and admins
+        // can manage team servers, members cannot.
+        const { success: isTeamAdmin } = await hasPermission(
+          { team: ["admin"] },
+          headers,
         );
+
+        if (!isTeamAdmin) {
+          // WHY: mcpServer:update distinguishes editors from members
+          // Editors have this permission, members don't
+          const { success: hasMcpServerUpdate } = await hasPermission(
+            { mcpServer: ["update"] },
+            headers,
+          );
+
+          if (!hasMcpServerUpdate) {
+            throw new ApiError(
+              403,
+              "You don't have permission to reinstall team MCP servers",
+            );
+          }
+
+          // WHY: Even editors can only reinstall servers for their own teams
+          const isMember = await TeamModel.isUserInTeam(
+            mcpServer.teamId,
+            user.id,
+          );
+          if (!isMember) {
+            throw new ApiError(
+              403,
+              "You can only reinstall MCP servers for teams you are a member of",
+            );
+          }
+        }
       }
 
       // Get catalog item

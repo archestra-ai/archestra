@@ -448,24 +448,33 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
           // Use setImmediate to not block the response
+          // Wrap entire callback in try/catch to prevent unhandled promise rejections
           setImmediate(async () => {
-            for (const server of installedServers) {
-              try {
-                await autoReinstallServer(server, catalogItem);
-                logger.info(
-                  { serverId: server.id, serverName: server.name },
-                  "Auto-reinstalled MCP server successfully",
-                );
-              } catch (error) {
-                logger.error(
-                  { err: error, serverId: server.id, serverName: server.name },
-                  "Failed to auto-reinstall MCP server - marking for manual reinstall",
-                );
-                // Mark for manual reinstall on failure
-                await McpServerModel.update(server.id, {
-                  reinstallRequired: true,
-                });
+            try {
+              for (const server of installedServers) {
+                try {
+                  await autoReinstallServer(server, catalogItem);
+                  logger.info(
+                    { serverId: server.id, serverName: server.name },
+                    "Auto-reinstalled MCP server successfully",
+                  );
+                } catch (error) {
+                  logger.error(
+                    { err: error, serverId: server.id, serverName: server.name },
+                    "Failed to auto-reinstall MCP server - marking for manual reinstall",
+                  );
+                  // Mark for manual reinstall on failure
+                  await McpServerModel.update(server.id, {
+                    reinstallRequired: true,
+                  });
+                }
               }
+            } catch (error) {
+              // Catch any unexpected errors from the iteration itself
+              logger.error(
+                { err: error, catalogId: id },
+                "Unexpected error during auto-reinstall batch - some servers may need manual reinstall",
+              );
             }
           });
         }

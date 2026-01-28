@@ -1954,6 +1954,131 @@ describe("InteractionModel", () => {
       );
     });
 
+    test("returns lastInteractionRequest for Gemini with image-only content (no text)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Gemini request with only image data (no text parts)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "gemini-image-session",
+        request: {
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: "image/png",
+                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        response: {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [{ text: "I see an image" }],
+              },
+              finishReason: "STOP",
+              index: 0,
+            },
+          ],
+          modelVersion: "gemini-2.5-pro",
+        },
+        type: "gemini:generateContent",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "gemini-image-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].lastInteractionType).toBe(
+        "gemini:generateContent",
+      );
+    });
+
+    test("returns lastInteractionRequest for Gemini with function response (tool result)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      // Gemini request with function response (common in agentic workflows)
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "gemini-function-session",
+        request: {
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: "Search for weather" }],
+            },
+            {
+              role: "model",
+              parts: [
+                {
+                  functionCall: {
+                    name: "get_weather",
+                    args: { location: "New York" },
+                  },
+                },
+              ],
+            },
+            {
+              role: "user",
+              parts: [
+                {
+                  functionResponse: {
+                    name: "get_weather",
+                    response: { temperature: 72, condition: "sunny" },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        response: {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [{ text: "The weather in New York is sunny at 72°F" }],
+              },
+              finishReason: "STOP",
+              index: 0,
+            },
+          ],
+          modelVersion: "gemini-2.5-pro",
+        },
+        type: "gemini:generateContent",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "gemini-function-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].lastInteractionType).toBe(
+        "gemini:generateContent",
+      );
+    });
+
     test("handles single interactions without sessionId (null session)", async ({
       makeAdmin,
     }) => {

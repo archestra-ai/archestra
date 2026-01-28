@@ -1102,46 +1102,26 @@ class InteractionModel {
           !requestStr.includes("prompt suggestion generator") &&
           !requestStr.includes("Please write a 5-10 word title")
         ) {
-          // Check message content length - support both OpenAI/Anthropic and Gemini formats
+          // Check if request has valid content - support both OpenAI/Anthropic and Gemini formats
+          // We accept any interaction that has a valid request structure, not just text content.
+          // This ensures we don't skip requests with images, files, or function calls.
           const request = interaction.request as {
             // OpenAI/Anthropic format
-            messages?: Array<{ content?: string | Array<{ text?: string }> }>;
+            messages?: Array<{ content?: string | Array<unknown> }>;
             // Gemini format
             contents?: Array<{
               role?: string;
-              parts?: Array<{ text?: string }>;
+              parts?: Array<unknown>;
             }>;
           };
 
-          let contentText = "";
+          // Check if request has valid content (messages or contents array with items)
+          const hasOpenAiContent =
+            Array.isArray(request?.messages) && request.messages.length > 0;
+          const hasGeminiContent =
+            Array.isArray(request?.contents) && request.contents.length > 0;
 
-          // Try OpenAI/Anthropic format first (messages[].content)
-          const firstMessage = request?.messages?.[0]?.content;
-          if (firstMessage) {
-            contentText =
-              typeof firstMessage === "string"
-                ? firstMessage
-                : Array.isArray(firstMessage)
-                  ? firstMessage
-                      .map((c) => (typeof c === "string" ? c : (c.text ?? "")))
-                      .join(" ")
-                  : "";
-          }
-
-          // Try Gemini format (contents[].parts[].text)
-          if (!contentText && request?.contents) {
-            const userContent = request.contents.find(
-              (c) => c.role === "user" || !c.role,
-            );
-            if (userContent?.parts) {
-              contentText = userContent.parts
-                .map((p) => p.text ?? "")
-                .filter(Boolean)
-                .join(" ");
-            }
-          }
-
-          if (contentText.length > 0) {
+          if (hasOpenAiContent || hasGeminiContent) {
             lastMainInteraction = interaction;
           }
         }

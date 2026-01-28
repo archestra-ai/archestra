@@ -1,5 +1,6 @@
 "use client";
 
+import { CHAT_DEFAULT_SESSION_NAME } from "@shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -82,7 +83,7 @@ export function getConversationDisplayTitle(
     }
   }
 
-  return "New chat";
+  return CHAT_DEFAULT_SESSION_NAME;
 }
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {

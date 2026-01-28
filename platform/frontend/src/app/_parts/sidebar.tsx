@@ -1,6 +1,6 @@
 "use client";
 import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
-import { CHAT_SIDEBAR_NEW_LABEL, E2eTestId } from "@shared";
+import { E2eTestId } from "@shared";
 import { requiredPagePermissionsMap } from "@shared/access-control";
 import {
   BookOpen,
@@ -60,7 +60,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   }
   return [
     {
-      title: CHAT_SIDEBAR_NEW_LABEL,
+      title: "New Chat",
       url: "/chat",
       icon: MessageCircle,
       customIsActive: (pathname: string, searchParams: URLSearchParams) =>

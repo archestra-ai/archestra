@@ -1,6 +1,7 @@
-import { CHAT_DEFAULT_SESSION_NAME } from "@shared";
 import { describe, expect, it } from "vitest";
-import { getConversationDisplayTitle } from "./chat-sidebar-section";
+import { getConversationDisplayTitle } from "./chat-utils";
+
+const DEFAULT_SESSION_NAME = "New Chat Session";
 
 describe("getConversationDisplayTitle", () => {
   it("returns the title if provided", () => {
@@ -68,17 +69,15 @@ describe("getConversationDisplayTitle", () => {
     );
   });
 
-  it("returns CHAT_DEFAULT_SESSION_NAME when no title and no messages", () => {
-    expect(getConversationDisplayTitle(null, [])).toBe(
-      CHAT_DEFAULT_SESSION_NAME,
-    );
+  it("returns default session name when no title and no messages", () => {
+    expect(getConversationDisplayTitle(null, [])).toBe(DEFAULT_SESSION_NAME);
     expect(getConversationDisplayTitle(null, undefined)).toBe(
-      CHAT_DEFAULT_SESSION_NAME,
+      DEFAULT_SESSION_NAME,
     );
-    expect(getConversationDisplayTitle(null)).toBe(CHAT_DEFAULT_SESSION_NAME);
+    expect(getConversationDisplayTitle(null)).toBe(DEFAULT_SESSION_NAME);
   });
 
-  it("returns CHAT_DEFAULT_SESSION_NAME when messages have no text parts", () => {
+  it("returns default session name when messages have no text parts", () => {
     const messages = [
       {
         role: "user",
@@ -86,11 +85,11 @@ describe("getConversationDisplayTitle", () => {
       },
     ];
     expect(getConversationDisplayTitle(null, messages)).toBe(
-      CHAT_DEFAULT_SESSION_NAME,
+      DEFAULT_SESSION_NAME,
     );
   });
 
-  it("returns CHAT_DEFAULT_SESSION_NAME when user message has no parts", () => {
+  it("returns default session name when user message has no parts", () => {
     const messages = [
       {
         role: "user",
@@ -98,18 +97,18 @@ describe("getConversationDisplayTitle", () => {
       },
     ];
     expect(getConversationDisplayTitle(null, messages)).toBe(
-      CHAT_DEFAULT_SESSION_NAME,
+      DEFAULT_SESSION_NAME,
     );
   });
 
-  it("returns CHAT_DEFAULT_SESSION_NAME when user message has undefined parts", () => {
+  it("returns default session name when user message has undefined parts", () => {
     const messages = [
       {
         role: "user",
       },
     ];
     expect(getConversationDisplayTitle(null, messages)).toBe(
-      CHAT_DEFAULT_SESSION_NAME,
+      DEFAULT_SESSION_NAME,
     );
   });
 });

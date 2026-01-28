@@ -94,11 +94,6 @@ export const DEFAULT_PROFILE_NAME = "Default Profile";
 export const DEFAULT_MCP_GATEWAY_NAME = "Default MCP Gateway";
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 
-// Chat UI strings
-export const CHAT_SIDEBAR_NEW_LABEL = "New Chat";
-export const CHAT_SHORTCUT_DIALOG_START_NEW_LABEL = "Start a New Chat";
-export const CHAT_DEFAULT_SESSION_NAME = "New Chat Session";
-
 /**
  * Separator used to construct fully-qualified MCP tool names
  * Format: {mcpServerName}__{toolName}

@@ -12,6 +12,45 @@ import { useBackendConnectivity } from "@/lib/backend-connectivity";
 describe("BackendConnectivityStatus", () => {
   const mockRetry = vi.fn();
 
+  it("should render nothing when status is initializing", () => {
+    vi.mocked(useBackendConnectivity).mockReturnValue({
+      status: "initializing",
+      attemptCount: 0,
+      elapsedMs: 0,
+      retry: mockRetry,
+    });
+
+    const { container } = render(
+      <BackendConnectivityStatus>
+        <div data-testid="child-content">Login Form</div>
+      </BackendConnectivityStatus>,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connecting...")).not.toBeInTheDocument();
+  });
+
+  it("should render nothing when status is checking (first health check in progress)", () => {
+    vi.mocked(useBackendConnectivity).mockReturnValue({
+      status: "checking",
+      attemptCount: 0,
+      elapsedMs: 0,
+      retry: mockRetry,
+    });
+
+    const { container } = render(
+      <BackendConnectivityStatus>
+        <div data-testid="child-content">Login Form</div>
+      </BackendConnectivityStatus>,
+    );
+
+    // Should not show any UI during the first health check to avoid flashing
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connecting...")).not.toBeInTheDocument();
+  });
+
   it("should render children when status is connected", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connected",

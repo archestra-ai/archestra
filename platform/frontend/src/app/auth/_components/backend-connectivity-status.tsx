@@ -36,7 +36,9 @@ export function BackendConnectivityStatus({
 }: BackendConnectivityStatusProps) {
   const { status, attemptCount, retry } = useBackendConnectivity();
 
-  if (status === "initializing") {
+  // During "initializing" or "checking" (first health check in progress),
+  // don't show any UI to avoid flashing the connecting dialog when backend is up
+  if (status === "initializing" || status === "checking") {
     return null;
   }
 

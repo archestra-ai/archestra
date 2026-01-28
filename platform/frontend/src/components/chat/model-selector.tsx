@@ -41,7 +41,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { ChatModel, ModelCapabilities } from "@/lib/chat-models.query";
+import {
+  type ChatModel,
+  type ModelCapabilities,
+  useModelsByProvider,
+} from "@/lib/chat-models.query";
 import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */

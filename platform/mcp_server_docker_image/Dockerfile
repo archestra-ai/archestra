@@ -27,27 +27,31 @@ RUN uv pip install --no-cache-dir \
    requests>=2.31.0 \
    python-dotenv>=1.0.0
 
-# Node.js stage
+# Node.js stage - using pnpm for reproducible builds
 FROM node:20-alpine AS node-builder
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /opt/node-deps
 
-# Copy package.json with dependencies and overrides to fix CVEs in transitive dependencies
-# CVE-2024-21538: ReDoS in cross-spawn < 7.0.5
-# CVE-2025-64756: OS Command Injection in glob < 11.1.0
-# CVE-2026-23745: Path Traversal in tar <= 7.5.2
-# CVE-2026-23950: Improper Unicode Handling in tar <= 7.5.3
-COPY package.json .
+# Copy package.json and lockfile for reproducible builds
+# CVE overrides are configured in package.json:
+# - cross-spawn >= 7.0.5 (CVE-2024-21538: ReDoS)
+# - glob >= 11.1.0 (CVE-2025-64756: OS Command Injection)
+# - tar >= 7.5.4 (CVE-2026-23745, CVE-2026-23950: Path Traversal, Unicode Handling)
+# - hono >= 4.11.7 (CVE-2025-*: IP spoofing, cache deception, key read)
+# - lodash >= 4.17.23 (Prototype Pollution)
+COPY package.json pnpm-lock.yaml ./
 
-RUN npm install
+RUN pnpm install --frozen-lockfile
 
 # Final stage - minimal runtime image with Python 3.12
 FROM python:3.12-alpine
 
-# Install runtime dependencies only
+# Install runtime dependencies only (excluding npm - we'll use pnpm)
 RUN apk add --no-cache \
    nodejs \
-   npm \
    libstdc++ \
    libgcc \
    openssl \
@@ -69,14 +73,15 @@ RUN apk add --no-cache \
    go && \
    # CVE-2025-55130, CVE-2025-55131: Node.js vulnerabilities fixed in 24.13.0-r0
    # CVE-2025-13878: BIND vulnerability fixed in 9.20.18-r0
-   apk upgrade --no-cache nodejs bind
+   # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
+   apk upgrade --no-cache nodejs bind openssl
 
-# Upgrade npm to get patched bundled dependencies (tar, glob)
-# CVE-2026-23950, CVE-2026-23745: tar vulnerabilities fixed in npm 11.8.0
-# CVE-2025-64756: glob vulnerability fixed in npm 11.8.0
-# Remove old Alpine npm after upgrading to avoid duplicate vulnerable packages
-RUN npm install -g npm@11.8.0 && \
-    rm -rf /usr/lib/node_modules/npm
+# Install pnpm globally for runtime use
+# Use npm temporarily to install pnpm, then remove npm to avoid CVE-2026-23950
+RUN apk add --no-cache npm && \
+    npm install -g pnpm@10.28.2 && \
+    apk del npm && \
+    rm -rf /usr/lib/node_modules/npm /root/.npm
 
 # Upgrade system pip to fix CVE-2025-8869 (Link Following vulnerability in pip <= 25.2)
 RUN pip install --upgrade pip>=25.3

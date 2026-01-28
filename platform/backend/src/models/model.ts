@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@shared";
 import { and, eq, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type { CreateModel, Model, ModelCapabilities } from "@/types";
 
 class ModelModel {
@@ -115,10 +116,23 @@ class ModelModel {
     // Batch size of 50 rows to stay safely under PostgreSQL parameter limits
     // Each row has ~11 columns, so 50 rows = ~550 parameters per batch
     const BATCH_SIZE = 50;
+    const totalBatches = Math.ceil(dataArray.length / BATCH_SIZE);
     const results: Model[] = [];
 
+    logger.info(
+      { totalModels: dataArray.length, batchSize: BATCH_SIZE, totalBatches },
+      "Starting batched model upsert",
+    );
+
     for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
       const batch = dataArray.slice(i, i + BATCH_SIZE);
+
+      logger.debug(
+        { batchNumber, totalBatches, batchSize: batch.length },
+        "Processing model batch",
+      );
+
       const batchResults = await db
         .insert(schema.modelsTable)
         .values(batch)
@@ -141,6 +155,11 @@ class ModelModel {
 
       results.push(...batchResults);
     }
+
+    logger.info(
+      { totalUpserted: results.length },
+      "Completed batched model upsert",
+    );
 
     return results;
   }

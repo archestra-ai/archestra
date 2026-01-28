@@ -1,10 +1,9 @@
 import type { SupportedProvider } from "@shared";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
-import config from "@/config";
 import logger from "@/logging";
 import { ApiKeyModelModel, ChatApiKeyModel, ModelModel } from "@/models";
-import { buildCapabilitiesMap, modelSyncService } from "@/services/model-sync";
+import { buildCapabilitiesMap } from "@/services/model-sync";
 import type { CreateModel } from "@/types";
 
 /**
@@ -14,14 +13,18 @@ interface KeylessProviderConfig {
   provider: SupportedProvider;
   name: string;
   isEnabled: () => boolean;
-  /** Optional API key for providers that support it (e.g., vLLM, Ollama) */
-  getApiKey?: () => string;
   /** Custom fetch function for providers that need special handling (e.g., Vertex AI) */
-  customFetch?: () => Promise<Array<{ id: string; displayName: string }>>;
+  customFetch: () => Promise<Array<{ id: string; displayName: string }>>;
 }
 
 /**
- * Manages system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock).
+ * Manages system API keys for truly keyless providers.
+ *
+ * Currently only Vertex AI qualifies as keyless because it uses GCP's
+ * Application Default Credentials (ADC) instead of API keys.
+ *
+ * Other providers (vLLM, Ollama, Bedrock) may have optional authentication
+ * but should use the normal API key flow through the UI.
  *
  * System keys are auto-created when a keyless provider is enabled via environment config,
  * and auto-deleted when the provider is disabled.
@@ -29,6 +32,7 @@ interface KeylessProviderConfig {
 class SystemKeyManager {
   /**
    * Registry of keyless providers that need system API keys.
+   * Only Vertex AI is truly keyless (uses ADC).
    */
   private readonly keylessProviders: KeylessProviderConfig[] = [
     {
@@ -44,24 +48,6 @@ class SystemKeyManager {
         const models = await fetchGeminiModelsViaVertexAi();
         return models.map((m) => ({ id: m.id, displayName: m.displayName }));
       },
-    },
-    {
-      provider: "vllm",
-      name: "vLLM (System)",
-      isEnabled: () => config.llm.vllm.enabled,
-      getApiKey: () => config.chat.vllm.apiKey || "EMPTY",
-    },
-    {
-      provider: "ollama",
-      name: "Ollama (System)",
-      isEnabled: () => config.llm.ollama.enabled,
-      getApiKey: () => config.chat.ollama.apiKey || "EMPTY",
-    },
-    {
-      provider: "bedrock",
-      name: "AWS Bedrock (System)",
-      isEnabled: () => config.llm.bedrock.enabled,
-      getApiKey: () => config.chat.bedrock.apiKey || "EMPTY",
     },
   ];
 
@@ -100,8 +86,7 @@ class SystemKeyManager {
     organizationId: string,
     providerConfig: KeylessProviderConfig,
   ): Promise<void> {
-    const { provider, name, isEnabled, getApiKey, customFetch } =
-      providerConfig;
+    const { provider, name, isEnabled, customFetch } = providerConfig;
     const enabled = isEnabled();
 
     const existingKey = await ChatApiKeyModel.findSystemKey(provider);
@@ -116,7 +101,6 @@ class SystemKeyManager {
         await this.syncModelsForSystemKey(
           existingKey.id,
           provider,
-          getApiKey?.(),
           customFetch,
         );
       } else {
@@ -127,12 +111,7 @@ class SystemKeyManager {
           name,
           provider,
         });
-        await this.syncModelsForSystemKey(
-          newKey.id,
-          provider,
-          getApiKey?.(),
-          customFetch,
-        );
+        await this.syncModelsForSystemKey(newKey.id, provider, customFetch);
       }
     } else {
       if (existingKey) {
@@ -148,33 +127,15 @@ class SystemKeyManager {
   }
 
   /**
-   * Sync models for a system key.
+   * Sync models for a system key using the provider's custom fetch function.
    */
   private async syncModelsForSystemKey(
     apiKeyId: string,
     provider: SupportedProvider,
-    apiKey?: string,
-    customFetch?: () => Promise<Array<{ id: string; displayName: string }>>,
+    customFetch: () => Promise<Array<{ id: string; displayName: string }>>,
   ): Promise<void> {
     try {
-      // If provider has custom fetch (like Vertex AI), use it directly
-      if (customFetch) {
-        await this.syncModelsWithCustomFetch(apiKeyId, provider, customFetch);
-        return;
-      }
-
-      // Otherwise use the standard modelSyncService
-      if (!modelSyncService.hasFetcher(provider)) {
-        logger.warn(
-          { provider, apiKeyId },
-          "No model fetcher registered for provider, skipping model sync",
-        );
-        return;
-      }
-
-      const keyToUse = apiKey || "SYSTEM_KEY_ADC";
-      await modelSyncService.syncModelsForApiKey(apiKeyId, provider, keyToUse);
-      logger.debug({ provider, apiKeyId }, "Synced models for system key");
+      await this.syncModelsWithCustomFetch(apiKeyId, provider, customFetch);
     } catch (error) {
       logger.warn(
         {

@@ -17,6 +17,7 @@
     "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",
     "codegen": "pnpm codegen:api-client && pnpm codegen:theme-css",
     "check:ci": "pnpm type-check && pnpm knip && biome ci",
+    "check:commit": "pnpm type-check && pnpm knip && biome ci",
     "knip": "knip"
   },
   "keywords": [],

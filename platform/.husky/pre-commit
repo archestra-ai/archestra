@@ -1,2 +1,2 @@
 cd platform
-pnpm check:ci
+pnpm commit:check

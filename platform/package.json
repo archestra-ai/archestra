@@ -7,7 +7,7 @@
     "node": ">=18.0.0 <25.0.0"
   },
   "scripts": {
-    "prepare": "cd .. && husky platform/.husky",
+    "prepare": "cd .. && husky platform/.husky || true",
     "ci:check": "turbo check:ci",
     "dev": "turbo dev",
     "build": "turbo build",

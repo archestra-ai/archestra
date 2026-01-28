@@ -82,8 +82,8 @@ function ConnectionStatusView({
           </CardTitle>
           <CardDescription>
             {isUnreachable
-              ? "We couldn't establish a connection to the backend server after multiple attempts."
-              : "Frontend can't reach Archestra backend. There may be an issue or backend just takes longer to start."}
+              ? "Unable to establish a connection to the backend server after multiple attempts."
+              : "Establishing connection to the Archestra backend server."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -95,12 +95,12 @@ function ConnectionStatusView({
               </AlertTitle>
               <AlertDescription className="text-destructive/90">
                 <p className="text-sm mb-3">
-                  The backend server is not responding. This could be due to:
+                  The backend server is not responding. Possible causes:
                 </p>
                 <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li>The server is still starting up</li>
-                  <li>Network connectivity issues</li>
-                  <li>The server is experiencing problems</li>
+                  <li>Server is still starting up</li>
+                  <li>Network connectivity issue</li>
+                  <li>Server configuration problem</li>
                 </ul>
               </AlertDescription>
             </Alert>

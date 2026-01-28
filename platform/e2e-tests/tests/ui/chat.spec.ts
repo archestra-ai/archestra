@@ -1,8 +1,66 @@
-import { E2eTestId } from "@shared";
+import type { Page } from "@playwright/test";
+import { E2eTestId, type SupportedProvider } from "@shared";
+import { UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
 
 // Run all provider tests sequentially to avoid WireMock stub timing issues
 test.describe.configure({ mode: "serial" });
+
+/**
+ * Creates an API key for a provider and waits for models to sync.
+ * This is required because models are stored in the database and linked to API keys.
+ */
+async function setupApiKeyForProvider(
+  page: Page,
+  provider: SupportedProvider,
+): Promise<string> {
+  // Create API key via API
+  const response = await page.request.post(
+    `${UI_BASE_URL}/api/chat-api-keys`,
+    {
+      data: {
+        name: `E2E Test ${provider} Key`,
+        provider,
+        apiKey: `e2e-test-${provider}-key`,
+        scope: "org_wide",
+      },
+    },
+  );
+
+  if (!response.ok()) {
+    throw new Error(
+      `Failed to create API key for ${provider}: ${response.status()}`,
+    );
+  }
+
+  const apiKey = await response.json();
+
+  // Wait for models to sync by polling the models endpoint
+  // The sync happens asynchronously after API key creation
+  const maxWaitMs = 10_000;
+  const startTime = Date.now();
+  while (Date.now() - startTime < maxWaitMs) {
+    const modelsResponse = await page.request.get(
+      `${UI_BASE_URL}/api/chat/models?provider=${provider}`,
+    );
+    if (modelsResponse.ok()) {
+      const models = await modelsResponse.json();
+      if (Array.isArray(models) && models.length > 0) {
+        break;
+      }
+    }
+    await page.waitForTimeout(500);
+  }
+
+  return apiKey.id;
+}
+
+/**
+ * Deletes an API key by ID.
+ */
+async function cleanupApiKey(page: Page, apiKeyId: string): Promise<void> {
+  await page.request.delete(`${UI_BASE_URL}/api/chat-api-keys/${apiKeyId}`);
+}
 
 interface ChatProviderTestConfig {
   providerName: string;
@@ -139,71 +197,83 @@ for (const config of testConfigs) {
       goToPage,
       makeRandomString,
     }) => {
-      // Skip onboarding if dialog is present
-      const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
-
-      // Navigate to chat page
-      await goToPage(page, "/chat");
-      await page.waitForLoadState("networkidle");
-
-      // Skip onboarding if it appears
-      if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await skipButton.click();
-        await page.waitForTimeout(500);
-      }
-
-      // Wait for the chat page to load - look for the prompt input area
-      const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
-      await expect(textarea).toBeVisible({ timeout: 15_000 });
-
-      // Open model selector and choose the test model
-      const modelSelectorTrigger = page.getByTestId(
-        E2eTestId.ChatModelSelectorTrigger,
+      // Create API key for the provider before navigating to chat
+      // This is required because models are stored in the database and linked to API keys
+      const apiKeyId = await setupApiKeyForProvider(
+        page,
+        config.providerName as SupportedProvider,
       );
-      await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
-      await modelSelectorTrigger.click();
 
-      // Wait for the model selector dialog to open
-      await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
+      try {
+        // Skip onboarding if dialog is present
+        const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
 
-      // Search for the model if search input is available
-      const searchInput = page.getByPlaceholder("Search models...");
-      if (await searchInput.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        await searchInput.fill(config.modelId);
-        await page.waitForTimeout(500);
+        // Navigate to chat page
+        await goToPage(page, "/chat");
+        await page.waitForLoadState("networkidle");
+
+        // Skip onboarding if it appears
+        if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await skipButton.click();
+          await page.waitForTimeout(500);
+        }
+
+        // Wait for the chat page to load - look for the prompt input area
+        const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
+        await expect(textarea).toBeVisible({ timeout: 15_000 });
+
+        // Open model selector and choose the test model
+        const modelSelectorTrigger = page.getByTestId(
+          E2eTestId.ChatModelSelectorTrigger,
+        );
+        await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
+        await modelSelectorTrigger.click();
+
+        // Wait for the model selector dialog to open
+        await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
+
+        // Search for the model if search input is available
+        const searchInput = page.getByPlaceholder("Search models...");
+        if (await searchInput.isVisible({ timeout: 1_000 }).catch(() => false)) {
+          await searchInput.fill(config.modelId);
+          await page.waitForTimeout(500);
+        }
+
+        // Click on the model option that contains our model ID
+        const modelOption = page
+          .getByRole("option")
+          .filter({ hasText: config.modelId });
+        await expect(modelOption.first()).toBeVisible({ timeout: 5_000 });
+        await modelOption.first().click();
+
+        // Wait for dialog to close
+        await expect(page.getByRole("dialog")).not.toBeVisible({
+          timeout: 5_000,
+        });
+
+        // Generate a unique message that contains our wiremock stub ID for matching
+        // The wiremock mapping matches on bodyPatterns: [{ "contains": "chat-ui-e2e-test" }]
+        const testMessageId = makeRandomString(8, config.wiremockStubId);
+        const testMessage = `Test message ${testMessageId}: Please respond with a simple greeting.`;
+
+        // Type and send the message
+        await textarea.fill(testMessage);
+
+        // Submit the message by pressing Enter
+        await page.keyboard.press("Enter");
+
+        // Wait for the response to appear
+        // The mocked response should contain our expected text
+        await expect(page.getByText(config.expectedResponse)).toBeVisible({
+          timeout: 30_000,
+        });
+
+        // Verify the user's message also appears in the chat
+        await expect(page.getByText(testMessage)).toBeVisible();
+      } finally {
+        // Clean up the API key
+        await cleanupApiKey(page, apiKeyId);
       }
-
-      // Click on the model option that contains our model ID
-      const modelOption = page
-        .getByRole("option")
-        .filter({ hasText: config.modelId });
-      await expect(modelOption.first()).toBeVisible({ timeout: 5_000 });
-      await modelOption.first().click();
-
-      // Wait for dialog to close
-      await expect(page.getByRole("dialog")).not.toBeVisible({
-        timeout: 5_000,
-      });
-
-      // Generate a unique message that contains our wiremock stub ID for matching
-      // The wiremock mapping matches on bodyPatterns: [{ "contains": "chat-ui-e2e-test" }]
-      const testMessageId = makeRandomString(8, config.wiremockStubId);
-      const testMessage = `Test message ${testMessageId}: Please respond with a simple greeting.`;
-
-      // Type and send the message
-      await textarea.fill(testMessage);
-
-      // Submit the message by pressing Enter
-      await page.keyboard.press("Enter");
-
-      // Wait for the response to appear
-      // The mocked response should contain our expected text
-      await expect(page.getByText(config.expectedResponse)).toBeVisible({
-        timeout: 30_000,
-      });
-
-      // Verify the user's message also appears in the chat
-      await expect(page.getByText(testMessage)).toBeVisible();
     });
   });
 }

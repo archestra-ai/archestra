@@ -16,6 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, LayoutGrid, Plus, Search, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -59,7 +60,6 @@ import {
   useDeleteProfile,
   useInternalAgents,
   useProfile,
-  useProfiles,
 } from "@/lib/agent.query";
 import {
   agentDelegationsQueryKeys,
@@ -100,12 +100,12 @@ function savePositions(nodes: Node<AgentNodeData>[]) {
 
 function AgentsCanvasViewInner() {
   const { resolvedTheme } = useTheme();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const reactFlowInstance = useReactFlow();
   const { getLayoutedNodes } = useLayoutNodes();
   const { data: internalAgents = [], isLoading: isLoadingAgents } =
     useInternalAgents();
-  const { data: profiles = [] } = useProfiles();
   const { data: delegationData, isLoading: isLoadingConnections } =
     useAllDelegationConnections();
   const connections = delegationData?.connections ?? [];
@@ -169,7 +169,10 @@ function AgentsCanvasViewInner() {
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedProfileId, setSelectedProfileId] = useState<string>("all");
+  const agentIdFromUrl = searchParams.get("agentId");
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(
+    agentIdFromUrl || "all",
+  );
 
   // Track previous data for change detection
   const prevAgentsRef = useRef<typeof internalAgents>([]);
@@ -663,13 +666,13 @@ function AgentsCanvasViewInner() {
             onValueChange={setSelectedProfileId}
           >
             <SelectTrigger className="!h-8 w-40 text-sm">
-              <SelectValue placeholder="All Profiles" />
+              <SelectValue placeholder="All Agents" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Profiles</SelectItem>
-              {profiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  {profile.name}
+              <SelectItem value="all">All Agents</SelectItem>
+              {internalAgents.map((agent) => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  {agent.name}
                 </SelectItem>
               ))}
             </SelectContent>

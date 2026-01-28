@@ -565,6 +565,8 @@ class ToolModel {
 
     // Prepare tools to insert (only those that don't exist)
     const toolsToInsert: InsertTool[] = [];
+    // Prepare tools to update (existing tools with changed description or parameters)
+    const toolsToUpdate: { id: string; description: string | null; parameters: unknown }[] = [];
 
     for (const archestraTool of archestraTools) {
       const existingTool = existingToolsByName.get(archestraTool.name);
@@ -576,12 +578,35 @@ class ToolModel {
           catalogId,
           agentId: null,
         });
+      } else {
+        // Check if description or parameters have changed
+        const newDescription = archestraTool.description || null;
+        const descriptionChanged = existingTool.description !== newDescription;
+        const parametersChanged =
+          JSON.stringify(existingTool.parameters) !==
+          JSON.stringify(archestraTool.inputSchema);
+
+        if (descriptionChanged || parametersChanged) {
+          toolsToUpdate.push({
+            id: existingTool.id,
+            description: newDescription,
+            parameters: archestraTool.inputSchema,
+          });
+        }
       }
     }
 
     // Bulk insert new tools if any
     if (toolsToInsert.length > 0) {
       await db.insert(schema.toolsTable).values(toolsToInsert).returning();
+    }
+
+    // Update existing tools with changed descriptions/parameters
+    for (const tool of toolsToUpdate) {
+      await db
+        .update(schema.toolsTable)
+        .set({ description: tool.description, parameters: tool.parameters })
+        .where(eq(schema.toolsTable.id, tool.id));
     }
   }
 

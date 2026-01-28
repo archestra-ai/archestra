@@ -7,14 +7,48 @@ import { expect, test } from "../../fixtures";
 test.describe.configure({ mode: "serial" });
 
 /**
- * Creates an API key for a provider and waits for models to sync.
+ * Result of setting up an API key for a provider.
+ * If the key was created by the test, it should be cleaned up afterward.
+ * If a system key already exists, we just use it without cleanup.
+ */
+interface ApiKeySetupResult {
+  apiKeyId: string;
+  /** If true, the key was created by this test and should be cleaned up. If false, it's a system key. */
+  shouldCleanup: boolean;
+}
+
+/**
+ * Sets up an API key for a provider and waits for models to sync.
  * This is required because models are stored in the database and linked to API keys.
+ *
+ * For keyless providers (vllm, ollama) that have system keys created at startup,
+ * this function will use the existing system key instead of creating a new one.
  */
 async function setupApiKeyForProvider(
   page: Page,
   provider: SupportedProvider,
-): Promise<string> {
-  // Create API key via API
+): Promise<ApiKeySetupResult> {
+  // Check if a system key already exists for this provider
+  const existingKeysResponse = await page.request.get(
+    `${UI_BASE_URL}/api/chat-api-keys`,
+  );
+
+  if (existingKeysResponse.ok()) {
+    const existingKeys = await existingKeysResponse.json();
+    const systemKey = existingKeys.find(
+      (key: { provider: string; isSystem: boolean }) =>
+        key.provider === provider && key.isSystem === true,
+    );
+
+    if (systemKey) {
+      // System key exists, use it directly - no need to create or cleanup
+      // Just wait for models to be available
+      await waitForModels(page, provider);
+      return { apiKeyId: systemKey.id, shouldCleanup: false };
+    }
+  }
+
+  // No system key exists, create a new API key
   const response = await page.request.post(
     `${UI_BASE_URL}/api/chat-api-keys`,
     {
@@ -35,8 +69,20 @@ async function setupApiKeyForProvider(
 
   const apiKey = await response.json();
 
-  // Wait for models to sync by polling the models endpoint
-  // The sync happens asynchronously after API key creation
+  // Wait for models to sync
+  await waitForModels(page, provider);
+
+  return { apiKeyId: apiKey.id, shouldCleanup: true };
+}
+
+/**
+ * Waits for models to be available for a provider.
+ * The sync happens asynchronously after API key creation.
+ */
+async function waitForModels(
+  page: Page,
+  provider: SupportedProvider,
+): Promise<void> {
   const maxWaitMs = 10_000;
   const startTime = Date.now();
   while (Date.now() - startTime < maxWaitMs) {
@@ -51,8 +97,6 @@ async function setupApiKeyForProvider(
     }
     await page.waitForTimeout(500);
   }
-
-  return apiKey.id;
 }
 
 /**
@@ -197,9 +241,10 @@ for (const config of testConfigs) {
       goToPage,
       makeRandomString,
     }) => {
-      // Create API key for the provider before navigating to chat
+      // Set up API key for the provider before navigating to chat
       // This is required because models are stored in the database and linked to API keys
-      const apiKeyId = await setupApiKeyForProvider(
+      // For keyless providers (vllm, ollama), a system key may already exist
+      const apiKeySetup = await setupApiKeyForProvider(
         page,
         config.providerName as SupportedProvider,
       );
@@ -271,8 +316,10 @@ for (const config of testConfigs) {
         // Verify the user's message also appears in the chat
         await expect(page.getByText(testMessage)).toBeVisible();
       } finally {
-        // Clean up the API key
-        await cleanupApiKey(page, apiKeyId);
+        // Only clean up API keys that were created by this test (not system keys)
+        if (apiKeySetup.shouldCleanup) {
+          await cleanupApiKey(page, apiKeySetup.apiKeyId);
+        }
       }
     });
   });

@@ -464,6 +464,7 @@ class StatisticsModel {
       .select({
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
         teamName: schema.teamsTable.name,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
@@ -517,6 +518,7 @@ class StatisticsModel {
       .groupBy(
         schema.agentsTable.id,
         schema.agentsTable.name,
+        schema.agentsTable.agentType,
         schema.teamsTable.name,
         sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
       )
@@ -550,6 +552,7 @@ class StatisticsModel {
         agentMap.set(row.agentId, {
           agentId: row.agentId,
           agentName: row.agentName,
+          agentType: row.agentType,
           teamName: row.teamName || "No Team",
           requests: 0,
           inputTokens: 0,

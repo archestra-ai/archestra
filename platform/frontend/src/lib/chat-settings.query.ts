@@ -1,10 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 export type SupportedChatProvider =
@@ -26,7 +21,7 @@ const {
 } = archestraApiSdk;
 
 export function useChatApiKeys() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["chat-api-keys"],
     queryFn: async () => {
       const { data, error } = await getChatApiKeys();

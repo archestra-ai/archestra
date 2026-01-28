@@ -23930,6 +23930,7 @@ export type GetAgentStatisticsResponses = {
     200: Array<{
         agentId: string;
         agentName: string;
+        agentType: string;
         teamName: string;
         requests: number;
         inputTokens: number;

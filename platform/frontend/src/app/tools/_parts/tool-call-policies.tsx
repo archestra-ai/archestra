@@ -46,10 +46,7 @@ type ToolForPolicies = {
 };
 
 export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
-  const {
-    data: { byProfileToolId },
-    data: invocationPolicies,
-  } = useToolInvocationPolicies();
+  const { data: invocationPolicies } = useToolInvocationPolicies();
   const toolInvocationPolicyCreateMutation =
     useToolInvocationPolicyCreateMutation();
   const toolInvocationPolicyDeleteMutation =
@@ -57,12 +54,15 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
   const toolInvocationPolicyUpdateMutation =
     useToolInvocationPolicyUpdateMutation();
   const callPolicyMutation = useCallPolicyMutation();
-  const { data: externalAgentIds } = useUniqueExternalAgentIds();
+  const { data: externalAgentIds = [] } = useUniqueExternalAgentIds();
   const { data: teams } = useTeams();
 
+  const byProfileToolId = invocationPolicies?.byProfileToolId ?? {};
   const allPolicies = byProfileToolId[tool.id] || [];
   // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
-  const policies = allPolicies.filter((policy) => policy.conditions.length > 0);
+  const policies = allPolicies.filter(
+    (policy: (typeof allPolicies)[number]) => policy.conditions.length > 0,
+  );
 
   const argumentNames = Object.keys(tool.parameters?.properties || []);
   // Combine argument names with context condition options
@@ -75,7 +75,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
   // Derive call policy action from policies (default policy with empty conditions)
   const currentAction = getCallPolicyActionFromPolicies(
     tool.id,
-    invocationPolicies,
+    invocationPolicies ?? { byProfileToolId: {} },
   );
 
   const getDefaultConditionKey = () =>
@@ -101,7 +101,9 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
     policy: (typeof policies)[number],
     index: number,
   ) => {
-    const newConditions = policy.conditions.filter((_, i) => i !== index);
+    const newConditions = policy.conditions.filter(
+      (_: unknown, i: number) => i !== index,
+    );
     toolInvocationPolicyUpdateMutation.mutate({
       id: policy.id,
       conditions: newConditions,
@@ -147,54 +149,56 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
           size="lg"
         />
       </div>
-      {policies.map((policy) => (
+      {policies.map((policy: (typeof allPolicies)[number]) => (
         <PolicyCard
           key={policy.id}
           onDelete={() => toolInvocationPolicyDeleteMutation.mutate(policy.id)}
         >
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
-              {policy.conditions.map((condition, index) => (
-                <div
-                  key={`${condition.key}-${condition.operator}-${condition.value}`}
-                  className="flex items-center gap-2"
-                >
-                  <span className="text-sm text-muted-foreground w-2">
-                    {index === 0 ? "If" : ""}
-                  </span>
-                  <ToolCallPolicyCondition
-                    condition={condition}
-                    conditionKeyOptions={{ argumentNames, contextOptions }}
-                    removable={policy.conditions.length > 1}
-                    onChange={(updated) =>
-                      handleConditionChange(policy, index, updated)
-                    }
-                    onRemove={() => handleConditionRemove(policy, index)}
-                  />
-                  {index < policy.conditions.length - 1 ? (
-                    <span className="text-sm text-muted-foreground">and</span>
-                  ) : (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="h-9 w-9 p-0"
-                            aria-label="Add condition"
-                            onClick={() => handleConditionAdd(policy)}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Add condition</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
-                </div>
-              ))}
+              {policy.conditions.map(
+                (condition: PolicyCondition, index: number) => (
+                  <div
+                    key={`${condition.key}-${condition.operator}-${condition.value}`}
+                    className="flex items-center gap-2"
+                  >
+                    <span className="text-sm text-muted-foreground w-2">
+                      {index === 0 ? "If" : ""}
+                    </span>
+                    <ToolCallPolicyCondition
+                      condition={condition}
+                      conditionKeyOptions={{ argumentNames, contextOptions }}
+                      removable={policy.conditions.length > 1}
+                      onChange={(updated) =>
+                        handleConditionChange(policy, index, updated)
+                      }
+                      onRemove={() => handleConditionRemove(policy, index)}
+                    />
+                    {index < policy.conditions.length - 1 ? (
+                      <span className="text-sm text-muted-foreground">and</span>
+                    ) : (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="h-9 w-9 p-0"
+                              aria-label="Add condition"
+                              onClick={() => handleConditionAdd(policy)}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Add condition</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                ),
+              )}
             </div>
             <div className="flex items-center gap-2 pl-12">
               <ArrowRightIcon className="w-4 h-4 text-muted-foreground shrink-0" />

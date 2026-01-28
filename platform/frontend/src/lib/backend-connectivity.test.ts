@@ -11,13 +11,13 @@ describe("useBackendConnectivity", () => {
     vi.useRealTimers();
   });
 
-  it("should start in connecting state", () => {
+  it("should start in initializing state when autoStart is false", () => {
     const checkHealthFn = vi.fn().mockResolvedValue(false);
     const { result } = renderHook(() =>
       useBackendConnectivity({ checkHealthFn, autoStart: false }),
     );
 
-    expect(result.current.status).toBe("connecting");
+    expect(result.current.status).toBe("initializing");
     expect(result.current.attemptCount).toBe(0);
     expect(result.current.elapsedMs).toBe(0);
   });
@@ -240,7 +240,7 @@ describe("useBackendConnectivity", () => {
     });
 
     expect(checkHealthFn).not.toHaveBeenCalled();
-    expect(result.current.status).toBe("connecting");
+    expect(result.current.status).toBe("initializing");
   });
 
   it("should start when retry is called with autoStart false", async () => {

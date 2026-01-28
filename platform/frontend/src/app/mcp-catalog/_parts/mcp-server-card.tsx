@@ -192,11 +192,12 @@ export function McpServerCard({
   );
 
   // Aggregate all installations for this catalog item (for logs dropdown)
-  let localInstalls: typeof allMcpServers = [];
+  let localInstalls: NonNullable<typeof allMcpServers> = [];
   if (
     installedServer?.catalogId &&
     variant === "local" &&
-    allMcpServers?.length > 0
+    allMcpServers &&
+    allMcpServers.length > 0
   ) {
     localInstalls = allMcpServers
       .filter(({ catalogId, serverType }) => {

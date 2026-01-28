@@ -1,8 +1,9 @@
 import { Home } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 
-export default function NotFound() {
+function NotFound() {
   return (
     <div className="flex h-full w-full items-center justify-center">
       <div className="flex flex-col items-center gap-6 max-w-lg px-6 text-center">
@@ -43,5 +44,13 @@ export default function NotFound() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NotFoundPage() {
+  return (
+    <Suspense>
+      <NotFound />
+    </Suspense>
   );
 }

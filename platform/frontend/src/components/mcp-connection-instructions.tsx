@@ -3,6 +3,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   archestraApiSdk,
+  type archestraApiTypes,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import {
@@ -66,10 +67,10 @@ export function McpConnectionInstructions({
   agentId,
   hideProfileSelector = false,
 }: McpConnectionInstructionsProps) {
-  const { data: profiles } = useProfiles({
+  const { data: profiles = [] } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
-  const { data: mcpServers } = useMcpServers();
+  const { data: mcpServers = [] } = useMcpServers();
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
@@ -118,7 +119,7 @@ export function McpConnectionInstructions({
         mcpServerToolGroups: new Map<
           string,
           {
-            server: (typeof mcpServers)[0];
+            server: (typeof mcpServers)[number];
             tools: Array<{
               id: string;
               name: string;
@@ -138,7 +139,7 @@ export function McpConnectionInstructions({
     const groups = new Map<
       string,
       {
-        server: (typeof mcpServers)[0];
+        server: (typeof mcpServers)[number];
         tools: Array<{ id: string; name: string; description?: string | null }>;
         credentialSourceMcpServerId?: string | null;
         useDynamicTeamCredential?: boolean;
@@ -166,7 +167,7 @@ export function McpConnectionInstructions({
         return;
       }
 
-      if (tool.mcpServerId && mcpServers) {
+      if (tool.mcpServerId) {
         const server = mcpServers.find((s) => s.id === tool.mcpServerId);
         if (server) {
           const existing = groups.get(tool.mcpServerId);
@@ -198,9 +199,10 @@ export function McpConnectionInstructions({
     return { mcpServerToolGroups: groups, archestraTools: archestraToolsList };
   }, [mcpServers, assignedToolsData]);
 
+  type ProfileType = archestraApiTypes.GetAllAgentsResponses["200"][number];
   const getToolsCountForProfile = useCallback(
-    (profile: (typeof profiles)[number]) => {
-      return profile.tools.reduce((acc, curr) => {
+    (profile: ProfileType) => {
+      return profile.tools.reduce((acc: number, curr) => {
         if (curr.mcpServerId) {
           const server = mcpServers?.find((s) => s.id === curr.mcpServerId);
           if (server) {

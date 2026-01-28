@@ -657,7 +657,7 @@ export async function getChatMcpTools({
                   mcpTool.name,
                   toolArguments,
                   {
-                    profile: { id: agentId, name: agentName },
+                    agent: { id: agentId, name: agentName },
                     conversationId,
                     userId,
                     agentId,
@@ -788,7 +788,7 @@ export async function getChatMcpTools({
 
         // Build the context for agent tool execution
         const archestraContext: ArchestraContext = {
-          profile: { id: agentId, name: agentName },
+          agent: { id: agentId, name: agentName },
           agentId,
           organizationId,
           conversationId,

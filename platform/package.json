@@ -7,6 +7,8 @@
     "node": ">=18.0.0 <25.0.0"
   },
   "scripts": {
+    "prepare": "cd .. && husky platform/.husky",
+    "ci:check": "turbo check:ci",
     "dev": "turbo dev",
     "build": "turbo build",
     "start": "turbo start",
@@ -30,6 +32,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.11",
+    "husky": "^9.1.7",
     "tsx": "^4.21.0",
     "turbo": "^2.7.4",
     "typescript": "^5.9.2"

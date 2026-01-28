@@ -905,10 +905,13 @@ class ToolModel {
 
   /**
    * Sync tools for a catalog item - updates existing tools and creates new ones.
-   * Unlike bulkCreateToolsIfNotExists, this method updates existing tools' description and parameters
-   * when they change, preserving tool IDs, policies, and profile assignments.
+   * Unlike bulkCreateToolsIfNotExists, this method:
+   * - Matches tools by their RAW name (the part after `__`), not the full slugified name
+   * - Renames tools when catalog name changes (preserving tool ID, policies, and assignments)
+   * - Updates description and parameters when they change
    *
-   * Used during reinstall to sync tools without losing policy configurations.
+   * This ensures that when a catalog item is renamed, existing tools are updated rather than
+   * duplicated, preserving all policy configurations and profile assignments.
    *
    * @returns Object with created, updated, and unchanged tool arrays for logging
    */
@@ -920,15 +923,20 @@ class ToolModel {
       catalogId: string;
       mcpServerId: string;
     }>,
-  ): Promise<{ created: Tool[]; updated: Tool[]; unchanged: Tool[] }> {
+  ): Promise<{
+    created: Tool[];
+    updated: Tool[];
+    unchanged: Tool[];
+    deleted: Tool[];
+  }> {
     if (tools.length === 0) {
-      return { created: [], updated: [], unchanged: [] };
+      return { created: [], updated: [], unchanged: [], deleted: [] };
     }
 
     const catalogId = tools[0].catalogId;
-    const toolNames = tools.map((t) => t.name);
 
-    // Fetch all existing tools for this catalog in a single query
+    // Fetch ALL existing tools for this catalog (regardless of name)
+    // This allows us to match by raw tool name even when catalog name changed
     const existingTools = await db
       .select()
       .from(schema.toolsTable)
@@ -936,11 +944,16 @@ class ToolModel {
         and(
           isNull(schema.toolsTable.agentId),
           eq(schema.toolsTable.catalogId, catalogId),
-          inArray(schema.toolsTable.name, toolNames),
         ),
       );
 
-    const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
+    // Create a map of existing tools by their RAW name (part after `__`)
+    // This allows matching when catalog name changes
+    const existingToolsByRawName = new Map<string, Tool>();
+    for (const tool of existingTools) {
+      const rawName = ToolModel.unslugifyName(tool.name);
+      existingToolsByRawName.set(rawName, tool);
+    }
 
     const created: Tool[] = [];
     const updated: Tool[] = [];
@@ -948,21 +961,25 @@ class ToolModel {
     const toolsToInsert: InsertTool[] = [];
 
     for (const tool of tools) {
-      const existingTool = existingToolsByName.get(tool.name);
+      // Extract raw name from the new tool name to find matching existing tool
+      const rawName = ToolModel.unslugifyName(tool.name);
+      const existingTool = existingToolsByRawName.get(rawName);
 
       if (existingTool) {
-        // Check if tool needs updating (description or parameters changed)
+        // Check what needs updating
+        const nameChanged = existingTool.name !== tool.name;
         const descriptionChanged =
           existingTool.description !== tool.description;
         const parametersChanged =
           JSON.stringify(existingTool.parameters) !==
           JSON.stringify(tool.parameters);
 
-        if (descriptionChanged || parametersChanged) {
-          // Update existing tool
+        if (nameChanged || descriptionChanged || parametersChanged) {
+          // Update existing tool (including rename if catalog name changed)
           const [updatedTool] = await db
             .update(schema.toolsTable)
             .set({
+              name: tool.name, // This handles renaming when catalog name changes
               description: tool.description,
               parameters: tool.parameters,
               updatedAt: new Date(),
@@ -1005,7 +1022,26 @@ class ToolModel {
       created.push(...insertedTools);
     }
 
-    return { created, updated, unchanged };
+    // Cleanup: Delete orphaned tools that weren't synced
+    // This handles the case where tools were renamed (old name tools are now orphaned)
+    // or tools were removed from the MCP server
+    const syncedToolIds = new Set([
+      ...created.map((t) => t.id),
+      ...updated.map((t) => t.id),
+      ...unchanged.map((t) => t.id),
+    ]);
+
+    const orphanedTools = existingTools.filter((t) => !syncedToolIds.has(t.id));
+    if (orphanedTools.length > 0) {
+      await db.delete(schema.toolsTable).where(
+        inArray(
+          schema.toolsTable.id,
+          orphanedTools.map((t) => t.id),
+        ),
+      );
+    }
+
+    return { created, updated, unchanged, deleted: orphanedTools };
   }
 
   /**

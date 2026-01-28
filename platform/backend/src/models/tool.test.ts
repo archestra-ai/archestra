@@ -1637,6 +1637,154 @@ describe("ToolModel", () => {
       expect(result.created).toHaveLength(0);
       expect(result.updated).toHaveLength(0);
       expect(result.unchanged).toHaveLength(0);
+      expect(result.deleted).toHaveLength(0);
+    });
+
+    test("renames tools when catalog name changes (preserves ID and assignments)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeAgent,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "old-catalog-name",
+      });
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      const agent = await makeAgent();
+
+      // Create existing tool with old catalog name prefix
+      const existingTool = await makeTool({
+        name: "old-catalog-name__query-docs",
+        description: "Query docs",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      // Assign tool to agent
+      await AgentToolModel.create(agent.id, existingTool.id);
+
+      // Sync with new catalog name (simulating catalog rename)
+      const toolsToSync = [
+        {
+          name: "new-catalog-name__query-docs", // Same raw name, different prefix
+          description: "Query docs",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      // Should update (rename) the existing tool, not create a new one
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.deleted).toHaveLength(0);
+
+      // Verify the tool was renamed but kept the same ID
+      expect(result.updated[0].id).toBe(existingTool.id);
+      expect(result.updated[0].name).toBe("new-catalog-name__query-docs");
+
+      // Verify agent-tool assignment still exists (uses same tool ID)
+      const agentToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(agentToolIds).toContain(existingTool.id);
+    });
+
+    test("deletes orphaned tools that are no longer returned by MCP server", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tools
+      const tool1 = await makeTool({
+        name: "catalog__tool-1",
+        description: "Tool 1",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      await makeTool({
+        name: "catalog__tool-2",
+        description: "Tool 2 - will be removed",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      // Sync with only one tool (simulating tool-2 being removed from MCP server)
+      const toolsToSync = [
+        {
+          name: "catalog__tool-1",
+          description: "Tool 1",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      // tool-1 should be unchanged, tool-2 should be deleted
+      expect(result.unchanged).toHaveLength(1);
+      expect(result.unchanged[0].id).toBe(tool1.id);
+      expect(result.deleted).toHaveLength(1);
+      expect(result.deleted[0].name).toBe("catalog__tool-2");
+    });
+
+    test("cleans up duplicate tools after catalog rename (legacy duplicates)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Simulate legacy state: both old and new named tools exist (duplicates with same raw name)
+      const oldTool = await makeTool({
+        name: "old-name__query-docs",
+        description: "Old tool",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const newTool = await makeTool({
+        name: "new-name__query-docs",
+        description: "New tool",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      // Sync with only the new name (correct state)
+      const toolsToSync = [
+        {
+          name: "new-name__query-docs",
+          description: "New tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      // When there are duplicates with same raw name, one is kept and one is deleted
+      // The behavior depends on which one is matched (order in the map)
+      // Either way, exactly one tool survives and one is deleted
+      const survivingTools = [...result.unchanged, ...result.updated];
+      expect(survivingTools).toHaveLength(1);
+      expect(result.deleted).toHaveLength(1);
+
+      // Verify only one tool with this raw name exists now
+      // (the surviving tool has the new name)
+      expect(survivingTools[0].name).toBe("new-name__query-docs");
     });
 
     test("creates default policies for newly created tools", async ({

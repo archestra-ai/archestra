@@ -37,7 +37,7 @@ describe("mcp-reinstall", () => {
       }) as InternalMcpCatalog;
 
     describe("local servers", () => {
-      test("returns false when no prompted env vars exist", () => {
+      test("returns false when no env vars exist", () => {
         const oldConfig = createLocalCatalog([]);
         const newConfig = createLocalCatalog([]);
 
@@ -46,7 +46,37 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(false);
       });
 
-      test("returns false when prompted env vars are unchanged", () => {
+      test("returns false when only non-prompted env vars exist", () => {
+        const oldConfig = createLocalCatalog([]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "STATIC_VAR",
+            type: "plain_text" as const,
+            promptOnInstallation: false,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when ANY prompted env var exists", () => {
+        const oldConfig = createLocalCatalog([]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when prompted env var exists (even if unchanged)", () => {
         const envVars = [
           {
             key: "API_KEY",
@@ -59,17 +89,11 @@ describe("mcp-reinstall", () => {
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
-        expect(result).toBe(false);
+        expect(result).toBe(true);
       });
 
-      test("returns true when new prompted env var is added", () => {
-        const oldConfig = createLocalCatalog([
-          {
-            key: "API_KEY",
-            type: "secret" as const,
-            promptOnInstallation: true,
-          },
-        ]);
+      test("returns true when mix of prompted and non-prompted env vars exist", () => {
+        const oldConfig = createLocalCatalog([]);
         const newConfig = createLocalCatalog([
           {
             key: "API_KEY",
@@ -77,9 +101,9 @@ describe("mcp-reinstall", () => {
             promptOnInstallation: true,
           },
           {
-            key: "NEW_KEY",
-            type: "secret" as const,
-            promptOnInstallation: true,
+            key: "STATIC_VAR",
+            type: "plain_text" as const,
+            promptOnInstallation: false,
           },
         ]);
 
@@ -88,7 +112,7 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
-      test("returns false when non-prompted env var is added", () => {
+      test("returns false when prompted env var is removed and no prompted vars remain", () => {
         const oldConfig = createLocalCatalog([
           {
             key: "API_KEY",
@@ -96,44 +120,7 @@ describe("mcp-reinstall", () => {
             promptOnInstallation: true,
           },
         ]);
-        const newConfig = createLocalCatalog([
-          {
-            key: "API_KEY",
-            type: "secret" as const,
-            promptOnInstallation: true,
-          },
-          {
-            key: "NEW_KEY",
-            type: "plain_text" as const,
-            promptOnInstallation: false,
-          },
-        ]);
-
-        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
-
-        expect(result).toBe(false);
-      });
-
-      test("returns false when prompted env var is removed", () => {
-        const oldConfig = createLocalCatalog([
-          {
-            key: "API_KEY",
-            type: "secret" as const,
-            promptOnInstallation: true,
-          },
-          {
-            key: "OLD_KEY",
-            type: "secret" as const,
-            promptOnInstallation: true,
-          },
-        ]);
-        const newConfig = createLocalCatalog([
-          {
-            key: "API_KEY",
-            type: "secret" as const,
-            promptOnInstallation: true,
-          },
-        ]);
+        const newConfig = createLocalCatalog([]);
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
@@ -142,7 +129,7 @@ describe("mcp-reinstall", () => {
     });
 
     describe("remote servers", () => {
-      test("returns false when no user config exists", () => {
+      test("returns false when no user config and no OAuth exists", () => {
         const oldConfig = createRemoteCatalog({});
         const newConfig = createRemoteCatalog({});
 
@@ -151,23 +138,21 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(false);
       });
 
-      test("returns false when user config is unchanged", () => {
-        const config = { field: { type: "string", required: true } };
-        const oldConfig = createRemoteCatalog(config);
-        const newConfig = createRemoteCatalog(config);
+      test("returns false when only optional user config exists", () => {
+        const oldConfig = createRemoteCatalog({});
+        const newConfig = createRemoteCatalog({
+          optionalField: { type: "string", required: false },
+        });
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
         expect(result).toBe(false);
       });
 
-      test("returns true when new required user config field is added", () => {
-        const oldConfig = createRemoteCatalog({
-          existing: { type: "string", required: true },
-        });
+      test("returns true when ANY required user config field exists", () => {
+        const oldConfig = createRemoteCatalog({});
         const newConfig = createRemoteCatalog({
-          existing: { type: "string", required: true },
-          newField: { type: "string", required: true },
+          field: { type: "string", required: true },
         });
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
@@ -175,21 +160,17 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
-      test("returns false when new optional user config field is added", () => {
-        const oldConfig = createRemoteCatalog({
-          existing: { type: "string", required: true },
-        });
-        const newConfig = createRemoteCatalog({
-          existing: { type: "string", required: true },
-          newField: { type: "string", required: false },
-        });
+      test("returns true when required user config exists (even if unchanged)", () => {
+        const config = { field: { type: "string", required: true } };
+        const oldConfig = createRemoteCatalog(config);
+        const newConfig = createRemoteCatalog(config);
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
-        expect(result).toBe(false);
+        expect(result).toBe(true);
       });
 
-      test("returns true when OAuth config is added", () => {
+      test("returns true when OAuth config exists", () => {
         const oldConfig = createRemoteCatalog({}, null);
         const newConfig = createRemoteCatalog(
           {},
@@ -203,14 +184,14 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
-      test("returns false when OAuth config already existed", () => {
+      test("returns true when OAuth config exists (even if unchanged)", () => {
         const oauthConfig = { authorizationUrl: "https://example.com/auth" };
         const oldConfig = createRemoteCatalog({}, oauthConfig);
         const newConfig = createRemoteCatalog({}, oauthConfig);
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
-        expect(result).toBe(false);
+        expect(result).toBe(true);
       });
     });
 

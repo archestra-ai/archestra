@@ -7,70 +7,61 @@ import type { InternalMcpCatalog, McpServer } from "@/types";
  * Checks if a catalog edit requires new user input for reinstallation.
  *
  * Returns true (manual reinstall required) when:
- * - NEW env var with promptOnInstallation=true was added (local servers)
- * - NEW required userConfig field was added (remote servers)
- * - OAuth config was added (remote servers)
+ * - ANY env var with promptOnInstallation=true exists (local servers)
+ * - ANY required userConfig field exists (remote servers)
+ * - OAuth config exists (remote servers)
  *
  * Returns false (auto-reinstall possible) when:
- * - Only non-prompted values changed (command, args, docker image, etc.)
- * - All prompted env vars already existed (user already provided values)
+ * - No prompted env vars exist (local servers)
+ * - No required userConfig fields or OAuth (remote servers)
+ *
+ * Note: We don't try to recover secrets from the secret manager because
+ * that's unreliable across different backends (DB, Vault, BYOS Vault).
+ * Instead, we require the user to re-enter values via the install dialog.
  */
 export function requiresNewUserInputForReinstall(
-  oldCatalogItem: InternalMcpCatalog,
+  _oldCatalogItem: InternalMcpCatalog,
   newCatalogItem: InternalMcpCatalog,
 ): boolean {
-  // Local servers: check if NEW prompted env vars were added
+  // Local servers: check if ANY prompted env vars exist
   if (newCatalogItem.serverType === "local") {
-    const oldPromptedKeys = new Set(
-      (oldCatalogItem.localConfig?.environment || [])
-        .filter((env) => env.promptOnInstallation)
-        .map((env) => env.key),
-    );
-
-    const newPromptedEnvVars = (
+    const hasPromptedEnvVars = (
       newCatalogItem.localConfig?.environment || []
-    ).filter((env) => env.promptOnInstallation);
+    ).some((env) => env.promptOnInstallation);
 
-    // Check if any NEW prompted env var was added (not in old config)
-    for (const env of newPromptedEnvVars) {
-      if (!oldPromptedKeys.has(env.key)) {
-        logger.info(
-          { catalogId: newCatalogItem.id, newEnvVar: env.key },
-          "New prompted env var added - manual reinstall required",
-        );
-        return true;
-      }
-    }
-
-    // All prompted env vars existed before - user already provided values
-    return false;
-  }
-
-  // Remote servers: check for new required userConfig fields or OAuth
-  if (newCatalogItem.serverType === "remote") {
-    // If OAuth was just added, requires auth flow
-    if (newCatalogItem.oauthConfig && !oldCatalogItem.oauthConfig) {
+    if (hasPromptedEnvVars) {
       logger.info(
         { catalogId: newCatalogItem.id },
-        "OAuth config added - manual reinstall required",
+        "Catalog has prompted env vars - manual reinstall required",
       );
       return true;
     }
 
-    // Check for new required userConfig fields
-    const oldUserConfigKeys = new Set(
-      Object.keys(oldCatalogItem.userConfig || {}),
-    );
-    const newUserConfig = newCatalogItem.userConfig || {};
+    return false;
+  }
 
-    for (const [key, field] of Object.entries(newUserConfig)) {
-      if (field.required && !oldUserConfigKeys.has(key)) {
-        logger.info(
-          { catalogId: newCatalogItem.id, newField: key },
-          "New required userConfig field added - manual reinstall required",
-        );
-        return true;
-      }
+  // Remote servers: check for OAuth or required userConfig
+  if (newCatalogItem.serverType === "remote") {
+    // OAuth requires user auth flow
+    if (newCatalogItem.oauthConfig) {
+      logger.info(
+        { catalogId: newCatalogItem.id },
+        "Catalog has OAuth config - manual reinstall required",
+      );
+      return true;
+    }
+
+    // Check for any required userConfig fields
+    const hasRequiredUserConfig = Object.values(
+      newCatalogItem.userConfig || {},
+    ).some((field) => field.required);
+
+    if (hasRequiredUserConfig) {
+      logger.info(
+        { catalogId: newCatalogItem.id },
+        "Catalog has required userConfig fields - manual reinstall required",
+      );
+      return true;
     }
 
     return false;
@@ -131,6 +122,7 @@ export async function autoReinstallServer(
       created: syncResult.created.length,
       updated: syncResult.updated.length,
       unchanged: syncResult.unchanged.length,
+      deleted: syncResult.deleted.length,
     },
     "Auto-reinstall completed - tools synced",
   );

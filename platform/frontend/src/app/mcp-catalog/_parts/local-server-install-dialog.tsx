@@ -82,6 +82,8 @@ interface LocalServerInstallDialogProps {
   isInstalling: boolean;
   /** When true, shows "Reinstall" instead of "Install" in the dialog */
   isReinstall?: boolean;
+  /** The team ID of the existing server being reinstalled (null = personal) */
+  existingTeamId?: string | null;
 }
 
 export function LocalServerInstallDialog({
@@ -91,6 +93,7 @@ export function LocalServerInstallDialog({
   catalogItem,
   isInstalling,
   isReinstall = false,
+  existingTeamId,
 }: LocalServerInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [credentialType, setCredentialType] = useState<"personal" | "team">(
@@ -289,8 +292,10 @@ export function LocalServerInstallDialog({
         <SelectMcpServerCredentialTypeAndTeams
           selectedTeamId={selectedTeamId}
           onTeamChange={setSelectedTeamId}
-          catalogId={catalogItem?.id}
+          catalogId={isReinstall ? undefined : catalogItem?.id}
           onCredentialTypeChange={setCredentialType}
+          isReinstall={isReinstall}
+          existingTeamId={existingTeamId}
         />
 
         {catalogItem?.localConfig?.serviceAccount !== undefined && (

@@ -6495,6 +6495,10 @@ export type GetAgentsResponses = {
             allowedChatops: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            description: string | null;
+            skills: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -6564,6 +6568,10 @@ export type CreateAgentData = {
         systemPrompt?: string | null;
         userPrompt?: string | null;
         allowedChatops?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        description?: string | null;
+        skills?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         incomingEmailEnabled?: boolean;
@@ -6660,6 +6668,10 @@ export type CreateAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        description: string | null;
+        skills: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
@@ -6807,6 +6819,10 @@ export type GetAllAgentsResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
+        skills: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -6943,6 +6959,10 @@ export type GetDefaultMcpGatewayResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
+        skills: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7077,6 +7097,10 @@ export type GetDefaultLlmProxyResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        description: string | null;
+        skills: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
@@ -7296,6 +7320,10 @@ export type GetAgentResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
+        skills: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7356,6 +7384,10 @@ export type UpdateAgentData = {
         systemPrompt?: string | null;
         userPrompt?: string | null;
         allowedChatops?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        description?: string | null;
+        skills?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         incomingEmailEnabled?: boolean;
@@ -7454,6 +7486,10 @@ export type UpdateAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        description: string | null;
+        skills: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
@@ -7593,6 +7629,10 @@ export type GetAgentVersionsResponses = {
                 [key: string]: unknown;
             } | Array<unknown> | null;
             allowedChatops: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            description: string | null;
+            skills: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
             incomingEmailEnabled: boolean;
@@ -7743,6 +7783,10 @@ export type RollbackAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         allowedChatops: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        description: string | null;
+        skills: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         incomingEmailEnabled: boolean;

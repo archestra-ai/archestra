@@ -331,6 +331,23 @@ curl -X GET "${agentCardUrl}" \\
         </div>
       </div>
 
+      {/* Agent Skills */}
+      {Array.isArray(agent.skills) && agent.skills.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Skills</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {(agent.skills as Array<{ name: string }>).map((skill) => (
+              <span
+                key={skill.name}
+                className="inline-flex items-center text-xs bg-muted px-2 py-1 rounded"
+              >
+                {skill.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Token Selector */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">Authentication Token</Label>

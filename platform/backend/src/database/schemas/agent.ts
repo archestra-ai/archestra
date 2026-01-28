@@ -86,6 +86,12 @@ const agentsTable = pgTable(
       .$type<ChatOpsProviderType[]>()
       .default([]),
 
+    // Description and skills (only used when agentType = 'agent')
+    /** Human-readable description of the agent */
+    description: text("description"),
+    /** Skills the agent can perform, used in A2A AgentCard */
+    skills: jsonb("skills").$type<Array<{ name: string }>>().default([]),
+
     // Incoming email settings (only used when agentType = 'agent')
     /** Whether incoming email invocation is enabled for this agent */
     incomingEmailEnabled: boolean("incoming_email_enabled")

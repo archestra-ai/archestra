@@ -382,6 +382,9 @@ export function AgentDialog({
 
   // Form state
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [skills, setSkills] = useState<Array<{ name: string }>>([]);
+  const [newSkillName, setNewSkillName] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
@@ -427,6 +430,14 @@ export function AgentDialog({
       if (agentData) {
         // Edit mode
         setName(agentData.name);
+        setDescription(agentData.description || "");
+        const agentSkills = agentData.skills;
+        setSkills(
+          Array.isArray(agentSkills)
+            ? (agentSkills as Array<{ name: string }>)
+            : [],
+        );
+        setNewSkillName("");
         setUserPrompt(agentData.userPrompt || "");
         setSystemPrompt(agentData.systemPrompt || "");
         // Reset delegation targets - will be populated by the next useEffect when data loads
@@ -458,6 +469,9 @@ export function AgentDialog({
       } else {
         // Create mode - reset all fields
         setName("");
+        setDescription("");
+        setSkills([]);
+        setNewSkillName("");
         setUserPrompt("");
         setSystemPrompt("");
         setSelectedDelegationTargetIds([]);
@@ -563,6 +577,8 @@ export function AgentDialog({
             name: trimmedName,
             agentType: agentType,
             ...(isInternalAgent && {
+              description: description.trim() || null,
+              skills,
               userPrompt: trimmedUserPrompt || undefined,
               systemPrompt: trimmedSystemPrompt || undefined,
               allowedChatops,
@@ -581,6 +597,8 @@ export function AgentDialog({
           name: trimmedName,
           agentType: agentType,
           ...(isInternalAgent && {
+            description: description.trim() || null,
+            skills,
             userPrompt: trimmedUserPrompt || undefined,
             systemPrompt: trimmedSystemPrompt || undefined,
             allowedChatops,
@@ -627,6 +645,8 @@ export function AgentDialog({
     }
   }, [
     name,
+    description,
+    skills,
     userPrompt,
     systemPrompt,
     allowedChatops,
@@ -829,6 +849,94 @@ export function AgentDialog({
                   placeholder="Enter user prompt (shown to user, sent to LLM)"
                   className="min-h-[150px] font-mono"
                 />
+              </div>
+            )}
+
+            {/* Description (Agent only) */}
+            {isInternalAgent && (
+              <div className="space-y-2">
+                <Label htmlFor="agentDescription">Description</Label>
+                <p className="text-sm text-muted-foreground">
+                  A brief summary of what this agent does. Helps other agents
+                  quickly understand if this agent is relevant for their task.
+                </p>
+                <Textarea
+                  id="agentDescription"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe what this agent does"
+                  className="min-h-[60px]"
+                />
+              </div>
+            )}
+
+            {/* Skills (Agent only) */}
+            {isInternalAgent && (
+              <div className="space-y-2">
+                <Label>Skills</Label>
+                <p className="text-sm text-muted-foreground">
+                  An Agent Skill describes a specific capability or function the
+                  agent can perform. It tells other agents what kinds of tasks
+                  the agent is good for.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {skills.map((skill) => (
+                    <span
+                      key={skill.name}
+                      className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded"
+                    >
+                      {skill.name}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSkills(skills.filter((s) => s.name !== skill.name))
+                        }
+                        className="hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={newSkillName}
+                      onChange={(e) => setNewSkillName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const trimmed = newSkillName.trim();
+                          if (
+                            trimmed &&
+                            !skills.some((s) => s.name === trimmed)
+                          ) {
+                            setSkills([...skills, { name: trimmed }]);
+                            setNewSkillName("");
+                          }
+                        }
+                      }}
+                      placeholder="Add a skill..."
+                      className="h-8 w-[160px] text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        const trimmed = newSkillName.trim();
+                        if (
+                          trimmed &&
+                          !skills.some((s) => s.name === trimmed)
+                        ) {
+                          setSkills([...skills, { name: trimmed }]);
+                          setNewSkillName("");
+                        }
+                      }}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
 

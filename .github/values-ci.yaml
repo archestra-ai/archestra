@@ -7,6 +7,7 @@ archestra:
 
   # Environment variables for e2e testing
   env:
+    ARCHESTRA_ANALYTICS: disabled
     # LLM Proxy base URLs (for LLM proxy routes)
     # Each provider uses a distinct path prefix to avoid WireMock stub conflicts
     ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/openai/v1"

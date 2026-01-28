@@ -15,14 +15,22 @@ import {
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatApiKeyModel, ModelModel, TeamModel } from "@/models";
+import {
+  ApiKeyModelModel,
+  ChatApiKeyModel,
+  ModelModel,
+  TeamModel,
+} from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { modelSyncService } from "@/services/model-sync";
+import { systemKeyManager } from "@/services/system-key-manager";
 import {
   type Anthropic,
   constructResponseSchema,
   type Gemini,
   type ModelCapabilities,
   ModelCapabilitiesSchema,
+  ModelWithApiKeysSchema,
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
@@ -768,6 +776,11 @@ const modelFetchers: Record<
   zhipuai: fetchZhipuaiModels,
 };
 
+// Register all model fetchers with the sync service
+for (const [provider, fetcher] of Object.entries(modelFetchers)) {
+  modelSyncService.registerFetcher(provider as SupportedProvider, fetcher);
+}
+
 /**
  * Test if an API key is valid by attempting to fetch models from the provider.
  * Throws an error if the key is invalid or the provider is unreachable.
@@ -963,22 +976,108 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Invalidate chat models cache
+  // Sync models from providers for all API keys
   fastify.post(
-    "/api/chat/models/invalidate-cache",
+    "/api/chat/models/sync",
     {
       schema: {
-        operationId: RouteId.InvalidateChatModelsCache,
+        operationId: RouteId.SyncChatModels,
         description:
-          "Invalidate the chat models cache to force a refresh of available models from providers",
+          "Sync models from providers for all API keys and store them in the database",
         tags: ["Chat"],
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (_, reply) => {
-      await cacheManager.deleteByPrefix(CacheKey.GetChatModels);
-      logger.info("Invalidated chat models cache");
+    async ({ organizationId, user }, reply) => {
+      // Sync models for all API keys visible to the user
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const apiKeys = await ChatApiKeyModel.getAvailableKeysForUser(
+        organizationId,
+        user.id,
+        userTeamIds,
+      );
+
+      // Fetch secret values and sync models for each API key
+      const syncPromises = apiKeys.map(async (apiKey) => {
+        if (!apiKey.secretId) {
+          return;
+        }
+
+        const secretValue = await getSecretValueForLlmProviderApiKey(
+          apiKey.secretId,
+        );
+
+        if (!secretValue) {
+          logger.warn(
+            { apiKeyId: apiKey.id, provider: apiKey.provider },
+            "No secret value for API key, skipping sync",
+          );
+          return;
+        }
+
+        try {
+          await modelSyncService.syncModelsForApiKey(
+            apiKey.id,
+            apiKey.provider,
+            secretValue as string,
+          );
+        } catch (error) {
+          logger.error(
+            {
+              apiKeyId: apiKey.id,
+              provider: apiKey.provider,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to sync models for API key",
+          );
+        }
+      });
+
+      await Promise.all(syncPromises);
+
+      // Also sync system keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)
+      await systemKeyManager.syncSystemKeys(organizationId);
+
+      logger.info(
+        { organizationId, apiKeyCount: apiKeys.length },
+        "Completed model sync for all API keys (including system keys)",
+      );
+
       return reply.send({ success: true });
+    },
+  );
+
+  // Get all models with their linked API keys for the settings page
+  fastify.get(
+    "/api/models",
+    {
+      schema: {
+        operationId: RouteId.GetModelsWithApiKeys,
+        description:
+          "Get all models with their linked API keys. Returns models from the database with information about which API keys provide access to them.",
+        tags: ["Models"],
+        response: constructResponseSchema(z.array(ModelWithApiKeysSchema)),
+      },
+    },
+    async (_, reply) => {
+      // Get all models with their API key relationships
+      const modelsWithApiKeys =
+        await ApiKeyModelModel.getAllModelsWithApiKeys();
+
+      // Transform to response format with capabilities
+      const response = modelsWithApiKeys.map(({ model, apiKeys }) => ({
+        ...model,
+        apiKeys,
+        capabilities: ModelModel.toCapabilities(model),
+      }));
+
+      logger.debug(
+        { modelCount: response.length },
+        "Returning models with API keys",
+      );
+
+      return reply.send(response);
     },
   );
 };

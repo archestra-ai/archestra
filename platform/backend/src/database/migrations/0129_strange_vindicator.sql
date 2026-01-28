@@ -1,0 +1,2 @@
+ALTER TABLE "chat_api_keys" ADD COLUMN "is_system" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "chat_api_keys_system_unique" ON "chat_api_keys" USING btree ("provider") WHERE "chat_api_keys"."is_system" = true;

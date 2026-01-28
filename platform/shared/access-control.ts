@@ -467,7 +467,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatModels]: {
     conversation: ["read"],
   },
-  [RouteId.InvalidateChatModelsCache]: {
+  [RouteId.SyncChatModels]: {
     chatSettings: ["update"],
   },
   [RouteId.UpdateChatMessage]: {
@@ -499,6 +499,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteChatApiKey]: {
     chatSettings: ["delete"],
+  },
+  [RouteId.GetModelsWithApiKeys]: {
+    chatSettings: ["read"],
   },
   [RouteId.GetPrompts]: {
     prompt: ["read"],

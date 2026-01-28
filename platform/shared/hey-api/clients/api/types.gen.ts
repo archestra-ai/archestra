@@ -12104,6 +12104,7 @@ export type GetChatApiKeysResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        isSystem: boolean;
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -12203,6 +12204,7 @@ export type CreateChatApiKeyResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        isSystem: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -12291,6 +12293,7 @@ export type GetAvailableChatApiKeysResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        isSystem: boolean;
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -12463,6 +12466,7 @@ export type GetChatApiKeyResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        isSystem: boolean;
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -12563,6 +12567,7 @@ export type UpdateChatApiKeyResponses = {
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
         teamId: string | null;
+        isSystem: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -12660,14 +12665,14 @@ export type GetChatModelsResponses = {
 
 export type GetChatModelsResponse = GetChatModelsResponses[keyof GetChatModelsResponses];
 
-export type InvalidateChatModelsCacheData = {
+export type SyncChatModelsData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/chat/models/invalidate-cache';
+    url: '/api/chat/models/sync';
 };
 
-export type InvalidateChatModelsCacheErrors = {
+export type SyncChatModelsErrors = {
     /**
      * Default Response
      */
@@ -12724,9 +12729,9 @@ export type InvalidateChatModelsCacheErrors = {
     };
 };
 
-export type InvalidateChatModelsCacheError = InvalidateChatModelsCacheErrors[keyof InvalidateChatModelsCacheErrors];
+export type SyncChatModelsError = SyncChatModelsErrors[keyof SyncChatModelsErrors];
 
-export type InvalidateChatModelsCacheResponses = {
+export type SyncChatModelsResponses = {
     /**
      * Default Response
      */
@@ -12735,7 +12740,112 @@ export type InvalidateChatModelsCacheResponses = {
     };
 };
 
-export type InvalidateChatModelsCacheResponse = InvalidateChatModelsCacheResponses[keyof InvalidateChatModelsCacheResponses];
+export type SyncChatModelsResponse = SyncChatModelsResponses[keyof SyncChatModelsResponses];
+
+export type GetModelsWithApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/models';
+};
+
+export type GetModelsWithApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetModelsWithApiKeysError = GetModelsWithApiKeysErrors[keyof GetModelsWithApiKeysErrors];
+
+export type GetModelsWithApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        externalId: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        modelId: string;
+        description: string | null;
+        contextLength: number | null;
+        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+        supportsToolCalling: boolean | null;
+        promptPricePerToken: string | null;
+        completionPricePerToken: string | null;
+        lastSyncedAt: string;
+        createdAt: string;
+        updatedAt: string;
+        apiKeys: Array<{
+            id: string;
+            name: string;
+            provider: string;
+            scope: string;
+            isSystem: boolean;
+        }>;
+        capabilities: {
+            contextLength: number | null;
+            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+            outputModalities: Array<'text' | 'image' | 'audio'> | null;
+            supportsToolCalling: boolean | null;
+            pricePerMillionInput: string | null;
+            pricePerMillionOutput: string | null;
+        };
+    }>;
+};
+
+export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
 
 export type StreamChatData = {
     body: {

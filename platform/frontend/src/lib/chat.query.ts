@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { showErrorToastFromApiError } from "./utils";
 
 const {
   getChatConversations,
@@ -63,7 +64,10 @@ export function useConversations({
         query: trimmedSearch ? { search: trimmedSearch } : undefined,
       });
 
-      if (error) throw new Error("Failed to fetch conversations");
+      if (error) {
+        showErrorToastFromApiError(error);
+        return [];
+      }
       return data;
     },
     staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise

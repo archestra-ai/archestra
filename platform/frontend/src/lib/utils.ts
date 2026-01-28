@@ -1,5 +1,7 @@
+import type { ApiError } from "@shared";
 import { type ClassValue, clsx } from "clsx";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
 
 export const DEFAULT_TABLE_LIMIT = 10;
@@ -25,4 +27,10 @@ export function formatDate({
   dateFormat?: string;
 }) {
   return format(new Date(date), dateFormat);
+}
+
+export function showErrorToastFromApiError(error: {
+  error: Partial<ApiError> | Error;
+}) {
+  toast.error(error.error?.message ?? "API request failed");
 }

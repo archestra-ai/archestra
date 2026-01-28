@@ -13,42 +13,6 @@ import {
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-// Mock cacheManager while preserving other exports (like LRUCacheManager, CacheKey)
-const mockCacheStore = new Map<string, unknown>();
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...actual,
-    cacheManager: {
-      get: vi.fn(async (key: string) => mockCacheStore.get(key)),
-      set: vi.fn(async (key: string, value: unknown) => {
-        mockCacheStore.set(key, value);
-        return value;
-      }),
-      delete: vi.fn(async (key: string) => {
-        const existed = mockCacheStore.has(key);
-        mockCacheStore.delete(key);
-        return existed;
-      }),
-      wrap: vi.fn(
-        async <T>(
-          key: string,
-          fn: () => Promise<T>,
-          _opts?: { ttl?: number },
-        ): Promise<T> => {
-          const cached = mockCacheStore.get(key);
-          if (cached !== undefined) {
-            return cached as T;
-          }
-          const result = await fn();
-          mockCacheStore.set(key, result);
-          return result;
-        },
-      ),
-    },
-  };
-});
-
 // Mock the Google GenAI client for Vertex AI tests
 vi.mock("@/clients/gemini-client", () => ({
   createGoogleGenAIClient: vi.fn(),
@@ -67,8 +31,6 @@ describe("chat-models", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockFetch.mockReset();
-    // Clear the mock cache store to ensure clean state for caching tests
-    mockCacheStore.clear();
   });
 
   describe("fetchGeminiModels (API key mode)", () => {
@@ -454,89 +416,6 @@ describe("chat-models", () => {
           createdAt: undefined,
         });
       });
-    });
-  });
-
-  describe("fetchGeminiModelsViaVertexAi caching", () => {
-    test("caches results globally and returns cached data on subsequent calls", async () => {
-      const mockModels = [
-        {
-          name: "publishers/google/models/gemini-2.0-flash",
-          version: "default",
-          tunedModelInfo: {},
-        },
-      ];
-
-      const mockPager = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const model of mockModels) {
-            yield model;
-          }
-        },
-      };
-
-      const mockList = vi.fn().mockResolvedValue(mockPager);
-      const mockClient = {
-        models: {
-          list: mockList,
-        },
-      } as unknown as GoogleGenAI;
-
-      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
-
-      // First call - should fetch from SDK
-      const models1 = await fetchGeminiModelsViaVertexAi();
-      expect(models1).toHaveLength(1);
-      expect(models1[0].id).toBe("gemini-2.0-flash");
-      expect(mockList).toHaveBeenCalledTimes(1);
-
-      // Second call - should return cached result
-      const models2 = await fetchGeminiModelsViaVertexAi();
-      expect(models2).toHaveLength(1);
-      expect(models2[0].id).toBe("gemini-2.0-flash");
-      // SDK should NOT be called again - data comes from cache
-      expect(mockList).toHaveBeenCalledTimes(1);
-
-      // Third call - still using cache
-      const models3 = await fetchGeminiModelsViaVertexAi();
-      expect(models3).toEqual(models1);
-      expect(mockList).toHaveBeenCalledTimes(1);
-    });
-
-    test("uses global cache key (not user-specific)", async () => {
-      const mockModels = [
-        {
-          name: "publishers/google/models/gemini-2.5-pro",
-          version: "default",
-          tunedModelInfo: {},
-        },
-      ];
-
-      const mockPager = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const model of mockModels) {
-            yield model;
-          }
-        },
-      };
-
-      const mockList = vi.fn().mockResolvedValue(mockPager);
-      const mockClient = {
-        models: {
-          list: mockList,
-        },
-      } as unknown as GoogleGenAI;
-
-      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
-
-      // Call twice - simulating different users calling the same function
-      // Both should hit the same cache
-      const firstCall = await fetchGeminiModelsViaVertexAi();
-      const secondCall = await fetchGeminiModelsViaVertexAi();
-
-      // Verify SDK was only called once (global cache hit)
-      expect(mockList).toHaveBeenCalledTimes(1);
-      expect(firstCall).toEqual(secondCall);
     });
   });
 

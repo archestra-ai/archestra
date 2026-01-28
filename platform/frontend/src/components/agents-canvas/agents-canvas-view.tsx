@@ -60,7 +60,6 @@ import {
   useDeleteProfile,
   useInternalAgents,
   useProfile,
-  useProfiles,
 } from "@/lib/agent.query";
 import {
   agentDelegationsQueryKeys,
@@ -107,7 +106,6 @@ function AgentsCanvasViewInner() {
   const { getLayoutedNodes } = useLayoutNodes();
   const { data: internalAgents = [], isLoading: isLoadingAgents } =
     useInternalAgents();
-  const { data: profiles = [] } = useProfiles();
   const { data: delegationData, isLoading: isLoadingConnections } =
     useAllDelegationConnections();
   const connections = delegationData?.connections ?? [];
@@ -672,9 +670,9 @@ function AgentsCanvasViewInner() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Agents</SelectItem>
-              {profiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  {profile.name}
+              {internalAgents.map((agent) => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  {agent.name}
                 </SelectItem>
               ))}
             </SelectContent>

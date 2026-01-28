@@ -16,6 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, LayoutGrid, Plus, Search, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -100,6 +101,7 @@ function savePositions(nodes: Node<AgentNodeData>[]) {
 
 function AgentsCanvasViewInner() {
   const { resolvedTheme } = useTheme();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const reactFlowInstance = useReactFlow();
   const { getLayoutedNodes } = useLayoutNodes();
@@ -169,7 +171,10 @@ function AgentsCanvasViewInner() {
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedProfileId, setSelectedProfileId] = useState<string>("all");
+  const agentIdFromUrl = searchParams.get("agentId");
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(
+    agentIdFromUrl || "all",
+  );
 
   // Track previous data for change detection
   const prevAgentsRef = useRef<typeof internalAgents>([]);
@@ -663,10 +668,10 @@ function AgentsCanvasViewInner() {
             onValueChange={setSelectedProfileId}
           >
             <SelectTrigger className="!h-8 w-40 text-sm">
-              <SelectValue placeholder="All Profiles" />
+              <SelectValue placeholder="All Agents" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Profiles</SelectItem>
+              <SelectItem value="all">All Agents</SelectItem>
               {profiles.map((profile) => (
                 <SelectItem key={profile.id} value={profile.id}>
                   {profile.name}

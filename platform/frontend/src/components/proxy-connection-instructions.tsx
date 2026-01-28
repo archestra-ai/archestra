@@ -72,6 +72,7 @@ const PRIMARY_PROVIDERS: ProviderOption[] = [
   "openai",
   "anthropic",
   "gemini",
+  "ollama",
   "claude-code",
 ];
 

@@ -1,6 +1,9 @@
 "use client";
 
-import { CHAT_DEFAULT_SESSION_NAME, CHAT_START_NEW_LABEL } from "@shared";
+import {
+  CHAT_DEFAULT_SESSION_NAME,
+  CHAT_SHORTCUT_DIALOG_START_NEW_LABEL,
+} from "@shared";
 import { useDebounce } from "@uidotdev/usehooks";
 import { isToday, isWithinInterval, isYesterday, subDays } from "date-fns";
 import { MessageSquare, Pencil } from "lucide-react";
@@ -285,7 +288,9 @@ export function ConversationSearchPalette({
                   className="flex items-center gap-2 px-3 py-3 cursor-pointer aria-selected:bg-accent"
                 >
                   <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="font-medium">{CHAT_START_NEW_LABEL}</span>
+                  <span className="font-medium">
+                    {CHAT_SHORTCUT_DIALOG_START_NEW_LABEL}
+                  </span>
                 </CommandItem>
               </CommandGroup>
             )}

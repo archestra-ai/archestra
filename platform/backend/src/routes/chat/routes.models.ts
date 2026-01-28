@@ -199,7 +199,7 @@ export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
  * Note: Llama models are excluded as they are not allowed in chat
  */
 async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.chat.cerebras.baseUrl;
+  const baseUrl = config.llm.cerebras.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -240,7 +240,7 @@ async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
  * Fetch models from Mistral API (OpenAI-compatible)
  */
 async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.chat.mistral.baseUrl;
+  const baseUrl = config.llm.mistral.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {

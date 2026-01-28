@@ -106,7 +106,9 @@ export function ProxyConnectionInstructions({
         </Label>
         <Select
           value={selectedProvider}
-          onValueChange={(value) => setSelectedProvider(value as ProviderOption)}
+          onValueChange={(value) =>
+            setSelectedProvider(value as ProviderOption)
+          }
         >
           <SelectTrigger id="provider-select" className="w-full">
             <SelectValue placeholder="Select a provider">
@@ -135,7 +137,7 @@ export function ProxyConnectionInstructions({
             Run Claude Code with the Archestra proxy:
           </p>
           <div className="bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
-            <CodeText className="text-xs text-primary flex-1">
+            <CodeText className="text-xs text-primary flex-1 break-all">
               {claudeCodeCommand}
             </CodeText>
             <CopyButton

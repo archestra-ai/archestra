@@ -115,7 +115,7 @@ export function ProxyConnectionInstructions({
               {PROVIDER_CONFIG[selectedProvider].label}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="max-h-[250px]">
             {ALL_PROVIDERS.map((provider) => (
               <SelectItem key={provider} value={provider}>
                 {PROVIDER_CONFIG[provider].label}

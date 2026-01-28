@@ -72,7 +72,6 @@ const PRIMARY_PROVIDERS: ProviderOption[] = [
   "openai",
   "anthropic",
   "gemini",
-  "ollama",
   "claude-code",
 ];
 
@@ -93,6 +92,7 @@ export function ProxyConnectionInstructions({
   const [connectionUrl, setConnectionUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
   );
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
@@ -118,7 +118,7 @@ export function ProxyConnectionInstructions({
             {PROVIDER_CONFIG[provider].label}
           </Button>
         ))}
-        <Popover>
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
           <PopoverTrigger asChild>
             <Button
               variant={
@@ -127,6 +127,7 @@ export function ProxyConnectionInstructions({
                   : "outline"
               }
               size="sm"
+              aria-label="More providers"
             >
               {DROPDOWN_PROVIDERS.includes(selectedProvider)
                 ? PROVIDER_CONFIG[selectedProvider].label
@@ -134,14 +135,20 @@ export function ProxyConnectionInstructions({
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-1">
+          <PopoverContent
+            className="w-auto p-1 flex flex-col"
+            aria-label="Additional providers"
+          >
             {DROPDOWN_PROVIDERS.map((provider) => (
               <Button
                 key={provider}
                 variant={selectedProvider === provider ? "default" : "ghost"}
                 size="sm"
-                className="w-full justify-start"
-                onClick={() => setSelectedProvider(provider)}
+                className="justify-start"
+                onClick={() => {
+                  setSelectedProvider(provider);
+                  setPopoverOpen(false);
+                }}
               >
                 {PROVIDER_CONFIG[provider].label}
               </Button>

@@ -395,13 +395,50 @@ class ModelsDevClient {
 
     // Deduplicate models by (provider, modelId) key - this can happen when
     // multiple models.dev providers map to the same Archestra provider
-    // (e.g., both google and google-vertex map to gemini)
+    // (e.g., both google and google-vertex map to gemini).
+    //
+    // We use a deterministic priority system: prefer direct API providers over
+    // derived/vertex providers. The externalId contains the original models.dev
+    // provider (e.g., "google/gemini-2.5-flash" vs "google-vertex/gemini-2.5-flash").
+    const preferredSourcePrefixes: Record<SupportedProvider, string[]> = {
+      gemini: ["google/"], // Prefer google over google-vertex
+      openai: ["openai/", "deepseek/"], // Prefer direct providers over aggregators
+      anthropic: ["anthropic/"],
+      cohere: ["cohere/"],
+      cerebras: ["cerebras/"],
+      mistral: ["mistral/"],
+      bedrock: ["amazon-bedrock/"],
+      ollama: ["ollama/"],
+      vllm: ["vllm/"],
+      zhipuai: ["zhipuai/"],
+    };
+
+    const getSourcePriority = (model: CreateModel): number => {
+      const prefixes = preferredSourcePrefixes[model.provider] ?? [];
+      for (let i = 0; i < prefixes.length; i++) {
+        if (model.externalId.startsWith(prefixes[i])) {
+          return i; // Lower index = higher priority
+        }
+      }
+      return prefixes.length; // Not in preferred list = lowest priority
+    };
+
     const deduplicatedModels = new Map<string, CreateModel>();
     for (const model of modelsToSync) {
       const key = `${model.provider}:${model.modelId}`;
-      // Keep the first occurrence (or could prefer one with more data)
-      if (!deduplicatedModels.has(key)) {
+      const existing = deduplicatedModels.get(key);
+
+      if (!existing) {
         deduplicatedModels.set(key, model);
+      } else {
+        // Keep the model with higher priority (lower priority number)
+        const modelPriority = getSourcePriority(model);
+        const existingPriority = getSourcePriority(existing);
+
+        if (modelPriority < existingPriority) {
+          deduplicatedModels.set(key, model);
+        }
+        // Otherwise keep existing (same priority = first occurrence wins)
       }
     }
     const uniqueModelsToSync = Array.from(deduplicatedModels.values());

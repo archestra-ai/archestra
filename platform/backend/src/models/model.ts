@@ -107,6 +107,7 @@ class ModelModel {
    * Bulk upsert models.
    * Uses batched inserts with ON CONFLICT to avoid query parameter limits.
    * PostgreSQL has a 65535 parameter limit, so we batch to stay well under.
+   * All batches are wrapped in a transaction to ensure atomicity.
    */
   static async bulkUpsert(dataArray: CreateModel[]): Promise<Model[]> {
     if (dataArray.length === 0) {
@@ -117,44 +118,50 @@ class ModelModel {
     // Each row has ~11 columns, so 50 rows = ~550 parameters per batch
     const BATCH_SIZE = 50;
     const totalBatches = Math.ceil(dataArray.length / BATCH_SIZE);
-    const results: Model[] = [];
 
-    logger.info(
+    logger.debug(
       { totalModels: dataArray.length, batchSize: BATCH_SIZE, totalBatches },
       "Starting batched model upsert",
     );
 
-    for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
-      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-      const batch = dataArray.slice(i, i + BATCH_SIZE);
+    // Wrap all batches in a transaction to ensure atomicity
+    const results = await db.transaction(async (tx) => {
+      const batchResults: Model[] = [];
 
-      logger.debug(
-        { batchNumber, totalBatches, batchSize: batch.length },
-        "Processing model batch",
-      );
+      for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        const batch = dataArray.slice(i, i + BATCH_SIZE);
 
-      const batchResults = await db
-        .insert(schema.modelsTable)
-        .values(batch)
-        .onConflictDoUpdate({
-          target: [schema.modelsTable.provider, schema.modelsTable.modelId],
-          set: {
-            externalId: sql`excluded.external_id`,
-            description: sql`excluded.description`,
-            contextLength: sql`excluded.context_length`,
-            inputModalities: sql`excluded.input_modalities`,
-            outputModalities: sql`excluded.output_modalities`,
-            supportsToolCalling: sql`excluded.supports_tool_calling`,
-            promptPricePerToken: sql`excluded.prompt_price_per_token`,
-            completionPricePerToken: sql`excluded.completion_price_per_token`,
-            lastSyncedAt: new Date(),
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
+        logger.debug(
+          { batchNumber, totalBatches, batchSize: batch.length },
+          "Processing model batch",
+        );
 
-      results.push(...batchResults);
-    }
+        const insertedBatch = await tx
+          .insert(schema.modelsTable)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+            set: {
+              externalId: sql`excluded.external_id`,
+              description: sql`excluded.description`,
+              contextLength: sql`excluded.context_length`,
+              inputModalities: sql`excluded.input_modalities`,
+              outputModalities: sql`excluded.output_modalities`,
+              supportsToolCalling: sql`excluded.supports_tool_calling`,
+              promptPricePerToken: sql`excluded.prompt_price_per_token`,
+              completionPricePerToken: sql`excluded.completion_price_per_token`,
+              lastSyncedAt: new Date(),
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+
+        batchResults.push(...insertedBatch);
+      }
+
+      return batchResults;
+    });
 
     logger.info(
       { totalUpserted: results.length },

@@ -30608,6 +30608,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "description": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "systemPrompt": {
                         "nullable": true,
                         "type": "string"
@@ -30616,6 +30620,7 @@
                     "required": [
                       "id",
                       "name",
+                      "description",
                       "systemPrompt"
                     ],
                     "additionalProperties": false

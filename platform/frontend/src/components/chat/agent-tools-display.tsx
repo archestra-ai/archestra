@@ -174,6 +174,11 @@ export function AgentToolsDisplay({
                     {enabled ? "Enabled" : "Disabled"}
                   </span>
                 </div>
+                {delegatedAgent.description && (
+                  <p className="text-xs text-muted-foreground">
+                    {delegatedAgent.description}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   Click to {enabled ? "disable" : "enable"} this agent
                 </p>

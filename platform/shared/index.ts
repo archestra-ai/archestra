@@ -1,3 +1,4 @@
+export * from "./chat";
 export * from "./chat-error";
 export * from "./consts";
 export { client as archestraApiClient } from "./hey-api/clients/api/client.gen";

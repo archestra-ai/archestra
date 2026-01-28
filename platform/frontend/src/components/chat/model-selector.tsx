@@ -1,8 +1,25 @@
 "use client";
 
-import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { CheckIcon, Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  E2eTestId,
+  type ModelInputModality,
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@shared";
+import {
+  CheckIcon,
+  CopyIcon,
+  DollarSign,
+  FileText,
+  ImageIcon,
+  Layers,
+  Loader2,
+  Mic,
+  Settings2,
+  Video,
+  XIcon,
+} from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -16,7 +33,44 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
-import { useModelsByProviderQuery } from "@/lib/chat-models.query";
+import { DialogClose } from "@/components/ui/dialog";
+import { Toggle } from "@/components/ui/toggle";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  type ChatModel,
+  type ModelCapabilities,
+  useModelsByProviderQuery,
+} from "@/lib/chat-models.query";
+import { cn } from "@/lib/utils";
+
+/** Modalities that can be filtered (excludes "text" since all models support it) */
+type FilterableModality = Exclude<ModelInputModality, "text">;
+
+/** Filter configuration for a modality */
+type ModalityFilterConfig = {
+  modality: FilterableModality;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+};
+
+/** Available modality filters */
+const MODALITY_FILTERS: ModalityFilterConfig[] = [
+  { modality: "image", icon: ImageIcon, label: "Vision" },
+  { modality: "audio", icon: Mic, label: "Audio" },
+  { modality: "video", icon: Video, label: "Video" },
+  { modality: "pdf", icon: FileText, label: "PDF" },
+];
+
+/** Tool calling filter config */
+const TOOL_CALLING_FILTER = {
+  icon: Settings2,
+  label: "Tools",
+};
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -29,7 +83,10 @@ interface ModelSelectorProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-/** Map our provider names to logo provider names */
+/** Map our provider names to logo provider names
+ * models.dev provider IDs
+ * see https://github.com/anomalyco/models.dev/tree/dev/providers
+ * */
 const providerToLogoProvider: Record<SupportedProvider, string> = {
   openai: "openai",
   anthropic: "anthropic",
@@ -39,9 +96,378 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   cohere: "cohere",
   mistral: "mistral",
   vllm: "vllm",
-  ollama: "ollama",
+  ollama: "ollama-cloud", // models.dev uses ollama-cloud for the Ollama provider
   zhipuai: "zhipuai",
 };
+
+/**
+ * Creates a unique value for a model that includes the provider.
+ * This prevents issues when different providers have models with the same ID.
+ */
+function createModelValue(
+  provider: SupportedProvider,
+  modelId: string,
+): string {
+  return `${provider}:${modelId}`;
+}
+
+/**
+ * Extracts the provider and model ID from a combined model value.
+ */
+function parseModelValue(
+  value: string,
+): { provider: SupportedProvider; modelId: string } | null {
+  const colonIndex = value.indexOf(":");
+  if (colonIndex === -1) return null;
+  return {
+    provider: value.substring(0, colonIndex) as SupportedProvider,
+    modelId: value.substring(colonIndex + 1),
+  };
+}
+
+/**
+ * Capability icon component - matches Vercel AI Elements style.
+ * Small, compact icons that show model capabilities.
+ */
+function CapabilityIcon({
+  icon: Icon,
+  label,
+  className,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            "inline-flex items-center justify-center size-4 rounded-sm bg-muted/50",
+            className,
+          )}
+        >
+          <Icon className="size-2.5 text-muted-foreground" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * Displays capability icons for a model in a compact row.
+ * Style inspired by Vercel AI Elements model selector.
+ */
+function ModelCapabilityBadges({
+  capabilities,
+}: {
+  capabilities?: ModelCapabilities;
+}) {
+  if (!capabilities) {
+    return null;
+  }
+
+  const hasVision = capabilities.inputModalities?.includes("image");
+  const hasAudio = capabilities.inputModalities?.includes("audio");
+  const hasVideo = capabilities.inputModalities?.includes("video");
+  const hasPdf = capabilities.inputModalities?.includes("pdf");
+  const hasToolCalling = capabilities.supportsToolCalling;
+
+  // Don't render if no capabilities to show
+  if (!hasVision && !hasAudio && !hasVideo && !hasPdf && !hasToolCalling) {
+    return null;
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <div className="flex items-center gap-0.5">
+        {hasVision && (
+          <CapabilityIcon icon={ImageIcon} label="Supports vision (images)" />
+        )}
+        {hasAudio && <CapabilityIcon icon={Mic} label="Supports audio input" />}
+        {hasVideo && (
+          <CapabilityIcon icon={Video} label="Supports video input" />
+        )}
+        {hasPdf && (
+          <CapabilityIcon icon={FileText} label="Supports PDF input" />
+        )}
+        {hasToolCalling && (
+          <CapabilityIcon icon={Settings2} label="Supports tool calling" />
+        )}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Formats a context length number into a human-readable string.
+ * e.g., 128000 -> "128K", 1000000 -> "1M"
+ */
+function formatContextLength(contextLength: number): string {
+  if (contextLength >= 1_000_000) {
+    return `${(contextLength / 1_000_000).toFixed(contextLength % 1_000_000 === 0 ? 0 : 1)}M`;
+  }
+  if (contextLength >= 1_000) {
+    return `${(contextLength / 1_000).toFixed(contextLength % 1_000 === 0 ? 0 : 1)}K`;
+  }
+  return contextLength.toString();
+}
+
+/**
+ * Displays the context window size with a tooltip.
+ */
+function ContextLengthIndicator({
+  contextLength,
+}: {
+  contextLength: number | null | undefined;
+}) {
+  if (!contextLength) {
+    return null;
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground font-mono">
+            <Layers className="size-3" />
+            {formatContextLength(contextLength)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {contextLength.toLocaleString()} token context window
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Displays pricing information with a tooltip showing cost per million tokens.
+ */
+function PricingIndicator({
+  pricePerMillionInput,
+  pricePerMillionOutput,
+}: {
+  pricePerMillionInput: string | null | undefined;
+  pricePerMillionOutput: string | null | undefined;
+}) {
+  if (!pricePerMillionInput && !pricePerMillionOutput) {
+    return null;
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center text-muted-foreground">
+            <DollarSign className="size-3" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          <div className="flex flex-col gap-0.5">
+            {pricePerMillionInput && (
+              <span>Input: ${pricePerMillionInput}/M tokens</span>
+            )}
+            {pricePerMillionOutput && (
+              <span>Output: ${pricePerMillionOutput}/M tokens</span>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Copy button for model ID that stops propagation to prevent row selection.
+ */
+function CopyModelIdButton({ modelId }: { modelId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleClick = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      try {
+        await navigator.clipboard.writeText(modelId);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Fallback for older browsers
+        const textArea = document.createElement("textarea");
+        textArea.value = modelId;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    },
+    [modelId],
+  );
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      onMouseDown={(e) => e.stopPropagation()}
+      className="inline-flex items-center justify-center size-4 rounded hover:bg-muted/80 transition-colors ml-1 opacity-0 group-hover:opacity-100"
+      aria-label={copied ? "Copied!" : "Copy model ID"}
+    >
+      {copied ? (
+        <CheckIcon className="size-2.5 text-green-500" />
+      ) : (
+        <CopyIcon className="size-2.5 text-muted-foreground" />
+      )}
+    </button>
+  );
+}
+
+/** Filter state type */
+type ModelFilters = {
+  modalities: Set<FilterableModality>;
+  toolCalling: boolean;
+};
+
+/** Initial filter state - no filters active */
+const INITIAL_FILTERS: ModelFilters = {
+  modalities: new Set(),
+  toolCalling: false,
+};
+
+/**
+ * Filter toggle button for capabilities.
+ * Shows a checkmark and highlighted styling when active.
+ */
+function FilterToggle({
+  icon: Icon,
+  label,
+  pressed,
+  onPressedChange,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  pressed: boolean;
+  onPressedChange: (pressed: boolean) => void;
+}) {
+  return (
+    <Toggle
+      size="sm"
+      pressed={pressed}
+      onPressedChange={onPressedChange}
+      className={cn(
+        "h-7 px-2 gap-1.5 border transition-colors",
+        pressed
+          ? "bg-primary text-primary-foreground border-primary ring-2 ring-primary/20"
+          : "border-transparent hover:border-border",
+      )}
+    >
+      {pressed && <CheckIcon className="size-3" />}
+      <Icon className="size-3.5" />
+      <span className="text-xs">{label}</span>
+    </Toggle>
+  );
+}
+
+/**
+ * Filter bar for model capabilities.
+ */
+function ModelFiltersBar({
+  filters,
+  onFiltersChange,
+  availableModalities,
+}: {
+  filters: ModelFilters;
+  onFiltersChange: (filters: ModelFilters) => void;
+  availableModalities: Set<FilterableModality>;
+}) {
+  const toggleModality = useCallback(
+    (modality: FilterableModality, pressed: boolean) => {
+      const newModalities = new Set(filters.modalities);
+      if (pressed) {
+        newModalities.add(modality);
+      } else {
+        newModalities.delete(modality);
+      }
+      onFiltersChange({ ...filters, modalities: newModalities });
+    },
+    [filters, onFiltersChange],
+  );
+
+  const toggleToolCalling = useCallback(
+    (pressed: boolean) => {
+      onFiltersChange({ ...filters, toolCalling: pressed });
+    },
+    [filters, onFiltersChange],
+  );
+
+  // Only show modality filters that are available in the model list
+  const visibleModalityFilters = MODALITY_FILTERS.filter((f) =>
+    availableModalities.has(f.modality),
+  );
+
+  // Don't render if no filters to show
+  if (visibleModalityFilters.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-1 px-3 py-2 border-b">
+      <span className="text-xs text-muted-foreground mr-1">Filter:</span>
+      <div className="flex flex-wrap items-center gap-1 flex-1">
+        {visibleModalityFilters.map((config) => (
+          <FilterToggle
+            key={config.modality}
+            icon={config.icon}
+            label={config.label}
+            pressed={filters.modalities.has(config.modality)}
+            onPressedChange={(pressed) =>
+              toggleModality(config.modality, pressed)
+            }
+          />
+        ))}
+        <FilterToggle
+          icon={TOOL_CALLING_FILTER.icon}
+          label={TOOL_CALLING_FILTER.label}
+          pressed={filters.toolCalling}
+          onPressedChange={toggleToolCalling}
+        />
+      </div>
+      <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+        <XIcon className="size-4" />
+        <span className="sr-only">Close</span>
+      </DialogClose>
+    </div>
+  );
+}
+
+/**
+ * Checks if a model matches the given filters.
+ */
+function modelMatchesFilters(model: ChatModel, filters: ModelFilters): boolean {
+  const capabilities = model.capabilities;
+
+  // Check modality filters (AND logic - model must support all selected modalities)
+  for (const modality of filters.modalities) {
+    if (!capabilities?.inputModalities?.includes(modality)) {
+      return false;
+    }
+  }
+
+  // Check tool calling filter
+  if (filters.toolCalling && !capabilities?.supportsToolCalling) {
+    return false;
+  }
+
+  return true;
+}
 
 /**
  * Model selector dialog with:
@@ -57,9 +483,14 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   const { modelsByProvider, isLoading } = useModelsByProviderQuery();
   const [open, setOpen] = useState(false);
+  const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
+    // Reset filters when closing the dialog
+    if (!newOpen) {
+      setFilters(INITIAL_FILTERS);
+    }
     onOpenChangeProp?.(newOpen);
   };
 
@@ -67,6 +498,49 @@ export function ModelSelector({
   const availableProviders = useMemo(() => {
     return Object.keys(modelsByProvider) as SupportedProvider[];
   }, [modelsByProvider]);
+
+  // Calculate which modalities are available across all models
+  const availableModalities = useMemo(() => {
+    const modalities = new Set<FilterableModality>();
+    for (const provider of availableProviders) {
+      for (const model of modelsByProvider[provider] ?? []) {
+        const inputMods = model.capabilities?.inputModalities ?? [];
+        for (const mod of inputMods) {
+          if (mod !== "text") {
+            modalities.add(mod as FilterableModality);
+          }
+        }
+      }
+    }
+    return modalities;
+  }, [availableProviders, modelsByProvider]);
+
+  // Check if any filters are active
+  const hasActiveFilters = filters.modalities.size > 0 || filters.toolCalling;
+
+  // Filter models by provider based on active filters
+  const filteredModelsByProvider = useMemo(() => {
+    if (!hasActiveFilters) {
+      return modelsByProvider;
+    }
+
+    const filtered: Partial<Record<SupportedProvider, ChatModel[]>> = {};
+    for (const provider of availableProviders) {
+      const models = modelsByProvider[provider] ?? [];
+      const matchingModels = models.filter((model) =>
+        modelMatchesFilters(model, filters),
+      );
+      if (matchingModels.length > 0) {
+        filtered[provider] = matchingModels;
+      }
+    }
+    return filtered;
+  }, [modelsByProvider, availableProviders, filters, hasActiveFilters]);
+
+  // Get filtered providers (only those with matching models)
+  const filteredProviders = useMemo(() => {
+    return Object.keys(filteredModelsByProvider) as SupportedProvider[];
+  }, [filteredModelsByProvider]);
 
   // Find the provider for a given model
   const getProviderForModel = (model: string): SupportedProvider | null => {
@@ -95,15 +569,19 @@ export function ModelSelector({
     return selectedModel; // Fall back to ID if not found
   }, [selectedModel, availableProviders, modelsByProvider]);
 
-  const handleSelectModel = (model: string) => {
+  const handleSelectModel = (modelValue: string) => {
+    // Parse the provider:modelId format
+    const parsed = parseModelValue(modelValue);
+    const modelId = parsed?.modelId ?? modelValue;
+
     // If selecting the same model, just close the dialog
-    if (model === selectedModel) {
+    if (modelId === selectedModel) {
       handleOpenChange(false);
       return;
     }
 
     handleOpenChange(false);
-    onModelChange(model);
+    onModelChange(modelId);
   };
 
   // Check if selectedModel is in the available models
@@ -142,6 +620,7 @@ export function ModelSelector({
           <PromptInputButton
             disabled={disabled}
             className="max-w-[280px] min-w-0"
+            data-testid={E2eTestId.ChatModelSelectorTrigger}
           >
             {selectedModelLogo && (
               <ModelSelectorLogo
@@ -157,10 +636,20 @@ export function ModelSelector({
         <ModelSelectorContent
           title="Select Model"
           onCloseAutoFocus={(e) => e.preventDefault()}
+          showCloseButton={false}
         >
+          <ModelFiltersBar
+            filters={filters}
+            onFiltersChange={setFilters}
+            availableModalities={availableModalities}
+          />
           <ModelSelectorInput placeholder="Search models..." />
           <ModelSelectorList>
-            <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+            <ModelSelectorEmpty>
+              {hasActiveFilters
+                ? "No models match the selected filters."
+                : "No models found."}
+            </ModelSelectorEmpty>
 
             {/* Show current model if not in available list */}
             {!isModelAvailable && selectedModel && (
@@ -179,28 +668,56 @@ export function ModelSelector({
               </ModelSelectorGroup>
             )}
 
-            {availableProviders.map((provider) => (
+            {filteredProviders.map((provider) => (
               <ModelSelectorGroup
                 key={provider}
                 heading={providerDisplayNames[provider]}
               >
-                {modelsByProvider[provider]?.map((model) => (
-                  <ModelSelectorItem
-                    key={model.id}
-                    value={model.id}
-                    onSelect={() => handleSelectModel(model.id)}
-                  >
-                    <ModelSelectorLogo
-                      provider={providerToLogoProvider[provider]}
-                    />
-                    <ModelSelectorName>{model.displayName}</ModelSelectorName>
-                    {selectedModel === model.id ? (
-                      <CheckIcon className="ml-auto size-4" />
-                    ) : (
-                      <div className="ml-auto size-4" />
-                    )}
-                  </ModelSelectorItem>
-                ))}
+                {filteredModelsByProvider[provider]?.map((model) => {
+                  // Use provider:modelId format for unique keys/values
+                  // This prevents issues when different providers have models with the same ID
+                  const modelValue = createModelValue(provider, model.id);
+                  return (
+                    <ModelSelectorItem
+                      key={modelValue}
+                      value={modelValue}
+                      onSelect={() => handleSelectModel(modelValue)}
+                      className="group"
+                    >
+                      <ModelSelectorLogo
+                        provider={providerToLogoProvider[provider]}
+                      />
+                      <ModelSelectorName>
+                        {model.displayName}{" "}
+                        <span className="text-xs text-muted-foreground font-mono">
+                          ({model.id})
+                        </span>
+                        <CopyModelIdButton modelId={model.id} />
+                      </ModelSelectorName>
+                      <div className="ml-auto flex items-center gap-2">
+                        <ModelCapabilityBadges
+                          capabilities={model.capabilities}
+                        />
+                        <ContextLengthIndicator
+                          contextLength={model.capabilities?.contextLength}
+                        />
+                        <PricingIndicator
+                          pricePerMillionInput={
+                            model.capabilities?.pricePerMillionInput
+                          }
+                          pricePerMillionOutput={
+                            model.capabilities?.pricePerMillionOutput
+                          }
+                        />
+                        {selectedModel === model.id ? (
+                          <CheckIcon className="size-4" />
+                        ) : (
+                          <div className="size-4" />
+                        )}
+                      </div>
+                    </ModelSelectorItem>
+                  );
+                })}
               </ModelSelectorGroup>
             ))}
           </ModelSelectorList>

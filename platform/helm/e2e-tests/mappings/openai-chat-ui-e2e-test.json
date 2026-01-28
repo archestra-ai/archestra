@@ -1,0 +1,20 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/openai/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "contains": "chat-ui-e2e-test"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache"
+    },
+    "body": "data: {\"id\":\"chatcmpl-chat-ui-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-chat-ui-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"This is a mocked response for the chat UI e2e test.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-chat-ui-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":50,\"completion_tokens\":15,\"total_tokens\":65}}\n\ndata: [DONE]\n\n"
+  }
+}

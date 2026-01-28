@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-01-17
+lastUpdated: 2026-01-27
 ---
 
 <!--
@@ -187,17 +187,21 @@ Interaction handlers parse stored request/response data for display in the LLM P
 
 ### E2E Tests
 
-Each provider must be added to the LLM Proxy e2e tests to ensure all features work correctly.
+Each provider must be added to the LLM Proxy and Chat UI e2e tests to ensure all features work correctly.
 
-| File                                                            | Description                                                                                                             |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `helm/e2e-tests/mappings/{provider}-*.json`                     | WireMock stub mappings for mocking provider API responses (models list, chat completions, tool calls, etc.)             |
-| `.github/values-ci.yaml`                                        | Add provider base URL pointing to WireMock (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL: "http://e2e-tests-wiremock:8080/v1"`) |
-| `e2e-tests/tests/api/llm-proxy/tool-invocation.spec.ts`         | Tool invocation policy tests - add `{provider}Config` to `testConfigs` array                                            |
-| `e2e-tests/tests/api/llm-proxy/tool-persistence.spec.ts`        | Tool call persistence tests - add `{provider}Config` to `testConfigs` array                                             |
-| `e2e-tests/tests/api/llm-proxy/tool-result-compression.spec.ts` | TOON compression tests - add `{provider}Config` to `testConfigs` array                                                  |
-| `e2e-tests/tests/api/llm-proxy/model-optimization.spec.ts`      | Model optimization tests - add `{provider}Config` to `testConfigs` array                                                |
-| `e2e-tests/tests/api/llm-proxy/token-cost-limits.spec.ts`       | Token cost limits tests - add `{provider}Config` to `testConfigs` array                                                 |
+#### LLM Proxy E2E Tests
+
+| File                                                            | Description                                                                                                                              |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `helm/e2e-tests/mappings/{provider}-*.json`                     | WireMock stub mappings for mocking provider API responses (models list, chat completions, tool calls, etc.)                              |
+| `helm/e2e-tests/mappings/{provider}-chat-ui-e2e-test.json`      | WireMock stub mapping for Chat UI streaming responses - must use SSE format with `bodyPatterns` matching on `chat-ui-e2e-test`           |
+| `.github/values-ci.yaml`                                        | Add provider base URL pointing to WireMock (e.g., `ARCHESTRA_{PROVIDER}_BASE_URL: "http://e2e-tests-wiremock:8080/v1"`)                  |
+| `e2e-tests/tests/api/llm-proxy/tool-invocation.spec.ts`         | Tool invocation policy tests - add `{provider}Config` to `testConfigs` array                                                             |
+| `e2e-tests/tests/api/llm-proxy/tool-persistence.spec.ts`        | Tool call persistence tests - add `{provider}Config` to `testConfigs` array                                                              |
+| `e2e-tests/tests/api/llm-proxy/tool-result-compression.spec.ts` | TOON compression tests - add `{provider}Config` to `testConfigs` array                                                                   |
+| `e2e-tests/tests/api/llm-proxy/model-optimization.spec.ts`      | Model optimization tests - add `{provider}Config` to `testConfigs` array                                                                 |
+| `e2e-tests/tests/api/llm-proxy/token-cost-limits.spec.ts`       | Token cost limits tests - add `{provider}Config` to `testConfigs` array                                                                  |
+| `e2e-tests/tests/ui/chat.spec.ts`                               | Chat UI tests - add `{provider}Config` to `testConfigs` array with `providerName`, `modelId`, `modelDisplayName`, and `expectedResponse` |
 
 ## Chat Support
 

@@ -1,6 +1,12 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import {
+  E2eTestId,
+  getAcceptedFileTypes,
+  getSupportedFileTypesDescription,
+  type ModelInputModality,
+  supportsFileUploads,
+} from "@shared";
 import type { ChatStatus } from "ai";
 import { PaperclipIcon, Plus } from "lucide-react";
 import type { FormEvent } from "react";
@@ -25,6 +31,7 @@ import {
 import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
+import { ContextIndicator } from "@/components/chat/context-indicator";
 import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { Button } from "@/components/ui/button";
@@ -66,6 +73,12 @@ interface ArchestraPromptInputProps {
   isModelsLoading?: boolean;
   /** Callback to open edit agent dialog */
   onEditAgent?: () => void;
+  /** Estimated tokens used in the conversation (for context indicator) */
+  tokensUsed?: number;
+  /** Maximum context length of the selected model (for context indicator) */
+  maxContextLength?: number | null;
+  /** Input modalities supported by the selected model (for file type filtering) */
+  inputModalities?: ModelInputModality[] | null;
 }
 
 // Inner component that has access to the controller context
@@ -85,6 +98,9 @@ const PromptInputContent = ({
   allowFileUploads = false,
   isModelsLoading = false,
   onEditAgent,
+  tokensUsed = 0,
+  maxContextLength,
+  inputModalities,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -92,6 +108,12 @@ const PromptInputContent = ({
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
+
+  // Derive file upload capabilities from model input modalities
+  const modelSupportsFiles = supportsFileUploads(inputModalities);
+  const acceptedFileTypes = getAcceptedFileTypes(inputModalities);
+  const supportedTypesDescription =
+    getSupportedFileTypesDescription(inputModalities);
 
   // Check if agent has tools or delegations
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
@@ -115,8 +137,18 @@ const PromptInputContent = ({
   const hasDelegatedAgents = delegatedAgents.length > 0;
   const hasContent = hasTools || hasDelegatedAgents;
 
+  // Determine if file uploads should be shown
+  // 1. Organization must allow file uploads (allowFileUploads)
+  // 2. Model must support at least one file type (modelSupportsFiles)
+  const showFileUploadButton = allowFileUploads && modelSupportsFiles;
+
   return (
-    <PromptInput globalDrop multiple onSubmit={onSubmit}>
+    <PromptInput
+      globalDrop
+      multiple
+      onSubmit={onSubmit}
+      accept={acceptedFileTypes}
+    >
       {agentId && (
         <PromptInputHeader>
           {hasContent ? (
@@ -160,23 +192,33 @@ const PromptInputContent = ({
           ref={textareaRef}
           className="px-4"
           disableEnterSubmit={status !== "ready" && status !== "error"}
+          data-testid={E2eTestId.ChatPromptTextarea}
         />
       </PromptInputBody>
       <PromptInputFooter>
         <PromptInputTools>
           {/* File attachment button - direct click opens file browser, shows tooltip when disabled */}
-          {allowFileUploads ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2"
-              onClick={() => attachments.openFileDialog()}
-              data-testid={E2eTestId.ChatFileUploadButton}
-            >
-              <PaperclipIcon className="size-4" />
-              <span className="sr-only">Attach files</span>
-            </Button>
+          {showFileUploadButton ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={() => attachments.openFileDialog()}
+                  data-testid={E2eTestId.ChatFileUploadButton}
+                >
+                  <PaperclipIcon className="size-4" />
+                  <span className="sr-only">Attach files</span>
+                </Button>
+              </TooltipTrigger>
+              {supportedTypesDescription && (
+                <TooltipContent side="top" sideOffset={4}>
+                  Supports: {supportedTypesDescription}
+                </TooltipContent>
+              )}
+            </Tooltip>
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -190,19 +232,23 @@ const PromptInputContent = ({
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={4}>
-                {canUpdateOrganization ? (
-                  <span>
-                    File uploads are disabled.{" "}
-                    <a
-                      href="/settings/security"
-                      className="underline hover:no-underline"
-                      aria-label="Enable file uploads in security settings"
-                    >
-                      Enable in settings
-                    </a>
-                  </span>
+                {!allowFileUploads ? (
+                  canUpdateOrganization ? (
+                    <span>
+                      File uploads are disabled.{" "}
+                      <a
+                        href="/settings/security"
+                        className="underline hover:no-underline"
+                        aria-label="Enable file uploads in security settings"
+                      >
+                        Enable in settings
+                      </a>
+                    </span>
+                  ) : (
+                    "File uploads are disabled by your administrator"
+                  )
                 ) : (
-                  "File uploads are disabled by your administrator"
+                  "This model does not support file uploads"
                 )}
               </TooltipContent>
             </Tooltip>
@@ -218,6 +264,13 @@ const PromptInputContent = ({
               }
             }}
           />
+          {tokensUsed > 0 && maxContextLength && (
+            <ContextIndicator
+              tokensUsed={tokensUsed}
+              maxTokens={maxContextLength}
+              size="sm"
+            />
+          )}
           {(conversationId || onApiKeyChange) && (
             <ChatApiKeySelector
               conversationId={conversationId}
@@ -271,6 +324,9 @@ const ArchestraPromptInput = ({
   allowFileUploads = false,
   isModelsLoading = false,
   onEditAgent,
+  tokensUsed = 0,
+  maxContextLength,
+  inputModalities,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -291,6 +347,9 @@ const ArchestraPromptInput = ({
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
           onEditAgent={onEditAgent}
+          tokensUsed={tokensUsed}
+          maxContextLength={maxContextLength}
+          inputModalities={inputModalities}
         />
       </PromptInputProvider>
     </div>

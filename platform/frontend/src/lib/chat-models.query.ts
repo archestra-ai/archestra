@@ -1,15 +1,23 @@
-import { archestraApiSdk, type SupportedProvider } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type SupportedProvider,
+} from "@shared";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 const { getChatModels } = archestraApiSdk;
 
-export interface ChatModel {
-  id: string;
-  displayName: string;
-  provider: SupportedProvider;
-  createdAt?: string;
-}
+/**
+ * Chat model type from the API response.
+ * Uses the generated API types for type safety.
+ */
+export type ChatModel = archestraApiTypes.GetChatModelsResponses["200"][number];
+
+/**
+ * Model capabilities type extracted from ChatModel.
+ */
+export type ModelCapabilities = NonNullable<ChatModel["capabilities"]>;
 
 /**
  * Fetch available chat models from all configured providers.

@@ -22,6 +22,7 @@ export * from "./mcp-server-installation-request";
 export * from "./mcp-tool-call";
 export * from "./member";
 export * from "./message";
+export * from "./model";
 export * from "./optimization-rule";
 export * from "./organization";
 export * from "./role";

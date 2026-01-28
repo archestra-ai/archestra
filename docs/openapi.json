@@ -44277,7 +44277,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get available LLM models from all configured providers. Models are fetched directly from provider APIs.",
+        "description": "Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.",
         "parameters": [
           {
             "schema": {
@@ -44333,6 +44333,64 @@
                       },
                       "createdAt": {
                         "type": "string"
+                      },
+                      "capabilities": {
+                        "type": "object",
+                        "properties": {
+                          "contextLength": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "inputModalities": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "text",
+                                "image",
+                                "audio",
+                                "video",
+                                "pdf"
+                              ]
+                            }
+                          },
+                          "outputModalities": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "text",
+                                "image",
+                                "audio"
+                              ]
+                            }
+                          },
+                          "supportsToolCalling": {
+                            "nullable": true,
+                            "type": "boolean"
+                          },
+                          "pricePerMillionInput": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "pricePerMillionOutput": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "contextLength",
+                          "inputModalities",
+                          "outputModalities",
+                          "supportsToolCalling",
+                          "pricePerMillionInput",
+                          "pricePerMillionOutput"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [

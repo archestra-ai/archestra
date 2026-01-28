@@ -74,6 +74,9 @@ export const E2eTestId = {
   // Chat Prompt Input
   ChatFileUploadButton: "chat-file-upload-button",
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
+  // Chat Model Selector
+  ChatModelSelectorTrigger: "chat-model-selector-trigger",
+  ChatPromptTextarea: "chat-prompt-textarea",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

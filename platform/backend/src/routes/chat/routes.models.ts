@@ -12,14 +12,17 @@ import {
   createGoogleGenAIClient,
   isVertexAiEnabled,
 } from "@/clients/gemini-client";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatApiKeyModel, TeamModel } from "@/models";
+import { ChatApiKeyModel, ModelModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   type Anthropic,
   constructResponseSchema,
   type Gemini,
+  type ModelCapabilities,
+  ModelCapabilitiesSchema,
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
@@ -30,6 +33,7 @@ const ChatModelSchema = z.object({
   displayName: z.string(),
   provider: SupportedChatProviderSchema,
   createdAt: z.string().optional(),
+  capabilities: ModelCapabilitiesSchema.optional(),
 });
 
 export interface ModelInfo {
@@ -37,6 +41,7 @@ export interface ModelInfo {
   displayName: string;
   provider: SupportedProvider;
   createdAt?: string;
+  capabilities?: ModelCapabilities;
 }
 
 /**
@@ -728,30 +733,22 @@ async function getProviderApiKey({
   }
 
   // Fall back to environment variable
-  switch (provider) {
-    case "anthropic":
-      return config.chat.anthropic.apiKey || null;
-    case "cerebras":
-      return config.chat.cerebras.apiKey || null;
-    case "mistral":
-      return config.chat.mistral.apiKey || null;
-    case "gemini":
-      return config.chat.gemini.apiKey || null;
-    case "openai":
-      return config.chat.openai.apiKey || null;
-    case "vllm":
-      // vLLM typically doesn't require API keys, return empty or configured key
-      return config.chat.vllm.apiKey || "";
-    case "ollama":
-      // Ollama typically doesn't require API keys, return empty or configured key
-      return config.chat.ollama.apiKey || "";
-    case "zhipuai":
-      return config.chat.zhipuai?.apiKey || null;
-    case "bedrock":
-      return config.chat.bedrock.apiKey || null;
-    default:
-      return null;
-  }
+  // Using Record<SupportedProvider, ...> ensures TypeScript will error if a new provider is added
+  // but not included in this map. This prevents missing API key fallbacks for new providers.
+  const envApiKeyFallbacks: Record<SupportedProvider, () => string | null> = {
+    anthropic: () => config.chat.anthropic.apiKey || null,
+    cerebras: () => config.chat.cerebras.apiKey || null,
+    cohere: () => config.chat.cohere?.apiKey || null,
+    gemini: () => config.chat.gemini.apiKey || null,
+    mistral: () => config.chat.mistral.apiKey || null,
+    ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
+    openai: () => config.chat.openai.apiKey || null,
+    vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
+    zhipuai: () => config.chat.zhipuai?.apiKey || null,
+    bedrock: () => config.chat.bedrock.apiKey || null,
+  };
+
+  return envApiKeyFallbacks[provider]();
 }
 
 // We need to make sure that every new provider we support has a model fetcher function
@@ -888,7 +885,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatModels,
         description:
-          "Get available LLM models from all configured providers. Models are fetched directly from provider APIs.",
+          "Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.",
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedChatProviderSchema.optional(),
@@ -899,6 +896,9 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ query, organizationId, user }, reply) => {
       const { provider } = query;
       const providersToFetch = provider ? [provider] : SupportedProviders;
+
+      // Trigger models.dev metadata sync in background if needed
+      modelsDevClient.syncIfNeeded();
 
       // Cache key includes user ID since API keys can be personal, team, or org-wide
       const cacheKey =
@@ -928,7 +928,28 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Fetched chat models from providers",
           );
 
-          return uniqBy(flatModels, (model) => `${model.provider}:${model.id}`);
+          const uniqueModels = uniqBy(
+            flatModels,
+            (model) => `${model.provider}:${model.id}`,
+          );
+
+          // Fetch metadata for all models
+          const metadataKeys = uniqueModels.map((m) => ({
+            provider: m.provider,
+            modelId: m.id,
+          }));
+          const metadataMap =
+            await ModelModel.findByProviderModelIds(metadataKeys);
+
+          // Attach capabilities to each model
+          return uniqueModels.map((model) => {
+            const key = `${model.provider}:${model.id}`;
+            const metadata = metadataMap.get(key);
+            return {
+              ...model,
+              capabilities: ModelModel.toCapabilities(metadata ?? null),
+            };
+          });
         },
         { ttl: 5 * TimeInMs.Minute },
       );

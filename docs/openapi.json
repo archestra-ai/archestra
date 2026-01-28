@@ -21985,6 +21985,10 @@
                               }
                             ]
                           },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "incomingEmailEnabled": {
                             "type": "boolean"
                           },
@@ -22160,6 +22164,7 @@
                           "promptVersion",
                           "promptHistory",
                           "allowedChatops",
+                          "description",
                           "incomingEmailEnabled",
                           "incomingEmailSecurityMode",
                           "incomingEmailAllowedDomain",
@@ -22511,6 +22516,10 @@
                       }
                     ]
                   },
+                  "description": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "incomingEmailEnabled": {
                     "type": "boolean"
                   },
@@ -22687,6 +22696,10 @@
                         }
                       ]
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -22862,6 +22875,7 @@
                     "promptVersion",
                     "promptHistory",
                     "allowedChatops",
+                    "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -23250,6 +23264,10 @@
                           }
                         ]
                       },
+                      "description": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "incomingEmailEnabled": {
                         "type": "boolean"
                       },
@@ -23425,6 +23443,7 @@
                       "promptVersion",
                       "promptHistory",
                       "allowedChatops",
+                      "description",
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
                       "incomingEmailAllowedDomain",
@@ -23777,6 +23796,10 @@
                         }
                       ]
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -23952,6 +23975,7 @@
                     "promptVersion",
                     "promptHistory",
                     "allowedChatops",
+                    "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -24303,6 +24327,10 @@
                         }
                       ]
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -24478,6 +24506,7 @@
                     "promptVersion",
                     "promptHistory",
                     "allowedChatops",
+                    "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -24841,6 +24870,10 @@
                         }
                       ]
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -25016,6 +25049,7 @@
                     "promptVersion",
                     "promptHistory",
                     "allowedChatops",
+                    "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -25319,6 +25353,10 @@
                       }
                     ]
                   },
+                  "description": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "incomingEmailEnabled": {
                     "type": "boolean"
                   },
@@ -25502,6 +25540,10 @@
                         }
                       ]
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -25677,6 +25719,7 @@
                     "promptVersion",
                     "promptHistory",
                     "allowedChatops",
+                    "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -26293,6 +26336,10 @@
                             }
                           ]
                         },
+                        "description": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "incomingEmailEnabled": {
                           "type": "boolean"
                         },
@@ -26468,6 +26515,7 @@
                         "promptVersion",
                         "promptHistory",
                         "allowedChatops",
+                        "description",
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
                         "incomingEmailAllowedDomain",
@@ -26888,6 +26936,10 @@
                         }
                       ]
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -27063,6 +27115,7 @@
                     "promptVersion",
                     "promptHistory",
                     "allowedChatops",
+                    "description",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -30183,6 +30236,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "description": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "systemPrompt": {
                         "nullable": true,
                         "type": "string"
@@ -30191,6 +30248,7 @@
                     "required": [
                       "id",
                       "name",
+                      "description",
                       "systemPrompt"
                     ],
                     "additionalProperties": false
@@ -86355,6 +86413,9 @@
                       "agentName": {
                         "type": "string"
                       },
+                      "agentType": {
+                        "type": "string"
+                      },
                       "teamName": {
                         "type": "string"
                       },
@@ -86393,6 +86454,7 @@
                     "required": [
                       "agentId",
                       "agentName",
+                      "agentType",
                       "teamName",
                       "requests",
                       "inputTokens",

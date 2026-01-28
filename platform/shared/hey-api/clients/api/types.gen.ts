@@ -6495,6 +6495,7 @@ export type GetAgentsResponses = {
             allowedChatops: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            description: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -6566,6 +6567,7 @@ export type CreateAgentData = {
         allowedChatops?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description?: string | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
@@ -6662,6 +6664,7 @@ export type CreateAgentResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -6807,6 +6810,7 @@ export type GetAllAgentsResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -6943,6 +6947,7 @@ export type GetDefaultMcpGatewayResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7079,6 +7084,7 @@ export type GetDefaultLlmProxyResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7296,6 +7302,7 @@ export type GetAgentResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7358,6 +7365,7 @@ export type UpdateAgentData = {
         allowedChatops?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description?: string | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
@@ -7456,6 +7464,7 @@ export type UpdateAgentResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7595,6 +7604,7 @@ export type GetAgentVersionsResponses = {
             allowedChatops: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            description: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -7745,6 +7755,7 @@ export type RollbackAgentResponses = {
         allowedChatops: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        description: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -8715,6 +8726,7 @@ export type GetAgentDelegationsResponses = {
     200: Array<{
         id: string;
         name: string;
+        description: string | null;
         systemPrompt: string | null;
     }>;
 };
@@ -24042,6 +24054,7 @@ export type GetAgentStatisticsResponses = {
     200: Array<{
         agentId: string;
         agentName: string;
+        agentType: string;
         teamName: string;
         requests: number;
         inputTokens: number;

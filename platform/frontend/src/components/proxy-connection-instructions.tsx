@@ -1,20 +1,18 @@
 "use client";
 
 import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, MoreHorizontal } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { ButtonGroup } from "@/components/ui/button-group";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import config from "@/lib/config";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
@@ -69,10 +67,18 @@ const PROVIDER_CONFIG: Record<
   "claude-code": { label: "Claude Code", isCommand: true },
 };
 
-/** All providers in the order they should appear in the dropdown */
-const ALL_PROVIDERS: ProviderOption[] = Object.keys(
-  PROVIDER_CONFIG,
-) as ProviderOption[];
+/** Featured providers to show as primary buttons */
+const PRIMARY_PROVIDERS: ProviderOption[] = [
+  "openai",
+  "anthropic",
+  "gemini",
+  "claude-code",
+];
+
+/** All other providers to show in the overflow dropdown */
+const DROPDOWN_PROVIDERS: ProviderOption[] = (
+  Object.keys(PROVIDER_CONFIG) as ProviderOption[]
+).filter((provider) => !PRIMARY_PROVIDERS.includes(provider));
 
 interface ProxyConnectionInstructionsProps {
   agentId?: string;
@@ -86,6 +92,7 @@ export function ProxyConnectionInstructions({
   const [connectionUrl, setConnectionUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
   );
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
   const getProviderPath = (provider: ProviderOption) =>
     provider === "claude-code" ? "anthropic" : provider;
@@ -100,30 +107,55 @@ export function ProxyConnectionInstructions({
 
   return (
     <div className="space-y-3">
-      <div className="space-y-2">
-        <Label htmlFor="provider-select" className="text-sm font-medium">
-          Provider
-        </Label>
-        <Select
-          value={selectedProvider}
-          onValueChange={(value) =>
-            setSelectedProvider(value as ProviderOption)
-          }
-        >
-          <SelectTrigger id="provider-select" className="w-full">
-            <SelectValue placeholder="Select a provider">
-              {PROVIDER_CONFIG[selectedProvider].label}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent position="popper" className="max-h-[250px]">
-            {ALL_PROVIDERS.map((provider) => (
-              <SelectItem key={provider} value={provider}>
+      <ButtonGroup>
+        {PRIMARY_PROVIDERS.map((provider) => (
+          <Button
+            key={provider}
+            variant={selectedProvider === provider ? "default" : "outline"}
+            size="sm"
+            onClick={() => setSelectedProvider(provider)}
+          >
+            {PROVIDER_CONFIG[provider].label}
+          </Button>
+        ))}
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant={
+                DROPDOWN_PROVIDERS.includes(selectedProvider)
+                  ? "default"
+                  : "outline"
+              }
+              size="sm"
+              aria-label="More providers"
+            >
+              {DROPDOWN_PROVIDERS.includes(selectedProvider)
+                ? PROVIDER_CONFIG[selectedProvider].label
+                : null}
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-auto p-1 flex flex-col"
+            aria-label="Additional providers"
+          >
+            {DROPDOWN_PROVIDERS.map((provider) => (
+              <Button
+                key={provider}
+                variant={selectedProvider === provider ? "default" : "ghost"}
+                size="sm"
+                className="justify-start"
+                onClick={() => {
+                  setSelectedProvider(provider);
+                  setPopoverOpen(false);
+                }}
+              >
                 {PROVIDER_CONFIG[provider].label}
-              </SelectItem>
+              </Button>
             ))}
-          </SelectContent>
-        </Select>
-      </div>
+          </PopoverContent>
+        </Popover>
+      </ButtonGroup>
 
       <ConnectionBaseUrlSelect
         value={connectionUrl}

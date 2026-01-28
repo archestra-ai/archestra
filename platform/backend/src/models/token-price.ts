@@ -105,7 +105,8 @@ class TokenPriceModel {
 
   /**
    * Bulk create token prices if they don't already exist.
-   * Uses a single INSERT with ON CONFLICT DO NOTHING for efficiency.
+   * Uses batched INSERTs with ON CONFLICT DO NOTHING for efficiency.
+   * All batches are wrapped in a transaction to ensure atomicity.
    *
    * @returns The number of rows actually inserted (excludes conflicts)
    */
@@ -116,15 +117,31 @@ class TokenPriceModel {
       return 0;
     }
 
-    const result = await db
-      .insert(schema.tokenPricesTable)
-      .values(tokenPrices)
-      .onConflictDoNothing({
-        target: schema.tokenPricesTable.model,
-      })
-      .returning({ id: schema.tokenPricesTable.id });
+    // Batch size of 100 rows to stay safely under PostgreSQL parameter limits
+    // Each row has ~4 columns, so 100 rows = ~400 parameters per batch
+    const BATCH_SIZE = 100;
 
-    return result.length;
+    // Wrap all batches in a transaction to ensure atomicity
+    const totalInserted = await db.transaction(async (tx) => {
+      let inserted = 0;
+
+      for (let i = 0; i < tokenPrices.length; i += BATCH_SIZE) {
+        const batch = tokenPrices.slice(i, i + BATCH_SIZE);
+        const result = await tx
+          .insert(schema.tokenPricesTable)
+          .values(batch)
+          .onConflictDoNothing({
+            target: schema.tokenPricesTable.model,
+          })
+          .returning({ id: schema.tokenPricesTable.id });
+
+        inserted += result.length;
+      }
+
+      return inserted;
+    });
+
+    return totalInserted;
   }
 
   static async delete(id: string): Promise<boolean> {

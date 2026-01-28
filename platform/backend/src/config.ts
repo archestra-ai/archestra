@@ -484,15 +484,9 @@ export default {
     },
     cerebras: {
       apiKey: process.env.ARCHESTRA_CHAT_CEREBRAS_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_CEREBRAS_BASE_URL ||
-        "https://api.cerebras.ai/v1",
     },
     mistral: {
       apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_MISTRAL_BASE_URL ||
-        "https://api.mistral.ai/v1",
     },
     vllm: {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
@@ -502,14 +496,9 @@ export default {
     },
     cohere: {
       apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_COHERE_BASE_URL || "https://api.cohere.ai",
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_ZHIPUAI_BASE_URL ||
-        "https://api.z.ai/api/paas/v4",
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",

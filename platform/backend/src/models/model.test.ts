@@ -272,6 +272,87 @@ describe("ModelModel", () => {
       const all = await ModelModel.findAll();
       expect(all).toHaveLength(2);
     });
+
+    test("handles large batches correctly (more than batch size of 50)", async () => {
+      // Create 150 test models to verify batching works across multiple batches
+      const models = Array.from({ length: 150 }, (_, i) => ({
+        externalId: `test-provider/model-${i}`,
+        provider: "openai" as const,
+        modelId: `test-model-${i}`,
+        description: `Test Model ${i}`,
+        contextLength: 128000,
+        inputModalities: ["text" as const],
+        outputModalities: ["text" as const],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      }));
+
+      const results = await ModelModel.bulkUpsert(models);
+
+      // All 150 models should be inserted
+      expect(results).toHaveLength(150);
+
+      // Verify all were persisted
+      const all = await ModelModel.findAll();
+      expect(all).toHaveLength(150);
+
+      // Verify some specific models to ensure data integrity
+      const first = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "test-model-0",
+      );
+      expect(first).not.toBeNull();
+      expect(first?.description).toBe("Test Model 0");
+
+      const last = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "test-model-149",
+      );
+      expect(last).not.toBeNull();
+      expect(last?.description).toBe("Test Model 149");
+    });
+
+    test("batching handles updates correctly", async () => {
+      // First create 100 models
+      const models = Array.from({ length: 100 }, (_, i) => ({
+        externalId: `test-provider/update-model-${i}`,
+        provider: "anthropic" as const,
+        modelId: `update-model-${i}`,
+        description: `Original Description ${i}`,
+        contextLength: 100000,
+        inputModalities: ["text" as const],
+        outputModalities: ["text" as const],
+        supportsToolCalling: false,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      }));
+
+      await ModelModel.bulkUpsert(models);
+
+      // Update all with new descriptions
+      const updatedModels = models.map((m, i) => ({
+        ...m,
+        description: `Updated Description ${i}`,
+        contextLength: 200000,
+        supportsToolCalling: true,
+      }));
+
+      const results = await ModelModel.bulkUpsert(updatedModels);
+
+      expect(results).toHaveLength(100);
+
+      // Verify updates were applied
+      const updated = await ModelModel.findByProviderAndModelId(
+        "anthropic",
+        "update-model-50",
+      );
+      expect(updated?.description).toBe("Updated Description 50");
+      expect(updated?.contextLength).toBe(200000);
+      expect(updated?.supportsToolCalling).toBe(true);
+    });
   });
 
   describe("delete", () => {

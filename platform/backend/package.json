@@ -16,6 +16,7 @@
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
     "check:ci": "pnpm type-check && pnpm test && pnpm knip && biome ci",
+    "check:commit": "pnpm type-check && pnpm knip && biome ci",
     "knip": "knip",
     "type-check": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",

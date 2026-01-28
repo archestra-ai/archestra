@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@shared";
 import { and, eq, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type { CreateModel, Model, ModelCapabilities } from "@/types";
 
 class ModelModel {
@@ -104,33 +105,71 @@ class ModelModel {
 
   /**
    * Bulk upsert models.
-   * Uses a single batch insert with ON CONFLICT for better performance.
+   * Uses batched inserts with ON CONFLICT to avoid query parameter limits.
+   * PostgreSQL has a 65535 parameter limit, so we batch to stay well under.
+   * All batches are wrapped in a transaction to ensure atomicity.
    */
   static async bulkUpsert(dataArray: CreateModel[]): Promise<Model[]> {
     if (dataArray.length === 0) {
       return [];
     }
 
-    // Single batch insert with ON CONFLICT DO UPDATE using excluded values
-    const results = await db
-      .insert(schema.modelsTable)
-      .values(dataArray)
-      .onConflictDoUpdate({
-        target: [schema.modelsTable.provider, schema.modelsTable.modelId],
-        set: {
-          externalId: sql`excluded.external_id`,
-          description: sql`excluded.description`,
-          contextLength: sql`excluded.context_length`,
-          inputModalities: sql`excluded.input_modalities`,
-          outputModalities: sql`excluded.output_modalities`,
-          supportsToolCalling: sql`excluded.supports_tool_calling`,
-          promptPricePerToken: sql`excluded.prompt_price_per_token`,
-          completionPricePerToken: sql`excluded.completion_price_per_token`,
-          lastSyncedAt: new Date(),
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+    // Batch size of 50 rows to stay safely under PostgreSQL parameter limits
+    // Each row has ~11 columns, so 50 rows = ~550 parameters per batch
+    const BATCH_SIZE = 50;
+    const totalBatches = Math.ceil(dataArray.length / BATCH_SIZE);
+
+    logger.debug(
+      { totalModels: dataArray.length, batchSize: BATCH_SIZE, totalBatches },
+      "Starting batched model upsert",
+    );
+
+    // Create timestamp once to ensure consistency across all batches
+    const now = new Date();
+
+    // Wrap all batches in a transaction to ensure atomicity
+    const results = await db.transaction(async (tx) => {
+      const batchResults: Model[] = [];
+
+      for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        const batch = dataArray.slice(i, i + BATCH_SIZE);
+
+        logger.debug(
+          { batchNumber, totalBatches, batchSize: batch.length },
+          "Processing model batch",
+        );
+
+        const insertedBatch = await tx
+          .insert(schema.modelsTable)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+            set: {
+              externalId: sql`excluded.external_id`,
+              description: sql`excluded.description`,
+              contextLength: sql`excluded.context_length`,
+              inputModalities: sql`excluded.input_modalities`,
+              outputModalities: sql`excluded.output_modalities`,
+              supportsToolCalling: sql`excluded.supports_tool_calling`,
+              promptPricePerToken: sql`excluded.prompt_price_per_token`,
+              completionPricePerToken: sql`excluded.completion_price_per_token`,
+              lastSyncedAt: now,
+              updatedAt: now,
+            },
+          })
+          .returning();
+
+        batchResults.push(...insertedBatch);
+      }
+
+      return batchResults;
+    });
+
+    logger.info(
+      { totalUpserted: results.length },
+      "Completed batched model upsert",
+    );
 
     return results;
   }

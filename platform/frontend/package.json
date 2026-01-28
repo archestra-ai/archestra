@@ -13,6 +13,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "check:ci": "pnpm type-check && pnpm test && pnpm knip && biome ci",
+    "check:commit": "pnpm type-check && pnpm knip && biome ci",
     "knip": "knip"
   },
   "dependencies": {

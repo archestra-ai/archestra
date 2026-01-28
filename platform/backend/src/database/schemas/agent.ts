@@ -86,6 +86,10 @@ const agentsTable = pgTable(
       .$type<ChatOpsProviderType[]>()
       .default([]),
 
+    // Description (only used when agentType = 'agent')
+    /** Human-readable description of the agent */
+    description: text("description"),
+
     // Incoming email settings (only used when agentType = 'agent')
     /** Whether incoming email invocation is enabled for this agent */
     incomingEmailEnabled: boolean("incoming_email_enabled")

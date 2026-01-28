@@ -1479,24 +1479,19 @@ describe("AgentModel", () => {
     });
   });
 
-  describe("Description and Skills", () => {
-    test("can create an agent with description and skills", async () => {
+  describe("Description", () => {
+    test("can create an agent with description", async () => {
       const agent = await AgentModel.create({
-        name: "Skilled Agent",
+        name: "Described Agent",
         agentType: "agent",
         description: "An agent that helps with code review",
-        skills: [{ name: "Code Review" }, { name: "Bug Detection" }],
         teams: [],
       });
 
       expect(agent.description).toBe("An agent that helps with code review");
-      expect(agent.skills).toEqual([
-        { name: "Code Review" },
-        { name: "Bug Detection" },
-      ]);
     });
 
-    test("description and skills default to null and empty array", async () => {
+    test("description defaults to null", async () => {
       const agent = await AgentModel.create({
         name: "Basic Agent",
         agentType: "agent",
@@ -1504,57 +1499,46 @@ describe("AgentModel", () => {
       });
 
       expect(agent.description).toBeNull();
-      expect(agent.skills).toEqual([]);
     });
 
-    test("findById returns description and skills", async () => {
+    test("findById returns description", async () => {
       const agent = await AgentModel.create({
         name: "Find Me Agent",
         agentType: "agent",
         description: "Test description",
-        skills: [{ name: "Skill A" }],
         teams: [],
       });
 
       const found = await AgentModel.findById(agent.id);
       expect(found).not.toBeNull();
       expect(found?.description).toBe("Test description");
-      expect(found?.skills).toEqual([{ name: "Skill A" }]);
     });
 
-    test("update can modify description and skills", async () => {
+    test("update can modify description", async () => {
       const agent = await AgentModel.create({
         name: "Updatable Agent",
         agentType: "agent",
         description: "Original description",
-        skills: [{ name: "Original Skill" }],
         teams: [],
       });
 
       const updated = await AgentModel.update(agent.id, {
         description: "Updated description",
-        skills: [{ name: "New Skill 1" }, { name: "New Skill 2" }],
       });
 
       expect(updated?.description).toBe("Updated description");
-      expect(updated?.skills).toEqual([
-        { name: "New Skill 1" },
-        { name: "New Skill 2" },
-      ]);
     });
 
-    test("findAll returns description and skills for all agents", async () => {
+    test("findAll returns description for all agents", async () => {
       await AgentModel.create({
         name: "Agent A",
         agentType: "agent",
         description: "Desc A",
-        skills: [{ name: "Skill A" }],
         teams: [],
       });
       await AgentModel.create({
         name: "Agent B",
         agentType: "agent",
-        skills: [{ name: "Skill B1" }, { name: "Skill B2" }],
         teams: [],
       });
 
@@ -1563,12 +1547,7 @@ describe("AgentModel", () => {
       const agentB = agents.find((a) => a.name === "Agent B");
 
       expect(agentA?.description).toBe("Desc A");
-      expect(agentA?.skills).toEqual([{ name: "Skill A" }]);
       expect(agentB?.description).toBeNull();
-      expect(agentB?.skills).toEqual([
-        { name: "Skill B1" },
-        { name: "Skill B2" },
-      ]);
     });
   });
 

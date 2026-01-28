@@ -21989,39 +21989,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "skills": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
                           "incomingEmailEnabled": {
                             "type": "boolean"
                           },
@@ -22198,7 +22165,6 @@
                           "promptHistory",
                           "allowedChatops",
                           "description",
-                          "skills",
                           "incomingEmailEnabled",
                           "incomingEmailSecurityMode",
                           "incomingEmailAllowedDomain",
@@ -22554,39 +22520,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "skills": {
-                    "nullable": true,
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "string",
-                            "nullable": true,
-                            "enum": [
-                              null
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "additionalProperties": {}
-                      },
-                      {
-                        "type": "array",
-                        "items": {}
-                      }
-                    ]
-                  },
                   "incomingEmailEnabled": {
                     "type": "boolean"
                   },
@@ -22767,39 +22700,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "skills": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -22976,7 +22876,6 @@
                     "promptHistory",
                     "allowedChatops",
                     "description",
-                    "skills",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -23369,39 +23268,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "skills": {
-                        "nullable": true,
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "string",
-                                "nullable": true,
-                                "enum": [
-                                  null
-                                ]
-                              }
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "additionalProperties": {}
-                          },
-                          {
-                            "type": "array",
-                            "items": {}
-                          }
-                        ]
-                      },
                       "incomingEmailEnabled": {
                         "type": "boolean"
                       },
@@ -23578,7 +23444,6 @@
                       "promptHistory",
                       "allowedChatops",
                       "description",
-                      "skills",
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
                       "incomingEmailAllowedDomain",
@@ -23935,39 +23800,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "skills": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -24144,7 +23976,6 @@
                     "promptHistory",
                     "allowedChatops",
                     "description",
-                    "skills",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -24500,39 +24331,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "skills": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -24709,7 +24507,6 @@
                     "promptHistory",
                     "allowedChatops",
                     "description",
-                    "skills",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -25077,39 +24874,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "skills": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -25286,7 +25050,6 @@
                     "promptHistory",
                     "allowedChatops",
                     "description",
-                    "skills",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -25594,39 +25357,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "skills": {
-                    "nullable": true,
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "string",
-                            "nullable": true,
-                            "enum": [
-                              null
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "additionalProperties": {}
-                      },
-                      {
-                        "type": "array",
-                        "items": {}
-                      }
-                    ]
-                  },
                   "incomingEmailEnabled": {
                     "type": "boolean"
                   },
@@ -25814,39 +25544,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "skills": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -26023,7 +25720,6 @@
                     "promptHistory",
                     "allowedChatops",
                     "description",
-                    "skills",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -26644,39 +26340,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "skills": {
-                          "nullable": true,
-                          "anyOf": [
-                            {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "boolean"
-                                },
-                                {
-                                  "type": "string",
-                                  "nullable": true,
-                                  "enum": [
-                                    null
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "additionalProperties": {}
-                            },
-                            {
-                              "type": "array",
-                              "items": {}
-                            }
-                          ]
-                        },
                         "incomingEmailEnabled": {
                           "type": "boolean"
                         },
@@ -26853,7 +26516,6 @@
                         "promptHistory",
                         "allowedChatops",
                         "description",
-                        "skills",
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
                         "incomingEmailAllowedDomain",
@@ -27278,39 +26940,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "skills": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "incomingEmailEnabled": {
                       "type": "boolean"
                     },
@@ -27487,7 +27116,6 @@
                     "promptHistory",
                     "allowedChatops",
                     "description",
-                    "skills",
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
@@ -30608,6 +30236,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "description": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "systemPrompt": {
                         "nullable": true,
                         "type": "string"
@@ -30616,6 +30248,7 @@
                     "required": [
                       "id",
                       "name",
+                      "description",
                       "systemPrompt"
                     ],
                     "additionalProperties": false

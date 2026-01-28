@@ -1,5 +1,5 @@
 {
-  "id": "5d3af8ff-dc3e-46f5-bcc6-403415a1f0ff",
+  "id": "b3e17482-f44c-4ad6-a24c-7ed7521b6bd7",
   "prevId": "c48ae326-a26f-4480-b4cc-25b71e306a67",
   "version": "7",
   "dialect": "postgresql",
@@ -487,13 +487,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "skills": {
-          "name": "skills",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'[]'::jsonb"
-        },
         "incoming_email_enabled": {
           "name": "incoming_email_enabled",
           "type": "boolean",
@@ -564,112 +557,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.api_key_models": {
-      "name": "api_key_models",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "api_key_id": {
-          "name": "api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model_id": {
-          "name": "model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "api_key_models_api_key_id_idx": {
-          "name": "api_key_models_api_key_id_idx",
-          "columns": [
-            {
-              "expression": "api_key_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "api_key_models_model_id_idx": {
-          "name": "api_key_models_model_id_idx",
-          "columns": [
-            {
-              "expression": "model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "api_key_models_api_key_id_chat_api_keys_id_fk": {
-          "name": "api_key_models_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "api_key_models",
-          "tableTo": "chat_api_keys",
-          "columnsFrom": [
-            "api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "api_key_models_model_id_models_id_fk": {
-          "name": "api_key_models_model_id_models_id_fk",
-          "tableFrom": "api_key_models",
-          "tableTo": "models",
-          "columnsFrom": [
-            "model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "api_key_models_unique": {
-          "name": "api_key_models_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "api_key_id",
-            "model_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

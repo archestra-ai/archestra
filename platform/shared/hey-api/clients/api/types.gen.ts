@@ -6496,9 +6496,6 @@ export type GetAgentsResponses = {
                 [key: string]: unknown;
             } | Array<unknown> | null;
             description: string | null;
-            skills: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -6571,9 +6568,6 @@ export type CreateAgentData = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description?: string | null;
-        skills?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
@@ -6671,9 +6665,6 @@ export type CreateAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
-        skills: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -6820,9 +6811,6 @@ export type GetAllAgentsResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
-        skills: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -6960,9 +6948,6 @@ export type GetDefaultMcpGatewayResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
-        skills: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7100,9 +7085,6 @@ export type GetDefaultLlmProxyResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
-        skills: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7321,9 +7303,6 @@ export type GetAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
-        skills: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7387,9 +7366,6 @@ export type UpdateAgentData = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description?: string | null;
-        skills?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
@@ -7489,9 +7465,6 @@ export type UpdateAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
-        skills: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -7632,9 +7605,6 @@ export type GetAgentVersionsResponses = {
                 [key: string]: unknown;
             } | Array<unknown> | null;
             description: string | null;
-            skills: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -7786,9 +7756,6 @@ export type RollbackAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
-        skills: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -8759,6 +8726,7 @@ export type GetAgentDelegationsResponses = {
     200: Array<{
         id: string;
         name: string;
+        description: string | null;
         systemPrompt: string | null;
     }>;
 };

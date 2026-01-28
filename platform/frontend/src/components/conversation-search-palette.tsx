@@ -284,7 +284,7 @@ export function ConversationSearchPalette({
                   className="flex items-center gap-2 px-3 py-3 cursor-pointer aria-selected:bg-accent"
                 >
                   <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="font-medium">New chat</span>
+                  <span className="font-medium">Create new chat session</span>
                 </CommandItem>
               </CommandGroup>
             )}

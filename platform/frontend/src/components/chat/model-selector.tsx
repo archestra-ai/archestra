@@ -44,7 +44,7 @@ import {
 import {
   type ChatModel,
   type ModelCapabilities,
-  useModelsByProviderQuery,
+  useModelsByProvider,
 } from "@/lib/chat-models.query";
 import { cn } from "@/lib/utils";
 
@@ -481,7 +481,7 @@ export function ModelSelector({
   disabled = false,
   onOpenChange: onOpenChangeProp,
 }: ModelSelectorProps) {
-  const { modelsByProvider, isLoading } = useModelsByProviderQuery();
+  const { modelsByProvider, isPending: isLoading } = useModelsByProvider();
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 

@@ -22,7 +22,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import type { ToolWithAssignmentsData } from "@/lib/tool.query";
 import { isMcpToolByProperties } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
@@ -41,7 +41,7 @@ export function ToolDetailsDialog({
   open,
   onOpenChange,
 }: ToolDetailsDialogProps) {
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalogSuspense();
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
   const [assignmentsOpen, setAssignmentsOpen] = useState(true);
 
   if (!tool) return null;

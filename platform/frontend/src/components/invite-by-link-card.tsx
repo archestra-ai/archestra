@@ -9,10 +9,10 @@ import {
 } from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
-import { Suspense, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -49,7 +49,7 @@ function InviteByLinkCardContent({
   const [isCopied, setIsCopied] = useState(false);
 
   const createMutation = useCreateInvitation(organizationId);
-  const { data: roles } = useRoles();
+  const { data: roles, isPending } = useRoles();
 
   // Validate email format
   const isValidEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -84,125 +84,127 @@ function InviteByLinkCardContent({
   }, []);
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <LinkIcon className="h-5 w-5" />
-          Invite Member by Link
-        </CardTitle>
-        <CardDescription>
-          Generate an invitation link to share with the person you want to
-          invite to your organization.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!invitationLink ? (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="user@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={createMutation.isPending}
-                data-testid={E2eTestId.InviteEmailInput}
-              />
-              <p className="text-xs text-muted-foreground">
-                The email of the person you want to invite
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select
-                value={role}
-                onValueChange={(value: AnyRoleName) => setRole(value)}
-                disabled={createMutation.isPending}
-              >
-                <SelectTrigger
-                  id="role"
-                  data-testid={E2eTestId.InviteRoleSelect}
-                >
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
-                  <SelectItem value={EDITOR_ROLE_NAME}>Editor</SelectItem>
-                  <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
-                  {roles
-                    ?.filter((r) => !r.predefined)
-                    .map((r) => (
-                      <SelectItem key={r.id} value={r.name}>
-                        {r.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                The role this person will have in your organization
-              </p>
-            </div>
-
-            <PermissionButton
-              permissions={{ invitation: ["create"] }}
-              onClick={handleGenerateLink}
-              disabled={createMutation.isPending || !isValidEmail}
-              className="w-full"
-              data-testid={E2eTestId.GenerateInvitationButton}
-            >
-              {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Generate Invitation Link
-            </PermissionButton>
-          </>
-        ) : (
-          <>
-            <div className="space-y-2">
-              <Label>Invitation Link</Label>
-              <div className="flex items-center gap-2">
+    <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <LinkIcon className="h-5 w-5" />
+            Invite Member by Link
+          </CardTitle>
+          <CardDescription>
+            Generate an invitation link to share with the person you want to
+            invite to your organization.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!invitationLink ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
                 <Input
-                  value={invitationLink}
-                  readOnly
-                  className="flex-1"
-                  data-testid={E2eTestId.InvitationLinkInput}
+                  id="email"
+                  type="email"
+                  placeholder="user@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={createMutation.isPending}
+                  data-testid={E2eTestId.InviteEmailInput}
                 />
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  onClick={handleCopyLink}
-                  data-testid={E2eTestId.InvitationLinkCopyButton}
+                <p className="text-xs text-muted-foreground">
+                  The email of the person you want to invite
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role">Role</Label>
+                <Select
+                  value={role}
+                  onValueChange={(value: AnyRoleName) => setRole(value)}
+                  disabled={createMutation.isPending}
                 >
-                  {isCopied ? (
-                    <Check className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
+                  <SelectTrigger
+                    id="role"
+                    data-testid={E2eTestId.InviteRoleSelect}
+                  >
+                    <SelectValue placeholder="Select a role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
+                    <SelectItem value={EDITOR_ROLE_NAME}>Editor</SelectItem>
+                    <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
+                    {roles
+                      ?.filter((r) => !r.predefined)
+                      .map((r) => (
+                        <SelectItem key={r.id} value={r.name}>
+                          {r.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  The role this person will have in your organization
+                </p>
+              </div>
+
+              <PermissionButton
+                permissions={{ invitation: ["create"] }}
+                onClick={handleGenerateLink}
+                disabled={createMutation.isPending || !isValidEmail}
+                className="w-full"
+                data-testid={E2eTestId.GenerateInvitationButton}
+              >
+                {createMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Generate Invitation Link
+              </PermissionButton>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label>Invitation Link</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={invitationLink}
+                    readOnly
+                    className="flex-1"
+                    data-testid={E2eTestId.InvitationLinkInput}
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={handleCopyLink}
+                    data-testid={E2eTestId.InvitationLinkCopyButton}
+                  >
+                    {isCopied ? (
+                      <Check className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Share this link with{" "}
+                  <span className="font-medium">{email}</span> to invite them as
+                  a <span className="font-medium">{role}</span>
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleReset}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Create Another
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Share this link with{" "}
-                <span className="font-medium">{email}</span> to invite them as a{" "}
-                <span className="font-medium">{role}</span>
-              </p>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                onClick={handleReset}
-                variant="outline"
-                className="flex-1"
-              >
-                Create Another
-              </Button>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </LoadingWrapper>
   );
 }
 
@@ -238,12 +240,10 @@ export function InviteByLinkCard({
             </Card>
           )}
         >
-          <Suspense fallback={<LoadingSpinner />}>
-            <InviteByLinkCardContent
-              organizationId={organizationId}
-              onInvitationCreated={onInvitationCreated}
-            />
-          </Suspense>
+          <InviteByLinkCardContent
+            organizationId={organizationId}
+            onInvitationCreated={onInvitationCreated}
+          />
         </ErrorBoundary>
       )}
     </QueryErrorResetBoundary>

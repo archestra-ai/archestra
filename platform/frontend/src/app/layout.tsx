@@ -18,7 +18,6 @@ import {
   Source_Sans_3,
 } from "next/font/google";
 import { PublicEnvScript } from "next-runtime-env";
-import { Suspense } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
@@ -152,30 +151,28 @@ export default function RootLayout({
               >
                 <PostHogProviderWrapper>
                   <OrgThemeLoader />
-                  <Suspense>
-                    <WithAuthCheck>
-                      <WebsocketInitializer />
-                      <SidebarProvider>
-                        <AppSidebar />
-                        <main className="h-screen w-full flex flex-col bg-background min-w-0">
-                          <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
-                            <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
-                          </header>
-                          <div className="flex-1 min-w-0 flex flex-col">
-                            <div className="flex-1 flex flex-col">
-                              <WithPagePermissions>
-                                {children}
-                              </WithPagePermissions>
-                            </div>
-                            <Version />
+                  <WithAuthCheck>
+                    <WebsocketInitializer />
+                    <SidebarProvider>
+                      <AppSidebar />
+                      <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+                        <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+                          <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+                        </header>
+                        <div className="flex-1 min-w-0 flex flex-col">
+                          <div className="flex-1 flex flex-col">
+                            <WithPagePermissions>
+                              {children}
+                            </WithPagePermissions>
                           </div>
-                        </main>
-                        <Toaster />
-                        <OnboardingDialogWrapper />
-                        <ConversationSearchProvider />
-                      </SidebarProvider>
-                    </WithAuthCheck>
-                  </Suspense>
+                          <Version />
+                        </div>
+                      </main>
+                      <Toaster />
+                      <OnboardingDialogWrapper />
+                      <ConversationSearchProvider />
+                    </SidebarProvider>
+                  </WithAuthCheck>
                 </PostHogProviderWrapper>
               </ThemeProvider>
             </ChatProvider>

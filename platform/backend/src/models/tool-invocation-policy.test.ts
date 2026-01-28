@@ -90,7 +90,7 @@ describe("ToolInvocationPolicyModel", () => {
         agent.id,
         [
           { toolCallName: "archestra__whoami", toolInput: {} },
-          { toolCallName: "archestra__get_profile", toolInput: { id: "123" } },
+          { toolCallName: "archestra__get_agent", toolInput: { id: "123" } },
         ],
         mockContext,
         false, // untrusted context

@@ -41,8 +41,8 @@ export function ToolResultPolicyCondition({
   onChange: (condition: PolicyCondition) => void;
   onRemove: () => void;
 }) {
-  const { data: operators } = useOperators();
-  const { data: externalAgentIds } = useUniqueExternalAgentIds();
+  const { data: operators = [] } = useOperators();
+  const { data: externalAgentIds = [] } = useUniqueExternalAgentIds();
   const { data: teams } = useTeams();
 
   const { key: attributePath, operator, value } = condition;

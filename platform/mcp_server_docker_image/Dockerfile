@@ -30,8 +30,25 @@ RUN uv pip install --no-cache-dir \
 # Node.js stage - using pnpm for reproducible builds
 FROM node:20-alpine AS node-builder
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm and patch bundled tar vulnerability
+# CVE-2026-23745: tar <=7.5.2 has path traversal vulnerability
+# CVE-2026-23950: tar <=7.5.3 has Improper Handling of Unicode Encoding
+RUN corepack enable && \
+    corepack prepare pnpm@10.28.2 --activate && \
+    TAR_SHA256="0a9e6154532a0fa2f0f6fa261cede2f916da7d34df68917c6f71be82dd739dce" && \
+    PNPM_TAR_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/tar" -type d 2>/dev/null) && \
+    [ -n "$PNPM_TAR_PATHS" ] || { echo "WARNING: No tar directories found to patch"; exit 0; } && \
+    for PNPM_TAR_PATH in $PNPM_TAR_PATHS; do \
+        echo "Patching tar in $PNPM_TAR_PATH" && \
+        TMP_DIR=$(mktemp -d) && \
+        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.4.tgz && \
+        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
+        tar -tzf "$TMP_DIR/tar.tgz" >/dev/null 2>&1 || { echo "ERROR: Downloaded tarball is corrupt"; rm -rf "$TMP_DIR"; exit 1; } && \
+        rm -rf "$PNPM_TAR_PATH"/* && \
+        tar -xzf "$TMP_DIR/tar.tgz" -C "$PNPM_TAR_PATH" --strip-components=1 && \
+        rm -rf "$TMP_DIR"; \
+    done && \
+    echo "Patched tar to 7.5.4 in all pnpm corepack caches"
 
 WORKDIR /opt/node-deps
 
@@ -76,10 +93,23 @@ RUN apk add --no-cache \
    # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
    apk upgrade --no-cache nodejs bind openssl
 
-# Install pnpm globally for runtime use
+# Install pnpm globally for runtime use and patch bundled tar
 # Use npm temporarily to install pnpm, then remove npm to avoid CVE-2026-23950
+# Also patch tar in pnpm's bundled dependencies (CVE-2026-23745, CVE-2026-23950)
 RUN apk add --no-cache npm && \
     npm install -g pnpm@10.28.2 && \
+    TAR_SHA256="0a9e6154532a0fa2f0f6fa261cede2f916da7d34df68917c6f71be82dd739dce" && \
+    PNPM_TAR_PATH="/usr/local/lib/node_modules/pnpm/dist/node_modules/tar" && \
+    if [ -d "$PNPM_TAR_PATH" ]; then \
+        echo "Patching tar in $PNPM_TAR_PATH" && \
+        TMP_DIR=$(mktemp -d) && \
+        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.4.tgz && \
+        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - && \
+        rm -rf "$PNPM_TAR_PATH"/* && \
+        tar -xzf "$TMP_DIR/tar.tgz" -C "$PNPM_TAR_PATH" --strip-components=1 && \
+        rm -rf "$TMP_DIR" && \
+        echo "Patched tar to 7.5.4 in pnpm"; \
+    fi && \
     apk del npm && \
     rm -rf /usr/lib/node_modules/npm /root/.npm
 

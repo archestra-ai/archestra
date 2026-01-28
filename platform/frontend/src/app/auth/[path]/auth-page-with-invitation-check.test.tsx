@@ -336,7 +336,7 @@ describe("AuthPageWithInvitationCheck", () => {
 
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
-      expect(screen.getByText("Connecting to Server")).toBeInTheDocument();
+      expect(screen.getByText("Connecting...")).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 
@@ -358,9 +358,8 @@ describe("AuthPageWithInvitationCheck", () => {
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
       expect(
-        screen.getByText(/Still trying to connect \(attempt 3\)/),
+        screen.getByText(/Still trying to connect, attempt 3/),
       ).toBeInTheDocument();
-      expect(screen.getByText(/5s elapsed/)).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 
@@ -427,9 +426,7 @@ describe("AuthPageWithInvitationCheck", () => {
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
       expect(screen.getByTestId("auth-view")).toBeInTheDocument();
-      expect(
-        screen.queryByText("Connecting to Server"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText("Connecting...")).not.toBeInTheDocument();
       expect(screen.queryByText("Unable to Connect")).not.toBeInTheDocument();
     });
   });

@@ -27,7 +27,7 @@ describe("BackendConnectivityStatus", () => {
     );
 
     expect(screen.getByTestId("child-content")).toBeInTheDocument();
-    expect(screen.queryByText("Connecting to Server")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connecting...")).not.toBeInTheDocument();
   });
 
   it("should show connecting view when status is connecting with no attempts", () => {
@@ -44,7 +44,7 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.getByText("Connecting to Server")).toBeInTheDocument();
+    expect(screen.getByText("Connecting...")).toBeInTheDocument();
     expect(screen.getByText("Attempting to connect...")).toBeInTheDocument();
     expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
   });
@@ -64,9 +64,8 @@ describe("BackendConnectivityStatus", () => {
     );
 
     expect(
-      screen.getByText(/Still trying to connect \(attempt 3\)/),
+      screen.getByText(/Still trying to connect, attempt 3/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/5s elapsed/)).toBeInTheDocument();
   });
 
   it("should show unreachable view when status is unreachable", () => {
@@ -125,16 +124,14 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
+    expect(screen.getByText(/Server is still starting up/)).toBeInTheDocument();
+    expect(screen.getByText(/Network connectivity issue/)).toBeInTheDocument();
     expect(
-      screen.getByText(/The server is still starting up/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Network connectivity issues/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/The server is experiencing problems/),
+      screen.getByText(/Server configuration problem/),
     ).toBeInTheDocument();
   });
 
-  it("should show help text in unreachable view", () => {
+  it("should show GitHub issues button in unreachable view", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "unreachable",
       attemptCount: 5,
@@ -148,18 +145,14 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(
-      screen.getByText(
-        /please check your server logs or contact your administrator/i,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Report issue on GitHub")).toBeInTheDocument();
   });
 
-  it("should not show elapsed time when 0 seconds", () => {
+  it("should show GitHub issues button when there are attempts", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 1,
-      elapsedMs: 500, // Less than 1 second
+      elapsedMs: 500,
       retry: mockRetry,
     });
 
@@ -170,15 +163,15 @@ describe("BackendConnectivityStatus", () => {
     );
 
     expect(
-      screen.getByText(/Still trying to connect \(attempt 1\)/),
+      screen.getByText(/Still trying to connect, attempt 1/),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/elapsed/)).not.toBeInTheDocument();
+    expect(screen.getByText("Report issue on GitHub")).toBeInTheDocument();
   });
 
-  it("should show elapsed time when greater than 0 seconds", () => {
+  it("should not show GitHub issues button on first attempt", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
-      attemptCount: 2,
+      attemptCount: 0,
       elapsedMs: 3500,
       retry: mockRetry,
     });
@@ -189,6 +182,8 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.getByText(/3s elapsed/)).toBeInTheDocument();
+    expect(
+      screen.queryByText("Report issue on GitHub"),
+    ).not.toBeInTheDocument();
   });
 });

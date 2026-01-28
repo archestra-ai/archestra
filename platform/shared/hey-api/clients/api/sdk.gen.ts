@@ -491,7 +491,7 @@ export const updateChatApiKey = <ThrowOnError extends boolean = false>(options: 
 });
 
 /**
- * Get available LLM models from all configured providers. Models are fetched directly from provider APIs.
+ * Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.
  */
 export const getChatModels = <ThrowOnError extends boolean = false>(options?: Options<GetChatModelsData, ThrowOnError>) => (options?.client ?? client).get<GetChatModelsResponses, GetChatModelsErrors, ThrowOnError>({ url: '/api/chat/models', ...options });
 

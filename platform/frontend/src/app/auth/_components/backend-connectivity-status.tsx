@@ -1,6 +1,12 @@
 "use client";
 
-import { AlertCircle, Loader2, RefreshCcw, ServerOff } from "lucide-react";
+import {
+  AlertCircle,
+  ExternalLink,
+  Loader2,
+  RefreshCcw,
+  ServerOff,
+} from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +34,7 @@ interface BackendConnectivityStatusProps {
 export function BackendConnectivityStatus({
   children,
 }: BackendConnectivityStatusProps) {
-  const { status, attemptCount, elapsedMs, retry } = useBackendConnectivity();
+  const { status, attemptCount, retry } = useBackendConnectivity();
 
   if (status === "initializing") {
     return null;
@@ -39,96 +45,112 @@ export function BackendConnectivityStatus({
     return <>{children}</>;
   }
 
-  // When still connecting, show the connecting state
-  if (status === "connecting") {
-    return <ConnectingView attemptCount={attemptCount} elapsedMs={elapsedMs} />;
-  }
-
-  // When unreachable, show the error state
-  return <UnreachableView retry={retry} />;
-}
-
-function ConnectingView({
-  attemptCount,
-  elapsedMs,
-}: {
-  attemptCount: number;
-  elapsedMs: number;
-}) {
-  const elapsedSeconds = Math.floor(elapsedMs / 1000);
-
+  // Show unified connection status view
   return (
-    <main className="h-full flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-            <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
-          </div>
-          <CardTitle>Connecting to Server</CardTitle>
-          <CardDescription>
-            Please wait while we establish a connection to the backend server.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <span>Attempting to connect...</span>
-          </div>
-          {attemptCount > 0 && (
-            <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
-              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
-                Still trying to connect (attempt {attemptCount})...
-                {elapsedSeconds > 0 && ` (${elapsedSeconds}s elapsed)`}
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-    </main>
+    <ConnectionStatusView
+      status={status}
+      attemptCount={attemptCount}
+      retry={retry}
+    />
   );
 }
 
-function UnreachableView({ retry }: { retry: () => void }) {
+function ConnectionStatusView({
+  status,
+  attemptCount,
+  retry,
+}: {
+  status: "connecting" | "unreachable";
+  attemptCount: number;
+  retry: () => void;
+}) {
+  const isUnreachable = status === "unreachable";
+
   return (
     <main className="h-full flex items-center justify-center p-4">
       <Card className="max-w-md w-full">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-            <ServerOff className="h-6 w-6 text-destructive" />
+          <div
+            className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${
+              isUnreachable ? "bg-destructive/10" : "bg-muted"
+            }`}
+          >
+            {isUnreachable ? (
+              <ServerOff className="h-6 w-6 text-destructive" />
+            ) : (
+              <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
+            )}
           </div>
-          <CardTitle>Unable to Connect</CardTitle>
+          <CardTitle>
+            {isUnreachable ? "Unable to Connect" : "Connecting..."}
+          </CardTitle>
           <CardDescription>
-            We couldn't establish a connection to the backend server after
-            multiple attempts.
+            {isUnreachable
+              ? "Unable to establish a connection to the backend server after multiple attempts."
+              : "Establishing connection to the Archestra backend server."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Alert className="border-destructive/50 bg-destructive/10">
-            <AlertCircle className="h-4 w-4 text-destructive" />
-            <AlertTitle className="text-destructive">
-              Server Unreachable
-            </AlertTitle>
-            <AlertDescription className="text-destructive/90">
-              <p className="text-sm mb-3">
-                The backend server is not responding. This could be due to:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>The server is still starting up</li>
-                <li>Network connectivity issues</li>
-                <li>The server is experiencing problems</li>
-              </ul>
-            </AlertDescription>
-          </Alert>
-          <div className="flex justify-center pt-2">
-            <Button onClick={retry} variant="outline" className="gap-2">
-              <RefreshCcw className="h-4 w-4" />
-              Try Again
-            </Button>
+          {isUnreachable ? (
+            <Alert className="border-destructive/50 bg-destructive/10">
+              <AlertCircle className="h-4 w-4 text-destructive" />
+              <AlertTitle className="text-destructive">
+                Server Unreachable
+              </AlertTitle>
+              <AlertDescription className="text-destructive/90">
+                <p className="text-sm mb-3">
+                  The backend server is not responding. Possible causes:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li>Server is still starting up</li>
+                  <li>Network connectivity issue</li>
+                  <li>Server configuration problem</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              {attemptCount === 0 && (
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <span>Attempting to connect...</span>
+                </div>
+              )}
+              {attemptCount > 0 && (
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  Still trying to connect, attempt {attemptCount}...
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="flex justify-center gap-2">
+            {isUnreachable && (
+              <Button
+                onClick={retry}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Try Again
+              </Button>
+            )}
+            {(attemptCount > 0 || isUnreachable) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  window.open(
+                    "https://github.com/archestra-ai/archestra/issues",
+                    "_blank",
+                  )
+                }
+              >
+                Report issue on GitHub
+                <ExternalLink className="ml-1 h-3 w-3" />
+              </Button>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground text-center">
-            If this problem persists, please check your server logs or contact
-            your administrator.
-          </p>
         </CardContent>
       </Card>
     </main>

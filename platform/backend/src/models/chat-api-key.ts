@@ -221,8 +221,14 @@ class ChatApiKeyModel {
       conditions.push(eq(schema.chatApiKeysTable.provider, provider));
     }
 
-    // Only return keys with configured secrets
-    conditions.push(sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`);
+    // Only return keys with configured secrets OR system keys (which don't need secrets)
+    const secretOrSystemCondition = or(
+      sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
+      eq(schema.chatApiKeysTable.isSystem, true),
+    );
+    if (secretOrSystemCondition) {
+      conditions.push(secretOrSystemCondition);
+    }
 
     // Query with team, user, and secrets table joins
     const apiKeys = await db

@@ -18,6 +18,7 @@ archestra:
   # Uses Application Default Credentials (ADC) via GKE Workload Identity
   # instead of API keys for authentication
   env:
+    ARCHESTRA_ANALYTICS: disabled
     ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"

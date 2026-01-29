@@ -381,11 +381,6 @@ export async function validateUserToken(
     profileTeamIds.includes(teamId),
   );
 
-  logger.debug(
-    { profileId, userId: token.userId, userTeamIds, profileTeamIds, hasAccess },
-    "validateUserToken: checking team access",
-  );
-
   if (!hasAccess) {
     logger.warn(
       { profileId, userId: token.userId, userTeamIds, profileTeamIds },
@@ -422,10 +417,6 @@ export async function validateMCPGatewayToken(
   // Then try user token validation
   const userTokenResult = await validateUserToken(profileId, tokenValue);
   if (userTokenResult) {
-    // logger.debug(
-    //   { profileId, userId: userTokenResult.userId },
-    //   "validateMCPGatewayToken: validated as user token",
-    // );
     return userTokenResult;
   }
 

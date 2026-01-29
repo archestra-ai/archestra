@@ -200,7 +200,6 @@ export async function executeArchestraTool(
     // Check user has access if user token is being used
     const userId = tokenAuth?.userId;
     if (userId && organizationId) {
-      // Check if user has profile admin permission directly (don't trust caller)
       const isProfileAdmin = await userHasPermission(
         userId,
         organizationId,

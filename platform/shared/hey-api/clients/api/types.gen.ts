@@ -12795,6 +12795,8 @@ export type GetModelsWithApiKeysResponses = {
         lastSyncedAt: string;
         createdAt: string;
         updatedAt: string;
+        isFastest: boolean;
+        isBest: boolean;
         apiKeys: Array<{
             id: string;
             name: string;

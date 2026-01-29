@@ -1,4 +1,11 @@
-import { index, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  pgTable,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 import chatApiKeysTable from "./chat-api-key";
 import modelsTable from "./model";
 
@@ -23,6 +30,10 @@ const apiKeyModelsTable = pgTable(
     modelId: uuid("model_id")
       .notNull()
       .references(() => modelsTable.id, { onDelete: "cascade" }),
+    /** Whether this model is marked as the fastest (lowest latency) for this API key */
+    isFastest: boolean("is_fastest").notNull().default(false),
+    /** Whether this model is marked as the best (highest quality) for this API key */
+    isBest: boolean("is_best").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

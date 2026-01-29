@@ -68,7 +68,7 @@ class ModelSyncService {
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");
         // Clear any existing links since no models are available
-        await ApiKeyModelModel.syncModelsForApiKey(apiKeyId, []);
+        await ApiKeyModelModel.syncModelsForApiKey(apiKeyId, [], provider);
         return 0;
       }
 
@@ -109,16 +109,23 @@ class ModelSyncService {
         "Upserted models to database",
       );
 
-      // 3. Link models to the API key
-      const modelIds = upsertedModels.map((m) => m.id);
-      await ApiKeyModelModel.syncModelsForApiKey(apiKeyId, modelIds);
+      // 3. Link models to the API key with fastest/best detection
+      const modelsWithIds = upsertedModels.map((m) => ({
+        id: m.id,
+        modelId: m.modelId,
+      }));
+      await ApiKeyModelModel.syncModelsForApiKey(
+        apiKeyId,
+        modelsWithIds,
+        provider,
+      );
 
       logger.info(
-        { provider, apiKeyId, linkedCount: modelIds.length },
+        { provider, apiKeyId, linkedCount: modelsWithIds.length },
         "Linked models to API key",
       );
 
-      return modelIds.length;
+      return modelsWithIds.length;
     } catch (error) {
       logger.error(
         {

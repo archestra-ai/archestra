@@ -160,7 +160,7 @@ class SystemKeyManager {
 
     if (models.length === 0) {
       logger.info({ provider, apiKeyId }, "No models returned from provider");
-      await ApiKeyModelModel.syncModelsForApiKey(apiKeyId, []);
+      await ApiKeyModelModel.syncModelsForApiKey(apiKeyId, [], provider);
       return;
     }
 
@@ -198,12 +198,19 @@ class SystemKeyManager {
       "Upserted models to database",
     );
 
-    // Link models to the API key
-    const modelIds = upsertedModels.map((m) => m.id);
-    await ApiKeyModelModel.syncModelsForApiKey(apiKeyId, modelIds);
+    // Link models to the API key with fastest/best detection
+    const modelsWithIds = upsertedModels.map((m) => ({
+      id: m.id,
+      modelId: m.modelId,
+    }));
+    await ApiKeyModelModel.syncModelsForApiKey(
+      apiKeyId,
+      modelsWithIds,
+      provider,
+    );
 
     logger.info(
-      { provider, apiKeyId, linkedCount: modelIds.length },
+      { provider, apiKeyId, linkedCount: modelsWithIds.length },
       "Linked models to system API key",
     );
   }

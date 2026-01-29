@@ -17,9 +17,11 @@ import {
   Plus,
   RefreshCw,
   Server,
+  Star,
   Trash2,
   User,
   Users,
+  Zap,
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -604,6 +606,30 @@ function UnknownCapabilitiesBadge() {
 }
 
 /**
+ * Badge for fastest (lowest latency) models
+ */
+function FastestModelBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950 px-1.5 py-0.5 rounded whitespace-nowrap">
+      <Zap className="h-3 w-3" />
+      fastest
+    </span>
+  );
+}
+
+/**
+ * Badge for best (highest quality) models
+ */
+function BestModelBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-950 px-1.5 py-0.5 rounded whitespace-nowrap">
+      <Star className="h-3 w-3" />
+      best
+    </span>
+  );
+}
+
+/**
  * Models table showing all models with their linked API keys
  */
 function ModelsTable() {
@@ -644,7 +670,11 @@ function ModelsTable() {
         accessorKey: "modelId",
         header: "Model ID",
         cell: ({ row }) => (
-          <span className="font-mono text-sm">{row.original.modelId}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm">{row.original.modelId}</span>
+            {row.original.isFastest && <FastestModelBadge />}
+            {row.original.isBest && <BestModelBadge />}
+          </div>
         ),
       },
       {

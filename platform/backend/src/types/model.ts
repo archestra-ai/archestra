@@ -87,6 +87,10 @@ export type LinkedApiKey = z.infer<typeof LinkedApiKeySchema>;
  * Schema for model with linked API keys (for settings page display)
  */
 export const ModelWithApiKeysSchema = SelectModelSchema.extend({
+  /** Whether this model is marked as the fastest (lowest latency) for any linked API key */
+  isFastest: z.boolean(),
+  /** Whether this model is marked as the best (highest quality) for any linked API key */
+  isBest: z.boolean(),
   /** API keys that provide access to this model */
   apiKeys: z.array(LinkedApiKeySchema),
   /** Computed capabilities with pricing */

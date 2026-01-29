@@ -45038,6 +45038,12 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "isFastest": {
+                        "type": "boolean"
+                      },
+                      "isBest": {
+                        "type": "boolean"
+                      },
                       "apiKeys": {
                         "type": "array",
                         "items": {
@@ -45145,6 +45151,8 @@
                       "lastSyncedAt",
                       "createdAt",
                       "updatedAt",
+                      "isFastest",
+                      "isBest",
                       "apiKeys",
                       "capabilities"
                     ],

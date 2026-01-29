@@ -1740,7 +1740,6 @@ describe("ToolModel", () => {
     test("cleans up duplicate tools after catalog rename (legacy duplicates)", async ({
       makeInternalMcpCatalog,
       makeMcpServer,
-      makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
       const mcpServer = await makeMcpServer({ catalogId: catalog.id });

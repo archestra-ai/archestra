@@ -6,7 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { InternalMcpCatalogServerType } from "@/types";
+import type { InternalMcpCatalogServerType, LocalConfig } from "@/types";
 import secretTable from "./secret";
 
 const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
@@ -45,25 +45,8 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
       onDelete: "set null",
     },
   ), // For local config secret env vars storage
-  // Local server configuration
-  localConfig: jsonb("local_config").$type<{
-    command?: string;
-    arguments?: Array<string>;
-    environment?: Array<{
-      key: string;
-      type: "plain_text" | "secret" | "boolean" | "number";
-      value?: string; // Boolean type uses "true"/"false" strings, number type uses numeric strings
-      promptOnInstallation: boolean;
-      required?: boolean; // Whether this env var is required during installation (defaults to false)
-      description?: string; // Description to show in installation dialog
-      mounted?: boolean; // When true for secret type, mount as file at /secrets/<key> instead of env var
-    }>;
-    dockerImage?: string;
-    serviceAccount?: string;
-    transportType?: "stdio" | "streamable-http";
-    httpPort?: number;
-    httpPath?: string;
-  }>(),
+  // Local server configuration - uses LocalConfig type from @/types
+  localConfig: jsonb("local_config").$type<LocalConfig>(),
   userConfig: jsonb("user_config")
     .$type<
       Record<

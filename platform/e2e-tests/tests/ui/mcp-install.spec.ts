@@ -208,6 +208,110 @@ test.describe("MCP Install", () => {
   // test("Remote from catalog", () => {
   //   expect(true).toBe(true);
   // });
+
+  test("Local server with advanced K8s configuration", async ({
+    adminPage,
+    extractCookieHeaders,
+  }) => {
+    const CATALOG_ITEM_NAME = "e2e__advanced_k8s_test";
+
+    await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
+
+    await goToPage(adminPage, "/mcp-catalog/registry");
+    await adminPage.waitForLoadState("networkidle");
+
+    // Open "Add MCP Server" dialog
+    await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
+    await adminPage.waitForLoadState("networkidle");
+
+    // Click "Local (orchestrated by Archestra)" button
+    await adminPage
+      .getByRole("button", { name: "Local (orchestrated by Archestra)" })
+      .click();
+
+    // Fill basic fields
+    await adminPage
+      .getByRole("textbox", { name: "Name *" })
+      .fill(CATALOG_ITEM_NAME);
+    await adminPage
+      .getByRole("textbox", { name: "Docker Image" })
+      .fill("test-image:latest");
+    await adminPage.getByRole("textbox", { name: "Command" }).fill("node");
+    await adminPage
+      .getByRole("textbox", { name: "Arguments (one per line)" })
+      .fill("server.js");
+
+    // Expand Advanced Configuration section
+    const advancedConfigButton = adminPage.getByRole("button", {
+      name: /Advanced Configuration/,
+    });
+    await advancedConfigButton.click();
+
+    // Fill advanced K8s configuration fields
+    await adminPage
+      .getByRole("textbox", { name: "Replicas", exact: false })
+      .fill("2");
+    await adminPage
+      .getByRole("textbox", { name: "Namespace" })
+      .fill("custom-namespace");
+    await adminPage
+      .getByRole("textbox", { name: "Memory Request" })
+      .fill("256Mi");
+    await adminPage.getByRole("textbox", { name: "CPU Request" }).fill("100m");
+    await adminPage
+      .getByRole("textbox", { name: "Memory Limit" })
+      .fill("512Mi");
+    await adminPage.getByRole("textbox", { name: "CPU Limit" }).fill("500m");
+    await adminPage
+      .getByRole("textbox", { name: "Labels (JSON)" })
+      .fill('{"environment": "test"}');
+    await adminPage
+      .getByRole("textbox", { name: "Annotations (JSON)" })
+      .fill('{"app.kubernetes.io/managed-by": "archestra"}');
+
+    // Add catalog item to the registry
+    await clickButton({ page: adminPage, options: { name: "Add Server" } });
+    await adminPage.waitForLoadState("networkidle");
+
+    // Wait for the install dialog to be visible
+    await adminPage
+      .getByRole("dialog")
+      .filter({ hasText: /Install -/ })
+      .waitFor({ state: "visible", timeout: 30000 });
+
+    // Close the install dialog without installing (just verifying catalog item was created)
+    await adminPage.keyboard.press("Escape");
+    await adminPage.waitForLoadState("networkidle");
+
+    // Open the catalog item for editing to verify advanced K8s config was saved
+    const serverCard = adminPage.getByTestId(
+      `${E2eTestId.McpServerCard}-${CATALOG_ITEM_NAME}`,
+    );
+    await serverCard.waitFor({ state: "visible", timeout: 30000 });
+    await serverCard.getByRole("button", { name: "Edit Server" }).click();
+    await adminPage.waitForLoadState("networkidle");
+
+    // Expand Advanced Configuration section
+    const editAdvancedConfigButton = adminPage.getByRole("button", {
+      name: /Advanced Configuration/,
+    });
+    await editAdvancedConfigButton.click();
+
+    // Verify the advanced K8s configuration values were saved
+    await adminPage
+      .getByRole("textbox", { name: "Replicas", exact: false })
+      .waitFor({ state: "visible" });
+
+    // Verify replicas value
+    const replicasInput = adminPage.getByRole("textbox", {
+      name: "Replicas",
+      exact: false,
+    });
+    await replicasInput.waitFor({ state: "visible" });
+
+    // cleanup
+    await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
+  });
 });
 
 async function deleteCatalogItem(

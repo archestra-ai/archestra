@@ -2008,6 +2008,374 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     // No env vars (all are mounted secrets, empty ones skipped entirely)
     expect(container?.env).toEqual([]);
   });
+
+  // Advanced K8s Configuration Tests
+  test("generates deploymentSpec with custom replicas from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "replicas-server-id",
+      name: "replicas-server",
+      catalogId: "catalog-replicas",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        replicas: 3,
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    expect(deploymentSpec.spec?.replicas).toBe(3);
+  });
+
+  test("generates deploymentSpec with custom labels from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "labels-server-id",
+      name: "labels-server",
+      catalogId: "catalog-labels",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        labels: {
+          environment: "production",
+          team: "platform",
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Custom labels should be merged with required labels
+    expect(deploymentSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "labels-server-id",
+      "mcp-server-name": "labels-server",
+      environment: "production",
+      team: "platform",
+    });
+
+    // Pod template should also have the merged labels
+    expect(deploymentSpec.spec?.template.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "labels-server-id",
+      "mcp-server-name": "labels-server",
+      environment: "production",
+      team: "platform",
+    });
+  });
+
+  test("generates deploymentSpec with annotations from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "annotations-server-id",
+      name: "annotations-server",
+      catalogId: "catalog-annotations",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        annotations: {
+          "prometheus.io/scrape": "true",
+          "prometheus.io/port": "9090",
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Annotations should be on the pod template
+    expect(deploymentSpec.spec?.template.metadata?.annotations).toEqual({
+      "prometheus.io/scrape": "true",
+      "prometheus.io/port": "9090",
+    });
+  });
+
+  test("generates deploymentSpec with custom resource requests from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "resources-server-id",
+      name: "resources-server",
+      catalogId: "catalog-resources",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        resources: {
+          requests: {
+            memory: "256Mi",
+            cpu: "100m",
+          },
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.resources?.requests).toEqual({
+      memory: "256Mi",
+      cpu: "100m",
+    });
+  });
+
+  test("generates deploymentSpec with resource limits from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "limits-server-id",
+      name: "limits-server",
+      catalogId: "catalog-limits",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        resources: {
+          requests: {
+            memory: "256Mi",
+            cpu: "100m",
+          },
+          limits: {
+            memory: "512Mi",
+            cpu: "500m",
+          },
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.resources?.requests).toEqual({
+      memory: "256Mi",
+      cpu: "100m",
+    });
+    expect(container?.resources?.limits).toEqual({
+      memory: "512Mi",
+      cpu: "500m",
+    });
+  });
+
+  test("generates deploymentSpec with combined advancedK8sConfig settings", () => {
+    const mcpServer: McpServer = {
+      id: "combined-server-id",
+      name: "combined-server",
+      catalogId: "catalog-combined",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        replicas: 2,
+        labels: {
+          environment: "staging",
+        },
+        annotations: {
+          "app.kubernetes.io/managed-by": "archestra",
+        },
+        resources: {
+          requests: {
+            memory: "512Mi",
+            cpu: "200m",
+          },
+          limits: {
+            memory: "1Gi",
+            cpu: "1000m",
+          },
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Check replicas
+    expect(deploymentSpec.spec?.replicas).toBe(2);
+
+    // Check labels are merged
+    expect(deploymentSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "combined-server-id",
+      "mcp-server-name": "combined-server",
+      environment: "staging",
+    });
+
+    // Check annotations on pod template
+    expect(deploymentSpec.spec?.template.metadata?.annotations).toEqual({
+      "app.kubernetes.io/managed-by": "archestra",
+    });
+
+    // Check resources
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.resources?.requests).toEqual({
+      memory: "512Mi",
+      cpu: "200m",
+    });
+    expect(container?.resources?.limits).toEqual({
+      memory: "1Gi",
+      cpu: "1000m",
+    });
+  });
+
+  test("uses default values when advancedK8sConfig is not provided", () => {
+    const mcpServer: McpServer = {
+      id: "default-server-id",
+      name: "default-server",
+      catalogId: "catalog-default",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      // No advancedK8sConfig
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Default replicas
+    expect(deploymentSpec.spec?.replicas).toBe(1);
+
+    // Default labels (only required ones)
+    expect(deploymentSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "default-server-id",
+      "mcp-server-name": "default-server",
+    });
+
+    // No annotations
+    expect(deploymentSpec.spec?.template.metadata?.annotations).toBeUndefined();
+
+    // Default resources
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.resources?.requests).toEqual({
+      memory: "128Mi",
+      cpu: "50m",
+    });
+    expect(container?.resources?.limits).toBeUndefined();
+  });
+
+  test("custom labels do not override required labels", () => {
+    const mcpServer: McpServer = {
+      id: "override-server-id",
+      name: "override-server",
+      catalogId: "catalog-override",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        labels: {
+          // Try to override required labels
+          app: "custom-app",
+          "mcp-server-id": "custom-id",
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Required labels should take precedence
+    expect(deploymentSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "override-server-id",
+      "mcp-server-name": "override-server",
+    });
+  });
 });
 
 describe("K8sDeployment.createK8sSecret", () => {

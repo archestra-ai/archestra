@@ -63732,6 +63732,62 @@
                           },
                           "httpPath": {
                             "type": "string"
+                          },
+                          "advancedK8sConfig": {
+                            "type": "object",
+                            "properties": {
+                              "replicas": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 10
+                              },
+                              "namespace": {
+                                "type": "string"
+                              },
+                              "annotations": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              },
+                              "labels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              },
+                              "resources": {
+                                "type": "object",
+                                "properties": {
+                                  "requests": {
+                                    "type": "object",
+                                    "properties": {
+                                      "memory": {
+                                        "type": "string"
+                                      },
+                                      "cpu": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "limits": {
+                                    "type": "object",
+                                    "properties": {
+                                      "memory": {
+                                        "type": "string"
+                                      },
+                                      "cpu": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -64326,6 +64382,58 @@
                       },
                       "serviceAccount": {
                         "type": "string"
+                      },
+                      "advancedK8sConfig": {
+                        "type": "object",
+                        "properties": {
+                          "replicas": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "namespace": {
+                            "type": "string"
+                          },
+                          "annotations": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "labels": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "resources": {
+                            "type": "object",
+                            "properties": {
+                              "requests": {
+                                "type": "object",
+                                "properties": {
+                                  "memory": {
+                                    "type": "string"
+                                  },
+                                  "cpu": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "limits": {
+                                "type": "object",
+                                "properties": {
+                                  "memory": {
+                                    "type": "string"
+                                  },
+                                  "cpu": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -64686,6 +64794,62 @@
                         },
                         "httpPath": {
                           "type": "string"
+                        },
+                        "advancedK8sConfig": {
+                          "type": "object",
+                          "properties": {
+                            "replicas": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10
+                            },
+                            "namespace": {
+                              "type": "string"
+                            },
+                            "annotations": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "labels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "resources": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -65295,6 +65459,62 @@
                         },
                         "httpPath": {
                           "type": "string"
+                        },
+                        "advancedK8sConfig": {
+                          "type": "object",
+                          "properties": {
+                            "replicas": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10
+                            },
+                            "namespace": {
+                              "type": "string"
+                            },
+                            "annotations": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "labels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "resources": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -65883,6 +66103,58 @@
                       },
                       "serviceAccount": {
                         "type": "string"
+                      },
+                      "advancedK8sConfig": {
+                        "type": "object",
+                        "properties": {
+                          "replicas": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "namespace": {
+                            "type": "string"
+                          },
+                          "annotations": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "labels": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "resources": {
+                            "type": "object",
+                            "properties": {
+                              "requests": {
+                                "type": "object",
+                                "properties": {
+                                  "memory": {
+                                    "type": "string"
+                                  },
+                                  "cpu": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "limits": {
+                                "type": "object",
+                                "properties": {
+                                  "memory": {
+                                    "type": "string"
+                                  },
+                                  "cpu": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -66250,6 +66522,62 @@
                         },
                         "httpPath": {
                           "type": "string"
+                        },
+                        "advancedK8sConfig": {
+                          "type": "object",
+                          "properties": {
+                            "replicas": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10
+                            },
+                            "namespace": {
+                              "type": "string"
+                            },
+                            "annotations": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "labels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "resources": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -69623,6 +69951,62 @@
                                   },
                                   "serviceAccount": {
                                     "type": "string"
+                                  },
+                                  "advancedK8sConfig": {
+                                    "type": "object",
+                                    "properties": {
+                                      "replicas": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 10
+                                      },
+                                      "namespace": {
+                                        "type": "string"
+                                      },
+                                      "annotations": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "labels": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "resources": {
+                                        "type": "object",
+                                        "properties": {
+                                          "requests": {
+                                            "type": "object",
+                                            "properties": {
+                                              "memory": {
+                                                "type": "string"
+                                              },
+                                              "cpu": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          "limits": {
+                                            "type": "object",
+                                            "properties": {
+                                              "memory": {
+                                                "type": "string"
+                                              },
+                                              "cpu": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "additionalProperties": false
                                   }
                                 },
                                 "additionalProperties": false
@@ -70178,6 +70562,58 @@
                               },
                               "serviceAccount": {
                                 "type": "string"
+                              },
+                              "advancedK8sConfig": {
+                                "type": "object",
+                                "properties": {
+                                  "replicas": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10
+                                  },
+                                  "namespace": {
+                                    "type": "string"
+                                  },
+                                  "annotations": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "labels": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "resources": {
+                                    "type": "object",
+                                    "properties": {
+                                      "requests": {
+                                        "type": "object",
+                                        "properties": {
+                                          "memory": {
+                                            "type": "string"
+                                          },
+                                          "cpu": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      },
+                                      "limits": {
+                                        "type": "object",
+                                        "properties": {
+                                          "memory": {
+                                            "type": "string"
+                                          },
+                                          "cpu": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -70464,6 +70900,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -71048,6 +71540,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -71606,6 +72154,58 @@
                               },
                               "serviceAccount": {
                                 "type": "string"
+                              },
+                              "advancedK8sConfig": {
+                                "type": "object",
+                                "properties": {
+                                  "replicas": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10
+                                  },
+                                  "namespace": {
+                                    "type": "string"
+                                  },
+                                  "annotations": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "labels": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "resources": {
+                                    "type": "object",
+                                    "properties": {
+                                      "requests": {
+                                        "type": "object",
+                                        "properties": {
+                                          "memory": {
+                                            "type": "string"
+                                          },
+                                          "cpu": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      },
+                                      "limits": {
+                                        "type": "object",
+                                        "properties": {
+                                          "memory": {
+                                            "type": "string"
+                                          },
+                                          "cpu": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -71942,6 +72542,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -72790,6 +73446,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -73388,6 +74100,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -73991,6 +74759,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false

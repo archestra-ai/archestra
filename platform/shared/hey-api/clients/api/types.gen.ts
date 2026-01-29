@@ -17698,6 +17698,26 @@ export type GetInternalMcpCatalogResponses = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            advancedK8sConfig?: {
+                replicas?: number;
+                namespace?: string;
+                annotations?: {
+                    [key: string]: string;
+                };
+                labels?: {
+                    [key: string]: string;
+                };
+                resources?: {
+                    requests?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                    limits?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                };
+            };
         } | null;
         userConfig: {
             [key: string]: {
@@ -17782,6 +17802,26 @@ export type CreateInternalMcpCatalogItemData = {
             httpPort?: number;
             httpPath?: string;
             serviceAccount?: string;
+            advancedK8sConfig?: {
+                replicas?: number;
+                namespace?: string;
+                annotations?: {
+                    [key: string]: string;
+                };
+                labels?: {
+                    [key: string]: string;
+                };
+                resources?: {
+                    requests?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                    limits?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                };
+            };
         } | null;
         userConfig?: {
             [key: string]: {
@@ -17931,6 +17971,26 @@ export type CreateInternalMcpCatalogItemResponses = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            advancedK8sConfig?: {
+                replicas?: number;
+                namespace?: string;
+                annotations?: {
+                    [key: string]: string;
+                };
+                labels?: {
+                    [key: string]: string;
+                };
+                resources?: {
+                    requests?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                    limits?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                };
+            };
         } | null;
         userConfig: {
             [key: string]: {
@@ -18165,6 +18225,26 @@ export type GetInternalMcpCatalogItemResponses = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            advancedK8sConfig?: {
+                replicas?: number;
+                namespace?: string;
+                annotations?: {
+                    [key: string]: string;
+                };
+                labels?: {
+                    [key: string]: string;
+                };
+                resources?: {
+                    requests?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                    limits?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                };
+            };
         } | null;
         userConfig: {
             [key: string]: {
@@ -18248,6 +18328,26 @@ export type UpdateInternalMcpCatalogItemData = {
             httpPort?: number;
             httpPath?: string;
             serviceAccount?: string;
+            advancedK8sConfig?: {
+                replicas?: number;
+                namespace?: string;
+                annotations?: {
+                    [key: string]: string;
+                };
+                labels?: {
+                    [key: string]: string;
+                };
+                resources?: {
+                    requests?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                    limits?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                };
+            };
         } | null;
         userConfig?: {
             [key: string]: {
@@ -18399,6 +18499,26 @@ export type UpdateInternalMcpCatalogItemResponses = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            advancedK8sConfig?: {
+                replicas?: number;
+                namespace?: string;
+                annotations?: {
+                    [key: string]: string;
+                };
+                labels?: {
+                    [key: string]: string;
+                };
+                resources?: {
+                    requests?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                    limits?: {
+                        memory?: string;
+                        cpu?: string;
+                    };
+                };
+            };
         } | null;
         userConfig: {
             [key: string]: {
@@ -19303,6 +19423,26 @@ export type GetMcpServerInstallationRequestsResponses = {
                 httpPort?: number;
                 httpPath?: string;
                 serviceAccount?: string;
+                advancedK8sConfig?: {
+                    replicas?: number;
+                    namespace?: string;
+                    annotations?: {
+                        [key: string]: string;
+                    };
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    resources?: {
+                        requests?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                        limits?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                    };
+                };
             };
         } | null;
         adminResponse: string | null;
@@ -19383,6 +19523,26 @@ export type CreateMcpServerInstallationRequestData = {
                 httpPort?: number;
                 httpPath?: string;
                 serviceAccount?: string;
+                advancedK8sConfig?: {
+                    replicas?: number;
+                    namespace?: string;
+                    annotations?: {
+                        [key: string]: string;
+                    };
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    resources?: {
+                        requests?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                        limits?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                    };
+                };
             };
         } | null;
     };
@@ -19517,6 +19677,26 @@ export type CreateMcpServerInstallationRequestResponses = {
                 httpPort?: number;
                 httpPath?: string;
                 serviceAccount?: string;
+                advancedK8sConfig?: {
+                    replicas?: number;
+                    namespace?: string;
+                    annotations?: {
+                        [key: string]: string;
+                    };
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    resources?: {
+                        requests?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                        limits?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                    };
+                };
             };
         } | null;
         adminResponse: string | null;
@@ -19750,6 +19930,26 @@ export type GetMcpServerInstallationRequestResponses = {
                 httpPort?: number;
                 httpPath?: string;
                 serviceAccount?: string;
+                advancedK8sConfig?: {
+                    replicas?: number;
+                    namespace?: string;
+                    annotations?: {
+                        [key: string]: string;
+                    };
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    resources?: {
+                        requests?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                        limits?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                    };
+                };
             };
         } | null;
         adminResponse: string | null;
@@ -19830,6 +20030,26 @@ export type UpdateMcpServerInstallationRequestData = {
                 httpPort?: number;
                 httpPath?: string;
                 serviceAccount?: string;
+                advancedK8sConfig?: {
+                    replicas?: number;
+                    namespace?: string;
+                    annotations?: {
+                        [key: string]: string;
+                    };
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    resources?: {
+                        requests?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                        limits?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                    };
+                };
             };
         } | null;
         adminResponse?: string | null;
@@ -19976,6 +20196,26 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 httpPort?: number;
                 httpPath?: string;
                 serviceAccount?: string;
+                advancedK8sConfig?: {
+                    replicas?: number;
+                    namespace?: string;
+                    annotations?: {
+                        [key: string]: string;
+                    };
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    resources?: {
+                        requests?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                        limits?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                    };
+                };
             };
         } | null;
         adminResponse: string | null;
@@ -20132,6 +20372,26 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 httpPort?: number;
                 httpPath?: string;
                 serviceAccount?: string;
+                advancedK8sConfig?: {
+                    replicas?: number;
+                    namespace?: string;
+                    annotations?: {
+                        [key: string]: string;
+                    };
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    resources?: {
+                        requests?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                        limits?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                    };
+                };
             };
         } | null;
         adminResponse: string | null;
@@ -20288,6 +20548,26 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 httpPort?: number;
                 httpPath?: string;
                 serviceAccount?: string;
+                advancedK8sConfig?: {
+                    replicas?: number;
+                    namespace?: string;
+                    annotations?: {
+                        [key: string]: string;
+                    };
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    resources?: {
+                        requests?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                        limits?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                    };
+                };
             };
         } | null;
         adminResponse: string | null;
@@ -20444,6 +20724,26 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 httpPort?: number;
                 httpPath?: string;
                 serviceAccount?: string;
+                advancedK8sConfig?: {
+                    replicas?: number;
+                    namespace?: string;
+                    annotations?: {
+                        [key: string]: string;
+                    };
+                    labels?: {
+                        [key: string]: string;
+                    };
+                    resources?: {
+                        requests?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                        limits?: {
+                            memory?: string;
+                            cpu?: string;
+                        };
+                    };
+                };
             };
         } | null;
         adminResponse: string | null;

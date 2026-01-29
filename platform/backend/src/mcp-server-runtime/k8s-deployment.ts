@@ -491,8 +491,13 @@ export default class K8sDeployment {
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
   ): k8s.V1Deployment {
+    const advancedConfig = localConfig.advancedK8sConfig;
+
     // Labels common to Deployment, RS, and Pods
+    // Merge custom labels from advanced config with required labels
+    // Required labels are spread last to prevent custom labels from overriding them
     const labels = K8sDeployment.sanitizeMetadataLabels({
+      ...(advancedConfig?.labels || {}),
       app: "mcp-server",
       "mcp-server-id": this.mcpServer.id,
       "mcp-server-name": this.mcpServer.name,
@@ -588,16 +593,36 @@ export default class K8sDeployment {
             : undefined,
           // Add volume mounts for mounted secrets
           ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
-          // Set resource requests for the container
+          // Set resource requests/limits for the container (with defaults)
           resources: {
             requests: {
-              memory: "128Mi",
-              cpu: "50m",
+              memory: advancedConfig?.resources?.requests?.memory || "128Mi",
+              cpu: advancedConfig?.resources?.requests?.cpu || "50m",
             },
+            ...(advancedConfig?.resources?.limits
+              ? {
+                  limits: {
+                    ...(advancedConfig.resources.limits.memory
+                      ? { memory: advancedConfig.resources.limits.memory }
+                      : {}),
+                    ...(advancedConfig.resources.limits.cpu
+                      ? { cpu: advancedConfig.resources.limits.cpu }
+                      : {}),
+                  },
+                }
+              : {}),
           },
         },
       ],
       restartPolicy: "Always",
+    };
+
+    // Build pod template metadata with optional annotations
+    const podTemplateMetadata: k8s.V1ObjectMeta = {
+      labels,
+      ...(advancedConfig?.annotations
+        ? { annotations: advancedConfig.annotations }
+        : {}),
     };
 
     return {
@@ -608,14 +633,12 @@ export default class K8sDeployment {
         labels,
       },
       spec: {
-        replicas: 1,
+        replicas: advancedConfig?.replicas ?? 1,
         selector: {
           matchLabels: labels,
         },
         template: {
-          metadata: {
-            labels,
-          },
+          metadata: podTemplateMetadata,
           spec: podSpec,
         },
       },

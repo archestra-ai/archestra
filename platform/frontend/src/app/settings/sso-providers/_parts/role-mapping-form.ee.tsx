@@ -41,6 +41,13 @@ interface RoleMappingFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
 }
 
+function toTitleCase(str: string): string {
+  return str
+    .split(/[-_\s]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 const HANDLEBARS_EXAMPLES = [
   {
     expression: '{{#includes groups "admin"}}true{{/includes}}',
@@ -225,7 +232,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                                 <SelectContent>
                                   {roles.map((role) => (
                                     <SelectItem key={role.id} value={role.role}>
-                                      {role.name}
+                                      {toTitleCase(role.name)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -270,7 +277,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                     <SelectContent>
                       {roles.map((role) => (
                         <SelectItem key={role.id} value={role.role}>
-                          {role.name}
+                          {toTitleCase(role.name)}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -48,9 +48,9 @@ Use this when you need to patch an already-released version without including un
 Create a branch from the tag you want to patch:
 
 ```bash
-# Example: patching v1.0.22
+# Example: patching platform-v1.0.22
 git fetch --tags
-git checkout -b release/v1.0.22 v1.0.22
+git checkout -b release/v1.0.22 platform-v1.0.22
 git push origin release/v1.0.22
 ```
 

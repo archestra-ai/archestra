@@ -1,4 +1,4 @@
-# MCP-native Centralized AI Platform
+# MCP-native Secure AI Platform
 
 Simplify AI usage in your company, providing user-friendly MCP toolbox, observability and control built on a strong security foundation.
 

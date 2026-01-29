@@ -21,13 +21,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { RoleSelectContent } from "@/components/ui/role-select";
+import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
@@ -35,17 +30,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useRoles } from "@/lib/role.query";
 
 interface RoleMappingFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
-}
-
-function toTitleCase(str: string): string {
-  return str
-    .split(/[-_\s]+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
 }
 
 const HANDLEBARS_EXAMPLES = [
@@ -77,8 +64,6 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
   const [ruleIds, setRuleIds] = useState<string[]>(() =>
     rules.map((_, i) => `${baseId}-rule-${i}`),
   );
-  // Fetch all roles (predefined + custom)
-  const { data: roles = [] } = useRoles();
 
   // Scroll the accordion content into view when expanded
   const handleAccordionChange = useCallback((value: string) => {
@@ -229,13 +214,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                                     <SelectValue placeholder="Select role" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent>
-                                  {roles.map((role) => (
-                                    <SelectItem key={role.id} value={role.role}>
-                                      {toTitleCase(role.name)}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
+                                <RoleSelectContent />
                               </Select>
                               <FormMessage />
                             </FormItem>
@@ -274,13 +253,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                         <SelectValue placeholder="Select default role" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
-                      {roles.map((role) => (
-                        <SelectItem key={role.id} value={role.role}>
-                          {toTitleCase(role.name)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
+                    <RoleSelectContent />
                   </Select>
                   <FormDescription>
                     Role assigned when no mapping rules match.

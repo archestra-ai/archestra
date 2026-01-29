@@ -9,7 +9,7 @@ import {
   WrenchIcon,
   XCircleIcon,
 } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
+import React, { type ComponentProps, type ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -250,6 +250,17 @@ export const ToolOutput = ({
             );
           })}
         </div>
+      </div>
+    );
+  }
+
+  if (React.isValidElement(output)) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {label ?? (errorText ? "Error" : "Result")}
+        </h4>
+        <div className="rounded-md text-xs">{output}</div>
       </div>
     );
   }

@@ -38,6 +38,7 @@ import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
+import { MCPUIRenderer, type MCPContent } from "./mcp-ui-renderer";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -935,14 +936,26 @@ function MessageTool({
         {toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
+            output={
+              Array.isArray(toolResultPart.output) ? (
+                <MCPUIRenderer content={toolResultPart.output as MCPContent[]} />
+              ) : (
+                toolResultPart.output
+              )
+            }
             errorText={errorText}
           />
         )}
         {!toolResultPart && Boolean(part.output) && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
-            output={part.output}
+            output={
+              Array.isArray(part.output) ? (
+                <MCPUIRenderer content={part.output as MCPContent[]} />
+              ) : (
+                part.output
+              )
+            }
             errorText={errorText}
           />
         )}

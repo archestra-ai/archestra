@@ -195,6 +195,7 @@ export async function createAgentServer(
         // Transform CommonToolResult to MCP response format
         // When isError is true, we still return the content so the LLM can see
         // the error message and potentially try a different approach
+        // Return the full content array from MCP client to support rich content (images, resources, etc.)
         return {
           content: Array.isArray(result.content)
             ? result.content

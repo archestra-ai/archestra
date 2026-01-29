@@ -268,6 +268,38 @@ export class McpServerRuntimeManager {
         throw new Error("Kubernetes clients not initialized");
       }
 
+      // If environmentValues not provided but server has a secretId,
+      // fetch the secret values to use as environmentValues.
+      // This is critical for restarts where env values need to be preserved
+      // to ensure the pod spec includes the secretKeyRef for prompted env vars.
+      let effectiveEnvironmentValues = environmentValues;
+      let secretData: Record<string, string> | undefined;
+
+      if (mcpServer.secretId) {
+        const secret = await secretManager().getSecret(mcpServer.secretId);
+
+        if (secret?.secret && typeof secret.secret === "object") {
+          secretData = {};
+          for (const [key, value] of Object.entries(secret.secret)) {
+            secretData[key] = String(value);
+          }
+
+          // Use secret data as environmentValues if not explicitly provided
+          // This ensures createContainerEnvFromConfig() knows to add secretKeyRef
+          if (!effectiveEnvironmentValues) {
+            effectiveEnvironmentValues = secretData;
+            logger.info(
+              {
+                mcpServerId: id,
+                secretId: mcpServer.secretId,
+                keys: Object.keys(secretData),
+              },
+              "Using secret values as environment values for deployment",
+            );
+          }
+        }
+      }
+
       const k8sDeployment = new K8sDeployment(
         mcpServer,
         this.k8sApi,
@@ -277,32 +309,20 @@ export class McpServerRuntimeManager {
         this.namespace,
         catalogItem,
         userConfigValues,
-        environmentValues,
+        effectiveEnvironmentValues,
       );
 
       // Register the deployment BEFORE starting it
       this.mcpServerIdToDeploymentMap.set(id, k8sDeployment);
       logger.info(`Registered MCP server deployment ${id} in map`);
 
-      // If MCP server has a secretId, fetch secret and create K8s Secret
-      if (mcpServer.secretId) {
-        const secret = await secretManager().getSecret(mcpServer.secretId);
-
-        if (secret?.secret && typeof secret.secret === "object") {
-          const secretData: Record<string, string> = {};
-
-          // Convert secret.secret to Record<string, string>
-          for (const [key, value] of Object.entries(secret.secret)) {
-            secretData[key] = String(value);
-          }
-
-          // Create K8s Secret
-          await k8sDeployment.createK8sSecret(secretData);
-          logger.info(
-            { mcpServerId: id, secretId: mcpServer.secretId },
-            "Created K8s Secret from secret manager",
-          );
-        }
+      // Create K8s Secret if we have secret data
+      if (secretData && Object.keys(secretData).length > 0) {
+        await k8sDeployment.createK8sSecret(secretData);
+        logger.info(
+          { mcpServerId: id, secretId: mcpServer.secretId },
+          "Created K8s Secret from secret manager",
+        );
       }
 
       await k8sDeployment.startOrCreateDeployment();

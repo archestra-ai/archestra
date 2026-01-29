@@ -209,7 +209,7 @@ export const RouteId = {
   UpdateConversationEnabledTools: "updateConversationEnabledTools",
   DeleteConversationEnabledTools: "deleteConversationEnabledTools",
   GetChatModels: "getChatModels",
-  InvalidateChatModelsCache: "invalidateChatModelsCache",
+  SyncChatModels: "syncChatModels",
 
   // Chat API Key Routes
   GetChatApiKeys: "getChatApiKeys",
@@ -218,6 +218,9 @@ export const RouteId = {
   GetChatApiKey: "getChatApiKey",
   UpdateChatApiKey: "updateChatApiKey",
   DeleteChatApiKey: "deleteChatApiKey",
+
+  // Models with API Keys Routes
+  GetModelsWithApiKeys: "getModelsWithApiKeys",
 
   // Prompt Routes
   GetPrompts: "getPrompts",

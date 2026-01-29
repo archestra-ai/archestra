@@ -14,8 +14,8 @@ import logger from "@/logging";
  * of related entries using deleteByPrefix().
  */
 export const CacheKey = {
-  /** Chat model list cache */
-  GetChatModels: "get-chat-models",
+  /** models.dev sync tracking */
+  ModelsDevSync: "models-dev-sync",
   /** MCP tools for chat feature */
   ChatMcpTools: "chat-mcp-tools",
   /** Deduplication for processed emails */

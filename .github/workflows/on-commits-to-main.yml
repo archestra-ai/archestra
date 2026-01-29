@@ -120,7 +120,7 @@ jobs:
             --zone us-central1-a \
             --project friendly-path-465518-r6
 
-      - name: Determine to staging
+      - name: Deploy to staging
         id: blue-green
         run: |
           # Get current active slot from helm values (defaults to "blue" if not set)

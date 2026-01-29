@@ -55,35 +55,12 @@ import {
   useGenerateConversationTitle,
   useUpdateConversation,
 } from "@/lib/chat.query";
+import { getConversationDisplayTitle } from "@/lib/chat-utils";
 import { cn } from "@/lib/utils";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 const VISIBLE_CHAT_COUNT = 10;
 const MAX_TITLE_LENGTH = 30;
-
-// Helper to extract display title from conversation
-export function getConversationDisplayTitle(
-  title: string | null,
-  // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
-  messages?: any[],
-): string {
-  if (title) return title;
-
-  // Try to extract from first user message
-  if (messages && messages.length > 0) {
-    for (const msg of messages) {
-      if (msg.role === "user" && msg.parts) {
-        for (const part of msg.parts) {
-          if (part.type === "text" && part.text) {
-            return part.text;
-          }
-        }
-      }
-    }
-  }
-
-  return "New chat";
-}
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   return (

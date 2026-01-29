@@ -96,21 +96,20 @@ class ApiKeyModelModel {
       // Insert new links
       if (models.length > 0) {
         // Detect fastest and best models using pattern matching
+        // Patterns are checked in order (first pattern = highest priority)
         const patterns = MODEL_MARKER_PATTERNS[provider];
         const sorted = [...models].sort((a, b) =>
           a.modelId.localeCompare(b.modelId),
         );
 
-        // Find first matching model for each category (alphabetically)
-        const fastestModel = sorted.find((m) =>
-          patterns.fastest.some((p) =>
-            m.modelId.toLowerCase().includes(p.toLowerCase()),
-          ),
+        // Find first matching model respecting pattern priority order
+        const fastestModel = findFirstMatchByPatternPriority(
+          sorted,
+          patterns.fastest,
         );
-        const bestModel = sorted.find((m) =>
-          patterns.best.some((p) =>
-            m.modelId.toLowerCase().includes(p.toLowerCase()),
-          ),
+        const bestModel = findFirstMatchByPatternPriority(
+          sorted,
+          patterns.best,
         );
 
         // Build values with markers
@@ -308,3 +307,27 @@ class ApiKeyModelModel {
 }
 
 export default ApiKeyModelModel;
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/**
+ * Find the first model matching patterns, respecting pattern priority order.
+ * Patterns are checked in order (first pattern = highest priority).
+ * For each pattern, returns the first alphabetically sorted match.
+ */
+function findFirstMatchByPatternPriority(
+  sortedModels: Array<{ id: string; modelId: string }>,
+  patterns: string[],
+): { id: string; modelId: string } | undefined {
+  for (const pattern of patterns) {
+    const match = sortedModels.find((m) =>
+      m.modelId.toLowerCase().includes(pattern.toLowerCase()),
+    );
+    if (match) {
+      return match;
+    }
+  }
+  return undefined;
+}

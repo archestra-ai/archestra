@@ -52,6 +52,11 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
  * Pattern-based model markers per provider.
  * Patterns are substrings that model IDs must contain (case-insensitive).
  * Used to identify "fastest" (lightweight, low latency) and "best" (highest quality) models.
+ *
+ * IMPORTANT: Patterns are checked in array order (first match wins).
+ * More specific patterns should come before general ones.
+ *
+ * Note: For OpenAI "best", we use "4o-2" to match "gpt-4o-2024..." but NOT "gpt-4o-mini-...".
  */
 export const MODEL_MARKER_PATTERNS: Record<
   SupportedProvider,
@@ -61,12 +66,13 @@ export const MODEL_MARKER_PATTERNS: Record<
   }
 > = {
   anthropic: {
-    fastest: ["claude-3-5-haiku", "claude-3-haiku"],
-    best: ["claude-opus", "claude-sonnet"],
+    fastest: ["haiku"],
+    best: ["opus", "sonnet"],
   },
   openai: {
     fastest: ["gpt-4o-mini", "gpt-3.5"],
-    best: ["gpt-4o", "gpt-4-turbo"],
+    // "4o-2" matches "gpt-4o-2024..." but not "gpt-4o-mini-..."
+    best: ["o1", "o3", "4o-2", "gpt-4-turbo"],
   },
   gemini: {
     fastest: ["flash"],

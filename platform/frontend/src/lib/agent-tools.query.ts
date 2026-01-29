@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { showErrorToastFromApiError } from "./utils";
 
 const {
   assignToolToAgent,
@@ -293,13 +294,9 @@ export function useAutoConfigurePolicies() {
         body: { toolIds },
       });
 
-      if (!result.data) {
-        const errorMessage =
-          typeof result.error?.error === "string"
-            ? result.error.error
-            : (result.error?.error as { message?: string })?.message ||
-              "Failed to auto-configure policies";
-        throw new Error(errorMessage);
+      if (result.error) {
+        showErrorToastFromApiError(result.error);
+        return null;
       }
 
       return result.data;
@@ -388,10 +385,8 @@ export function useSyncAgentDelegations() {
         body: { targetAgentIds },
       });
       if (response.error) {
-        throw new Error(
-          (response.error as { error?: { message?: string } })?.error
-            ?.message || "Failed to sync delegations",
-        );
+        showErrorToastFromApiError(response.error);
+        return null;
       }
       return response.data;
     },
@@ -434,10 +429,8 @@ export function useRemoveAgentDelegation() {
         path: { agentId, targetAgentId },
       });
       if (response.error) {
-        throw new Error(
-          (response.error as { error?: { message?: string } })?.error
-            ?.message || "Failed to remove delegation",
-        );
+        showErrorToastFromApiError(response.error);
+        return null;
       }
       return response.data;
     },

@@ -37,7 +37,13 @@ export function useMcpRegistryServersInfinite(
         },
       });
       if (!response.data) {
-        throw new Error("No data returned from Archestra catalog");
+        return {
+          servers: [],
+          totalCount: 0,
+          limit,
+          offset: pageParam,
+          hasMore: false,
+        };
       }
       return response.data;
     },
@@ -78,7 +84,7 @@ export function useMcpServerCategories() {
     > => {
       const response = await archestraCatalogSdk.getMcpServerCategories();
       if (!response.data) {
-        throw new Error("No categories returned from Archestra catalog");
+        return [];
       }
       return response.data.categories;
     },

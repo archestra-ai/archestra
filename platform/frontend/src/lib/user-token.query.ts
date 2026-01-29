@@ -1,6 +1,7 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { showErrorToastFromApiError } from "./utils";
 
 const { getUserToken, getUserTokenValue, rotateUserToken } = archestraApiSdk;
 
@@ -23,11 +24,12 @@ export function useUserToken() {
   return useQuery({
     queryKey: ["userToken"],
     queryFn: async () => {
-      const response = await getUserToken();
-      if (!response.data) {
-        throw new Error("Failed to fetch personal token");
+      const { data, error } = await getUserToken();
+      if (error) {
+        showErrorToastFromApiError(error);
+        return null;
       }
-      return response.data as UserToken;
+      return data as UserToken;
     },
     retry: false,
   });

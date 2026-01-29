@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 export type InvitationCheckResponse = {
   invitation: {
@@ -26,7 +27,8 @@ export function useInvitationCheck(invitationId: string | null | undefined) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || "Failed to check invitation");
+        toast.error(error.message || "Failed to check invitation");
+        return null;
       }
 
       return (await response.json()) as InvitationCheckResponse;

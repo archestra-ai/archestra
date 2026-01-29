@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { authClient } from "./clients/auth/auth-client";
+import { showErrorToastFromApiError } from "./utils";
 
 const {
   deleteMcpServer,
@@ -206,13 +207,14 @@ export function useMcpServerTools(mcpServerId: string | null) {
     queryKey: ["mcp-servers", mcpServerId, "tools"],
     queryFn: async () => {
       if (!mcpServerId) return [];
-      try {
-        const response = await getMcpServerTools({ path: { id: mcpServerId } });
-        return response.data ?? [];
-      } catch (error) {
-        console.error("Failed to fetch MCP server tools:", error);
+      const { data, error } = await getMcpServerTools({
+        path: { id: mcpServerId },
+      });
+      if (error) {
+        showErrorToastFromApiError(error);
         return [];
       }
+      return data ?? [];
     },
     enabled: !!mcpServerId,
   });
@@ -266,16 +268,15 @@ export function useMcpServerLogs(mcpServerId: string | null) {
     queryKey: ["mcp-servers", mcpServerId, "logs"],
     queryFn: async () => {
       if (!mcpServerId) return null;
-      try {
-        const response = await getMcpServerLogs({
-          path: { id: mcpServerId },
-          query: { lines: 100 },
-        });
-        return response.data ?? null;
-      } catch (error) {
-        console.error("Failed to fetch MCP server logs:", error);
-        throw error;
+      const { data, error } = await getMcpServerLogs({
+        path: { id: mcpServerId },
+        query: { lines: 100 },
+      });
+      if (error) {
+        showErrorToastFromApiError(error);
+        return null;
       }
+      return data ?? null;
     },
     enabled: !!mcpServerId,
     refetchOnWindowFocus: false,
@@ -328,15 +329,13 @@ export function useReinstallMcpServer() {
         body,
       });
       if (response.error) {
-        const msg =
-          typeof response.error.error === "string"
-            ? response.error.error
-            : response.error.error?.message || "Unknown error";
-        throw new Error(msg);
+        showErrorToastFromApiError(response.error);
+        return null;
       }
       return { data: response.data, name };
     },
-    onSuccess: async ({ name }, variables) => {
+    onSuccess: async (result, variables) => {
+      if (!result) return;
       // Refetch servers to get updated status
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate tools queries since tools may have been synced
@@ -349,13 +348,7 @@ export function useReinstallMcpServer() {
           queryKey: ["mcp-servers", variables.id, "tools"],
         });
       }
-      toast.success(`Successfully reinstalled ${name}`);
-    },
-    onError: (error, variables) => {
-      console.error("Reinstall error:", error);
-      toast.error(
-        `Failed to reinstall ${variables.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+      toast.success(`Successfully reinstalled ${result.name}`);
     },
   });
 }

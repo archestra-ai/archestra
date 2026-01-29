@@ -357,7 +357,9 @@ export function stripEnvVarQuotes(value: string): string {
 /**
  * Safely parse a JSON string, returning undefined if parsing fails.
  */
-function parseJsonSafe(jsonString: string): Record<string, string> | undefined {
+export function parseJsonSafe(
+  jsonString: string,
+): Record<string, string> | undefined {
   if (!jsonString || !jsonString.trim()) {
     return undefined;
   }
@@ -380,7 +382,7 @@ function parseJsonSafe(jsonString: string): Record<string, string> | undefined {
 /**
  * Build resources object from advanced K8s config form values.
  */
-function buildResources(advancedConfig: {
+export function buildResources(advancedConfig: {
   resourceRequestsMemory?: string;
   resourceRequestsCpu?: string;
   resourceLimitsMemory?: string;

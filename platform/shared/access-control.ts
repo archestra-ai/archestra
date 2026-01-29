@@ -329,6 +329,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RestartAllMcpServerInstallations]: {
     mcpServer: ["admin"],
   },
+  [RouteId.ReinstallMcpServer]: {
+    mcpServer: ["update"],
+  },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],
   },

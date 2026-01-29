@@ -21323,6 +21323,118 @@ export type RestartMcpServerResponses = {
 
 export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
 
+export type ReinstallMcpServerData = {
+    body?: {
+        environmentValues?: {
+            [key: string]: string;
+        };
+        isByosVault?: boolean;
+        serviceAccount?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/reinstall';
+};
+
+export type ReinstallMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ReinstallMcpServerError = ReinstallMcpServerErrors[keyof ReinstallMcpServerErrors];
+
+export type ReinstallMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        catalogId: string;
+        serverType: 'local' | 'remote' | 'builtin';
+        secretId: string | null;
+        ownerId: string | null;
+        teamId: string | null;
+        reinstallRequired: boolean;
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+        localInstallationError: string | null;
+        oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshFailedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        ownerEmail?: string | null;
+        catalogName?: string | null;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: {
+            teamId: string;
+            name: string;
+            createdAt: string;
+        } | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+    };
+};
+
+export type ReinstallMcpServerResponse = ReinstallMcpServerResponses[keyof ReinstallMcpServerResponses];
+
 export type RestartAllMcpServerInstallationsData = {
     body?: never;
     path: {

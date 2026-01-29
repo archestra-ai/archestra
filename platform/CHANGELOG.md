@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.35](https://github.com/archestra-ai/archestra/compare/platform-v1.0.34...platform-v1.0.35) (2026-01-29)
+
+
+### Bug Fixes
+
+* add options for external db ([#2518](https://github.com/archestra-ai/archestra/issues/2518)) ([73ade82](https://github.com/archestra-ai/archestra/commit/73ade82463d673f4a425bb0b85d7600c8461a344))
+
 ## [1.0.34](https://github.com/archestra-ai/archestra/compare/platform-v1.0.33...platform-v1.0.34) (2026-01-26)
 
 

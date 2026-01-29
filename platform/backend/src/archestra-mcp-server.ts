@@ -199,9 +199,16 @@ export async function executeArchestraTool(
 
     // Check user has access if user token is being used
     const userId = tokenAuth?.userId;
-    if (userId) {
+    if (userId && organizationId) {
+      const isProfileAdmin = await userHasPermission(
+        userId,
+        organizationId,
+        "profile",
+        "admin",
+      );
+
       const userAccessibleAgentIds =
-        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, isProfileAdmin);
       if (!userAccessibleAgentIds.includes(delegation.targetAgent.id)) {
         return {
           content: [

@@ -584,7 +584,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "LLM proxies cannot have subagents");
       }
 
-      const delegations = await AgentToolModel.getDelegationTargets(agentId);
+      const delegations = await AgentToolModel.getDelegationTargets(
+        agentId,
+        user.id,
+        isAgentAdmin,
+      );
       return reply.send(delegations);
     },
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -11,9 +12,8 @@ import { useRoles } from "@/lib/role.query";
 
 /**
  * Converts a string to title case, splitting on hyphens, underscores, and spaces.
- * Exported for use in components that need custom role rendering.
  */
-export function toTitleCase(str: string): string {
+function toTitleCase(str: string): string {
   return str
     .split(/[-_\s]+/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -46,12 +46,20 @@ export function RoleSelect({
   className,
   id,
 }: RoleSelectProps) {
-  const { data: roles = [] } = useRoles();
+  const { data: roles = [], isPending } = useRoles();
 
   return (
-    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+    <Select
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled || isPending}
+    >
       <SelectTrigger id={id} data-testid={testId} className={className}>
-        <SelectValue placeholder={placeholder} />
+        {isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <SelectValue placeholder={placeholder} />
+        )}
       </SelectTrigger>
       <SelectContent>
         {roles.map((role) => (
@@ -68,15 +76,21 @@ export function RoleSelect({
  * Just the SelectContent part for roles - use when you need custom trigger handling (e.g., with FormControl)
  */
 export function RoleSelectContent() {
-  const { data: roles = [] } = useRoles();
+  const { data: roles = [], isPending } = useRoles();
 
   return (
     <SelectContent>
-      {roles.map((role) => (
-        <SelectItem key={role.id} value={role.role}>
-          {toTitleCase(role.name)}
-        </SelectItem>
-      ))}
+      {isPending ? (
+        <div className="flex items-center justify-center py-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      ) : (
+        roles.map((role) => (
+          <SelectItem key={role.id} value={role.role}>
+            {toTitleCase(role.name)}
+          </SelectItem>
+        ))
+      )}
     </SelectContent>
   );
 }

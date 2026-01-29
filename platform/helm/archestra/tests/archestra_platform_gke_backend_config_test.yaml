@@ -44,9 +44,24 @@ tests:
           path: metadata.name
           pattern: -frontend-config$
 
-  - it: should use correct naming with release name
+  - it: should use correct naming with release name (standard mode)
     set:
       archestra.gkeBackendConfig.enabled: true
+      archestra.blueGreen.enabled: false
+    release:
+      name: "my-release"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: "my-release-archestra-platform-backend-config"
+
+  - it: should use correct naming with release name (blue-green mode)
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.blueGreen.enabled: true
+      archestra.blueGreen.active: blue
+      archestra.blueGreen.blue.enabled: true
     release:
       name: "my-release"
     documentIndex: 0

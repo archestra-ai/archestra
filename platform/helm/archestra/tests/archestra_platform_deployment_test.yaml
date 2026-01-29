@@ -46,6 +46,10 @@ tests:
 
   - it: should create a Deployment with correct metadata
     documentIndex: 1
+    set:
+      archestra.blueGreen.enabled: true
+      archestra.blueGreen.active: blue
+      archestra.blueGreen.blue.enabled: true
     asserts:
       - isKind:
           of: Deployment
@@ -134,10 +138,12 @@ tests:
           value: archestra/platform:test-version
 
   # Image helper tests - ensures backward compatibility with existing deployments
-  # that set the full image:tag in archestra.image
-  - it: should use image as-is when image already contains a tag
+  # that set the full image:tag in archestra.image (standard mode only)
+  # Note: In blue-green mode, archestra.imageTag takes precedence over embedded tags
+  - it: should use image as-is when image already contains a tag (standard mode)
     documentIndex: 1
     set:
+      archestra.blueGreen.enabled: false
       archestra.image: archestra/platform:ci-test
       archestra.imageTag: "1.0.0"
     asserts:
@@ -145,9 +151,10 @@ tests:
           path: spec.template.spec.containers[0].image
           value: archestra/platform:ci-test
 
-  - it: should append imageTag when registry has port but image has no tag
+  - it: should append imageTag when registry has port but image has no tag (standard mode)
     documentIndex: 1
     set:
+      archestra.blueGreen.enabled: false
       archestra.image: registry.io:5000/archestra/platform
       archestra.imageTag: "1.0.0"
     asserts:
@@ -155,15 +162,44 @@ tests:
           path: spec.template.spec.containers[0].image
           value: registry.io:5000/archestra/platform:1.0.0
 
-  - it: should use image as-is when registry has port and image has tag
+  - it: should use image as-is when registry has port and image has tag (standard mode)
     documentIndex: 1
     set:
+      archestra.blueGreen.enabled: false
       archestra.image: registry.io:5000/archestra/platform:v2.0.0
       archestra.imageTag: "1.0.0"
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
           value: registry.io:5000/archestra/platform:v2.0.0
+
+  # Blue-green mode image tests - archestra.imageTag takes precedence over embedded tags
+  - it: should use archestra.imageTag over embedded tag in blue-green mode
+    documentIndex: 1
+    set:
+      archestra.blueGreen.enabled: true
+      archestra.blueGreen.active: blue
+      archestra.blueGreen.blue.enabled: true
+      archestra.image: archestra/platform:embedded-tag
+      archestra.imageTag: "1.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: archestra/platform:1.0.0
+
+  - it: should use slot-specific imageTag over archestra.imageTag in blue-green mode
+    documentIndex: 1
+    set:
+      archestra.blueGreen.enabled: true
+      archestra.blueGreen.active: blue
+      archestra.blueGreen.blue.enabled: true
+      archestra.blueGreen.blue.imageTag: "blue-specific"
+      archestra.image: archestra/platform:embedded-tag
+      archestra.imageTag: "1.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: archestra/platform:blue-specific
 
   - it: should allow configuring image pull policy
     documentIndex: 1

@@ -27,10 +27,13 @@ tests:
       - failedTemplate:
           errorMessage: "PodDisruptionBudget cannot have both minAvailable and maxUnavailable set. Only one can be specified."
 
-  - it: should create PDB with correct metadata when enabled
+  - it: should create PDB with correct metadata when enabled (blue-green mode)
     set:
       archestra.podDisruptionBudget.enabled: true
       archestra.podDisruptionBudget.minAvailable: 1
+      archestra.blueGreen.enabled: true
+      archestra.blueGreen.active: blue
+      archestra.blueGreen.blue.enabled: true
     asserts:
       - isKind:
           of: PodDisruptionBudget

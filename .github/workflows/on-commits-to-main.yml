@@ -40,6 +40,13 @@ jobs:
 
       - name: Extract previous version static assets
         run: |
+          # Try blue-green deployment names first, fall back to standard deployment name
+          PREV_TAG=$(kubectl get deployment archestra-platform-blue -n archestra \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
+            | cut -d: -f2) || \
+          PREV_TAG=$(kubectl get deployment archestra-platform-green -n archestra \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
+            | cut -d: -f2) || \
           PREV_TAG=$(kubectl get deployment archestra-platform -n archestra \
             -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
             | cut -d: -f2) || true
@@ -113,14 +120,38 @@ jobs:
             --zone us-central1-a \
             --project friendly-path-465518-r6
 
-      - name: Deploy to staging
+      - name: Determine to staging
+        id: blue-green
         run: |
+          # Get current active slot from helm values (defaults to "blue" if not set)
+          CURRENT_ACTIVE=$(helm get values archestra-platform -n archestra -o json 2>/dev/null | jq -r '.archestra.blueGreen.active // "blue"') || CURRENT_ACTIVE="blue"
+
+          # Determine inactive slot to deploy to
+          if [ "$CURRENT_ACTIVE" = "blue" ]; then
+            INACTIVE_SLOT="green"
+          else
+            INACTIVE_SLOT="blue"
+          fi
+
+          echo "Current active slot: $CURRENT_ACTIVE"
+          echo "Deploying to inactive slot: $INACTIVE_SLOT"
+
+          echo "current_active=$CURRENT_ACTIVE" >> $GITHUB_OUTPUT
+          echo "inactive_slot=$INACTIVE_SLOT" >> $GITHUB_OUTPUT
+
+      - name: Deploy new version to inactive slot
+        run: |
+          echo "Deploying version ${{ github.sha }} to ${{ steps.blue-green.outputs.inactive_slot }} slot..."
+
           helm upgrade archestra-platform \
             ./platform/helm/archestra \
             --install \
             --namespace archestra \
             --create-namespace \
-            --set archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }} \
+            --reuse-values \
+            --set archestra.blueGreen.enabled=true \
+            --set archestra.blueGreen.${{ steps.blue-green.outputs.inactive_slot }}.enabled=true \
+            --set archestra.blueGreen.${{ steps.blue-green.outputs.inactive_slot }}.imageTag=${{ github.sha }} \
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
             --set archestra.env.ARCHESTRA_FRONTEND_URL="https://frontend.archestra.dev" \
             --set archestra.env.ARCHESTRA_API_BASE_URL="https://backend.archestra.dev" \
@@ -152,3 +183,50 @@ jobs:
             --set archestra.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID="${{ secrets.ARCHESTRA_STAGING_MS_TEAMS_TENANT_ID }}" \
             --values .github/values-staging.yaml \
             --wait
+
+      - name: Wait for inactive slot pods to be ready
+        run: |
+          echo "Waiting for ${{ steps.blue-green.outputs.inactive_slot }} slot pods to be ready..."
+          kubectl rollout status deployment/archestra-platform-${{ steps.blue-green.outputs.inactive_slot }} \
+            -n archestra \
+            --timeout=300s
+
+      - name: Switch traffic to new slot
+        run: |
+          echo "Switching traffic from ${{ steps.blue-green.outputs.current_active }} to ${{ steps.blue-green.outputs.inactive_slot }}..."
+
+          helm upgrade archestra-platform \
+            ./platform/helm/archestra \
+            --namespace archestra \
+            --reuse-values \
+            --set archestra.blueGreen.active=${{ steps.blue-green.outputs.inactive_slot }} \
+            --wait
+
+          echo "✅ Successfully switched traffic to ${{ steps.blue-green.outputs.inactive_slot }} slot"
+          echo "New version ${{ github.sha }} is now live!"
+
+      - name: Verify deployment health
+        run: |
+          echo "Verifying deployment health..."
+
+          # Check that the service is routing to the correct slot
+          ACTIVE_SLOT=$(kubectl get svc archestra-platform -n archestra -o jsonpath='{.spec.selector.archestra\.io/slot}')
+          echo "Service is routing to: $ACTIVE_SLOT"
+
+          if [ "$ACTIVE_SLOT" != "${{ steps.blue-green.outputs.inactive_slot }}" ]; then
+            echo "❌ ERROR: Service selector mismatch! Expected ${{ steps.blue-green.outputs.inactive_slot }}, got $ACTIVE_SLOT"
+            exit 1
+          fi
+
+          # Check pod readiness
+          READY_PODS=$(kubectl get pods -n archestra -l archestra.io/slot=${{ steps.blue-green.outputs.inactive_slot }} -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | tr ' ' '\n' | grep -c "True" || echo "0")
+          TOTAL_PODS=$(kubectl get pods -n archestra -l archestra.io/slot=${{ steps.blue-green.outputs.inactive_slot }} --no-headers | wc -l | tr -d ' ')
+
+          echo "Ready pods: $READY_PODS / $TOTAL_PODS"
+
+          if [ "$READY_PODS" -lt 1 ]; then
+            echo "❌ ERROR: No ready pods in the new slot!"
+            exit 1
+          fi
+
+          echo "✅ Deployment verified successfully"

@@ -9,11 +9,14 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should create HPA with correct metadata when enabled
+  - it: should create HPA with correct metadata when enabled (blue-green mode)
     set:
       archestra.horizontalPodAutoscaler.enabled: true
       archestra.horizontalPodAutoscaler.minReplicas: 1
       archestra.horizontalPodAutoscaler.maxReplicas: 10
+      archestra.blueGreen.enabled: true
+      archestra.blueGreen.active: blue
+      archestra.blueGreen.blue.enabled: true
     asserts:
       - isKind:
           of: HorizontalPodAutoscaler
@@ -37,11 +40,14 @@ tests:
       - exists:
           path: metadata.labels["helm.sh/chart"]
 
-  - it: should target the correct deployment
+  - it: should target the correct deployment (blue-green mode)
     set:
       archestra.horizontalPodAutoscaler.enabled: true
       archestra.horizontalPodAutoscaler.minReplicas: 1
       archestra.horizontalPodAutoscaler.maxReplicas: 10
+      archestra.blueGreen.enabled: true
+      archestra.blueGreen.active: blue
+      archestra.blueGreen.blue.enabled: true
     release:
       name: "test-release"
     asserts:

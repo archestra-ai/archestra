@@ -104,7 +104,7 @@ git push origin main
 ```bash
 git checkout main
 git pull origin main
-git commit -m "chore(release): bump version" -m "release-as: 1.0.24" --allow-empty
+git commit -m "chore(release): bump version" -m "release-as: X.Y.Z" --allow-empty
 git push origin main
 ```
 (alternatively create PR with this empty commit and merge to `main`)

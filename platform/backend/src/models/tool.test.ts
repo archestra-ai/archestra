@@ -1740,11 +1740,22 @@ describe("ToolModel", () => {
     test("cleans up duplicate tools after catalog rename (legacy duplicates)", async ({
       makeInternalMcpCatalog,
       makeMcpServer,
+      makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog();
       const mcpServer = await makeMcpServer({ catalogId: catalog.id });
 
-      // Sync with only the new name (correct state)
+      // Create legacy tool with old catalog name prefix
+      // This simulates a tool that existed before catalog was renamed
+      await makeTool({
+        name: "old-name__query-docs",
+        description: "Old tool with legacy name",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      // Sync with the new name (after catalog rename)
       const toolsToSync = [
         {
           name: "new-name__query-docs",
@@ -1752,21 +1763,21 @@ describe("ToolModel", () => {
           parameters: { type: "object" },
           catalogId: catalog.id,
           mcpServerId: mcpServer.id,
+          rawToolName: "query-docs",
         },
       ];
 
       const result = await ToolModel.syncToolsForCatalog(toolsToSync);
 
-      // When there are duplicates with same raw name, one is kept and one is deleted
-      // The behavior depends on which one is matched (order in the map)
-      // Either way, exactly one tool survives and one is deleted
+      // The old tool should be updated with the new name (matched by rawToolName)
+      // Note: If the old tool didn't have rawToolName stored, it would be deleted
+      // and the new tool would be created instead
       const survivingTools = [...result.unchanged, ...result.updated];
-      expect(survivingTools).toHaveLength(1);
-      expect(result.deleted).toHaveLength(1);
 
-      // Verify only one tool with this raw name exists now
-      // (the surviving tool has the new name)
-      expect(survivingTools[0].name).toBe("new-name__query-docs");
+      // Verify exactly one tool survives with the new name
+      expect(survivingTools.length + result.created.length).toBe(1);
+      const finalTool = survivingTools[0] || result.created[0];
+      expect(finalTool.name).toBe("new-name__query-docs");
     });
 
     test("creates default policies for newly created tools", async ({

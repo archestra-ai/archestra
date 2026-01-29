@@ -133,18 +133,28 @@ jobs:
             INACTIVE_SLOT="blue"
           fi
 
+          # Get the current active slot's image tag to preserve it during deployment
+          # This prevents the active slot from being affected when deploying to inactive slot
+          ACTIVE_IMAGE_TAG=$(kubectl get deployment "archestra-platform-${CURRENT_ACTIVE}" -n archestra \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | sed 's/.*://') || ACTIVE_IMAGE_TAG=""
+
           echo "Current active slot: $CURRENT_ACTIVE"
+          echo "Active slot image tag: $ACTIVE_IMAGE_TAG"
           echo "Deploying to inactive slot: $INACTIVE_SLOT"
 
           echo "current_active=$CURRENT_ACTIVE" >> $GITHUB_OUTPUT
           echo "inactive_slot=$INACTIVE_SLOT" >> $GITHUB_OUTPUT
+          echo "active_image_tag=$ACTIVE_IMAGE_TAG" >> $GITHUB_OUTPUT
 
       - name: Deploy new version to inactive slot
         env:
           INACTIVE_SLOT: ${{ steps.blue-green.outputs.inactive_slot }}
+          CURRENT_ACTIVE: ${{ steps.blue-green.outputs.current_active }}
+          ACTIVE_IMAGE_TAG: ${{ steps.blue-green.outputs.active_image_tag }}
           GITHUB_SHA_VALUE: ${{ github.sha }}
         run: |
           echo "Deploying version $GITHUB_SHA_VALUE to $INACTIVE_SLOT slot..."
+          echo "Preserving $CURRENT_ACTIVE slot with image tag: $ACTIVE_IMAGE_TAG"
 
           helm upgrade archestra-platform \
             ./platform/helm/archestra \
@@ -155,6 +165,8 @@ jobs:
             --set archestra.blueGreen.enabled=true \
             --set "archestra.blueGreen.${INACTIVE_SLOT}.enabled=true" \
             --set "archestra.blueGreen.${INACTIVE_SLOT}.imageTag=${GITHUB_SHA_VALUE}" \
+            --set "archestra.blueGreen.${CURRENT_ACTIVE}.enabled=true" \
+            --set "archestra.blueGreen.${CURRENT_ACTIVE}.imageTag=${ACTIVE_IMAGE_TAG}" \
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
             --set archestra.env.ARCHESTRA_FRONTEND_URL="https://frontend.archestra.dev" \
             --set archestra.env.ARCHESTRA_API_BASE_URL="https://backend.archestra.dev" \

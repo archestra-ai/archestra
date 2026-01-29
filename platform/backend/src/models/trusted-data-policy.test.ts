@@ -159,7 +159,7 @@ describe("TrustedDataPolicyModel", () => {
         [
           { toolName: "archestra__whoami", toolOutput: { user: "test" } },
           { toolName: "regular-tool", toolOutput: { data: "test" } },
-          { toolName: "archestra__create_profile", toolOutput: { id: "123" } },
+          { toolName: "archestra__create_agent", toolOutput: { id: "123" } },
         ],
         "restrictive",
         { teamIds: [] },

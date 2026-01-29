@@ -70,3 +70,30 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   pricePerMillionOutput: z.string().nullable(),
 });
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;
+
+/**
+ * Schema for linked API key info (minimal info for display)
+ */
+export const LinkedApiKeySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  provider: z.string(),
+  scope: z.string(),
+  isSystem: z.boolean(),
+});
+export type LinkedApiKey = z.infer<typeof LinkedApiKeySchema>;
+
+/**
+ * Schema for model with linked API keys (for settings page display)
+ */
+export const ModelWithApiKeysSchema = SelectModelSchema.extend({
+  /** Whether this model is marked as the fastest (lowest latency) for any linked API key */
+  isFastest: z.boolean(),
+  /** Whether this model is marked as the best (highest quality) for any linked API key */
+  isBest: z.boolean(),
+  /** API keys that provide access to this model */
+  apiKeys: z.array(LinkedApiKeySchema),
+  /** Computed capabilities with pricing */
+  capabilities: ModelCapabilitiesSchema,
+});
+export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;

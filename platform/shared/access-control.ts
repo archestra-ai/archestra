@@ -329,6 +329,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RestartAllMcpServerInstallations]: {
     mcpServer: ["admin"],
   },
+  [RouteId.ReinstallMcpServer]: {
+    mcpServer: ["update"],
+  },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],
   },
@@ -467,7 +470,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatModels]: {
     conversation: ["read"],
   },
-  [RouteId.InvalidateChatModelsCache]: {
+  [RouteId.SyncChatModels]: {
     chatSettings: ["update"],
   },
   [RouteId.UpdateChatMessage]: {
@@ -499,6 +502,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteChatApiKey]: {
     chatSettings: ["delete"],
+  },
+  [RouteId.GetModelsWithApiKeys]: {
+    chatSettings: ["read"],
   },
   [RouteId.GetPrompts]: {
     prompt: ["read"],

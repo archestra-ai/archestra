@@ -14,6 +14,7 @@ const {
   restartMcpServer,
   restartAllMcpServerInstallations,
   reauthenticateMcpServer,
+  reinstallMcpServer,
 } = archestraApiSdk;
 
 export function useMcpServers(params?: {
@@ -302,6 +303,59 @@ export function useReauthenticateMcpServer() {
     },
     onError: (_error, variables) => {
       toast.error(`Failed to re-authenticate ${variables.name}`);
+    },
+  });
+}
+
+/**
+ * Reinstall an MCP server without losing tool assignments and policies.
+ * This is used when a catalog item is edited and requires manual reinstall
+ * (e.g., when new prompted env vars were added).
+ */
+export function useReinstallMcpServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: string;
+      name: string;
+      environmentValues?: Record<string, string>;
+      isByosVault?: boolean;
+      serviceAccount?: string;
+    }) => {
+      const { id, name, ...body } = data;
+      const response = await reinstallMcpServer({
+        path: { id },
+        body,
+      });
+      if (response.error) {
+        const msg =
+          typeof response.error.error === "string"
+            ? response.error.error
+            : response.error.error?.message || "Unknown error";
+        throw new Error(msg);
+      }
+      return { data: response.data, name };
+    },
+    onSuccess: async ({ name }, variables) => {
+      // Refetch servers to get updated status
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate tools queries since tools may have been synced
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate catalog tools query
+      if (variables.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-servers", variables.id, "tools"],
+        });
+      }
+      toast.success(`Successfully reinstalled ${name}`);
+    },
+    onError: (error, variables) => {
+      console.error("Reinstall error:", error);
+      toast.error(
+        `Failed to reinstall ${variables.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     },
   });
 }

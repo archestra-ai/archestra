@@ -34,7 +34,7 @@ vi.mock("@/cache-manager", () => {
   }
 
   return {
-    CacheKey: { GetChatModels: "get-chat-models" },
+    CacheKey: { ModelsDevSync: "models-dev-sync" },
     cacheManager: {
       get: vi.fn().mockResolvedValue(undefined),
       set: vi.fn().mockResolvedValue(undefined),

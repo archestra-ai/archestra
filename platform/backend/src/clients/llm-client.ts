@@ -247,7 +247,7 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     }
     const client = createCerebras({
       apiKey,
-      baseURL: config.chat.cerebras.baseUrl,
+      baseURL: config.llm.cerebras.baseUrl,
     });
     return client(modelName);
   },
@@ -261,7 +261,7 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     }
     const client = createCohere({
       apiKey,
-      baseURL: config.chat.cohere.baseUrl,
+      baseURL: config.llm.cohere.baseUrl,
     });
     return client(modelName);
   },
@@ -275,7 +275,7 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     }
     const client = createMistral({
       apiKey,
-      baseURL: config.chat.mistral.baseUrl,
+      baseURL: config.llm.mistral.baseUrl,
     });
     return client(modelName);
   },
@@ -308,7 +308,7 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     // Zhipu AI uses OpenAI-compatible API
     const client = createOpenAI({
       apiKey,
-      baseURL: config.chat.zhipuai.baseUrl,
+      baseURL: config.llm.zhipuai.baseUrl,
     });
     return client(modelName);
   },

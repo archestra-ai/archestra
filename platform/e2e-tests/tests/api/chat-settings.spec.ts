@@ -53,14 +53,15 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Use bedrock provider - the only one without env var in CI (all others are seeded)
     const response = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Org Wide Test Key",
-        provider: "anthropic",
-        apiKey: "sk-ant-org-wide-test-key",
+        provider: "bedrock",
+        apiKey: "bedrock-org-wide-test-key",
         scope: "org_wide",
       },
     });
@@ -463,15 +464,15 @@ test.describe("Chat API Keys Scope Update", () => {
     makeApiRequest,
   }) => {
     // Create a personal key first
-    // Use gemini provider to avoid conflicts with other tests using openai personal keys
+    // Use bedrock provider - the only one without env var in CI (all others are seeded with org_wide keys)
     const createResponse = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Scope Update Test Key",
-        provider: "gemini",
-        apiKey: "gemini-scope-update-test",
+        provider: "bedrock",
+        apiKey: "bedrock-scope-update-test",
         scope: "personal",
       },
     });

@@ -1,5 +1,6 @@
 "use client";
 
+import { providerDisplayNames, type SupportedProvider } from "@shared";
 import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
@@ -34,7 +35,6 @@ import {
   type SupportedChatProvider,
   useAvailableChatApiKeys,
 } from "@/lib/chat-settings.query";
-import { useFeatureFlag } from "@/lib/features.hook";
 
 interface ChatApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */
@@ -47,8 +47,10 @@ interface ChatApiKeySelectorProps {
   messageCount?: number;
   /** Callback for initial chat mode when no conversationId is available */
   onApiKeyChange?: (apiKeyId: string) => void;
-  /** Current provider (derived from selected model) - used to filter API keys */
+  /** Current provider (derived from selected model) - used for auto-selection */
   currentProvider?: SupportedChatProvider;
+  /** Callback when user explicitly selects a key with different provider */
+  onProviderChange?: (provider: SupportedChatProvider) => void;
   /** Callback when the selector opens or closes */
   onOpenChange?: (open: boolean) => void;
   /** Whether models are still loading - don't render until models are loaded */
@@ -77,15 +79,13 @@ export function ChatApiKeySelector({
   messageCount = 0,
   onApiKeyChange,
   currentProvider,
+  onProviderChange,
   onOpenChange,
   isModelsLoading = false,
 }: ChatApiKeySelectorProps) {
-  // Check if Vertex AI is enabled for Gemini (uses ADC, no API key needed)
-  const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
-
-  // Fetch API keys for the current provider only
+  // Fetch ALL API keys (not filtered by provider) so user can switch providers
   const { data: availableKeys = [], isLoading: isLoadingKeys } =
-    useAvailableChatApiKeys(currentProvider);
+    useAvailableChatApiKeys();
 
   // Combined loading state - wait for both API keys and models
   const isLoading = isLoadingKeys || isModelsLoading;
@@ -99,7 +99,35 @@ export function ChatApiKeySelector({
   // Track if we've already auto-selected to prevent infinite loops
   const hasAutoSelectedRef = useRef(false);
 
-  // Group keys by scope (personal, team, org_wide)
+  // Group keys by provider for display
+  const keysByProvider = useMemo(() => {
+    const grouped: Record<SupportedChatProvider, ChatApiKey[]> = {} as Record<
+      SupportedChatProvider,
+      ChatApiKey[]
+    >;
+
+    for (const key of availableKeys) {
+      if (!grouped[key.provider]) {
+        grouped[key.provider] = [];
+      }
+      grouped[key.provider].push(key);
+    }
+
+    return grouped;
+  }, [availableKeys]);
+
+  // Get available providers sorted (current provider first)
+  const availableProviders = useMemo(() => {
+    const providers = Object.keys(keysByProvider) as SupportedChatProvider[];
+    // Sort: current provider first, then alphabetically
+    return providers.sort((a, b) => {
+      if (a === currentProvider) return -1;
+      if (b === currentProvider) return 1;
+      return a.localeCompare(b);
+    });
+  }, [keysByProvider, currentProvider]);
+
+  // Group keys by scope (personal, team, org_wide) for auto-selection priority
   const keysByScope = useMemo(() => {
     const grouped: Record<ChatApiKeyScope, ChatApiKey[]> = {
       personal: [],
@@ -134,10 +162,19 @@ export function ChatApiKeySelector({
     // Skip if we've already auto-selected to prevent infinite loops
     if (hasAutoSelectedRef.current) return;
 
-    // Check if current key is valid
+    // Check if current key is valid AND matches the current provider
     const currentKeyValid =
       currentConversationChatApiKey &&
-      availableKeys.some((k) => k.id === currentConversationChatApiKeyId);
+      availableKeys.some((k) => k.id === currentConversationChatApiKeyId) &&
+      currentConversationChatApiKey.provider === currentProvider;
+
+    // If current key is valid, no need to auto-select
+    if (currentKeyValid) return;
+
+    // Get keys for the current provider (prefer matching provider)
+    const providerKeys = currentProvider
+      ? (keysByProvider[currentProvider] ?? [])
+      : [];
 
     // Try to find key from localStorage (per-provider key)
     const localStorageKey = currentProvider
@@ -145,18 +182,29 @@ export function ChatApiKeySelector({
       : LOCAL_STORAGE_KEY;
     const keyIdFromLocalStorage = localStorage.getItem(localStorageKey);
     const keyFromLocalStorage = keyIdFromLocalStorage
-      ? availableKeys.find((k) => k.id === keyIdFromLocalStorage)
+      ? providerKeys.find((k) => k.id === keyIdFromLocalStorage)
       : null;
+
+    // Priority: localStorage > personal > team > org_wide (within current provider)
+    const personalKeys = providerKeys.filter((k) => k.scope === "personal");
+    const teamKeys = providerKeys.filter((k) => k.scope === "team");
+    const orgWideKeys = providerKeys.filter((k) => k.scope === "org_wide");
+
     const keyToSelect =
       keyFromLocalStorage ||
+      personalKeys[0] ||
+      teamKeys[0] ||
+      orgWideKeys[0] ||
+      // Fall back to any key if no provider-specific key found
       keysByScope.personal[0] ||
       keysByScope.team[0] ||
       keysByScope.org_wide[0];
+
     const keyToSelectValid =
       keyToSelect && availableKeys.some((k) => k.id === keyToSelect.id);
 
-    // Auto-select first key if no valid key is selected
-    if (!currentKeyValid && keyToSelectValid) {
+    // Auto-select key if no valid key is selected
+    if (keyToSelectValid) {
       // Mark as auto-selected BEFORE calling callbacks to prevent loops
       hasAutoSelectedRef.current = true;
 
@@ -176,6 +224,7 @@ export function ChatApiKeySelector({
     isLoading,
     conversationId,
     currentProvider,
+    keysByProvider,
     keysByScope,
     onApiKeyChange,
   ]);
@@ -196,6 +245,10 @@ export function ChatApiKeySelector({
   };
 
   const applyKeyChange = (keyId: string) => {
+    // Find the selected key to get its provider
+    const selectedKey = availableKeys.find((k) => k.id === keyId);
+    const selectedKeyProvider = selectedKey?.provider;
+
     if (conversationId) {
       updateConversationMutation.mutate({
         id: conversationId,
@@ -205,9 +258,21 @@ export function ChatApiKeySelector({
       onApiKeyChange(keyId);
     }
 
-    // Save to localStorage for this provider
-    if (currentProvider) {
-      localStorage.setItem(`${LOCAL_STORAGE_KEY}-${currentProvider}`, keyId);
+    // Save to localStorage for the selected key's provider
+    if (selectedKeyProvider) {
+      localStorage.setItem(
+        `${LOCAL_STORAGE_KEY}-${selectedKeyProvider}`,
+        keyId,
+      );
+    }
+
+    // If the selected key has a different provider, notify parent to switch model
+    if (
+      selectedKeyProvider &&
+      selectedKeyProvider !== currentProvider &&
+      onProviderChange
+    ) {
+      onProviderChange(selectedKeyProvider);
     }
   };
 
@@ -224,11 +289,6 @@ export function ChatApiKeySelector({
 
   // Don't render until models are loaded (prevents flashing)
   if (isModelsLoading) {
-    return null;
-  }
-
-  // Hide for Gemini with Vertex AI enabled (uses ADC, no API key needed)
-  if (currentProvider === "gemini" && geminiVertexAiEnabled) {
     return null;
   }
 
@@ -265,38 +325,46 @@ export function ChatApiKeySelector({
             </span>
           </PromptInputButton>
         </PopoverTrigger>
-        <PopoverContent className="w-72 p-0" align="start">
+        <PopoverContent className="w-80 p-0" align="start">
           <Command>
             <CommandInput placeholder="Search API Keys..." />
             <CommandList>
               <CommandEmpty>No API keys found.</CommandEmpty>
-              {/* Show all keys for the current provider */}
-              <CommandGroup>
-                {availableKeys.map((key) => (
-                  <CommandItem
-                    key={key.id}
-                    value={`${key.name} ${key.teamName || ""}`}
-                    onSelect={() => handleSelectKey(key.id)}
-                    className="cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      {SCOPE_ICONS[key.scope]}
-                      <span className="truncate">{key.name}</span>
-                      {key.scope === "team" && key.teamName && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1 py-0"
-                        >
-                          {key.teamName}
-                        </Badge>
+              {/* Group keys by provider */}
+              {availableProviders.map((provider) => (
+                <CommandGroup
+                  key={provider}
+                  heading={
+                    providerDisplayNames[provider as SupportedProvider] ??
+                    provider
+                  }
+                >
+                  {keysByProvider[provider]?.map((key) => (
+                    <CommandItem
+                      key={key.id}
+                      value={`${provider} ${key.name} ${key.teamName || ""}`}
+                      onSelect={() => handleSelectKey(key.id)}
+                      className="cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {SCOPE_ICONS[key.scope]}
+                        <span className="truncate">{key.name}</span>
+                        {key.scope === "team" && key.teamName && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1 py-0"
+                          >
+                            {key.teamName}
+                          </Badge>
+                        )}
+                      </div>
+                      {currentConversationChatApiKeyId === key.id && (
+                        <CheckIcon className="h-4 w-4 shrink-0" />
                       )}
-                    </div>
-                    {currentConversationChatApiKeyId === key.id && (
-                      <CheckIcon className="h-4 w-4 shrink-0" />
-                    )}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ))}
             </CommandList>
           </Command>
         </PopoverContent>

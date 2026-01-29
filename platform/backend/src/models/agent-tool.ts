@@ -73,11 +73,17 @@ class AgentToolModel {
 
   /**
    * Get all agents that this agent can delegate to.
+   * Optionally filters by user access when userId is provided.
    */
-  static async getDelegationTargets(agentId: string): Promise<
+  static async getDelegationTargets(
+    agentId: string,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<
     Array<{
       id: string;
       name: string;
+      description: string | null;
       systemPrompt: string | null;
     }>
   > {
@@ -85,6 +91,7 @@ class AgentToolModel {
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
+        description: schema.agentsTable.description,
         systemPrompt: schema.agentsTable.systemPrompt,
       })
       .from(schema.agentToolsTable)
@@ -102,6 +109,13 @@ class AgentToolModel {
           isNotNull(schema.toolsTable.delegateToAgentId),
         ),
       );
+
+    // Filter by user access if userId is provided
+    if (userId && !isAgentAdmin) {
+      const userAccessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
+      return results.filter((r) => userAccessibleAgentIds.includes(r.id));
+    }
 
     return results;
   }

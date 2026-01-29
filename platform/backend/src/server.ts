@@ -44,7 +44,7 @@ import {
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
-import { isDatabaseHealthy } from "@/database";
+import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import {
   cleanupKnowledgeGraphProvider,
@@ -55,6 +55,8 @@ import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
+import OrganizationModel from "@/models/organization";
+import { systemKeyManager } from "@/services/system-key-manager";
 import {
   Anthropic,
   ApiError,
@@ -554,7 +556,21 @@ const start = async () => {
   fastify.register(enterpriseLicenseMiddleware);
 
   try {
+    // Initialize database connection first
+    await initializeDatabase();
+
     await seedRequiredStartingData();
+
+    // Sync system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)
+    const defaultOrg = await OrganizationModel.getFirst();
+    if (defaultOrg) {
+      systemKeyManager.syncSystemKeys(defaultOrg.id).catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to sync system API keys on startup",
+        );
+      });
+    }
 
     // Start cache manager's background cleanup interval
     cacheManager.start();

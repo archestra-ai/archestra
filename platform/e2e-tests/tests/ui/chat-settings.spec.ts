@@ -272,30 +272,48 @@ test.describe("Chat API Keys", () => {
       goToPage,
       makeRandomString,
     }) => {
-      const testKeyName = makeRandomString(8, "Test Key");
       await goToPage(adminPage, "/settings/llm-api-keys");
+      await adminPage.waitForLoadState("networkidle");
 
-      // Admin create an org-wide key
-      await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
-      await adminPage.getByLabel(/Name/i).fill(testKeyName);
-      await adminPage.getByRole("combobox", { name: "Scope" }).click();
-      await adminPage
-        .getByRole("option", { name: "Whole Organization" })
-        .click();
-      await adminPage
-        .getByRole("textbox", { name: /API Key/i })
-        .fill(TEST_API_KEY);
-      await clickButton({
-        page: adminPage,
-        options: { name: "Test & Create" },
-      });
-      await expect(
-        adminPage.getByText("API key created successfully"),
-      ).toBeVisible({
-        timeout: 5000,
+      // Find any existing org-wide Anthropic key by looking at the Scope column
+      // The scope badge shows "Whole Organization" for org-wide keys
+      const orgWideRow = adminPage.locator("tr").filter({
+        has: adminPage.locator("text=Whole Organization"),
       });
 
-      // Every user can see it
+      let testKeyName: string;
+      let needsCleanup = false;
+
+      if ((await orgWideRow.count()) > 0) {
+        // An org-wide key already exists, get its name from the first cell
+        const nameCell = orgWideRow.first().locator("td").first();
+        testKeyName = ((await nameCell.textContent()) ?? "").trim();
+      } else {
+        // No org-wide key exists, create one
+        testKeyName = makeRandomString(8, "Test Key");
+        needsCleanup = true;
+
+        await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+        await adminPage.getByLabel(/Name/i).fill(testKeyName);
+        await adminPage.getByRole("combobox", { name: "Scope" }).click();
+        await adminPage
+          .getByRole("option", { name: "Whole Organization" })
+          .click();
+        await adminPage
+          .getByRole("textbox", { name: /API Key/i })
+          .fill(TEST_API_KEY);
+        await clickButton({
+          page: adminPage,
+          options: { name: "Test & Create" },
+        });
+        await expect(
+          adminPage.getByText("API key created successfully"),
+        ).toBeVisible({
+          timeout: 5000,
+        });
+      }
+
+      // Every user can see the org-wide key
       for (const p of [adminPage, editorPage, memberPage]) {
         await goToPage(p, "/settings/llm-api-keys");
         await p.waitForLoadState("networkidle");
@@ -304,19 +322,21 @@ test.describe("Chat API Keys", () => {
         ).toBeVisible();
       }
 
-      // Second org-wide key cannot be created
+      // Second org-wide key cannot be created (for the same provider)
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await adminPage.getByRole("combobox", { name: "Scope" }).click();
       await expect(
         adminPage.getByText("Whole Organization (already exists)"),
       ).toBeVisible();
 
-      // Cleanup: delete the created key
-      await goToPage(adminPage, "/settings/llm-api-keys");
-      await adminPage
-        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
-        .click();
-      await clickButton({ page: adminPage, options: { name: "Delete" } });
+      // Cleanup: only delete the key if we created it in this test
+      if (needsCleanup) {
+        await goToPage(adminPage, "/settings/llm-api-keys");
+        await adminPage
+          .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
+          .click();
+        await clickButton({ page: adminPage, options: { name: "Delete" } });
+      }
     });
   });
 });

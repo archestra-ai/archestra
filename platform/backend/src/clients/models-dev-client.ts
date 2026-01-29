@@ -15,7 +15,7 @@ import {
  * Cache key for tracking when we last synced from models.dev.
  */
 const MODELS_DEV_SYNC_CACHE_KEY =
-  `${CacheKey.GetChatModels}-models-dev-sync-timestamp` as const;
+  `${CacheKey.ModelsDevSync}-timestamp` as const;
 
 /**
  * How long to wait between models.dev syncs (24 hours).
@@ -393,28 +393,80 @@ class ModelsDevClient {
       }
     }
 
+    // Deduplicate models by (provider, modelId) key - this can happen when
+    // multiple models.dev providers map to the same Archestra provider
+    // (e.g., both google and google-vertex map to gemini).
+    //
+    // We use a deterministic priority system: prefer direct API providers over
+    // derived/vertex providers. The externalId contains the original models.dev
+    // provider (e.g., "google/gemini-2.5-flash" vs "google-vertex/gemini-2.5-flash").
+    const preferredSourcePrefixes: Record<SupportedProvider, string[]> = {
+      gemini: ["google/"], // Prefer google over google-vertex
+      openai: ["openai/", "deepseek/"], // Prefer direct providers over aggregators
+      anthropic: ["anthropic/"],
+      cohere: ["cohere/"],
+      cerebras: ["cerebras/"],
+      mistral: ["mistral/"],
+      bedrock: ["amazon-bedrock/"],
+      ollama: ["ollama/"],
+      vllm: ["vllm/"],
+      zhipuai: ["zhipuai/"],
+    };
+
+    const getSourcePriority = (model: CreateModel): number => {
+      const prefixes = preferredSourcePrefixes[model.provider] ?? [];
+      for (let i = 0; i < prefixes.length; i++) {
+        if (model.externalId.startsWith(prefixes[i])) {
+          return i; // Lower index = higher priority
+        }
+      }
+      return prefixes.length; // Not in preferred list = lowest priority
+    };
+
+    const deduplicatedModels = new Map<string, CreateModel>();
+    for (const model of modelsToSync) {
+      const key = `${model.provider}:${model.modelId}`;
+      const existing = deduplicatedModels.get(key);
+
+      if (!existing) {
+        deduplicatedModels.set(key, model);
+      } else {
+        // Keep the model with higher priority (lower priority number)
+        const modelPriority = getSourcePriority(model);
+        const existingPriority = getSourcePriority(existing);
+
+        if (modelPriority < existingPriority) {
+          deduplicatedModels.set(key, model);
+        }
+        // Otherwise keep existing (same priority = first occurrence wins)
+      }
+    }
+    const uniqueModelsToSync = Array.from(deduplicatedModels.values());
+
     logger.info(
       {
         totalModels,
         modelsToSync: modelsToSync.length,
+        uniqueModelsToSync: uniqueModelsToSync.length,
+        duplicatesRemoved: modelsToSync.length - uniqueModelsToSync.length,
         skippedProviders: Array.from(skippedProviders),
       },
       "Filtered models for sync",
     );
 
-    if (modelsToSync.length > 0) {
-      await ModelModel.bulkUpsert(modelsToSync);
-      await this.syncTokenPrices(modelsToSync);
+    if (uniqueModelsToSync.length > 0) {
+      await ModelModel.bulkUpsert(uniqueModelsToSync);
+      await this.syncTokenPrices(uniqueModelsToSync);
     }
 
     await this.updateSyncTimestamp();
 
     logger.info(
-      { syncedCount: modelsToSync.length },
+      { syncedCount: uniqueModelsToSync.length },
       "models.dev model metadata sync completed",
     );
 
-    return modelsToSync.length;
+    return uniqueModelsToSync.length;
   }
 
   /**

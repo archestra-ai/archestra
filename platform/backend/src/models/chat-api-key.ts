@@ -127,6 +127,7 @@ class ChatApiKeyModel {
         scope: schema.chatApiKeysTable.scope,
         userId: schema.chatApiKeysTable.userId,
         teamId: schema.chatApiKeysTable.teamId,
+        isSystem: schema.chatApiKeysTable.isSystem,
         createdAt: schema.chatApiKeysTable.createdAt,
         updatedAt: schema.chatApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
@@ -220,8 +221,14 @@ class ChatApiKeyModel {
       conditions.push(eq(schema.chatApiKeysTable.provider, provider));
     }
 
-    // Only return keys with configured secrets
-    conditions.push(sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`);
+    // Only return keys with configured secrets OR system keys (which don't need secrets)
+    const secretOrSystemCondition = or(
+      sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
+      eq(schema.chatApiKeysTable.isSystem, true),
+    );
+    if (secretOrSystemCondition) {
+      conditions.push(secretOrSystemCondition);
+    }
 
     // Query with team, user, and secrets table joins
     const apiKeys = await db
@@ -234,6 +241,7 @@ class ChatApiKeyModel {
         scope: schema.chatApiKeysTable.scope,
         userId: schema.chatApiKeysTable.userId,
         teamId: schema.chatApiKeysTable.teamId,
+        isSystem: schema.chatApiKeysTable.isSystem,
         createdAt: schema.chatApiKeysTable.createdAt,
         updatedAt: schema.chatApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
@@ -502,6 +510,82 @@ class ChatApiKeyModel {
       .limit(1);
 
     return !!result;
+  }
+
+  // =========================================================================
+  // System API Key Methods
+  // =========================================================================
+
+  /**
+   * Find the system API key for a provider.
+   * System keys are global (one per provider).
+   */
+  static async findSystemKey(
+    provider: SupportedChatProvider,
+  ): Promise<ChatApiKey | null> {
+    const [result] = await db
+      .select()
+      .from(schema.chatApiKeysTable)
+      .where(
+        and(
+          eq(schema.chatApiKeysTable.provider, provider),
+          eq(schema.chatApiKeysTable.isSystem, true),
+        ),
+      )
+      .limit(1);
+
+    return result ?? null;
+  }
+
+  /**
+   * Create a system API key for a keyless provider.
+   * System keys don't require a secret (credentials from environment/ADC).
+   */
+  static async createSystemKey(params: {
+    organizationId: string;
+    name: string;
+    provider: SupportedChatProvider;
+  }): Promise<ChatApiKey> {
+    const [apiKey] = await db
+      .insert(schema.chatApiKeysTable)
+      .values({
+        organizationId: params.organizationId,
+        name: params.name,
+        provider: params.provider,
+        scope: "org_wide",
+        isSystem: true,
+        secretId: null,
+        userId: null,
+        teamId: null,
+      })
+      .returning();
+
+    return apiKey;
+  }
+
+  /**
+   * Delete the system API key for a provider.
+   * Also deletes associated model links via cascade.
+   */
+  static async deleteSystemKey(provider: SupportedChatProvider): Promise<void> {
+    await db
+      .delete(schema.chatApiKeysTable)
+      .where(
+        and(
+          eq(schema.chatApiKeysTable.provider, provider),
+          eq(schema.chatApiKeysTable.isSystem, true),
+        ),
+      );
+  }
+
+  /**
+   * Get all system API keys.
+   */
+  static async findAllSystemKeys(): Promise<ChatApiKey[]> {
+    return db
+      .select()
+      .from(schema.chatApiKeysTable)
+      .where(eq(schema.chatApiKeysTable.isSystem, true));
   }
 }
 

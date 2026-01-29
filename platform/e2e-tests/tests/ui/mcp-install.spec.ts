@@ -1,7 +1,19 @@
+import * as k8s from "@kubernetes/client-node";
 import { expect } from "@playwright/test";
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { goToPage, type Page, test } from "../../fixtures";
 import { clickButton } from "../../utils";
+
+// Initialize K8s client for deployment verification
+function createK8sClient() {
+  const kc = new k8s.KubeConfig();
+  kc.loadFromDefault();
+  return {
+    appsApi: kc.makeApiClient(k8s.AppsV1Api),
+    coreApi: kc.makeApiClient(k8s.CoreV1Api),
+    namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
+  };
+}
 
 /**
  * To cover:
@@ -205,15 +217,12 @@ test.describe("MCP Install", () => {
     });
   });
 
-  // TBD
-  // test("Remote from catalog", () => {
-  //   expect(true).toBe(true);
-  // });
-
   test("Local server with advanced K8s configuration", async ({
     adminPage,
     extractCookieHeaders,
   }) => {
+    // Increase timeout to 3 minutes to allow K8s deployment to be ready
+    test.setTimeout(180_000);
     const CATALOG_ITEM_NAME = "e2e__advanced_k8s_test";
 
     // Test values for advanced K8s config
@@ -291,15 +300,40 @@ test.describe("MCP Install", () => {
       .fill(testConfig.resourceLimitsMemory);
     await adminPage.getByPlaceholder("500m").fill(testConfig.resourceLimitsCpu);
 
-    // 5. Custom Labels (JSON editor) - Monaco requires click to focus then keyboard input
-    const labelsEditorContainer = adminPage.locator(".monaco-editor").first();
-    await labelsEditorContainer.click();
-    await adminPage.keyboard.type(JSON.stringify(testConfig.labels));
+    // 5. Custom Labels (JSON editor) - Use page.evaluate to set Monaco editor value directly
+    // This avoids issues with Monaco's auto-pairing of brackets/quotes
+    await adminPage.evaluate((labelsJson) => {
+      // Get the Monaco editor instance for labels (first editor)
+      const monacoEditors = (
+        window as unknown as {
+          monaco?: {
+            editor?: {
+              getEditors?: () => Array<{ setValue: (v: string) => void }>;
+            };
+          };
+        }
+      ).monaco?.editor?.getEditors?.();
+      if (monacoEditors && monacoEditors.length > 0) {
+        monacoEditors[0].setValue(labelsJson);
+      }
+    }, JSON.stringify(testConfig.labels));
 
     // 6. Custom Annotations (JSON editor)
-    const annotationsEditorContainer = adminPage.locator(".monaco-editor").last();
-    await annotationsEditorContainer.click();
-    await adminPage.keyboard.type(JSON.stringify(testConfig.annotations));
+    await adminPage.evaluate((annotationsJson) => {
+      // Get the Monaco editor instance for annotations (second editor)
+      const monacoEditors = (
+        window as unknown as {
+          monaco?: {
+            editor?: {
+              getEditors?: () => Array<{ setValue: (v: string) => void }>;
+            };
+          };
+        }
+      ).monaco?.editor?.getEditors?.();
+      if (monacoEditors && monacoEditors.length > 1) {
+        monacoEditors[1].setValue(annotationsJson);
+      }
+    }, JSON.stringify(testConfig.annotations));
 
     // Add catalog item to the registry
     await clickButton({ page: adminPage, options: { name: "Add Server" } });
@@ -321,62 +355,91 @@ test.describe("MCP Install", () => {
     );
     await serverCard.waitFor({ state: "visible", timeout: 30000 });
 
-    // Re-open the catalog item edit dialog to verify advanced K8s config was persisted
-    // First, click the menu button (three-dots icon) on the server card
-    await serverCard.locator("button").first().click();
-    // Then click "Edit" in the dropdown menu
-    await adminPage.getByRole("menuitem", { name: "Edit" }).click();
-    await adminPage.waitForLoadState("networkidle");
+    // Wait for server card to be fully visible (don't wait for Connect since alpine:latest won't run MCP)
+    await adminPage.waitForTimeout(2000);
 
-    // Expand Advanced Configuration section
-    const editAdvancedConfigButton = adminPage.getByRole("button", {
-      name: /Advanced Configuration/,
-    });
-    await editAdvancedConfigButton.click();
+    // ========================================
+    // VERIFY ACTUAL K8S DEPLOYMENT VALUES
+    // ========================================
+    const k8sClient = createK8sClient();
 
-    // Verify replicas value was saved
-    const replicasInput = adminPage.getByRole("spinbutton", {
-      name: "Replicas",
-    });
-    await expect(replicasInput).toHaveValue(String(testConfig.replicas));
+    // The catalog item name is slugified and used as part of the MCP server name
+    // MCP server names include an org ID suffix, so we search by label
+    const slugifiedName = CATALOG_ITEM_NAME.toLowerCase().replace(
+      /[^a-z0-9.-]/g,
+      "",
+    );
 
-    // Verify service account value was saved
-    const serviceAccountInput = adminPage.getByRole("textbox", {
-      name: "Service Account",
-    });
-    await expect(serviceAccountInput).toHaveValue(testConfig.serviceAccount);
+    // Poll for the deployment to exist by listing with label selector
+    let deployment: k8s.V1Deployment | null = null;
+    const maxAttempts = 60; // 2 minutes with 2s intervals
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        // List all MCP server deployments and find the one matching our catalog item
+        const deployments = await k8sClient.appsApi.listNamespacedDeployment({
+          namespace: k8sClient.namespace,
+          labelSelector: "app=mcp-server",
+        });
 
-    // Verify resource requests values were saved
-    await expect(adminPage.getByPlaceholder("128Mi")).toHaveValue(
+        // Find deployment whose name contains our slugified catalog item name
+        const matchingDeployment = deployments.items.find((d) =>
+          d.metadata?.name?.includes(slugifiedName),
+        );
+
+        if (matchingDeployment?.spec) {
+          deployment = matchingDeployment;
+          break;
+        }
+      } catch {
+        // Deployment may not exist yet, keep polling
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    // Assert deployment was found
+    expect(deployment).not.toBeNull();
+    expect(deployment!.metadata?.name).toContain(slugifiedName);
+
+    // 1. Verify replicas
+    expect(deployment!.spec?.replicas).toBe(testConfig.replicas);
+
+    // 2. Verify service account
+    expect(deployment!.spec?.template?.spec?.serviceAccountName).toBe(
+      testConfig.serviceAccount,
+    );
+
+    // 3. Verify resource requests
+    const container = deployment!.spec?.template?.spec?.containers?.[0];
+    expect(container).toBeDefined();
+    expect(container!.resources?.requests?.memory).toBe(
       testConfig.resourceRequestsMemory,
     );
-    await expect(adminPage.getByPlaceholder("50m")).toHaveValue(
+    expect(container!.resources?.requests?.cpu).toBe(
       testConfig.resourceRequestsCpu,
     );
 
-    // Verify resource limits values were saved
-    await expect(adminPage.getByPlaceholder("256Mi")).toHaveValue(
+    // 4. Verify resource limits
+    expect(container!.resources?.limits?.memory).toBe(
       testConfig.resourceLimitsMemory,
     );
-    await expect(adminPage.getByPlaceholder("500m")).toHaveValue(
+    expect(container!.resources?.limits?.cpu).toBe(
       testConfig.resourceLimitsCpu,
     );
 
-    // Verify custom labels JSON was saved by checking the Monaco editor content
-    const labelsEditorContent = await adminPage
-      .locator(".monaco-editor")
-      .first()
-      .innerText();
-    expect(labelsEditorContent).toContain("environment");
-    expect(labelsEditorContent).toContain("e2e-test");
+    // 5. Verify custom labels (merged with required labels)
+    const labels = deployment!.spec?.template?.metadata?.labels;
+    expect(labels).toBeDefined();
+    // Custom labels should be present (sanitized to lowercase)
+    expect(labels!.environment).toBe("e2e-test");
+    expect(labels!["test-label"]).toBe("test-value");
+    // Required labels should also be present
+    expect(labels!.app).toBe("mcp-server");
 
-    // Verify custom annotations JSON was saved
-    const annotationsEditorContent = await adminPage
-      .locator(".monaco-editor")
-      .last()
-      .innerText();
-    expect(annotationsEditorContent).toContain("app.kubernetes.io/managed-by");
-    expect(annotationsEditorContent).toContain("archestra-e2e");
+    // 6. Verify custom annotations
+    const annotations = deployment!.spec?.template?.metadata?.annotations;
+    expect(annotations).toBeDefined();
+    expect(annotations!["app.kubernetes.io/managed-by"]).toBe("archestra-e2e");
+    expect(annotations!["test-annotation"]).toBe("annotation-value");
 
     // Cleanup
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);

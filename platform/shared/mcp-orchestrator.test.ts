@@ -1,9 +1,9 @@
+import { describe, expect, test } from "vitest";
 import {
   isValidJsonKeyValueString,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
-} from "@shared";
-import { describe, expect, test } from "@/test";
+} from "./mcp-orchestrator";
 
 describe("MCP Orchestrator Validation", () => {
   describe("isValidJsonKeyValueString", () => {

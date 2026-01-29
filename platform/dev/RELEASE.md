@@ -45,7 +45,7 @@ Use this when you need to patch an already-released version without including un
 
 ### 1. Create a Release Branch
 
-Create a branch from the tag you want to patch:
+Create a branch from the tag you want to patch, so we can merge hotfix into it later and make a hotfix release:
 
 ```bash
 # Example: patching platform-v1.0.22
@@ -60,8 +60,17 @@ Create a PR targeting your `release/v1.0.22` branch:
 
 ```bash
 git checkout -b hotfix/fix-critical-bug release/v1.0.22
+```
+```
 # make your fix
 git commit -m "fix: resolve critical authentication issue"
+```
+```
+# Alternatively cherry-pick commits from main or from PR
+# NOTE: Make sure that the PR's branch is not deleted, copy commit SHA
+git cherry-pick <commit-sha>
+```
+```
 git push origin hotfix/fix-critical-bug
 # create PR targeting release/v1.0.22, get review, merge
 ```

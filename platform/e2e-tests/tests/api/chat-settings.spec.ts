@@ -53,14 +53,15 @@ test.describe("Chat API Keys CRUD", () => {
     request,
     makeApiRequest,
   }) => {
+    // Use cerebras provider to avoid conflicts with seeded org-wide keys (anthropic, openai, gemini)
     const response = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Org Wide Test Key",
-        provider: "anthropic",
-        apiKey: "sk-ant-org-wide-test-key",
+        provider: "cerebras",
+        apiKey: "cerebras-org-wide-test-key",
         scope: "org_wide",
       },
     });
@@ -463,15 +464,15 @@ test.describe("Chat API Keys Scope Update", () => {
     makeApiRequest,
   }) => {
     // Create a personal key first
-    // Use gemini provider to avoid conflicts with other tests using openai personal keys
+    // Use cohere provider to avoid conflicts with seeded org-wide keys (anthropic, openai, gemini)
     const createResponse = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Scope Update Test Key",
-        provider: "gemini",
-        apiKey: "gemini-scope-update-test",
+        provider: "cohere",
+        apiKey: "cohere-scope-update-test",
         scope: "personal",
       },
     });

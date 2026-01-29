@@ -99,7 +99,7 @@ git cherry-pick <commit-sha>
 git push origin main
 ```
 
-### 5. Bump the version on `main` using the `release-as` directive:
+### 5. IMPORTANT! Bump the version on `main` using the `release-as` directive:
 
 ```bash
 git checkout main
@@ -157,22 +157,3 @@ Check the "On commits to main" workflow for errors. Common issues:
 - Docker build failures
 - Kubernetes deployment issues
 - Secret configuration problems
-
-### Version Clash After Hotfix
-
-**Scenario:** You released a hotfix (e.g., v1.0.23) from a `release/*` branch, but `main` already has a release-please PR targeting the same version.
-
-**Symptom:** The "Version Clash Check" CI job fails on the release-please PR for `main`.
-
-**Solution:** Bump the version on `main` using the `release-as` directive:
-
-```bash
-git checkout main
-git pull origin main
-git commit -m "chore(release): bump version" -m "release-as: 1.0.24" --allow-empty
-git push origin main
-```
-
-This creates an empty commit that tells Release Please to target v1.0.24 instead. The release-please PR will automatically update.
-
-**Prevention:** Before merging any release-please PR, check that the target version hasn't already been used. The CI check does this automatically, but if you're releasing a hotfix, be aware that you may need to bump the version on `main` afterwards.

@@ -27,46 +27,43 @@ RUN uv pip install --no-cache-dir \
    requests>=2.31.0 \
    python-dotenv>=1.0.0
 
-# Node.js stage - using pnpm for reproducible builds
+# Node.js stage
 FROM node:20-alpine AS node-builder
 
-# Install pnpm and patch bundled tar vulnerability
-# CVE-2026-23745: tar <=7.5.2 has path traversal vulnerability
-# CVE-2026-23950: tar <=7.5.3 has Improper Handling of Unicode Encoding
-RUN corepack enable && \
-    corepack prepare pnpm@10.28.2 --activate && \
-    TAR_SHA256="0a9e6154532a0fa2f0f6fa261cede2f916da7d34df68917c6f71be82dd739dce" && \
-    PNPM_TAR_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/tar" -type d 2>/dev/null) && \
-    [ -n "$PNPM_TAR_PATHS" ] || { echo "WARNING: No tar directories found to patch"; exit 0; } && \
-    for PNPM_TAR_PATH in $PNPM_TAR_PATHS; do \
-        echo "Patching tar in $PNPM_TAR_PATH" && \
+# Upgrade npm to 11.8.0 to get patched bundled dependencies (tar, glob, cross-spawn)
+# CVE-2026-23950, CVE-2026-23745, CVE-2026-24842: tar vulnerabilities
+# CVE-2025-64756: glob vulnerability
+# CVE-2024-21538: cross-spawn vulnerability
+RUN npm install -g npm@11.8.0 && \
+    # Patch tar to 7.5.7 inside npm's bundled node_modules to fix CVE-2026-24842
+    TAR_SHA256="87355a4cb10e7e7cdb4326e3e3c89232eaf5266d0792b998a396ddf6c11502bb" && \
+    NPM_TAR_PATH="/usr/local/lib/node_modules/npm/node_modules/tar" && \
+    if [ -d "$NPM_TAR_PATH" ]; then \
         TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.4.tgz && \
-        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
-        tar -tzf "$TMP_DIR/tar.tgz" >/dev/null 2>&1 || { echo "ERROR: Downloaded tarball is corrupt"; rm -rf "$TMP_DIR"; exit 1; } && \
-        rm -rf "$PNPM_TAR_PATH"/* && \
-        tar -xzf "$TMP_DIR/tar.tgz" -C "$PNPM_TAR_PATH" --strip-components=1 && \
-        rm -rf "$TMP_DIR"; \
-    done && \
-    echo "Patched tar to 7.5.4 in all pnpm corepack caches"
+        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.7.tgz && \
+        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - && \
+        rm -rf "$NPM_TAR_PATH"/* && \
+        tar -xzf "$TMP_DIR/tar.tgz" -C "$NPM_TAR_PATH" --strip-components=1 && \
+        rm -rf "$TMP_DIR" && \
+        echo "Patched tar to 7.5.7 in npm"; \
+    fi
 
 WORKDIR /opt/node-deps
 
-# Copy package.json and lockfile for reproducible builds
-# CVE overrides are configured in package.json:
-# - cross-spawn >= 7.0.5 (CVE-2024-21538: ReDoS)
-# - glob >= 11.1.0 (CVE-2025-64756: OS Command Injection)
-# - tar >= 7.5.4 (CVE-2026-23745, CVE-2026-23950: Path Traversal, Unicode Handling)
-# - hono >= 4.11.7 (CVE-2025-*: IP spoofing, cache deception, key read)
-# - lodash >= 4.17.23 (Prototype Pollution)
-COPY package.json pnpm-lock.yaml ./
+# Copy package.json with dependencies and overrides to fix CVEs in transitive dependencies
+# CVE-2024-21538: ReDoS in cross-spawn < 7.0.5
+# CVE-2025-64756: OS Command Injection in glob < 11.1.0
+# CVE-2026-23745: Path Traversal in tar <= 7.5.2
+# CVE-2026-23950: Improper Unicode Handling in tar <= 7.5.3
+# CVE-2026-24842: Path Traversal in tar <= 7.5.6
+COPY package.json package-lock.json ./
 
-RUN pnpm install --frozen-lockfile
+RUN npm ci
 
 # Final stage - minimal runtime image with Python 3.12
 FROM python:3.12-alpine
 
-# Install runtime dependencies only (excluding npm - we'll use pnpm)
+# Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \
    nodejs \
    libstdc++ \
@@ -93,25 +90,11 @@ RUN apk add --no-cache \
    # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
    apk upgrade --no-cache nodejs bind openssl
 
-# Install pnpm globally for runtime use and patch bundled tar
-# Use npm temporarily to install pnpm, then remove npm to avoid CVE-2026-23950
-# Also patch tar in pnpm's bundled dependencies (CVE-2026-23745, CVE-2026-23950)
-RUN apk add --no-cache npm && \
-    npm install -g pnpm@10.28.2 && \
-    TAR_SHA256="0a9e6154532a0fa2f0f6fa261cede2f916da7d34df68917c6f71be82dd739dce" && \
-    PNPM_TAR_PATH="/usr/local/lib/node_modules/pnpm/dist/node_modules/tar" && \
-    if [ -d "$PNPM_TAR_PATH" ]; then \
-        echo "Patching tar in $PNPM_TAR_PATH" && \
-        TMP_DIR=$(mktemp -d) && \
-        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.4.tgz && \
-        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - && \
-        rm -rf "$PNPM_TAR_PATH"/* && \
-        tar -xzf "$TMP_DIR/tar.tgz" -C "$PNPM_TAR_PATH" --strip-components=1 && \
-        rm -rf "$TMP_DIR" && \
-        echo "Patched tar to 7.5.4 in pnpm"; \
-    fi && \
-    apk del npm && \
-    rm -rf /usr/lib/node_modules/npm /root/.npm
+# Copy npm from node-builder stage to avoid Alpine's vulnerable npm package (CVE-2026-23950)
+# node:20-alpine has npm in /usr/local/lib/node_modules/npm
+COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 # Upgrade system pip to fix CVE-2025-8869 (Link Following vulnerability in pip <= 25.2)
 RUN pip install --upgrade pip>=25.3

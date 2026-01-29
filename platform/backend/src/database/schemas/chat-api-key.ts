@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   pgTable,
   text,
@@ -31,6 +32,8 @@ const chatApiKeysTable = pgTable(
     teamId: text("team_id").references(() => team.id, {
       onDelete: "cascade",
     }),
+    /** System keys are auto-managed for keyless providers (Vertex AI, vLLM, etc.) */
+    isSystem: boolean("is_system").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -57,6 +60,10 @@ const chatApiKeysTable = pgTable(
     uniqueIndex("chat_api_keys_org_wide_unique")
       .on(table.organizationId, table.provider)
       .where(sql`${table.scope} = 'org_wide'`),
+    // Partial unique index: only one system key per provider (global)
+    uniqueIndex("chat_api_keys_system_unique")
+      .on(table.provider)
+      .where(sql`${table.isSystem} = true`),
   ],
 );
 

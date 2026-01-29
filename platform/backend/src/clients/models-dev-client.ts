@@ -15,7 +15,7 @@ import {
  * Cache key for tracking when we last synced from models.dev.
  */
 const MODELS_DEV_SYNC_CACHE_KEY =
-  `${CacheKey.GetChatModels}-models-dev-sync-timestamp` as const;
+  `${CacheKey.ModelsDevSync}-timestamp` as const;
 
 /**
  * How long to wait between models.dev syncs (24 hours).

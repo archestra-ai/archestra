@@ -65,6 +65,8 @@ interface ArchestraPromptInputProps {
   initialApiKeyId?: string | null;
   /** Callback for API key change in initial chat mode (no conversation) */
   onApiKeyChange?: (apiKeyId: string) => void;
+  /** Callback when user selects an API key with a different provider */
+  onProviderChange?: (provider: SupportedChatProvider) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Whether file uploads are allowed (controlled by organization setting) */
@@ -94,6 +96,7 @@ const PromptInputContent = ({
   currentProvider,
   initialApiKeyId,
   onApiKeyChange,
+  onProviderChange,
   textareaRef: externalTextareaRef,
   allowFileUploads = false,
   isModelsLoading = false,
@@ -282,6 +285,7 @@ const PromptInputContent = ({
               }
               messageCount={messageCount}
               onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
               isModelsLoading={isModelsLoading}
               onOpenChange={(open) => {
                 if (!open) {
@@ -320,6 +324,7 @@ const ArchestraPromptInput = ({
   currentProvider,
   initialApiKeyId,
   onApiKeyChange,
+  onProviderChange,
   textareaRef,
   allowFileUploads = false,
   isModelsLoading = false,
@@ -343,6 +348,7 @@ const ArchestraPromptInput = ({
           currentProvider={currentProvider}
           initialApiKeyId={initialApiKeyId}
           onApiKeyChange={onApiKeyChange}
+          onProviderChange={onProviderChange}
           textareaRef={textareaRef}
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}

@@ -15,6 +15,7 @@ import {
   Layers,
   Loader2,
   Mic,
+  RefreshCw,
   Settings2,
   Video,
   XIcon,
@@ -46,6 +47,7 @@ import {
   type ModelCapabilities,
   useModelsByProvider,
 } from "@/lib/chat-models.query";
+import { useSyncChatModels } from "@/lib/chat-settings.query";
 import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
@@ -166,19 +168,22 @@ function ModelCapabilityBadges({
 }: {
   capabilities?: ModelCapabilities;
 }) {
-  if (!capabilities) {
-    return null;
-  }
+  const hasVision = capabilities?.inputModalities?.includes("image");
+  const hasAudio = capabilities?.inputModalities?.includes("audio");
+  const hasVideo = capabilities?.inputModalities?.includes("video");
+  const hasPdf = capabilities?.inputModalities?.includes("pdf");
+  const hasToolCalling = capabilities?.supportsToolCalling;
 
-  const hasVision = capabilities.inputModalities?.includes("image");
-  const hasAudio = capabilities.inputModalities?.includes("audio");
-  const hasVideo = capabilities.inputModalities?.includes("video");
-  const hasPdf = capabilities.inputModalities?.includes("pdf");
-  const hasToolCalling = capabilities.supportsToolCalling;
+  const hasAnyCapability =
+    hasVision || hasAudio || hasVideo || hasPdf || hasToolCalling;
 
-  // Don't render if no capabilities to show
-  if (!hasVision && !hasAudio && !hasVideo && !hasPdf && !hasToolCalling) {
-    return null;
+  // Show "unknown" badge if no capabilities data at all
+  if (!capabilities || !hasAnyCapability) {
+    return (
+      <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+        capabilities unknown
+      </span>
+    );
   }
 
   return (
@@ -383,10 +388,14 @@ function ModelFiltersBar({
   filters,
   onFiltersChange,
   availableModalities,
+  onRefresh,
+  isRefreshing,
 }: {
   filters: ModelFilters;
   onFiltersChange: (filters: ModelFilters) => void;
   availableModalities: Set<FilterableModality>;
+  onRefresh: () => void;
+  isRefreshing: boolean;
 }) {
   const toggleModality = useCallback(
     (modality: FilterableModality, pressed: boolean) => {
@@ -413,33 +422,53 @@ function ModelFiltersBar({
     availableModalities.has(f.modality),
   );
 
-  // Don't render if no filters to show
-  if (visibleModalityFilters.length === 0) {
-    return null;
-  }
-
   return (
     <div className="flex items-center gap-1 px-3 py-2 border-b">
-      <span className="text-xs text-muted-foreground mr-1">Filter:</span>
-      <div className="flex flex-wrap items-center gap-1 flex-1">
-        {visibleModalityFilters.map((config) => (
-          <FilterToggle
-            key={config.modality}
-            icon={config.icon}
-            label={config.label}
-            pressed={filters.modalities.has(config.modality)}
-            onPressedChange={(pressed) =>
-              toggleModality(config.modality, pressed)
-            }
-          />
-        ))}
-        <FilterToggle
-          icon={TOOL_CALLING_FILTER.icon}
-          label={TOOL_CALLING_FILTER.label}
-          pressed={filters.toolCalling}
-          onPressedChange={toggleToolCalling}
-        />
-      </div>
+      {visibleModalityFilters.length > 0 && (
+        <>
+          <span className="text-xs text-muted-foreground mr-1">Filter:</span>
+          <div className="flex flex-wrap items-center gap-1 flex-1">
+            {visibleModalityFilters.map((config) => (
+              <FilterToggle
+                key={config.modality}
+                icon={config.icon}
+                label={config.label}
+                pressed={filters.modalities.has(config.modality)}
+                onPressedChange={(pressed) =>
+                  toggleModality(config.modality, pressed)
+                }
+              />
+            ))}
+            <FilterToggle
+              icon={TOOL_CALLING_FILTER.icon}
+              label={TOOL_CALLING_FILTER.label}
+              pressed={filters.toolCalling}
+              onPressedChange={toggleToolCalling}
+            />
+          </div>
+        </>
+      )}
+      {visibleModalityFilters.length === 0 && <div className="flex-1" />}
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="rounded-sm p-1 opacity-70 ring-offset-background transition-opacity hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
+            >
+              <RefreshCw
+                className={cn("size-4", isRefreshing && "animate-spin")}
+              />
+              <span className="sr-only">Refresh models</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            Refresh models from providers
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
         <XIcon className="size-4" />
         <span className="sr-only">Close</span>
@@ -449,9 +478,31 @@ function ModelFiltersBar({
 }
 
 /**
+ * Checks if a model has unknown capabilities (no data available).
+ */
+function hasUnknownCapabilities(model: ChatModel): boolean {
+  const capabilities = model.capabilities;
+  if (!capabilities) return true;
+
+  const hasVision = capabilities.inputModalities?.includes("image");
+  const hasAudio = capabilities.inputModalities?.includes("audio");
+  const hasVideo = capabilities.inputModalities?.includes("video");
+  const hasPdf = capabilities.inputModalities?.includes("pdf");
+  const hasToolCalling = capabilities.supportsToolCalling;
+
+  return !hasVision && !hasAudio && !hasVideo && !hasPdf && !hasToolCalling;
+}
+
+/**
  * Checks if a model matches the given filters.
+ * Models with unknown capabilities are always shown.
  */
 function modelMatchesFilters(model: ChatModel, filters: ModelFilters): boolean {
+  // Always show models with unknown capabilities
+  if (hasUnknownCapabilities(model)) {
+    return true;
+  }
+
   const capabilities = model.capabilities;
 
   // Check modality filters (AND logic - model must support all selected modalities)
@@ -482,6 +533,7 @@ export function ModelSelector({
   onOpenChange: onOpenChangeProp,
 }: ModelSelectorProps) {
   const { modelsByProvider, isPending: isLoading } = useModelsByProvider();
+  const syncMutation = useSyncChatModels();
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
@@ -642,6 +694,8 @@ export function ModelSelector({
             filters={filters}
             onFiltersChange={setFilters}
             availableModalities={availableModalities}
+            onRefresh={() => syncMutation.mutate()}
+            isRefreshing={syncMutation.isPending}
           />
           <ModelSelectorInput placeholder="Search models..." />
           <ModelSelectorList>

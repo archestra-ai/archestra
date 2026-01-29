@@ -81,8 +81,6 @@ When you merge to `release/v1.0.22`:
 - Release Please creates a PR for `v1.0.23` targeting the release branch
 - Merge this PR to create the hotfix release
 
-**Important:** If there's already a release-please PR on `main` targeting the same version (v1.0.23), you'll need to resolve the version clash after releasing the hotfix. See [Version Clash](#version-clash-after-hotfix) in Troubleshooting.
-
 ### 4. Backport to Main
 
 After releasing the hotfix, apply the fix to `main`:

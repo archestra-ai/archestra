@@ -106,6 +106,7 @@ git commit -m "chore(release): bump version" -m "release-as: X.Y.Z" --allow-empt
 git push origin main
 ```
 (alternatively create PR with this empty commit and merge to `main`)
+Replace X.Y.Z with a version higher than the hotfix you just released (e.g., if hotfix was v1.0.23, use v1.0.24)
 
 Now the version of existing release-please PR for `main` will be bumped
 

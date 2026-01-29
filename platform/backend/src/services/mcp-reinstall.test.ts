@@ -1,13 +1,6 @@
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
-import { McpServerModel, ToolModel } from "@/models";
-import { beforeEach, describe, expect, test, vi } from "@/test";
-import type { InternalMcpCatalog, McpServer } from "@/types";
-import {
-  autoReinstallServer,
-  requiresNewUserInputForReinstall,
-} from "./mcp-reinstall";
+import { vi } from "vitest";
 
-// Mock dependencies
+// Mock dependencies before other imports
 vi.mock("@/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     restartServer: vi.fn(),
@@ -26,6 +19,15 @@ vi.mock("@/models", () => ({
   },
 }));
 
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { McpServerModel, ToolModel } from "@/models";
+import { beforeEach, describe, expect, test } from "@/test";
+import type { InternalMcpCatalog, McpServer } from "@/types";
+import {
+  autoReinstallServer,
+  requiresNewUserInputForReinstall,
+} from "./mcp-reinstall";
+
 describe("mcp-reinstall", () => {
   describe("requiresNewUserInputForReinstall", () => {
     // Helper to create a minimal local catalog item
@@ -34,6 +36,7 @@ describe("mcp-reinstall", () => {
         key: string;
         type: "plain_text" | "secret";
         promptOnInstallation: boolean;
+        required?: boolean;
       }> = [],
     ): InternalMcpCatalog =>
       ({
@@ -85,7 +88,7 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(false);
       });
 
-      test("returns true when ANY prompted env var exists", () => {
+      test("returns true when prompted env var is ADDED", () => {
         const oldConfig = createLocalCatalog([]);
         const newConfig = createLocalCatalog([
           {
@@ -100,7 +103,7 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
-      test("returns true when prompted env var exists (even if unchanged)", () => {
+      test("returns false when prompted env var is UNCHANGED", () => {
         const envVars = [
           {
             key: "API_KEY",
@@ -113,12 +116,170 @@ describe("mcp-reinstall", () => {
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
+        expect(result).toBe(false);
+      });
+
+      test("returns true when new prompted env var is ADDED to existing ones", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+          {
+            key: "NEW_SECRET",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
         expect(result).toBe(true);
       });
 
-      test("returns true when mix of prompted and non-prompted env vars exist", () => {
-        const oldConfig = createLocalCatalog([]);
+      test("returns true when prompted env var is REMOVED", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+        const newConfig = createLocalCatalog([]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when prompted env var TYPE changes", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "CONFIG_VAR",
+            type: "plain_text" as const,
+            promptOnInstallation: true,
+          },
+        ]);
         const newConfig = createLocalCatalog([
+          {
+            key: "CONFIG_VAR",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when prompted env var REQUIRED status changes", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: true,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when server NAME changes (even with no prompted env vars)", () => {
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          name: "Old Server Name",
+        };
+        const newConfig = {
+          ...createLocalCatalog([]),
+          name: "New Server Name",
+        };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when server NAME changes (with existing prompted env vars)", () => {
+        const envVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ];
+        const oldConfig = {
+          ...createLocalCatalog(envVars),
+          name: "Old Server Name",
+        };
+        const newConfig = {
+          ...createLocalCatalog(envVars),
+          name: "New Server Name",
+        };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when only non-prompted config changes (command/args)", () => {
+        const envVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ];
+        const oldConfig = {
+          ...createLocalCatalog(envVars),
+          localConfig: {
+            command: "npm",
+            arguments: ["start"],
+            environment: envVars,
+          },
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog(envVars),
+          localConfig: {
+            command: "node",
+            arguments: ["index.js", "--verbose"],
+            environment: envVars,
+          },
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when only non-prompted env vars are added", () => {
+        const oldEnvVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ];
+        const newEnvVars = [
           {
             key: "API_KEY",
             type: "secret" as const,
@@ -129,22 +290,75 @@ describe("mcp-reinstall", () => {
             type: "plain_text" as const,
             promptOnInstallation: false,
           },
-        ]);
+        ];
+        const oldConfig = createLocalCatalog(oldEnvVars);
+        const newConfig = createLocalCatalog(newEnvVars);
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
-        expect(result).toBe(true);
+        expect(result).toBe(false);
       });
 
-      test("returns false when prompted env var is removed and no prompted vars remain", () => {
-        const oldConfig = createLocalCatalog([
+      test("returns false when only non-prompted env vars are removed", () => {
+        const oldEnvVars = [
           {
             key: "API_KEY",
             type: "secret" as const,
             promptOnInstallation: true,
           },
-        ]);
-        const newConfig = createLocalCatalog([]);
+          {
+            key: "STATIC_VAR",
+            type: "plain_text" as const,
+            promptOnInstallation: false,
+          },
+        ];
+        const newEnvVars = [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ];
+        const oldConfig = createLocalCatalog(oldEnvVars);
+        const newConfig = createLocalCatalog(newEnvVars);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("handles missing localConfig.environment gracefully", () => {
+        const oldConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "local",
+          localConfig: {},
+        } as InternalMcpCatalog;
+        const newConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "local",
+          localConfig: {},
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("handles null localConfig gracefully", () => {
+        const oldConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "local",
+          localConfig: null,
+        } as InternalMcpCatalog;
+        const newConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "local",
+          localConfig: null,
+        } as InternalMcpCatalog;
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 

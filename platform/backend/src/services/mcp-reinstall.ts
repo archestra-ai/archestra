@@ -7,36 +7,46 @@ import type { InternalMcpCatalog, McpServer } from "@/types";
  * Checks if a catalog edit requires new user input for reinstallation.
  *
  * Returns true (manual reinstall required) when:
- * - ANY env var with promptOnInstallation=true exists (local servers)
+ * - Server name changed (local servers) - affects secret paths
+ * - Prompted env vars changed: added, removed, or key/required/type changed (local servers)
  * - ANY required userConfig field exists (remote servers)
  * - OAuth config exists (remote servers)
  *
  * Returns false (auto-reinstall possible) when:
- * - No prompted env vars exist (local servers)
+ * - Only non-prompted config changed (local servers) - existing secrets can be reused
  * - No required userConfig fields or OAuth (remote servers)
  *
- * Note: We don't try to recover secrets from the secret manager because
- * that's unreliable across different backends (DB, Vault, BYOS Vault).
- * Instead, we require the user to re-enter values via the install dialog.
+ * Note: For local servers, we can reuse existing secrets when prompted env vars
+ * haven't changed. This allows auto-reinstall when only command/args/docker image changes.
  */
 export function requiresNewUserInputForReinstall(
-  _oldCatalogItem: InternalMcpCatalog,
+  oldCatalogItem: InternalMcpCatalog,
   newCatalogItem: InternalMcpCatalog,
 ): boolean {
-  // Local servers: check if ANY prompted env vars exist
+  // Local servers: check if name or prompted env vars changed
   if (newCatalogItem.serverType === "local") {
-    const hasPromptedEnvVars = (
-      newCatalogItem.localConfig?.environment || []
-    ).some((env) => env.promptOnInstallation);
-
-    if (hasPromptedEnvVars) {
+    // 1. Check if name changed - affects secret paths
+    if (oldCatalogItem.name !== newCatalogItem.name) {
       logger.info(
         { catalogId: newCatalogItem.id },
-        "Catalog has prompted env vars - manual reinstall required",
+        "Catalog name changed - manual reinstall required",
       );
       return true;
     }
 
+    // 2. Check if prompted env vars changed
+    const oldPromptedEnvVars = getPromptedEnvVars(oldCatalogItem);
+    const newPromptedEnvVars = getPromptedEnvVars(newCatalogItem);
+
+    if (promptedEnvVarsChanged(oldPromptedEnvVars, newPromptedEnvVars)) {
+      logger.info(
+        { catalogId: newCatalogItem.id },
+        "Prompted env vars changed - manual reinstall required",
+      );
+      return true;
+    }
+
+    // No relevant changes - auto-reinstall can proceed with existing secrets
     return false;
   }
 
@@ -132,4 +142,47 @@ export async function autoReinstallServer(
 
   // Clear reinstall flag
   await McpServerModel.update(server.id, { reinstallRequired: false });
+}
+
+// ===== Internal helpers =====
+
+type PromptedEnvVarInfo = { required: boolean; type: string };
+
+/**
+ * Extract prompted env vars from a catalog item as a map of key -> { required, type }
+ */
+function getPromptedEnvVars(
+  catalog: InternalMcpCatalog,
+): Map<string, PromptedEnvVarInfo> {
+  const map = new Map<string, PromptedEnvVarInfo>();
+  for (const env of catalog.localConfig?.environment || []) {
+    if (env.promptOnInstallation) {
+      map.set(env.key, { required: env.required ?? false, type: env.type });
+    }
+  }
+  return map;
+}
+
+/**
+ * Check if prompted env vars changed between old and new catalog items.
+ * Returns true if any prompted env var was added, removed, or had its type/required status changed.
+ */
+function promptedEnvVarsChanged(
+  oldMap: Map<string, PromptedEnvVarInfo>,
+  newMap: Map<string, PromptedEnvVarInfo>,
+): boolean {
+  // Check for removals or changes
+  for (const [key, oldVal] of oldMap) {
+    const newVal = newMap.get(key);
+    if (!newVal) return true; // Removed
+    if (newVal.required !== oldVal.required) return true; // Required changed
+    if (newVal.type !== oldVal.type) return true; // Type changed
+  }
+
+  // Check for additions
+  for (const key of newMap.keys()) {
+    if (!oldMap.has(key)) return true; // Added
+  }
+
+  return false;
 }

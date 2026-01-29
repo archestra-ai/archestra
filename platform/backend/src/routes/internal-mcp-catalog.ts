@@ -5,6 +5,10 @@ import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
+  autoReinstallServer,
+  requiresNewUserInputForReinstall,
+} from "@/services/mcp-reinstall";
+import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -420,19 +424,68 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // Mark all installed servers for reinstall
-      // and delete existing tools so they can be rediscovered
+      // Handle reinstall for installed servers
       const installedServers = await McpServerModel.findByCatalogId(id);
 
-      for (const server of installedServers) {
-        await McpServerModel.update(server.id, {
-          reinstallRequired: true,
-        });
+      if (installedServers.length > 0) {
+        // Check if new user input is required for reinstall
+        if (
+          requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)
+        ) {
+          // Manual reinstall required: mark servers and let user trigger reinstall
+          logger.info(
+            { catalogId: id, serverCount: installedServers.length },
+            "Catalog edit requires new user input - marking servers for manual reinstall",
+          );
+          for (const server of installedServers) {
+            await McpServerModel.update(server.id, { reinstallRequired: true });
+          }
+        } else {
+          // Auto-reinstall in background (no new user input needed)
+          logger.info(
+            { catalogId: id, serverCount: installedServers.length },
+            "Catalog edit does not require new user input - auto-reinstalling servers",
+          );
+
+          // Use setImmediate to not block the response
+          // Wrap entire callback in try/catch to prevent unhandled promise rejections
+          setImmediate(async () => {
+            try {
+              for (const server of installedServers) {
+                try {
+                  await autoReinstallServer(server, catalogItem);
+                  logger.info(
+                    { serverId: server.id, serverName: server.name },
+                    "Auto-reinstalled MCP server successfully",
+                  );
+                } catch (error) {
+                  logger.error(
+                    {
+                      err: error,
+                      serverId: server.id,
+                      serverName: server.name,
+                    },
+                    "Failed to auto-reinstall MCP server - marking for manual reinstall",
+                  );
+                  // Mark for manual reinstall on failure
+                  await McpServerModel.update(server.id, {
+                    reinstallRequired: true,
+                  });
+                }
+              }
+            } catch (error) {
+              // Catch any unexpected errors from the iteration itself
+              logger.error(
+                { err: error, catalogId: id },
+                "Unexpected error during auto-reinstall batch - some servers may need manual reinstall",
+              );
+            }
+          });
+        }
       }
 
-      // Delete all tools associated with this catalog id
-      // This ensures tools are rediscovered with updated configuration during reinstall
-      await ToolModel.deleteByCatalogId(id);
+      // Note: Tools are NOT deleted - they are synced during reinstall to preserve
+      // policies and profile assignments
 
       return reply.send(catalogItem);
     },

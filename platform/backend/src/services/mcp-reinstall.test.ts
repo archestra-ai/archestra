@@ -674,8 +674,9 @@ describe("mcp-reinstall", () => {
 
       await autoReinstallServer(server, catalog);
 
-      // Verify reinstall flag was cleared
+      // Verify server name and reinstall flag were updated
       expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        name: catalog.name,
         reinstallRequired: false,
       });
     });
@@ -725,8 +726,9 @@ describe("mcp-reinstall", () => {
         }),
       ]);
 
-      // Verify reinstall flag was cleared
+      // Verify server name and reinstall flag were updated
       expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
+        name: catalog.name,
         reinstallRequired: false,
       });
     });

@@ -55,32 +55,62 @@ archestra:
       maxUnavailable: 0
       maxSurge: 1
 
+  # Minimum number of seconds a newly created pod should be ready before considering it available
+  # This prevents traffic from switching to new pods too quickly and ensures stability
+  # Recommended: 10-30 seconds for production workloads
+  minReadySeconds: 10
+
+  # Time in seconds given to pods to terminate gracefully after receiving SIGTERM
+  # The pod continues serving in-flight requests during this period
+  # Should be longer than your longest expected request + preStop delay
+  # See: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination
+  terminationGracePeriodSeconds: 60
+
+  # Lifecycle hooks for graceful shutdown
+  # preStop hook runs before SIGTERM is sent, allowing time for load balancer to drain traffic
+  lifecycle:
+    preStop:
+      # Sleep for 15 seconds before SIGTERM to allow load balancer to stop routing traffic
+      # This is critical for zero-downtime deployments with GKE/AWS load balancers
+      exec:
+        command: ["sleep", "15"]
+
   # Blue-Green deployment strategy
   # When enabled, two separate Deployments are created (blue and green slots).
   # The Service routes traffic only to the active slot, preventing chunk loading
   # errors during deployments caused by mixed-version pods serving different
   # Next.js static asset hashes.
   #
-  # Deployment workflow:
-  #   1. Deploy new version to inactive slot:
+  # IMPORTANT: Zero-downtime requires following this workflow exactly!
+  # The key is to NEVER change 'active' slot until new pods are ready.
+  #
+  # Deployment workflow (switching from blue to green):
+  #   1. Deploy new version to INACTIVE slot (don't change 'active' yet):
   #      helm upgrade archestra ./helm/archestra \
   #        --set archestra.blueGreen.green.enabled=true \
-  #        --set archestra.blueGreen.green.imageTag=1.0.34
+  #        --set archestra.blueGreen.green.imageTag=1.0.35
   #
   #   2. Wait for new pods to be ready:
   #      kubectl rollout status deployment/archestra-platform-green
   #
-  #   3. Switch traffic to the new slot:
+  #   3. Switch traffic to the new slot (only after pods are ready):
   #      helm upgrade archestra ./helm/archestra \
   #        --set archestra.blueGreen.active=green
   #
-  #   4. Scale down old slot:
+  #   4. (Optional) Scale down old slot after verifying new version works:
   #      helm upgrade archestra ./helm/archestra \
   #        --set archestra.blueGreen.blue.enabled=false
   #
   #   Rollback: To rollback, switch traffic back to the previous slot:
   #      helm upgrade archestra ./helm/archestra \
   #        --set archestra.blueGreen.active=blue
+  #
+  # MIGRATION from standard mode (blueGreen.enabled=false):
+  #   When first enabling blue-green mode, there will be brief downtime as the
+  #   standard deployment is replaced. To minimize this:
+  #   1. Enable blue-green during a maintenance window
+  #   2. Or use a temporary redirect/maintenance page
+  #   Future deployments will be zero-downtime if following the workflow above.
   #
   # Note: Database migrations need to be handled carefully with blue-green
   # deployments as both versions may briefly connect to the same database.

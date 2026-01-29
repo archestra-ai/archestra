@@ -51,7 +51,7 @@ tests:
           of: Deployment
       - matchRegex:
           path: metadata.name
-          pattern: -archestra-platform-blue$
+          pattern: -archestra-platform$
       - equal:
           path: spec.replicas
           value: 1

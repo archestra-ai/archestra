@@ -7,40 +7,6 @@
 {{- if and $minAvailableSet $maxUnavailableSet }}
 {{- fail "PodDisruptionBudget cannot have both minAvailable and maxUnavailable set. Only one can be specified." }}
 {{- end }}
-{{- if .Values.archestra.blueGreen.enabled }}
-{{/*
-In blue-green mode, create a PDB for each enabled slot.
-This ensures disruption budgets are properly applied to each deployment.
-*/}}
-{{- range $slot := list "blue" "green" }}
-{{- $slotConfig := index $.Values.archestra.blueGreen $slot }}
-{{- if $slotConfig.enabled }}
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: {{ include "archestra-platform.fullname" $ }}-{{ $slot }}
-  namespace: {{ $.Release.Namespace }}
-  labels:
-    {{- include "archestra-platform.labels" $ | nindent 4 }}
-    archestra.io/slot: {{ $slot }}
-spec:
-  {{- if $minAvailableSet }}
-  minAvailable: {{ $.Values.archestra.podDisruptionBudget.minAvailable }}
-  {{- end }}
-  {{- if $maxUnavailableSet }}
-  maxUnavailable: {{ $.Values.archestra.podDisruptionBudget.maxUnavailable }}
-  {{- end }}
-  {{- if $.Values.archestra.podDisruptionBudget.unhealthyPodEvictionPolicy }}
-  unhealthyPodEvictionPolicy: {{ $.Values.archestra.podDisruptionBudget.unhealthyPodEvictionPolicy }}
-  {{- end }}
-  selector:
-    matchLabels:
-      {{- include "archestra-platform.selectorLabels" $ | nindent 6 }}
-      archestra.io/slot: {{ $slot }}
-{{- end }}
-{{- end }}
-{{- else }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -61,5 +27,4 @@ spec:
   selector:
     matchLabels:
       {{- include "archestra-platform.selectorLabels" . | nindent 6 }}
-{{- end }}
 {{- end }}

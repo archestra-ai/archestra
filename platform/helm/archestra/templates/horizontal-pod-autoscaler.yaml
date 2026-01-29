@@ -1,42 +1,4 @@
 {{- if .Values.archestra.horizontalPodAutoscaler.enabled }}
-{{- if .Values.archestra.blueGreen.enabled }}
-{{/*
-In blue-green mode, create an HPA for each enabled slot.
-Only the active slot will receive traffic, but both may need scaling.
-Per-slot HPA configuration allows inactive slots to use fewer resources.
-*/}}
-{{- range $slot := list "blue" "green" }}
-{{- $slotConfig := index $.Values.archestra.blueGreen $slot }}
-{{- if $slotConfig.enabled }}
-{{- $slotMinReplicas := $slotConfig.hpa.minReplicas | default $.Values.archestra.horizontalPodAutoscaler.minReplicas }}
-{{- $slotMaxReplicas := $slotConfig.hpa.maxReplicas | default $.Values.archestra.horizontalPodAutoscaler.maxReplicas }}
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: {{ include "archestra-platform.fullname" $ }}-{{ $slot }}
-  namespace: {{ $.Release.Namespace }}
-  labels:
-    {{- include "archestra-platform.labels" $ | nindent 4 }}
-    archestra.io/slot: {{ $slot }}
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: {{ include "archestra-platform.fullname" $ }}-{{ $slot }}
-  minReplicas: {{ $slotMinReplicas }}
-  maxReplicas: {{ $slotMaxReplicas }}
-  {{- with $.Values.archestra.horizontalPodAutoscaler.metrics }}
-  metrics:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with $.Values.archestra.horizontalPodAutoscaler.behavior }}
-  behavior:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-{{- end }}
-{{- end }}
-{{- else }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -59,5 +21,4 @@ spec:
   behavior:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-{{- end }}
 {{- end }}

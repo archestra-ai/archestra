@@ -22,7 +22,7 @@ tests:
           value: autoscaling/v2
       - matchRegex:
           path: metadata.name
-          pattern: -archestra-platform-blue$
+          pattern: -archestra-platform$
 
   - it: should have common labels
     set:
@@ -53,7 +53,7 @@ tests:
           value: Deployment
       - equal:
           path: spec.scaleTargetRef.name
-          value: "test-release-archestra-platform-blue"
+          value: "test-release-archestra-platform"
 
   - it: should configure default replica counts
     set:

@@ -39,7 +39,7 @@ tests:
           value: policy/v1
       - matchRegex:
           path: metadata.name
-          pattern: -archestra-platform-blue$
+          pattern: -archestra-platform$
 
   - it: should have common labels
     set:

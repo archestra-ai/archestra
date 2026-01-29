@@ -182,55 +182,6 @@ ServiceAccount name for the Archestra Platform
 {{- end }}
 
 {{/*
-Resolve the image tag for a blue-green slot.
-Returns the slot-specific imageTag if set, otherwise falls back to archestra.imageTag.
-Usage: {{ include "archestra-platform.blueGreen.imageTag" (dict "root" . "slot" "blue") }}
-*/}}
-{{- define "archestra-platform.blueGreen.imageTag" -}}
-{{- $root := .root -}}
-{{- $slot := .slot -}}
-{{- $slotConfig := index $root.Values.archestra.blueGreen $slot -}}
-{{- if $slotConfig.imageTag -}}
-{{- $slotConfig.imageTag -}}
-{{- else -}}
-{{- $root.Values.archestra.imageTag -}}
-{{- end -}}
-{{- end }}
-
-{{/*
-Resolve the image reference for a blue-green slot.
-Constructs the full image:tag string using the slot's imageTag.
-Usage: {{ include "archestra-platform.blueGreen.image" (dict "root" . "slot" "blue") }}
-*/}}
-{{- define "archestra-platform.blueGreen.image" -}}
-{{- $root := .root -}}
-{{- $image := $root.Values.archestra.image -}}
-{{- $imageTag := include "archestra-platform.blueGreen.imageTag" . -}}
-{{- $afterLastSlash := regexReplaceAll ".*/" $image "" -}}
-{{- if contains ":" $afterLastSlash -}}
-{{- $image -}}
-{{- else -}}
-{{- printf "%s:%s" $image $imageTag -}}
-{{- end -}}
-{{- end }}
-
-{{/*
-Resolve the replica count for a blue-green slot.
-Returns the slot-specific replicaCount if set, otherwise falls back to archestra.replicaCount.
-Usage: {{ include "archestra-platform.blueGreen.replicaCount" (dict "root" . "slot" "blue") }}
-*/}}
-{{- define "archestra-platform.blueGreen.replicaCount" -}}
-{{- $root := .root -}}
-{{- $slot := .slot -}}
-{{- $slotConfig := index $root.Values.archestra.blueGreen $slot -}}
-{{- if $slotConfig.replicaCount -}}
-{{- $slotConfig.replicaCount -}}
-{{- else -}}
-{{- $root.Values.archestra.replicaCount -}}
-{{- end -}}
-{{- end }}
-
-{{/*
 Full container image reference for the Archestra Platform.
 This helper constructs the image reference smartly:
 - If archestra.image already contains a tag (colon after the last slash), use it as-is

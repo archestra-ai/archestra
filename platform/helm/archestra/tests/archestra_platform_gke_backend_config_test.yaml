@@ -53,7 +53,7 @@ tests:
     asserts:
       - equal:
           path: metadata.name
-          value: "my-release-archestra-platform-blue-backend-config"
+          value: "my-release-archestra-platform-backend-config"
 
   - it: should configure backend health check with default values
     set:

@@ -17,8 +17,9 @@ function createK8sClient() {
 }
 
 /**
- * Sets a Monaco editor's value using clipboard paste to bypass auto-pairing behavior.
+ * Sets a Monaco editor's value using keyboard.insertText to bypass auto-pairing behavior.
  * Monaco auto-pairs brackets and quotes which makes character-by-character typing unreliable.
+ * Using insertText() inserts the text as if it came from a paste operation, avoiding auto-pairing.
  */
 async function setMonacoEditorValue(
   page: PlaywrightPage,
@@ -29,10 +30,9 @@ async function setMonacoEditorValue(
   // Select all and delete existing content
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Backspace");
-  // Use clipboard paste to set the value (bypasses Monaco auto-pairing)
-  await page.evaluate((text) => navigator.clipboard.writeText(text), value);
-  await page.keyboard.press("ControlOrMeta+v");
-  // Wait for Monaco to process the paste
+  // Use insertText to set the value (bypasses Monaco auto-pairing like a paste would)
+  await page.keyboard.insertText(value);
+  // Wait for Monaco to process the input
   await page.waitForTimeout(500);
 }
 

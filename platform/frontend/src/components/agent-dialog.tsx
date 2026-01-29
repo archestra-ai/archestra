@@ -714,6 +714,24 @@ export function AgentDialog({
               />
             </div>
 
+            {/* Description (Agent only) */}
+            {isInternalAgent && (
+              <div className="space-y-2">
+                <Label htmlFor="agentDescription">Description</Label>
+                <p className="text-sm text-muted-foreground">
+                  A brief summary of what this agent does. Helps other agents
+                  quickly understand if this agent is relevant for their task.
+                </p>
+                <Textarea
+                  id="agentDescription"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe what this agent does"
+                  className="min-h-[60px]"
+                />
+              </div>
+            )}
+
             {/* Tools (MCP Gateway and Agent only) */}
             {showToolsAndSubagents && (
               <div className="space-y-2">
@@ -834,24 +852,6 @@ export function AgentDialog({
                   onChange={(e) => setUserPrompt(e.target.value)}
                   placeholder="Enter user prompt (shown to user, sent to LLM)"
                   className="min-h-[150px] font-mono"
-                />
-              </div>
-            )}
-
-            {/* Description (Agent only) */}
-            {isInternalAgent && (
-              <div className="space-y-2">
-                <Label htmlFor="agentDescription">Description</Label>
-                <p className="text-sm text-muted-foreground">
-                  A brief summary of what this agent does. Helps other agents
-                  quickly understand if this agent is relevant for their task.
-                </p>
-                <Textarea
-                  id="agentDescription"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe what this agent does"
-                  className="min-h-[60px]"
                 />
               </div>
             )}

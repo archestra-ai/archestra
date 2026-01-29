@@ -1,7 +1,85 @@
-import { isValidK8sCpuQuantity, isValidK8sMemoryQuantity } from "@shared";
+import {
+  isValidJsonKeyValueString,
+  isValidK8sCpuQuantity,
+  isValidK8sMemoryQuantity,
+} from "@shared";
 import { describe, expect, test } from "@/test";
 
-describe("K8s Resource Quantity Validation", () => {
+describe("MCP Orchestrator Validation", () => {
+  describe("isValidJsonKeyValueString", () => {
+    describe("valid JSON key-value strings", () => {
+      test.each([
+        // Empty values (valid)
+        [undefined, "undefined"],
+        ["", "empty string"],
+        ["  ", "whitespace only"],
+        ["\n\t", "newlines and tabs"],
+
+        // Valid JSON objects with string values
+        ["{}", "empty object"],
+        ['{"key": "value"}', "single key-value"],
+        ['{"a": "1", "b": "2"}', "multiple key-values"],
+        ['{"environment": "test", "team": "backend"}', "realistic labels"],
+        ['{"prometheus.io/scrape": "true"}', "annotation-style keys"],
+        ['{"a.b/c-d": "value"}', "complex key format"],
+
+        // Whitespace in JSON
+        ['{ "key" : "value" }', "spaces around tokens"],
+        ['{\n  "key": "value"\n}', "multiline JSON"],
+      ])("should accept %s (%s)", (value, _description) => {
+        expect(isValidJsonKeyValueString(value)).toBe(true);
+      });
+    });
+
+    describe("invalid JSON key-value strings", () => {
+      test.each([
+        // Invalid JSON syntax
+        ["{key: value}", "missing quotes"],
+        ['{"key": "value"', "unclosed brace"],
+        ['{"key": "value",}', "trailing comma"],
+        ["not json at all", "plain text"],
+        ["123", "number as string"],
+        ["true", "boolean as string"],
+        ['"just a string"', "JSON string value"],
+
+        // Valid JSON but wrong structure
+        ["[]", "array instead of object"],
+        ['["a", "b"]', "array of strings"],
+        ["null", "null value"],
+
+        // Valid JSON object but non-string values
+        ['{"key": 123}', "number value"],
+        ['{"key": true}', "boolean value"],
+        ['{"key": null}', "null value in object"],
+        ['{"key": ["a"]}', "array value"],
+        ['{"key": {"nested": "obj"}}', "nested object value"],
+        ['{"a": "valid", "b": 123}', "mixed string and number values"],
+      ])("should reject %s (%s)", (value, _description) => {
+        expect(isValidJsonKeyValueString(value)).toBe(false);
+      });
+    });
+
+    describe("edge cases", () => {
+      test("should handle special characters in values", () => {
+        expect(isValidJsonKeyValueString('{"key": "value with spaces"}')).toBe(
+          true,
+        );
+        expect(
+          isValidJsonKeyValueString('{"key": "value\\nwith\\nnewlines"}'),
+        ).toBe(true);
+        expect(
+          isValidJsonKeyValueString('{"key": "value\\"with\\"quotes"}'),
+        ).toBe(true);
+        expect(isValidJsonKeyValueString('{"key": ""}')).toBe(true); // empty string value
+      });
+
+      test("should handle unicode", () => {
+        expect(isValidJsonKeyValueString('{"emoji": "🚀"}')).toBe(true);
+        expect(isValidJsonKeyValueString('{"日本語": "value"}')).toBe(true);
+      });
+    });
+  });
+
   describe("isValidK8sMemoryQuantity", () => {
     describe("valid memory quantities", () => {
       test.each([

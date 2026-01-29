@@ -168,7 +168,7 @@ export default class K8sDeployment {
   private k8sAppsApi: k8s.AppsV1Api;
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
-  private namespace: string;
+  private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
   private state: K8sDeploymentState = "not_created";
   private errorMessage: string | null = null;
@@ -197,11 +197,22 @@ export default class K8sDeployment {
     this.k8sAppsApi = k8sAppsApi;
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
-    this.namespace = namespace;
+    this.defaultNamespace = namespace;
     this.catalogItem = catalogItem;
     this.userConfigValues = userConfigValues;
     this.environmentValues = environmentValues;
     this.deploymentName = K8sDeployment.constructDeploymentName(mcpServer);
+  }
+
+  /**
+   * Returns the effective namespace for this deployment.
+   * Uses the namespace from advancedK8sConfig if specified, otherwise falls back to the default.
+   */
+  private get namespace(): string {
+    return (
+      this.catalogItem?.localConfig?.advancedK8sConfig?.namespace ||
+      this.defaultNamespace
+    );
   }
 
   /**
@@ -271,14 +282,22 @@ export default class K8sDeployment {
   }
 
   /**
-   * Get catalog item for this MCP server
+   * Get catalog item for this MCP server.
+   * Caches the result in this.catalogItem for subsequent calls.
    */
   private async getCatalogItem(): Promise<InternalMcpCatalog | null> {
+    if (this.catalogItem) {
+      return this.catalogItem;
+    }
+
     if (!this.mcpServer.catalogId) {
       return null;
     }
 
-    return await InternalMcpCatalogModel.findById(this.mcpServer.catalogId);
+    this.catalogItem = await InternalMcpCatalogModel.findById(
+      this.mcpServer.catalogId,
+    );
+    return this.catalogItem;
   }
 
   /**

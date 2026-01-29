@@ -535,7 +535,7 @@ export function McpCatalogForm({
                             />
                           </FormControl>
                           <FormDescription>
-                            Override k8s namespace
+                            Override K8s namespace
                           </FormDescription>
                           <FormMessage />
                         </FormItem>

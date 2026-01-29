@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  isValidJsonKeyValueString,
+  isValidK8sCpuQuantity,
+  isValidK8sMemoryQuantity,
+} from "./mcp-orchestrator";
 import { SUPPORTED_THEMES } from "./themes/theme-config";
 
 export const OAuthConfigSchema = z.object({
@@ -96,66 +101,15 @@ export const LocalConfigSchema = z
   );
 
 /**
- * Validates that a string is valid JSON containing only string key-value pairs.
- * Empty strings are allowed (treated as no value).
+ * Zod schema that validates JSON key-value strings.
+ * Uses the shared isValidJsonKeyValueString function.
  */
 const jsonKeyValueStringSchema = z
   .string()
   .optional()
-  .refine(
-    (val) => {
-      if (!val || !val.trim()) return true; // Empty is valid
-      try {
-        const parsed = JSON.parse(val);
-        if (
-          typeof parsed !== "object" ||
-          parsed === null ||
-          Array.isArray(parsed)
-        ) {
-          return false;
-        }
-        // Check all values are strings
-        return Object.values(parsed).every((v) => typeof v === "string");
-      } catch {
-        return false;
-      }
-    },
-    {
-      message: 'Must be valid JSON with string values, e.g. { "key": "value" }',
-    },
-  );
-
-/**
- * Validates a Kubernetes memory resource quantity string.
- * Valid formats: "128Mi", "1Gi", "256M", "1G", "1024Ki", "1024", etc.
- * Supports decimal and binary suffixes as per K8s spec.
- *
- * @param value - The memory quantity string to validate
- * @returns true if valid, false otherwise
- */
-export function isValidK8sMemoryQuantity(value: string): boolean {
-  if (!value || !value.trim()) return false;
-  // K8s memory format: number followed by optional suffix
-  // Binary suffixes: Ki, Mi, Gi, Ti, Pi, Ei
-  // Decimal suffixes: k, M, G, T, P, E (or K for kilo)
-  // Or just a number (bytes)
-  const memoryRegex = /^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|k|K|M|G|T|P|E)?$/;
-  return memoryRegex.test(value.trim());
-}
-
-/**
- * Validates a Kubernetes CPU resource quantity string.
- * Valid formats: "100m" (millicores), "0.5", "1", "1.5", "2000m", etc.
- *
- * @param value - The CPU quantity string to validate
- * @returns true if valid, false otherwise
- */
-export function isValidK8sCpuQuantity(value: string): boolean {
-  if (!value || !value.trim()) return false;
-  // K8s CPU format: decimal number or integer followed by optional 'm' for millicores
-  const cpuRegex = /^[0-9]+(\.[0-9]+)?m?$/;
-  return cpuRegex.test(value.trim());
-}
+  .refine((val) => isValidJsonKeyValueString(val), {
+    message: 'Must be valid JSON with string values, e.g. { "key": "value" }',
+  });
 
 const k8sMemoryQuantitySchema = z
   .string()
@@ -174,7 +128,7 @@ const k8sCpuQuantitySchema = z
 // Form version of advanced K8s config for UI (using strings that get parsed)
 export const AdvancedK8sConfigFormSchema = z.object({
   replicas: z.string().optional(), // UI uses string, gets parsed to number
-  namespace: z.string().optional(),
+  namespace: z.string().optional(), // Custom namespace override
   annotations: jsonKeyValueStringSchema, // UI uses JSON string, gets parsed to object
   labels: jsonKeyValueStringSchema, // UI uses JSON string, gets parsed to object
   resourceRequestsMemory: k8sMemoryQuantitySchema,

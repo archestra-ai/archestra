@@ -1,3 +1,4 @@
+import { expect } from "@playwright/test";
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { goToPage, type Page, test } from "../../fixtures";
 import { clickButton } from "../../utils";
@@ -215,6 +216,22 @@ test.describe("MCP Install", () => {
   }) => {
     const CATALOG_ITEM_NAME = "e2e__advanced_k8s_test";
 
+    // Test values for advanced K8s config
+    const testConfig = {
+      replicas: 2,
+      serviceAccount: "default",
+      resourceRequestsMemory: "256Mi",
+      resourceRequestsCpu: "100m",
+      resourceLimitsMemory: "512Mi",
+      resourceLimitsCpu: "500m",
+      labels: { environment: "e2e-test", "test-label": "test-value" },
+      annotations: {
+        "app.kubernetes.io/managed-by": "archestra-e2e",
+        "test-annotation": "annotation-value",
+      },
+    };
+
+    // Cleanup any existing catalog item and MCP server
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
 
     await goToPage(adminPage, "/mcp-catalog/registry");
@@ -224,9 +241,11 @@ test.describe("MCP Install", () => {
     await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
     await adminPage.waitForLoadState("networkidle");
 
-    // Click "Local (orchestrated by Archestra)" button
+    // Click "Self-hosted (orchestrated by Archestra in K8s)" button
     await adminPage
-      .getByRole("button", { name: "Local (orchestrated by Archestra)" })
+      .getByRole("button", {
+        name: "Self-hosted (orchestrated by Archestra in K8s)",
+      })
       .click();
 
     // Fill basic fields
@@ -235,11 +254,11 @@ test.describe("MCP Install", () => {
       .fill(CATALOG_ITEM_NAME);
     await adminPage
       .getByRole("textbox", { name: "Docker Image" })
-      .fill("test-image:latest");
-    await adminPage.getByRole("textbox", { name: "Command" }).fill("node");
+      .fill("alpine:latest");
+    await adminPage.getByRole("textbox", { name: "Command" }).fill("sleep");
     await adminPage
       .getByRole("textbox", { name: "Arguments (one per line)" })
-      .fill("server.js");
+      .fill("infinity");
 
     // Expand Advanced Configuration section
     const advancedConfigButton = adminPage.getByRole("button", {
@@ -247,27 +266,40 @@ test.describe("MCP Install", () => {
     });
     await advancedConfigButton.click();
 
-    // Fill advanced K8s configuration fields
+    // Fill ALL advanced K8s configuration fields
+    // 1. Replicas (spinbutton because it's a number input)
     await adminPage
-      .getByRole("textbox", { name: "Replicas", exact: false })
-      .fill("2");
+      .getByRole("spinbutton", { name: "Replicas" })
+      .fill(String(testConfig.replicas));
+
+    // 2. Service Account
     await adminPage
-      .getByRole("textbox", { name: "Namespace" })
-      .fill("custom-namespace");
+      .getByRole("textbox", { name: "Service Account" })
+      .fill(testConfig.serviceAccount);
+
+    // 3. Resource Requests (Memory and CPU)
     await adminPage
-      .getByRole("textbox", { name: "Memory Request" })
-      .fill("256Mi");
-    await adminPage.getByRole("textbox", { name: "CPU Request" }).fill("100m");
+      .getByPlaceholder("128Mi")
+      .fill(testConfig.resourceRequestsMemory);
     await adminPage
-      .getByRole("textbox", { name: "Memory Limit" })
-      .fill("512Mi");
-    await adminPage.getByRole("textbox", { name: "CPU Limit" }).fill("500m");
+      .getByPlaceholder("50m")
+      .fill(testConfig.resourceRequestsCpu);
+
+    // 4. Resource Limits (Memory and CPU)
     await adminPage
-      .getByRole("textbox", { name: "Labels (JSON)" })
-      .fill('{"environment": "test"}');
-    await adminPage
-      .getByRole("textbox", { name: "Annotations (JSON)" })
-      .fill('{"app.kubernetes.io/managed-by": "archestra"}');
+      .getByPlaceholder("256Mi")
+      .fill(testConfig.resourceLimitsMemory);
+    await adminPage.getByPlaceholder("500m").fill(testConfig.resourceLimitsCpu);
+
+    // 5. Custom Labels (JSON editor) - Monaco requires click to focus then keyboard input
+    const labelsEditorContainer = adminPage.locator(".monaco-editor").first();
+    await labelsEditorContainer.click();
+    await adminPage.keyboard.type(JSON.stringify(testConfig.labels));
+
+    // 6. Custom Annotations (JSON editor)
+    const annotationsEditorContainer = adminPage.locator(".monaco-editor").last();
+    await annotationsEditorContainer.click();
+    await adminPage.keyboard.type(JSON.stringify(testConfig.annotations));
 
     // Add catalog item to the registry
     await clickButton({ page: adminPage, options: { name: "Add Server" } });
@@ -279,16 +311,21 @@ test.describe("MCP Install", () => {
       .filter({ hasText: /Install -/ })
       .waitFor({ state: "visible", timeout: 30000 });
 
-    // Close the install dialog without installing (just verifying catalog item was created)
-    await adminPage.keyboard.press("Escape");
+    // Install the server (click Install button)
+    await clickButton({ page: adminPage, options: { name: "Install" } });
     await adminPage.waitForLoadState("networkidle");
 
-    // Open the catalog item for editing to verify advanced K8s config was saved
+    // Wait for the server card to appear
     const serverCard = adminPage.getByTestId(
       `${E2eTestId.McpServerCard}-${CATALOG_ITEM_NAME}`,
     );
     await serverCard.waitFor({ state: "visible", timeout: 30000 });
-    await serverCard.getByRole("button", { name: "Edit Server" }).click();
+
+    // Re-open the catalog item edit dialog to verify advanced K8s config was persisted
+    // First, click the menu button (three-dots icon) on the server card
+    await serverCard.locator("button").first().click();
+    // Then click "Edit" in the dropdown menu
+    await adminPage.getByRole("menuitem", { name: "Edit" }).click();
     await adminPage.waitForLoadState("networkidle");
 
     // Expand Advanced Configuration section
@@ -297,19 +334,51 @@ test.describe("MCP Install", () => {
     });
     await editAdvancedConfigButton.click();
 
-    // Verify the advanced K8s configuration values were saved
-    await adminPage
-      .getByRole("textbox", { name: "Replicas", exact: false })
-      .waitFor({ state: "visible" });
-
-    // Verify replicas value
-    const replicasInput = adminPage.getByRole("textbox", {
+    // Verify replicas value was saved
+    const replicasInput = adminPage.getByRole("spinbutton", {
       name: "Replicas",
-      exact: false,
     });
-    await replicasInput.waitFor({ state: "visible" });
+    await expect(replicasInput).toHaveValue(String(testConfig.replicas));
 
-    // cleanup
+    // Verify service account value was saved
+    const serviceAccountInput = adminPage.getByRole("textbox", {
+      name: "Service Account",
+    });
+    await expect(serviceAccountInput).toHaveValue(testConfig.serviceAccount);
+
+    // Verify resource requests values were saved
+    await expect(adminPage.getByPlaceholder("128Mi")).toHaveValue(
+      testConfig.resourceRequestsMemory,
+    );
+    await expect(adminPage.getByPlaceholder("50m")).toHaveValue(
+      testConfig.resourceRequestsCpu,
+    );
+
+    // Verify resource limits values were saved
+    await expect(adminPage.getByPlaceholder("256Mi")).toHaveValue(
+      testConfig.resourceLimitsMemory,
+    );
+    await expect(adminPage.getByPlaceholder("500m")).toHaveValue(
+      testConfig.resourceLimitsCpu,
+    );
+
+    // Verify custom labels JSON was saved by checking the Monaco editor content
+    const labelsEditorContent = await adminPage
+      .locator(".monaco-editor")
+      .first()
+      .innerText();
+    expect(labelsEditorContent).toContain("environment");
+    expect(labelsEditorContent).toContain("e2e-test");
+
+    // Verify custom annotations JSON was saved
+    const annotationsEditorContent = await adminPage
+      .locator(".monaco-editor")
+      .last()
+      .innerText();
+    expect(annotationsEditorContent).toContain("app.kubernetes.io/managed-by");
+    expect(annotationsEditorContent).toContain("archestra-e2e");
+
+    // Cleanup
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
   });
 });

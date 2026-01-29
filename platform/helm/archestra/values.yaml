@@ -120,7 +120,7 @@ archestra:
   # as before with a single Deployment using the rolling update strategy.
   blueGreen:
     # Enable blue-green deployment mode
-    enabled: false
+    enabled: true
 
     # Which slot the Service routes traffic to (blue or green)
     active: blue

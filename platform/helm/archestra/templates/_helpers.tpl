@@ -200,31 +200,17 @@ Usage: {{ include "archestra-platform.blueGreen.imageTag" (dict "root" . "slot" 
 {{/*
 Resolve the image reference for a blue-green slot.
 Constructs the full image:tag string using the slot's imageTag.
-
-IMPORTANT: For blue-green deployments, the slot-specific imageTag takes precedence.
-If a slot has imageTag set, we strip any tag from archestra.image and use the slot's tag.
-This ensures that updating archestra.image doesn't accidentally update both slots.
-
 Usage: {{ include "archestra-platform.blueGreen.image" (dict "root" . "slot" "blue") }}
 */}}
 {{- define "archestra-platform.blueGreen.image" -}}
 {{- $root := .root -}}
-{{- $slot := .slot -}}
-{{- $slotConfig := index $root.Values.archestra.blueGreen $slot -}}
 {{- $image := $root.Values.archestra.image -}}
+{{- $imageTag := include "archestra-platform.blueGreen.imageTag" . -}}
 {{- $afterLastSlash := regexReplaceAll ".*/" $image "" -}}
-{{- $hasEmbeddedTag := contains ":" $afterLastSlash -}}
-{{- /* Get base image (strip tag if present) */ -}}
-{{- $baseImage := ternary (regexReplaceAll ":[^:]*$" $image "") $image $hasEmbeddedTag -}}
-{{- /* Determine which tag to use: slot-specific > archestra.imageTag > embedded tag */ -}}
-{{- if $slotConfig.imageTag -}}
-{{- printf "%s:%s" $baseImage $slotConfig.imageTag -}}
-{{- else if $root.Values.archestra.imageTag -}}
-{{- printf "%s:%s" $baseImage $root.Values.archestra.imageTag -}}
-{{- else if $hasEmbeddedTag -}}
+{{- if contains ":" $afterLastSlash -}}
 {{- $image -}}
 {{- else -}}
-{{- fail "No image tag specified: set archestra.imageTag or archestra.blueGreen.<slot>.imageTag" -}}
+{{- printf "%s:%s" $image $imageTag -}}
 {{- end -}}
 {{- end }}
 

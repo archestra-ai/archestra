@@ -1,10 +1,6 @@
 archestra:
   replicaCount: 4
 
-  # Enable blue-green deployments for zero-downtime releases
-  blueGreen:
-    enabled: true
-
   # Pod Disruption Budget: ensure at least 3 of 4 pods stay running during
   # voluntary disruptions (node upgrades, autoscaling, maintenance)
   podDisruptionBudget:

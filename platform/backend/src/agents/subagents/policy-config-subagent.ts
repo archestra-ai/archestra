@@ -88,6 +88,7 @@ Examples:
     promptVersion: 1,
     promptHistory: [],
     allowedChatops: [],
+    description: null,
     incomingEmailEnabled: false,
     incomingEmailSecurityMode: "private",
     incomingEmailAllowedDomain: null,

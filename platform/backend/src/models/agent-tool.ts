@@ -78,6 +78,7 @@ class AgentToolModel {
     Array<{
       id: string;
       name: string;
+      description: string | null;
       systemPrompt: string | null;
     }>
   > {
@@ -85,6 +86,7 @@ class AgentToolModel {
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
+        description: schema.agentsTable.description,
         systemPrompt: schema.agentsTable.systemPrompt,
       })
       .from(schema.agentToolsTable)

@@ -2834,15 +2834,18 @@ export async function getAgentTools(context: {
   );
 
   // Convert DB tools to MCP Tool format
-  return accessibleTools.map((t) => ({
-    name: t.tool.name,
-    title: t.targetAgent.name,
-    description:
-      t.tool.description ||
-      t.targetAgent.systemPrompt?.substring(0, 500) ||
-      `Call the "${t.targetAgent.name}" agent to perform tasks.`,
-    inputSchema: t.tool.parameters as Tool["inputSchema"],
-    annotations: {},
-    _meta: { targetAgentId: t.targetAgent.id },
-  }));
+  return accessibleTools.map((t) => {
+    const description = t.targetAgent.description
+      ? `Delegate task to agent: ${t.targetAgent.name}. ${t.targetAgent.description.substring(0, 400)}`
+      : `Delegate task to agent: ${t.targetAgent.name}`;
+
+    return {
+      name: t.tool.name,
+      title: t.targetAgent.name,
+      description,
+      inputSchema: t.tool.parameters as Tool["inputSchema"],
+      annotations: {},
+      _meta: { targetAgentId: t.targetAgent.id },
+    };
+  });
 }

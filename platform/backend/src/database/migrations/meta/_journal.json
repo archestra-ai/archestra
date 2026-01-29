@@ -918,6 +918,13 @@
       "when": 1769650613535,
       "tag": "0130_amazing_dracula",
       "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1769766000000,
+      "tag": "0131_fix_agent_tool_trailing_underscores",
+      "breakpoints": true
     }
   ]
 }

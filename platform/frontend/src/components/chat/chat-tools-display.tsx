@@ -2,6 +2,7 @@
 
 import {
   ARCHESTRA_MCP_SERVER_NAME,
+  isAgentTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { Loader2, Plus, X } from "lucide-react";
@@ -156,13 +157,15 @@ export function ChatToolsDisplay({
   // Create enabled tool IDs set for quick lookup
   const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
-  // Use only profile tools (agent tools are displayed separately in the header)
+  // Use only profile tools (agent tools are displayed separately in AgentToolsDisplay)
   type ToolItem = {
     id: string;
     name: string;
     description: string | null;
   };
-  const allTools: ToolItem[] = profileTools;
+  const allTools: ToolItem[] = profileTools.filter(
+    (tool) => !isAgentTool(tool.name),
+  );
 
   // Group ALL tools by MCP server name (don't filter by enabled status)
   const groupedTools: Record<string, ToolItem[]> = {};

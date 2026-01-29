@@ -581,6 +581,13 @@ The following environment variables can be used to configure Archestra Platform.
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
+- **`ARCHESTRA_DATABASE_URL_VAULT_REF`** - Read the database connection string from Vault instead of environment variables.
+
+  - Optional: Only used when `ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT`
+  - Format: `path:key` where `path` is the Vault secret path and `key` is the field containing the database URL
+  - KV v2 example: `secret/data/archestra/database:connection_string`
+  - KV v1 example: `secret/archestra/database:connection_string`
+
 ### LLM Provider Configuration
 
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.

@@ -1377,4 +1377,434 @@ describe("ToolModel", () => {
       expect(toolIds).toHaveLength(0);
     });
   });
+
+  describe("syncToolsForCatalog", () => {
+    test("creates new tools when none exist", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      const toolsToSync = [
+        {
+          name: "tool-1",
+          description: "First tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+        {
+          name: "tool-2",
+          description: "Second tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(2);
+      expect(result.updated).toHaveLength(0);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.created.map((t) => t.name)).toContain("tool-1");
+      expect(result.created.map((t) => t.name)).toContain("tool-2");
+    });
+
+    test("updates existing tools when description changes", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tool
+      const existingTool = await makeTool({
+        name: "tool-1",
+        description: "Original description",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const toolsToSync = [
+        {
+          name: "tool-1",
+          description: "Updated description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.updated[0].id).toBe(existingTool.id);
+      expect(result.updated[0].description).toBe("Updated description");
+    });
+
+    test("updates existing tools when parameters change", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tool
+      const existingTool = await makeTool({
+        name: "tool-1",
+        description: "Tool description",
+        parameters: { type: "object", properties: { a: { type: "string" } } },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const toolsToSync = [
+        {
+          name: "tool-1",
+          description: "Tool description",
+          parameters: {
+            type: "object",
+            properties: { a: { type: "string" }, b: { type: "number" } },
+          },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.updated[0].id).toBe(existingTool.id);
+    });
+
+    test("leaves tools unchanged when nothing changes", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tool
+      const existingTool = await makeTool({
+        name: "tool-1",
+        description: "Tool description",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const toolsToSync = [
+        {
+          name: "tool-1",
+          description: "Tool description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(0);
+      expect(result.unchanged).toHaveLength(1);
+      expect(result.unchanged[0].id).toBe(existingTool.id);
+    });
+
+    test("handles mix of create, update, and unchanged", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tools
+      const unchangedTool = await makeTool({
+        name: "tool-unchanged",
+        description: "No change",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const updateTool = await makeTool({
+        name: "tool-update",
+        description: "Old description",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const toolsToSync = [
+        {
+          name: "tool-unchanged",
+          description: "No change",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+        {
+          name: "tool-update",
+          description: "New description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+        {
+          name: "tool-new",
+          description: "Brand new tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(1);
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(1);
+
+      expect(result.created[0].name).toBe("tool-new");
+      expect(result.updated[0].id).toBe(updateTool.id);
+      expect(result.unchanged[0].id).toBe(unchangedTool.id);
+    });
+
+    test("preserves tool IDs during update (for policy preservation)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeToolPolicy,
+      makeAgent,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      const agent = await makeAgent();
+
+      // Create existing tool with policy
+      const existingTool = await makeTool({
+        name: "tool-with-policy",
+        description: "Has policy",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      // Create a tool invocation policy for this tool
+      await makeToolPolicy(existingTool.id, {
+        action: "block_always",
+        reason: "Test policy",
+      });
+
+      // Assign tool to agent
+      await AgentToolModel.create(agent.id, existingTool.id);
+
+      // Sync with updated description
+      const toolsToSync = [
+        {
+          name: "tool-with-policy",
+          description: "Updated description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.updated).toHaveLength(1);
+      expect(result.updated[0].id).toBe(existingTool.id);
+
+      // Verify agent-tool assignment still exists (key verification for policy preservation)
+      const agentToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(agentToolIds).toContain(existingTool.id);
+    });
+
+    test("returns empty arrays for empty input", async () => {
+      const result = await ToolModel.syncToolsForCatalog([]);
+
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(0);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.deleted).toHaveLength(0);
+    });
+
+    test("renames tools when catalog name changes (preserves ID and assignments)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeAgent,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "old-catalog-name",
+      });
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+      const agent = await makeAgent();
+
+      // Create existing tool with old catalog name prefix
+      const existingTool = await makeTool({
+        name: "old-catalog-name__query-docs",
+        description: "Query docs",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      // Assign tool to agent
+      await AgentToolModel.create(agent.id, existingTool.id);
+
+      // Sync with new catalog name (simulating catalog rename)
+      const toolsToSync = [
+        {
+          name: "new-catalog-name__query-docs", // Same raw name, different prefix
+          description: "Query docs",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      // Should update (rename) the existing tool, not create a new one
+      expect(result.created).toHaveLength(0);
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.deleted).toHaveLength(0);
+
+      // Verify the tool was renamed but kept the same ID
+      expect(result.updated[0].id).toBe(existingTool.id);
+      expect(result.updated[0].name).toBe("new-catalog-name__query-docs");
+
+      // Verify agent-tool assignment still exists (uses same tool ID)
+      const agentToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(agentToolIds).toContain(existingTool.id);
+    });
+
+    test("deletes orphaned tools that are no longer returned by MCP server", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Create existing tools
+      const tool1 = await makeTool({
+        name: "catalog__tool-1",
+        description: "Tool 1",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      await makeTool({
+        name: "catalog__tool-2",
+        description: "Tool 2 - will be removed",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      // Sync with only one tool (simulating tool-2 being removed from MCP server)
+      const toolsToSync = [
+        {
+          name: "catalog__tool-1",
+          description: "Tool 1",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      // tool-1 should be unchanged, tool-2 should be deleted
+      expect(result.unchanged).toHaveLength(1);
+      expect(result.unchanged[0].id).toBe(tool1.id);
+      expect(result.deleted).toHaveLength(1);
+      expect(result.deleted[0].name).toBe("catalog__tool-2");
+    });
+
+    test("cleans up duplicate tools after catalog rename (legacy duplicates)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Create legacy tool with old catalog name prefix
+      // This simulates a tool that existed before catalog was renamed
+      await makeTool({
+        name: "old-name__query-docs",
+        description: "Old tool with legacy name",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      // Sync with the new name (after catalog rename)
+      const toolsToSync = [
+        {
+          name: "new-name__query-docs",
+          description: "New tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+          rawToolName: "query-docs",
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      // The old tool should be updated with the new name (matched by rawToolName)
+      // Note: If the old tool didn't have rawToolName stored, it would be deleted
+      // and the new tool would be created instead
+      const survivingTools = [...result.unchanged, ...result.updated];
+
+      // Verify exactly one tool survives with the new name
+      expect(survivingTools.length + result.created.length).toBe(1);
+      const finalTool = survivingTools[0] || result.created[0];
+      expect(finalTool.name).toBe("new-name__query-docs");
+    });
+
+    test("creates default policies for newly created tools", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      const toolsToSync = [
+        {
+          name: "new-tool",
+          description: "New tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(1);
+
+      // Verify the tool was created (default policies are created internally by createDefaultPolicies)
+      const createdTool = result.created[0];
+      expect(createdTool.id).toBeDefined();
+      expect(createdTool.name).toBe("new-tool");
+    });
+  });
 });

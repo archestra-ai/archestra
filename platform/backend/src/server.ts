@@ -44,7 +44,7 @@ import {
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
-import { isDatabaseHealthy } from "@/database";
+import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import {
   cleanupKnowledgeGraphProvider,
@@ -556,6 +556,9 @@ const start = async () => {
   fastify.register(enterpriseLicenseMiddleware);
 
   try {
+    // Initialize database connection first
+    await initializeDatabase();
+
     await seedRequiredStartingData();
 
     // Sync system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)

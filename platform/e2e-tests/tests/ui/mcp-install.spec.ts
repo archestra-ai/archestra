@@ -1,4 +1,5 @@
 import * as k8s from "@kubernetes/client-node";
+import type { Locator, Page as PlaywrightPage } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { goToPage, type Page, test } from "../../fixtures";
@@ -13,6 +14,26 @@ function createK8sClient() {
     coreApi: kc.makeApiClient(k8s.CoreV1Api),
     namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
   };
+}
+
+/**
+ * Sets a Monaco editor's value using clipboard paste to bypass auto-pairing behavior.
+ * Monaco auto-pairs brackets and quotes which makes character-by-character typing unreliable.
+ */
+async function setMonacoEditorValue(
+  page: PlaywrightPage,
+  editor: Locator,
+  value: string,
+): Promise<void> {
+  await editor.click();
+  // Select all and delete existing content
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
+  // Use clipboard paste to set the value (bypasses Monaco auto-pairing)
+  await page.evaluate((text) => navigator.clipboard.writeText(text), value);
+  await page.keyboard.press("ControlOrMeta+v");
+  // Wait for Monaco to process the paste
+  await page.waitForTimeout(500);
 }
 
 /**
@@ -300,38 +321,21 @@ test.describe("MCP Install", () => {
       .fill(testConfig.resourceLimitsMemory);
     await adminPage.getByPlaceholder("500m").fill(testConfig.resourceLimitsCpu);
 
-    // 5. Custom Labels (JSON editor) - Click, select all, type with slow delay
-    // Note: Monaco editor auto-pairs brackets/quotes, so we need to handle that
+    // 5. Custom Labels (JSON editor)
     const labelsEditor = adminPage.locator(".monaco-editor").first();
-    await labelsEditor.click();
-    // Select all and delete first
-    await adminPage.keyboard.press("ControlOrMeta+a");
-    await adminPage.keyboard.press("Backspace");
-    // Type the JSON character by character to avoid auto-pairing issues
-    const labelsJson = JSON.stringify(testConfig.labels);
-    for (const char of labelsJson) {
-      await adminPage.keyboard.type(char, { delay: 5 });
-      // If we just typed an opening bracket/quote, Monaco auto-pairs it
-      // We need to delete the auto-paired closing character before continuing
-      if (char === "{" || char === "[" || char === '"') {
-        await adminPage.keyboard.press("Delete");
-      }
-    }
+    await setMonacoEditorValue(
+      adminPage,
+      labelsEditor,
+      JSON.stringify(testConfig.labels),
+    );
 
     // 6. Custom Annotations (JSON editor)
     const annotationsEditor = adminPage.locator(".monaco-editor").last();
-    await annotationsEditor.click();
-    // Select all and delete first
-    await adminPage.keyboard.press("ControlOrMeta+a");
-    await adminPage.keyboard.press("Backspace");
-    // Type the JSON character by character
-    const annotationsJson = JSON.stringify(testConfig.annotations);
-    for (const char of annotationsJson) {
-      await adminPage.keyboard.type(char, { delay: 5 });
-      if (char === "{" || char === "[" || char === '"') {
-        await adminPage.keyboard.press("Delete");
-      }
-    }
+    await setMonacoEditorValue(
+      adminPage,
+      annotationsEditor,
+      JSON.stringify(testConfig.annotations),
+    );
 
     // Add catalog item to the registry
     await clickButton({ page: adminPage, options: { name: "Add Server" } });
@@ -372,9 +376,9 @@ test.describe("MCP Install", () => {
       });
       k8sAccessible = true;
     } catch {
-      // K8s not accessible - skip K8s verification
-      console.log(
-        "K8s API not accessible, skipping deployment verification. This is expected in CI without orchestrator enabled.",
+      // K8s not accessible - fail the test since orchestrator should be enabled
+      throw new Error(
+        "K8s API not accessible. The orchestrator should be enabled in CI.",
       );
     }
 
@@ -398,8 +402,8 @@ test.describe("MCP Install", () => {
           });
 
           // Find deployment whose name contains our slugified catalog item name
-          const matchingDeployment = deployments.items.find((d) =>
-            d.metadata?.name?.includes(slugifiedName),
+          const matchingDeployment = deployments.items.find(
+            (d: k8s.V1Deployment) => d.metadata?.name?.includes(slugifiedName),
           );
 
           if (matchingDeployment?.spec) {
@@ -412,52 +416,54 @@ test.describe("MCP Install", () => {
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      // Assert deployment was found
+      // Assert deployment was found and extract verified properties
       expect(deployment).not.toBeNull();
-      expect(deployment!.metadata?.name).toContain(slugifiedName);
+      const deploymentSpec = deployment?.spec;
+      const deploymentMetadata = deployment?.metadata;
+      expect(deploymentSpec).toBeDefined();
+      expect(deploymentMetadata?.name).toContain(slugifiedName);
 
       // 1. Verify replicas
-      expect(deployment!.spec?.replicas).toBe(testConfig.replicas);
+      expect(deploymentSpec?.replicas).toBe(testConfig.replicas);
 
       // 2. Verify service account
-      expect(deployment!.spec?.template?.spec?.serviceAccountName).toBe(
-        testConfig.serviceAccount,
-      );
+      const podSpec = deploymentSpec?.template?.spec;
+      expect(podSpec?.serviceAccountName).toBe(testConfig.serviceAccount);
 
       // 3. Verify resource requests
-      const container = deployment!.spec?.template?.spec?.containers?.[0];
+      const container = podSpec?.containers?.[0];
       expect(container).toBeDefined();
-      expect(container!.resources?.requests?.memory).toBe(
+      expect(container?.resources?.requests?.memory).toBe(
         testConfig.resourceRequestsMemory,
       );
-      expect(container!.resources?.requests?.cpu).toBe(
+      expect(container?.resources?.requests?.cpu).toBe(
         testConfig.resourceRequestsCpu,
       );
 
       // 4. Verify resource limits
-      expect(container!.resources?.limits?.memory).toBe(
+      expect(container?.resources?.limits?.memory).toBe(
         testConfig.resourceLimitsMemory,
       );
-      expect(container!.resources?.limits?.cpu).toBe(
+      expect(container?.resources?.limits?.cpu).toBe(
         testConfig.resourceLimitsCpu,
       );
 
       // 5. Verify custom labels (merged with required labels)
-      const labels = deployment!.spec?.template?.metadata?.labels;
+      const labels = deploymentSpec?.template?.metadata?.labels;
       expect(labels).toBeDefined();
       // Custom labels should be present (sanitized to lowercase)
-      expect(labels!.environment).toBe("e2e-test");
-      expect(labels!["test-label"]).toBe("test-value");
+      expect(labels?.environment).toBe("e2e-test");
+      expect(labels?.["test-label"]).toBe("test-value");
       // Required labels should also be present
-      expect(labels!.app).toBe("mcp-server");
+      expect(labels?.app).toBe("mcp-server");
 
       // 6. Verify custom annotations
-      const annotations = deployment!.spec?.template?.metadata?.annotations;
+      const annotations = deploymentSpec?.template?.metadata?.annotations;
       expect(annotations).toBeDefined();
-      expect(annotations!["app.kubernetes.io/managed-by"]).toBe(
+      expect(annotations?.["app.kubernetes.io/managed-by"]).toBe(
         "archestra-e2e",
       );
-      expect(annotations!["test-annotation"]).toBe("annotation-value");
+      expect(annotations?.["test-annotation"]).toBe("annotation-value");
     }
 
     // Cleanup

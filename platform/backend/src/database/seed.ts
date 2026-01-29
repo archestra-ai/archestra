@@ -293,6 +293,36 @@ async function seedTeamTokens(): Promise<void> {
   }
 }
 
+/**
+ * Seeds the MCP UI Demo server
+ */
+async function seedUiDemoMcpServer(): Promise<void> {
+  const existing = await InternalMcpCatalogModel.findByName(
+    "mcp-ui-demo-server",
+  );
+  if (existing) {
+    logger.info("MCP UI Demo server already exists in catalog, skipping");
+    return;
+  }
+
+  // Use absolute path or relative to backend root
+  // We assume the server starts in platform/backend root
+  const scriptPath = "mcp-ui-demo-server.js";
+
+  await InternalMcpCatalogModel.create({
+    name: "mcp-ui-demo-server",
+    description: "Demo server for MCP UI capabilities (Charts, Status)",
+    serverType: "local",
+    localConfig: {
+      command: "node",
+      arguments: [scriptPath],
+      transportType: "stdio",
+      environment: [],
+    },
+  });
+  logger.info("Seeded MCP UI Demo server");
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();

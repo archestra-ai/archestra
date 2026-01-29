@@ -35,9 +35,9 @@ export function usePublicAppearance(enabled = true) {
       const { data, error } = await archestraApiSdk.getPublicAppearance();
 
       if (error || !data) {
-        // Return undefined on API failure so sync effects don't overwrite localStorage
+        // Return null on API failure so sync effects don't overwrite localStorage
         // This allows localStorage values to persist during temporary API outages
-        return undefined;
+        return null;
       }
 
       return data;

@@ -20,6 +20,7 @@ import {
   useMemo,
   useRef,
   useState,
+  Suspense,
 } from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
@@ -79,7 +80,7 @@ import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
-export default function ChatPage() {
+function ChatContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -982,16 +983,16 @@ export default function ChatPage() {
                   {(conversationId
                     ? conversation?.agentId
                     : initialAgentId) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openDialog("edit-agent")}
-                      title="Edit agent, tools, sub-agents"
-                      className="h-8 px-2"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDialog("edit-agent")}
+                        title="Edit agent, tools, sub-agents"
+                        className="h-8 px-2"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
                 </div>
               </div>
               {/* Right side - controls stay fixed in first row */}
@@ -1054,25 +1055,25 @@ export default function ChatPage() {
                 conversationId
                   ? undefined
                   : internalAgents.find((a) => a.id === initialAgentId)
-                      ?.userPrompt
+                    ?.userPrompt
               }
               onSuggestedPromptClick={
                 conversationId
                   ? undefined
                   : () => {
-                      const selectedAgent = internalAgents.find(
-                        (a) => a.id === initialAgentId,
-                      );
-                      const userPrompt = selectedAgent?.userPrompt;
-                      if (!userPrompt) return;
-                      const syntheticEvent = {
-                        preventDefault: () => {},
-                      } as React.FormEvent<HTMLFormElement>;
-                      handleInitialSubmit(
-                        { text: userPrompt, files: [] },
-                        syntheticEvent,
-                      );
-                    }
+                    const selectedAgent = internalAgents.find(
+                      (a) => a.id === initialAgentId,
+                    );
+                    const userPrompt = selectedAgent?.userPrompt;
+                    if (!userPrompt) return;
+                    const syntheticEvent = {
+                      preventDefault: () => { },
+                    } as React.FormEvent<HTMLFormElement>;
+                    handleInitialSubmit(
+                      { text: userPrompt, files: [] },
+                      syntheticEvent,
+                    );
+                  }
               }
               messages={messages}
               hideToolCalls={hideToolCalls}
@@ -1237,5 +1238,13 @@ export default function ChatPage() {
         agent={versionHistoryAgent}
       />
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <ChatContent />
+    </Suspense>
   );
 }

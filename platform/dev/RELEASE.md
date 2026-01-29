@@ -99,6 +99,18 @@ git cherry-pick <commit-sha>
 git push origin main
 ```
 
+### 5. Bump the version on `main` using the `release-as` directive:
+
+```bash
+git checkout main
+git pull origin main
+git commit -m "chore(release): bump version" -m "release-as: 1.0.24" --allow-empty
+git push origin main
+```
+(alternatively create PR with this empty commit and merge to `main`)
+
+Now the version of existing release-please PR for `main` will be bumped
+
 ## Quick Reference
 
 ### Release a New Version

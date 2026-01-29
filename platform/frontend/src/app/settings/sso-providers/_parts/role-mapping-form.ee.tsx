@@ -157,6 +157,15 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                 </Button>
               </div>
 
+              {rules.length > 1 && (
+                <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
+                  <span className="font-medium">Note:</span> Rules are evaluated
+                  in order from top to bottom. The first matching rule
+                  determines the user&apos;s role. Order your most specific
+                  rules first.
+                </p>
+              )}
+
               {rules.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No mapping rules configured. All users will be assigned the

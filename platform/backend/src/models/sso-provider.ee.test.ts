@@ -1094,6 +1094,144 @@ describe("evaluateRoleMapping", () => {
         matched: true,
       });
     });
+
+    test("evaluates second rule when first rule does not match", () => {
+      // Scenario: User in team-b should match second rule, not first (team-a)
+      const config: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "team-b"}}true{{/includes}}',
+            role: "editor",
+          },
+        ],
+        defaultRole: "member",
+      };
+
+      // User is only in team-b, should match the second rule
+      const result = SsoProviderModel.evaluateRoleMapping(config, {
+        token: { groups: ["team-b"] },
+        provider: mockProvider,
+      });
+
+      expect(result).toEqual({
+        role: "editor", // Second rule matched
+        matched: true,
+      });
+    });
+
+    test("evaluates third rule when first two rules do not match", () => {
+      const config: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "super-admins"}}true{{/includes}}',
+            role: "super_admin",
+          },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "editors"}}true{{/includes}}',
+            role: "editor",
+          },
+        ],
+        defaultRole: "member",
+      };
+
+      // User is only in editors group, should match the third rule
+      const result = SsoProviderModel.evaluateRoleMapping(config, {
+        token: { groups: ["editors", "viewers"] },
+        provider: mockProvider,
+      });
+
+      expect(result).toEqual({
+        role: "editor", // Third rule matched
+        matched: true,
+      });
+    });
+
+    test("falls back to default when no rules match", () => {
+      const config: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "team-b"}}true{{/includes}}',
+            role: "editor",
+          },
+        ],
+        defaultRole: "member",
+      };
+
+      // User is in team-c which doesn't match any rule
+      const result = SsoProviderModel.evaluateRoleMapping(config, {
+        token: { groups: ["team-c"] },
+        provider: mockProvider,
+      });
+
+      expect(result).toEqual({
+        role: "member", // Default role
+        matched: false,
+      });
+    });
+
+    test("all rules are evaluated - real world scenario with copied/modified rules", () => {
+      // Real-world scenario: Admin copies a working rule for team-a and modifies it for team-b
+      // Both rules should be independently evaluated
+      const config: SsoRoleMappingConfig = {
+        rules: [
+          {
+            // First rule: team-a gets admin
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            // Second rule: team-b gets editor (copied from first, modified)
+            expression: '{{#includes groups "team-b"}}true{{/includes}}',
+            role: "editor",
+          },
+        ],
+        defaultRole: "viewer",
+      };
+
+      // Test team-a user
+      const teamAResult = SsoProviderModel.evaluateRoleMapping(config, {
+        token: { groups: ["team-a"] },
+        provider: mockProvider,
+      });
+      expect(teamAResult.role).toBe("admin");
+      expect(teamAResult.matched).toBe(true);
+
+      // Test team-b user - this was the reported issue scenario
+      const teamBResult = SsoProviderModel.evaluateRoleMapping(config, {
+        token: { groups: ["team-b"] },
+        provider: mockProvider,
+      });
+      expect(teamBResult.role).toBe("editor");
+      expect(teamBResult.matched).toBe(true);
+
+      // Test user in neither team
+      const noTeamResult = SsoProviderModel.evaluateRoleMapping(config, {
+        token: { groups: ["team-c"] },
+        provider: mockProvider,
+      });
+      expect(noTeamResult.role).toBe("viewer");
+      expect(noTeamResult.matched).toBe(false);
+
+      // Test user in both teams - should match first rule (team-a)
+      const bothTeamsResult = SsoProviderModel.evaluateRoleMapping(config, {
+        token: { groups: ["team-a", "team-b"] },
+        provider: mockProvider,
+      });
+      expect(bothTeamsResult.role).toBe("admin"); // First match wins
+      expect(bothTeamsResult.matched).toBe(true);
+    });
   });
 
   describe("error handling", () => {
@@ -1827,6 +1965,322 @@ describe("resolveSsoRole", () => {
       const result = await SsoProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("admin");
+    });
+  });
+
+  describe("multiple rules evaluation (integration)", () => {
+    test("second rule matches when user is in team-b but not team-a", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      // This test explicitly verifies the scenario where:
+      // - Admin configured rule 1 for team-a users -> admin
+      // - Admin copied and modified rule 2 for team-b users -> editor
+      // - A user in team-b (but not team-a) should get editor role
+      const org = await makeOrganization();
+      const roleMapping: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "team-b"}}true{{/includes}}',
+            role: "editor",
+          },
+        ],
+        defaultRole: "member",
+      };
+      const provider = await makeSsoProvider(org.id, {
+        providerId: "TestOIDC",
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      // User is only in team-b, should match the second rule
+      const params = createParams({
+        user: { id: "user-1", email: "teamb-user@company.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["team-b", "general-users"] },
+      });
+
+      const result = await SsoProviderModel.resolveSsoRole(params);
+
+      expect(result).toBe("editor");
+    });
+
+    test("third rule matches when first two do not apply", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const roleMapping: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "super-admins"}}true{{/includes}}',
+            role: "super_admin",
+          },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "editors"}}true{{/includes}}',
+            role: "editor",
+          },
+        ],
+        defaultRole: "viewer",
+      };
+      const provider = await makeSsoProvider(org.id, {
+        providerId: "TestOIDC",
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      const params = createParams({
+        user: { id: "user-1", email: "editor-user@company.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["editors", "viewers"] },
+      });
+
+      const result = await SsoProviderModel.resolveSsoRole(params);
+
+      expect(result).toBe("editor");
+    });
+
+    test("all rules are evaluated independently for different users", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const roleMapping: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "team-b"}}true{{/includes}}',
+            role: "editor",
+          },
+          {
+            expression: '{{#includes groups "team-c"}}true{{/includes}}',
+            role: "viewer",
+          },
+        ],
+        defaultRole: "member",
+      };
+      const provider = await makeSsoProvider(org.id, {
+        providerId: "TestOIDC",
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      // Test team-a user gets admin
+      const teamAParams = createParams({
+        user: { id: "user-a", email: "team-a@company.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["team-a"] },
+      });
+      expect(await SsoProviderModel.resolveSsoRole(teamAParams)).toBe("admin");
+
+      // Test team-b user gets editor
+      const teamBParams = createParams({
+        user: { id: "user-b", email: "team-b@company.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["team-b"] },
+      });
+      expect(await SsoProviderModel.resolveSsoRole(teamBParams)).toBe("editor");
+
+      // Test team-c user gets viewer
+      const teamCParams = createParams({
+        user: { id: "user-c", email: "team-c@company.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["team-c"] },
+      });
+      expect(await SsoProviderModel.resolveSsoRole(teamCParams)).toBe("viewer");
+
+      // Test user with no matching team gets default
+      const noTeamParams = createParams({
+        user: { id: "user-d", email: "no-team@company.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["unrelated-group"] },
+      });
+      expect(await SsoProviderModel.resolveSsoRole(noTeamParams)).toBe(
+        "member",
+      );
+    });
+
+    test("first match wins when user is in multiple matching groups", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const roleMapping: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "team-b"}}true{{/includes}}',
+            role: "editor",
+          },
+        ],
+        defaultRole: "member",
+      };
+      const provider = await makeSsoProvider(org.id, {
+        providerId: "TestOIDC",
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      // User is in BOTH team-a and team-b, should get admin (first match wins)
+      const params = createParams({
+        user: { id: "user-1", email: "both-teams@company.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["team-b", "team-a"] }, // Note: team-b listed first in array
+      });
+
+      const result = await SsoProviderModel.resolveSsoRole(params);
+
+      // Rule order matters, not group array order - team-a rule is first
+      expect(result).toBe("admin");
+    });
+  });
+
+  describe("database round-trip for multiple rules", () => {
+    test("multiple rules survive create and read from database", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const roleMapping: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "team-b"}}true{{/includes}}',
+            role: "editor",
+          },
+          {
+            expression: '{{#includes groups "team-c"}}true{{/includes}}',
+            role: "viewer",
+          },
+        ],
+        defaultRole: "member",
+        strictMode: true,
+      };
+
+      // Create provider with multiple rules
+      const provider = await makeSsoProvider(org.id, {
+        providerId: "MultiRuleTest",
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      // Read it back from database
+      const retrieved = await SsoProviderModel.findByProviderId(
+        provider.providerId,
+      );
+
+      // Verify all rules are preserved
+      expect(retrieved?.roleMapping?.rules).toHaveLength(3);
+      expect(retrieved?.roleMapping?.rules?.[0]?.role).toBe("admin");
+      expect(retrieved?.roleMapping?.rules?.[1]?.role).toBe("editor");
+      expect(retrieved?.roleMapping?.rules?.[2]?.role).toBe("viewer");
+      expect(retrieved?.roleMapping?.defaultRole).toBe("member");
+      expect(retrieved?.roleMapping?.strictMode).toBe(true);
+    });
+
+    test("multiple rules survive update operation", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      // Create with one rule
+      const initialRoleMapping: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+        ],
+        defaultRole: "member",
+      };
+
+      const provider = await makeSsoProvider(org.id, {
+        providerId: "UpdateTest",
+        roleMapping: initialRoleMapping as unknown as Record<string, unknown>,
+      });
+
+      // Update with multiple rules (simulating user adding a second rule in UI)
+      const updatedRoleMapping: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "team-b"}}true{{/includes}}',
+            role: "editor",
+          },
+        ],
+        defaultRole: "member",
+      };
+
+      const updated = await SsoProviderModel.update(
+        provider.id,
+        {
+          roleMapping: updatedRoleMapping,
+        },
+        org.id,
+      );
+
+      // Verify update returned both rules
+      expect(updated?.roleMapping?.rules).toHaveLength(2);
+      expect(updated?.roleMapping?.rules?.[0]?.role).toBe("admin");
+      expect(updated?.roleMapping?.rules?.[1]?.role).toBe("editor");
+
+      // Also read from database to double-check persistence
+      const retrieved = await SsoProviderModel.findByProviderId(
+        provider.providerId,
+      );
+
+      expect(retrieved?.roleMapping?.rules).toHaveLength(2);
+      expect(retrieved?.roleMapping?.rules?.[0]?.role).toBe("admin");
+      expect(retrieved?.roleMapping?.rules?.[1]?.role).toBe("editor");
+    });
+
+    test("findAll returns multiple rules correctly", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const roleMapping: SsoRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "team-a"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "team-b"}}true{{/includes}}',
+            role: "editor",
+          },
+        ],
+        defaultRole: "member",
+      };
+
+      await makeSsoProvider(org.id, {
+        providerId: "FindAllTest",
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      // Use findAll which is used by the admin API
+      const allProviders = await SsoProviderModel.findAll(org.id);
+      const provider = allProviders.find((p) => p.providerId === "FindAllTest");
+
+      expect(provider?.roleMapping?.rules).toHaveLength(2);
+      expect(provider?.roleMapping?.rules?.[0]?.role).toBe("admin");
+      expect(provider?.roleMapping?.rules?.[1]?.role).toBe("editor");
     });
   });
 

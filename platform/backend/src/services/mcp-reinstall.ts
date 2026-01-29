@@ -142,8 +142,11 @@ export async function autoReinstallServer(
     "Auto-reinstall completed - tools synced",
   );
 
-  // Clear reinstall flag
-  await McpServerModel.update(server.id, { reinstallRequired: false });
+  // Update server name to match catalog name and clear reinstall flag
+  await McpServerModel.update(server.id, {
+    name: catalogItem.name,
+    reinstallRequired: false,
+  });
 }
 
 // ===== Internal helpers =====

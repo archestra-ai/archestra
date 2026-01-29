@@ -581,9 +581,7 @@ export async function getChatMcpTools({
     const { tools: mcpTools } = await client.listTools();
 
     // Filter out agent skills (tools starting with "agent__")
-    const filteredMcpTools = mcpTools.filter(
-      (tool) => !isAgentTool(tool.name),
-    );
+    const filteredMcpTools = mcpTools.filter((tool) => !isAgentTool(tool.name));
 
     logger.info(
       {

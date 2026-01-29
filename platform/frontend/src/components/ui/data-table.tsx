@@ -65,6 +65,10 @@ export function DataTable<TData, TValue>({
   getRowId,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
+  const [internalPagination, setInternalPagination] = useState({
+    pageIndex: 0,
+    pageSize: 10,
+  });
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
   // Use controlled sorting if provided, otherwise use internal state
@@ -111,16 +115,14 @@ export function DataTable<TData, TValue>({
       sorting,
       columnVisibility,
       rowSelection: rowSelection || {},
-      ...(pagination && {
-        pagination: {
-          pageIndex: pagination.pageIndex,
-          pageSize: pagination.pageSize,
-        },
-      }),
+      pagination: pagination
+        ? {
+            pageIndex: pagination.pageIndex,
+            pageSize: pagination.pageSize,
+          }
+        : internalPagination,
     },
     onPaginationChange: (updater) => {
-      if (!onPaginationChange) return;
-
       const currentPagination = table.getState().pagination;
       const newPagination =
         typeof updater === "function" ? updater(currentPagination) : updater;
@@ -130,7 +132,11 @@ export function DataTable<TData, TValue>({
         newPagination.pageIndex = 0;
       }
 
-      onPaginationChange(newPagination);
+      if (onPaginationChange) {
+        onPaginationChange(newPagination);
+      } else {
+        setInternalPagination(newPagination);
+      }
     },
   });
 

@@ -6,7 +6,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-const { getChatModels } = archestraApiSdk;
+const { getChatModels, getModelsWithApiKeys } = archestraApiSdk;
 
 /**
  * Chat model type from the API response.
@@ -66,4 +66,36 @@ export function useModelsByProvider() {
     ...query,
     modelsByProvider,
   };
+}
+
+/**
+ * Model with API keys type from the API response.
+ */
+export type ModelWithApiKeys =
+  archestraApiTypes.GetModelsWithApiKeysResponses["200"][number];
+
+/**
+ * Linked API key type extracted from ModelWithApiKeys.
+ */
+export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
+
+/**
+ * Fetch all models with their linked API keys.
+ * Used for the settings page models table.
+ */
+export function useModelsWithApiKeys() {
+  return useQuery({
+    queryKey: ["models-with-api-keys"],
+    queryFn: async () => {
+      const { data, error } = await getModelsWithApiKeys();
+      if (error) {
+        throw new Error(
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || "Failed to fetch models",
+        );
+      }
+      return (data ?? []) as ModelWithApiKeys[];
+    },
+  });
 }

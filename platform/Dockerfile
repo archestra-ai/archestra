@@ -9,7 +9,7 @@ RUN corepack enable
 # Patch CVE-2026-23950: tar <=7.5.3 has Improper Handling of Unicode Encoding
 # tar is bundled in pnpm's corepack distribution and needs to be patched
 # Patch ALL pnpm versions in corepack cache to ensure comprehensive fix
-RUN corepack prepare pnpm@10.28.1 --activate && \
+RUN corepack prepare pnpm@10.28.2 --activate && \
     TAR_SHA256="0a9e6154532a0fa2f0f6fa261cede2f916da7d34df68917c6f71be82dd739dce" && \
     PNPM_TAR_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/tar" -type d 2>/dev/null) && \
     [ -n "$PNPM_TAR_PATHS" ] || { echo "WARNING: No tar directories found to patch"; exit 0; } && \

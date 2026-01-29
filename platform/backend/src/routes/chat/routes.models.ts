@@ -1,13 +1,6 @@
-import {
-  RouteId,
-  type SupportedProvider,
-  SupportedProviders,
-  TimeInMs,
-} from "@shared";
+import { RouteId, type SupportedProvider } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { uniqBy } from "lodash-es";
 import { z } from "zod";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   createGoogleGenAIClient,
   isVertexAiEnabled,
@@ -15,14 +8,22 @@ import {
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatApiKeyModel, ModelModel, TeamModel } from "@/models";
+import {
+  ApiKeyModelModel,
+  ChatApiKeyModel,
+  ModelModel,
+  TeamModel,
+} from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { modelSyncService } from "@/services/model-sync";
+import { systemKeyManager } from "@/services/system-key-manager";
 import {
   type Anthropic,
   constructResponseSchema,
   type Gemini,
   type ModelCapabilities,
   ModelCapabilitiesSchema,
+  ModelWithApiKeysSchema,
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
@@ -625,78 +626,64 @@ export async function fetchBedrockModels(apiKey: string): Promise<ModelInfo[]> {
  * (authentication is via ADC, not user-specific API keys)
  */
 export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
-  // Use a global cache key since Vertex AI models are the same for everyone
-  const cacheKey = `${CacheKey.GetChatModels}-vertex-ai-global` as const;
-
-  return cacheManager.wrap(
-    cacheKey,
-    async () => {
-      logger.debug(
-        {
-          project: config.llm.gemini.vertexAi.project,
-          location: config.llm.gemini.vertexAi.location,
-        },
-        "Fetching Gemini models via Vertex AI SDK (cache miss)",
-      );
-
-      // Create a client without API key (uses ADC for Vertex AI)
-      const ai = createGoogleGenAIClient(undefined, "[ChatModels]");
-
-      const pager = await ai.models.list({ config: { pageSize: 100 } });
-
-      const models: ModelInfo[] = [];
-
-      // Patterns to exclude non-chat models
-      const excludePatterns = [
-        "embedding",
-        "imagen",
-        "text-bison",
-        "code-bison",
-      ];
-
-      for await (const model of pager) {
-        const modelName = model.name ?? "";
-
-        // Only include Gemini models that are chat-capable
-        // Vertex AI returns names like "publishers/google/models/gemini-2.0-flash-001"
-        if (!modelName.includes("gemini")) {
-          continue;
-        }
-
-        // Exclude embedding and other non-chat models
-        const isExcluded = excludePatterns.some((pattern) =>
-          modelName.toLowerCase().includes(pattern),
-        );
-        if (isExcluded) {
-          continue;
-        }
-
-        // Extract model ID from "publishers/google/models/gemini-xxx" format
-        const modelId = modelName.replace("publishers/google/models/", "");
-
-        // Generate a readable display name from the model ID
-        // e.g., "gemini-2.0-flash-001" -> "Gemini 2.0 Flash 001"
-        const displayName = modelId
-          .split("-")
-          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-          .join(" ");
-
-        models.push({
-          id: modelId,
-          displayName,
-          provider: "gemini" as const,
-        });
-      }
-
-      logger.debug(
-        { modelCount: models.length },
-        "Fetched Gemini models via Vertex AI SDK",
-      );
-
-      return models;
+  logger.debug(
+    {
+      project: config.llm.gemini.vertexAi.project,
+      location: config.llm.gemini.vertexAi.location,
     },
-    { ttl: 5 * TimeInMs.Minute },
+    "Fetching Gemini models via Vertex AI SDK",
   );
+
+  // Create a client without API key (uses ADC for Vertex AI)
+  const ai = createGoogleGenAIClient(undefined, "[ChatModels]");
+
+  const pager = await ai.models.list({ config: { pageSize: 100 } });
+
+  const models: ModelInfo[] = [];
+
+  // Patterns to exclude non-chat models
+  const excludePatterns = ["embedding", "imagen", "text-bison", "code-bison"];
+
+  for await (const model of pager) {
+    const modelName = model.name ?? "";
+
+    // Only include Gemini models that are chat-capable
+    // Vertex AI returns names like "publishers/google/models/gemini-2.0-flash-001"
+    if (!modelName.includes("gemini")) {
+      continue;
+    }
+
+    // Exclude embedding and other non-chat models
+    const isExcluded = excludePatterns.some((pattern) =>
+      modelName.toLowerCase().includes(pattern),
+    );
+    if (isExcluded) {
+      continue;
+    }
+
+    // Extract model ID from "publishers/google/models/gemini-xxx" format
+    const modelId = modelName.replace("publishers/google/models/", "");
+
+    // Generate a readable display name from the model ID
+    // e.g., "gemini-2.0-flash-001" -> "Gemini 2.0 Flash 001"
+    const displayName = modelId
+      .split("-")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+
+    models.push({
+      id: modelId,
+      displayName,
+      provider: "gemini" as const,
+    });
+  }
+
+  logger.debug(
+    { modelCount: models.length },
+    "Fetched Gemini models via Vertex AI SDK",
+  );
+
+  return models;
 }
 
 /**
@@ -767,6 +754,11 @@ const modelFetchers: Record<
   cohere: fetchCohereModels,
   zhipuai: fetchZhipuaiModels,
 };
+
+// Register all model fetchers with the sync service
+for (const [provider, fetcher] of Object.entries(modelFetchers)) {
+  modelSyncService.registerFetcher(provider as SupportedProvider, fetcher);
+}
 
 /**
  * Test if an API key is valid by attempting to fetch models from the provider.
@@ -895,90 +887,176 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ query, organizationId, user }, reply) => {
       const { provider } = query;
-      const providersToFetch = provider ? [provider] : SupportedProviders;
 
       // Trigger models.dev metadata sync in background if needed
       modelsDevClient.syncIfNeeded();
 
-      // Cache key includes user ID since API keys can be personal, team, or org-wide
-      const cacheKey =
-        `${CacheKey.GetChatModels}-${organizationId}-${user.id}-${provider ?? "all"}` as const;
-
-      const models = await cacheManager.wrap(
-        cacheKey,
-        async () => {
-          // Fetch user team IDs once to avoid N+1 queries when fetching models for multiple providers
-          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-
-          const results = await Promise.all(
-            providersToFetch.map((p) =>
-              fetchModelsForProvider({
-                provider: p as SupportedProvider,
-                organizationId,
-                userId: user.id,
-                userTeamIds,
-              }),
-            ),
-          );
-
-          const flatModels = results.flat();
-
-          logger.info(
-            { organizationId, provider, modelCount: flatModels.length },
-            "Fetched chat models from providers",
-          );
-
-          const uniqueModels = uniqBy(
-            flatModels,
-            (model) => `${model.provider}:${model.id}`,
-          );
-
-          // Fetch metadata for all models
-          const metadataKeys = uniqueModels.map((m) => ({
-            provider: m.provider,
-            modelId: m.id,
-          }));
-          const metadataMap =
-            await ModelModel.findByProviderModelIds(metadataKeys);
-
-          // Attach capabilities to each model
-          return uniqueModels.map((model) => {
-            const key = `${model.provider}:${model.id}`;
-            const metadata = metadataMap.get(key);
-            return {
-              ...model,
-              capabilities: ModelModel.toCapabilities(metadata ?? null),
-            };
-          });
-        },
-        { ttl: 5 * TimeInMs.Minute },
+      // Get user's accessible API keys
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const apiKeys = await ChatApiKeyModel.getAvailableKeysForUser(
+        organizationId,
+        user.id,
+        userTeamIds,
+        provider,
       );
 
-      logger.debug(
+      logger.info(
+        {
+          organizationId,
+          provider,
+          apiKeyCount: apiKeys.length,
+          apiKeys: apiKeys.map((k) => ({
+            id: k.id,
+            name: k.name,
+            provider: k.provider,
+            isSystem: k.isSystem,
+          })),
+        },
+        "Available API keys for user",
+      );
+
+      // Get models from database based on user's API keys
+      const apiKeyIds = apiKeys.map((k) => k.id);
+      const dbModels = await ApiKeyModelModel.getModelsForApiKeyIds(apiKeyIds);
+
+      logger.info(
+        {
+          organizationId,
+          provider,
+          apiKeyIds,
+          modelCount: dbModels.length,
+        },
+        "Models fetched from database",
+      );
+
+      // Filter by provider if specified
+      const filteredModels = provider
+        ? dbModels.filter((m) => m.provider === provider)
+        : dbModels;
+
+      // Transform to response format with capabilities
+      const models = filteredModels.map((model) => ({
+        id: model.modelId,
+        displayName: model.description || model.modelId,
+        provider: model.provider,
+        capabilities: ModelModel.toCapabilities(model),
+      }));
+
+      logger.info(
         { organizationId, provider, totalModels: models.length },
-        "Returning chat models",
+        "Returning chat models from database",
       );
 
       return reply.send(models);
     },
   );
 
-  // Invalidate chat models cache
+  // Sync models from providers for all API keys
   fastify.post(
-    "/api/chat/models/invalidate-cache",
+    "/api/chat/models/sync",
     {
       schema: {
-        operationId: RouteId.InvalidateChatModelsCache,
+        operationId: RouteId.SyncChatModels,
         description:
-          "Invalidate the chat models cache to force a refresh of available models from providers",
+          "Sync models from providers for all API keys and store them in the database",
         tags: ["Chat"],
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (_, reply) => {
-      await cacheManager.deleteByPrefix(CacheKey.GetChatModels);
-      logger.info("Invalidated chat models cache");
+    async ({ organizationId, user }, reply) => {
+      // Sync models for all API keys visible to the user
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const apiKeys = await ChatApiKeyModel.getAvailableKeysForUser(
+        organizationId,
+        user.id,
+        userTeamIds,
+      );
+
+      // Fetch secret values and sync models for each API key
+      const syncPromises = apiKeys.map(async (apiKey) => {
+        if (!apiKey.secretId) {
+          return;
+        }
+
+        const secretValue = await getSecretValueForLlmProviderApiKey(
+          apiKey.secretId,
+        );
+
+        if (!secretValue) {
+          logger.warn(
+            { apiKeyId: apiKey.id, provider: apiKey.provider },
+            "No secret value for API key, skipping sync",
+          );
+          return;
+        }
+
+        try {
+          await modelSyncService.syncModelsForApiKey(
+            apiKey.id,
+            apiKey.provider,
+            secretValue as string,
+          );
+        } catch (error) {
+          logger.error(
+            {
+              apiKeyId: apiKey.id,
+              provider: apiKey.provider,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to sync models for API key",
+          );
+        }
+      });
+
+      await Promise.all(syncPromises);
+
+      // Also sync system keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)
+      await systemKeyManager.syncSystemKeys(organizationId);
+
+      logger.info(
+        { organizationId, apiKeyCount: apiKeys.length },
+        "Completed model sync for all API keys (including system keys)",
+      );
+
       return reply.send({ success: true });
+    },
+  );
+
+  // Get all models with their linked API keys for the settings page
+  fastify.get(
+    "/api/models",
+    {
+      schema: {
+        operationId: RouteId.GetModelsWithApiKeys,
+        description:
+          "Get all models with their linked API keys. Returns models from the database with information about which API keys provide access to them.",
+        tags: ["Models"],
+        response: constructResponseSchema(z.array(ModelWithApiKeysSchema)),
+      },
+    },
+    async (_, reply) => {
+      // Get all models with their API key relationships
+      const modelsWithApiKeys =
+        await ApiKeyModelModel.getAllModelsWithApiKeys();
+
+      // Transform to response format with capabilities and markers
+      const response = modelsWithApiKeys.map(
+        ({ model, isFastest, isBest, apiKeys }) => ({
+          ...model,
+          isFastest,
+          isBest,
+          apiKeys,
+          capabilities: ModelModel.toCapabilities(model),
+        }),
+      );
+
+      logger.debug(
+        { modelCount: response.length },
+        "Returning models with API keys",
+      );
+
+      return reply.send(response);
     },
   );
 };

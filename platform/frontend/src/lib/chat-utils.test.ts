@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getConversationDisplayTitle } from "./chat-sidebar-section";
+import { getConversationDisplayTitle } from "./chat-utils";
+
+const DEFAULT_SESSION_NAME = "New Chat Session";
 
 describe("getConversationDisplayTitle", () => {
   it("returns the title if provided", () => {
@@ -67,38 +69,46 @@ describe("getConversationDisplayTitle", () => {
     );
   });
 
-  it("returns 'New chat' when no title and no messages", () => {
-    expect(getConversationDisplayTitle(null, [])).toBe("New chat");
-    expect(getConversationDisplayTitle(null, undefined)).toBe("New chat");
-    expect(getConversationDisplayTitle(null)).toBe("New chat");
+  it("returns default session name when no title and no messages", () => {
+    expect(getConversationDisplayTitle(null, [])).toBe(DEFAULT_SESSION_NAME);
+    expect(getConversationDisplayTitle(null, undefined)).toBe(
+      DEFAULT_SESSION_NAME,
+    );
+    expect(getConversationDisplayTitle(null)).toBe(DEFAULT_SESSION_NAME);
   });
 
-  it("returns 'New chat' when messages have no text parts", () => {
+  it("returns default session name when messages have no text parts", () => {
     const messages = [
       {
         role: "user",
         parts: [{ type: "image", url: "http://example.com/img.png" }],
       },
     ];
-    expect(getConversationDisplayTitle(null, messages)).toBe("New chat");
+    expect(getConversationDisplayTitle(null, messages)).toBe(
+      DEFAULT_SESSION_NAME,
+    );
   });
 
-  it("returns 'New chat' when user message has no parts", () => {
+  it("returns default session name when user message has no parts", () => {
     const messages = [
       {
         role: "user",
         parts: [],
       },
     ];
-    expect(getConversationDisplayTitle(null, messages)).toBe("New chat");
+    expect(getConversationDisplayTitle(null, messages)).toBe(
+      DEFAULT_SESSION_NAME,
+    );
   });
 
-  it("returns 'New chat' when user message has undefined parts", () => {
+  it("returns default session name when user message has undefined parts", () => {
     const messages = [
       {
         role: "user",
       },
     ];
-    expect(getConversationDisplayTitle(null, messages)).toBe("New chat");
+    expect(getConversationDisplayTitle(null, messages)).toBe(
+      DEFAULT_SESSION_NAME,
+    );
   });
 });

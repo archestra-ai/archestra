@@ -1479,6 +1479,78 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("Description", () => {
+    test("can create an agent with description", async () => {
+      const agent = await AgentModel.create({
+        name: "Described Agent",
+        agentType: "agent",
+        description: "An agent that helps with code review",
+        teams: [],
+      });
+
+      expect(agent.description).toBe("An agent that helps with code review");
+    });
+
+    test("description defaults to null", async () => {
+      const agent = await AgentModel.create({
+        name: "Basic Agent",
+        agentType: "agent",
+        teams: [],
+      });
+
+      expect(agent.description).toBeNull();
+    });
+
+    test("findById returns description", async () => {
+      const agent = await AgentModel.create({
+        name: "Find Me Agent",
+        agentType: "agent",
+        description: "Test description",
+        teams: [],
+      });
+
+      const found = await AgentModel.findById(agent.id);
+      expect(found).not.toBeNull();
+      expect(found?.description).toBe("Test description");
+    });
+
+    test("update can modify description", async () => {
+      const agent = await AgentModel.create({
+        name: "Updatable Agent",
+        agentType: "agent",
+        description: "Original description",
+        teams: [],
+      });
+
+      const updated = await AgentModel.update(agent.id, {
+        description: "Updated description",
+      });
+
+      expect(updated?.description).toBe("Updated description");
+    });
+
+    test("findAll returns description for all agents", async () => {
+      await AgentModel.create({
+        name: "Agent A",
+        agentType: "agent",
+        description: "Desc A",
+        teams: [],
+      });
+      await AgentModel.create({
+        name: "Agent B",
+        agentType: "agent",
+        teams: [],
+      });
+
+      const agents = await AgentModel.findAll();
+      const agentA = agents.find((a) => a.name === "Agent A");
+      const agentB = agents.find((a) => a.name === "Agent B");
+
+      expect(agentA?.description).toBe("Desc A");
+      expect(agentB?.description).toBeNull();
+    });
+  });
+
   describe("getMCPGatewayOrCreateDefault Junction Table", () => {
     test("getMCPGatewayOrCreateDefault returns tools from junction table", async ({
       makeTool,

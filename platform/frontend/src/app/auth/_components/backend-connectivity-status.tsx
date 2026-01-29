@@ -2,11 +2,14 @@
 
 import {
   AlertCircle,
+  CheckCircle2,
   ExternalLink,
   Loader2,
   RefreshCcw,
   ServerOff,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,14 +33,59 @@ interface BackendConnectivityStatusProps {
  * - Shows a "Connecting..." message while attempting to connect
  * - Shows children only when connected
  * - Shows an error message after 1 minute of failed attempts
+ * - Shows "Connected" message briefly after recovering from connection issues
+ * - Redirects authenticated users to their intended destination
  */
 export function BackendConnectivityStatus({
   children,
 }: BackendConnectivityStatusProps) {
   const { status, attemptCount, retry } = useBackendConnectivity();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirectTo");
+  const [showConnectedMessage, setShowConnectedMessage] = useState(false);
+  const hadConnectionIssuesRef = useRef(false);
+  const hasInitiatedRefreshRef = useRef(false);
 
-  if (status === "initializing") {
+  // Track if we had connection issues (were in "connecting" state with attempts)
+  useEffect(() => {
+    if (status === "connecting" && attemptCount > 0) {
+      hadConnectionIssuesRef.current = true;
+    }
+  }, [status, attemptCount]);
+
+  // When connected after having connection issues, show the connected message
+  // and refresh the page if there's a redirectTo param
+  useEffect(() => {
+    if (status === "connected" && hadConnectionIssuesRef.current) {
+      setShowConnectedMessage(true);
+
+      // If there's a redirectTo param, refresh the page after showing the message
+      // The normal auth flow will handle the redirect
+      if (redirectTo && !hasInitiatedRefreshRef.current) {
+        hasInitiatedRefreshRef.current = true;
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else if (!redirectTo) {
+        // No redirectTo, just show connected message briefly then show children
+        const timer = setTimeout(() => {
+          setShowConnectedMessage(false);
+          hadConnectionIssuesRef.current = false;
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [status, redirectTo]);
+
+  // During "initializing" or "checking" (first health check in progress),
+  // don't show any UI to avoid flashing the connecting dialog when backend is up
+  if (status === "initializing" || status === "checking") {
     return null;
+  }
+
+  // Show "Connected" message briefly after recovering from connection issues
+  if (status === "connected" && showConnectedMessage) {
+    return <ConnectedSuccessView hasRedirectTo={!!redirectTo} />;
   }
 
   // When connected, render children (the login form)
@@ -52,6 +100,28 @@ export function BackendConnectivityStatus({
       attemptCount={attemptCount}
       retry={retry}
     />
+  );
+}
+
+function ConnectedSuccessView({ hasRedirectTo }: { hasRedirectTo: boolean }) {
+  return (
+    <main className="h-full flex items-center justify-center p-4">
+      <Card className="max-w-md w-full">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+            <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+          </div>
+          <CardTitle className="text-green-600 dark:text-green-400">
+            Connected
+          </CardTitle>
+          <CardDescription>
+            {hasRedirectTo
+              ? "Refreshing..."
+              : "Successfully connected to the backend server."}
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    </main>
   );
 }
 

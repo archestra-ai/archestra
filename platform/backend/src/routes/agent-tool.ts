@@ -560,6 +560,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             z.object({
               id: z.string().uuid(),
               name: z.string(),
+              description: z.string().nullable(),
               systemPrompt: z.string().nullable(),
             }),
           ),

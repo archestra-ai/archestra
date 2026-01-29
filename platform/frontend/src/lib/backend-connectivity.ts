@@ -5,7 +5,8 @@ const { getHealth } = archestraApiSdk;
 
 export type BackendConnectionStatus =
   | "initializing"
-  | "connecting"
+  | "checking" // First attempt in progress, no UI shown yet
+  | "connecting" // First attempt failed, now retrying with UI
   | "connected"
   | "unreachable";
 
@@ -131,6 +132,12 @@ export function useBackendConnectivity(
         return;
       }
 
+      // First attempt failed - transition from "checking" to "connecting"
+      // This ensures we only show the connecting UI after the first failure
+      if (currentAttempt === 0) {
+        setStatus("connecting");
+      }
+
       // Check if we've exceeded the timeout
       const now = Date.now();
       const elapsed = startTimeRef.current ? now - startTimeRef.current : 0;
@@ -158,8 +165,8 @@ export function useBackendConnectivity(
   );
 
   const startConnection = useCallback(() => {
-    // Reset state
-    setStatus("connecting");
+    // Reset state - use "checking" for first attempt to avoid flashing UI
+    setStatus("checking");
     setAttemptCount(0);
     setElapsedMs(0);
     clearTimers();

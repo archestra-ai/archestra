@@ -713,6 +713,7 @@ export async function getChatMcpTools({
                   tokenId: mcpGwToken.tokenId,
                   teamId: mcpGwToken.teamId,
                   isOrganizationToken: mcpGwToken.isOrganizationToken,
+                  organizationId,
                   userId, // Pass userId for user-owned server priority
                 },
               );

@@ -460,7 +460,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 } catch (error) {
                   logger.error(
-                    { err: error, serverId: server.id, serverName: server.name },
+                    {
+                      err: error,
+                      serverId: server.id,
+                      serverName: server.name,
+                    },
                     "Failed to auto-reinstall MCP server - marking for manual reinstall",
                   );
                   // Mark for manual reinstall on failure

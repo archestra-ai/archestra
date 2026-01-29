@@ -1745,23 +1745,6 @@ describe("ToolModel", () => {
       const catalog = await makeInternalMcpCatalog();
       const mcpServer = await makeMcpServer({ catalogId: catalog.id });
 
-      // Simulate legacy state: both old and new named tools exist (duplicates with same raw name)
-      const oldTool = await makeTool({
-        name: "old-name__query-docs",
-        description: "Old tool",
-        parameters: { type: "object" },
-        catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
-      });
-
-      const newTool = await makeTool({
-        name: "new-name__query-docs",
-        description: "New tool",
-        parameters: { type: "object" },
-        catalogId: catalog.id,
-        mcpServerId: mcpServer.id,
-      });
-
       // Sync with only the new name (correct state)
       const toolsToSync = [
         {

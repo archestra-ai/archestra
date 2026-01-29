@@ -53284,6 +53284,9 @@
                     },
                     "mcpServerBaseImage": {
                       "type": "string"
+                    },
+                    "orchestratorK8sNamespace": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -53298,7 +53301,8 @@
                     "browserStreamingEnabled",
                     "incomingEmail",
                     "knowledgeGraph",
-                    "mcpServerBaseImage"
+                    "mcpServerBaseImage",
+                    "orchestratorK8sNamespace"
                   ],
                   "additionalProperties": false
                 }

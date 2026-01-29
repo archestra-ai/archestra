@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
-import type { LocalConfigSchema } from "@shared";
+import { type LocalConfigSchema, MCP_ORCHESTRATOR_DEFAULTS } from "@shared";
 import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
@@ -596,8 +596,12 @@ export default class K8sDeployment {
           // Set resource requests/limits for the container (with defaults)
           resources: {
             requests: {
-              memory: advancedConfig?.resources?.requests?.memory || "128Mi",
-              cpu: advancedConfig?.resources?.requests?.cpu || "50m",
+              memory:
+                advancedConfig?.resources?.requests?.memory ||
+                MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
+              cpu:
+                advancedConfig?.resources?.requests?.cpu ||
+                MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
             },
             ...(advancedConfig?.resources?.limits
               ? {
@@ -633,7 +637,8 @@ export default class K8sDeployment {
         labels,
       },
       spec: {
-        replicas: advancedConfig?.replicas ?? 1,
+        replicas:
+          advancedConfig?.replicas ?? MCP_ORCHESTRATOR_DEFAULTS.replicas,
         selector: {
           matchLabels: labels,
         },

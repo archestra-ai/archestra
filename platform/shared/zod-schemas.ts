@@ -95,16 +95,92 @@ export const LocalConfigSchema = z
     },
   );
 
+/**
+ * Validates that a string is valid JSON containing only string key-value pairs.
+ * Empty strings are allowed (treated as no value).
+ */
+const jsonKeyValueStringSchema = z
+  .string()
+  .optional()
+  .refine(
+    (val) => {
+      if (!val || !val.trim()) return true; // Empty is valid
+      try {
+        const parsed = JSON.parse(val);
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
+          return false;
+        }
+        // Check all values are strings
+        return Object.values(parsed).every((v) => typeof v === "string");
+      } catch {
+        return false;
+      }
+    },
+    {
+      message: 'Must be valid JSON with string values, e.g. { "key": "value" }',
+    },
+  );
+
+/**
+ * Validates a Kubernetes memory resource quantity string.
+ * Valid formats: "128Mi", "1Gi", "256M", "1G", "1024Ki", "1024", etc.
+ * Supports decimal and binary suffixes as per K8s spec.
+ *
+ * @param value - The memory quantity string to validate
+ * @returns true if valid, false otherwise
+ */
+export function isValidK8sMemoryQuantity(value: string): boolean {
+  if (!value || !value.trim()) return false;
+  // K8s memory format: number followed by optional suffix
+  // Binary suffixes: Ki, Mi, Gi, Ti, Pi, Ei
+  // Decimal suffixes: k, M, G, T, P, E (or K for kilo)
+  // Or just a number (bytes)
+  const memoryRegex = /^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|k|K|M|G|T|P|E)?$/;
+  return memoryRegex.test(value.trim());
+}
+
+/**
+ * Validates a Kubernetes CPU resource quantity string.
+ * Valid formats: "100m" (millicores), "0.5", "1", "1.5", "2000m", etc.
+ *
+ * @param value - The CPU quantity string to validate
+ * @returns true if valid, false otherwise
+ */
+export function isValidK8sCpuQuantity(value: string): boolean {
+  if (!value || !value.trim()) return false;
+  // K8s CPU format: decimal number or integer followed by optional 'm' for millicores
+  const cpuRegex = /^[0-9]+(\.[0-9]+)?m?$/;
+  return cpuRegex.test(value.trim());
+}
+
+const k8sMemoryQuantitySchema = z
+  .string()
+  .optional()
+  .refine((val) => !val || !val.trim() || isValidK8sMemoryQuantity(val), {
+    message: "Invalid memory format. Use K8s format like 128Mi, 1Gi, 256M",
+  });
+
+const k8sCpuQuantitySchema = z
+  .string()
+  .optional()
+  .refine((val) => !val || !val.trim() || isValidK8sCpuQuantity(val), {
+    message: "Invalid CPU format. Use K8s format like 100m, 0.5, 1",
+  });
+
 // Form version of advanced K8s config for UI (using strings that get parsed)
 export const AdvancedK8sConfigFormSchema = z.object({
   replicas: z.string().optional(), // UI uses string, gets parsed to number
   namespace: z.string().optional(),
-  annotations: z.string().optional(), // UI uses JSON string, gets parsed to object
-  labels: z.string().optional(), // UI uses JSON string, gets parsed to object
-  resourceRequestsMemory: z.string().optional(), // e.g., "128Mi"
-  resourceRequestsCpu: z.string().optional(), // e.g., "50m"
-  resourceLimitsMemory: z.string().optional(),
-  resourceLimitsCpu: z.string().optional(),
+  annotations: jsonKeyValueStringSchema, // UI uses JSON string, gets parsed to object
+  labels: jsonKeyValueStringSchema, // UI uses JSON string, gets parsed to object
+  resourceRequestsMemory: k8sMemoryQuantitySchema,
+  resourceRequestsCpu: k8sCpuQuantitySchema,
+  resourceLimitsMemory: k8sMemoryQuantitySchema,
+  resourceLimitsCpu: k8sCpuQuantitySchema,
 });
 
 // Form version of LocalConfigSchema for UI forms (using strings that get parsed)

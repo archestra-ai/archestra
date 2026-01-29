@@ -1,15 +1,16 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, MCP_ORCHESTRATOR_DEFAULTS } from "@shared";
 import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
   Settings2,
 } from "lucide-react";
-import { lazy, useEffect, useState } from "react";
+import { lazy, useCallback, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { Editor } from "@/components/editor";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -39,13 +40,63 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
-import { ServiceAccountField } from "./service-account-field";
 
 const ExternalSecretSelector = lazy(
   () =>
     // biome-ignore lint/style/noRestrictedImports: lazy loading
     import("@/components/external-secret-selector.ee"),
 );
+
+/**
+ * JSON editor for key-value pairs (labels, annotations).
+ * Provides a Monaco editor with JSON syntax highlighting.
+ */
+function JsonKeyValueEditor({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string | undefined;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const handleEditorChange = useCallback(
+    (newValue: string | undefined) => {
+      onChange(newValue ?? "");
+    },
+    [onChange],
+  );
+
+  return (
+    <div className="border rounded-md overflow-hidden">
+      <Editor
+        height="100px"
+        defaultLanguage="json"
+        value={value || ""}
+        onChange={handleEditorChange}
+        options={{
+          minimap: { enabled: false },
+          lineNumbers: "off",
+          folding: false,
+          scrollBeyondLastLine: false,
+          wordWrap: "on",
+          fontSize: 13,
+          fontFamily: "monospace",
+          padding: { top: 8, bottom: 8 },
+          renderLineHighlight: "none",
+          overviewRulerLanes: 0,
+          hideCursorInOverviewRuler: true,
+          scrollbar: {
+            vertical: "auto",
+            horizontal: "hidden",
+            verticalScrollbarSize: 8,
+          },
+          placeholder,
+        }}
+      />
+    </div>
+  );
+}
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";
@@ -67,8 +118,10 @@ export function McpCatalogForm({
     initialValues?.localConfigSecretId ?? null,
   );
 
-  // Get MCP server base image from backend features endpoint
+  // Get MCP server base image and K8s namespace from backend features endpoint
   const mcpServerBaseImage = useFeatureValue("mcpServerBaseImage") ?? "";
+  const orchestratorK8sNamespace =
+    useFeatureValue("orchestratorK8sNamespace") ?? "default";
 
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
@@ -108,6 +161,7 @@ export function McpCatalogForm({
               resourceLimitsMemory: "",
               resourceLimitsCpu: "",
             },
+            serviceAccount: "",
           },
         },
   });
@@ -307,19 +361,6 @@ export function McpCatalogForm({
                 )}
               />
 
-              {initialValues?.localConfig?.serviceAccount !== undefined && (
-                <FormField
-                  control={form.control}
-                  name="localConfig.serviceAccount"
-                  render={({ field }) => (
-                    <ServiceAccountField
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  )}
-                />
-              )}
-
               <EnvironmentVariablesFormField
                 control={form.control}
                 fields={fields}
@@ -448,7 +489,7 @@ export function McpCatalogForm({
                     )}
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="px-4 pb-4 space-y-4">
+                <CollapsibleContent className="px-4 pt-2 pb-4 space-y-4">
                   <p className="text-sm text-muted-foreground">
                     Customize Kubernetes deployment settings. These options are
                     optional and have sensible defaults.
@@ -464,15 +505,16 @@ export function McpCatalogForm({
                           <FormControl>
                             <Input
                               type="number"
-                              placeholder="1"
+                              placeholder={String(
+                                MCP_ORCHESTRATOR_DEFAULTS.replicas,
+                              )}
                               min={1}
-                              max={10}
                               className="font-mono"
                               {...field}
                             />
                           </FormControl>
                           <FormDescription>
-                            Number of pod replicas (1-10)
+                            Number of pod replicas
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -487,19 +529,40 @@ export function McpCatalogForm({
                           <FormLabel>Namespace</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="default"
+                              placeholder={orchestratorK8sNamespace}
                               className="font-mono"
                               {...field}
                             />
                           </FormControl>
                           <FormDescription>
-                            Override K8s namespace
+                            Override k8s namespace
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
+
+                  <FormField
+                    control={form.control}
+                    name="localConfig.serviceAccount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Account</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="default"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          K8s service account for the deployment pods
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <div className="space-y-2">
                     <FormLabel>Resource Requests</FormLabel>
@@ -514,7 +577,9 @@ export function McpCatalogForm({
                             </FormLabel>
                             <FormControl>
                               <Input
-                                placeholder="128Mi"
+                                placeholder={
+                                  MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory
+                                }
                                 className="font-mono"
                                 {...field}
                               />
@@ -534,7 +599,9 @@ export function McpCatalogForm({
                             </FormLabel>
                             <FormControl>
                               <Input
-                                placeholder="50m"
+                                placeholder={
+                                  MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu
+                                }
                                 className="font-mono"
                                 {...field}
                               />
@@ -596,16 +663,16 @@ export function McpCatalogForm({
                     name="localConfig.advancedK8sConfig.labels"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Custom Labels</FormLabel>
+                        <FormLabel>Custom Labels (JSON)</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder='{"team": "backend", "env": "staging"}'
-                            className="font-mono"
-                            {...field}
+                          <JsonKeyValueEditor
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder='{ "team": "backend" }'
                           />
                         </FormControl>
                         <FormDescription>
-                          JSON object of custom labels to add to pods
+                          Custom labels to add to pods (JSON key-value format)
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -617,16 +684,17 @@ export function McpCatalogForm({
                     name="localConfig.advancedK8sConfig.annotations"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Custom Annotations</FormLabel>
+                        <FormLabel>Custom Annotations (JSON)</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder='{"prometheus.io/scrape": "true"}'
-                            className="font-mono"
-                            {...field}
+                          <JsonKeyValueEditor
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder='{ "prometheus.io/scrape": "true" }'
                           />
                         </FormControl>
                         <FormDescription>
-                          JSON object of custom annotations to add to pods
+                          Custom annotations to add to pods (JSON key-value
+                          format)
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

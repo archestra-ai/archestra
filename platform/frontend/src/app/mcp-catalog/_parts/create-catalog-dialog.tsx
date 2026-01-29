@@ -129,7 +129,7 @@ export function CreateCatalogDialog({
                       : "text-muted-foreground",
                   )}
                 >
-                  Self-hosted (orchestrated by Archestra in K8S)
+                  Self-hosted (orchestrated by Archestra in K8s)
                   {activeTab === "local" && (
                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                   )}

@@ -15095,6 +15095,7 @@ export type GetFeaturesResponses = {
             displayName?: string;
         };
         mcpServerBaseImage: string;
+        orchestratorK8sNamespace: string;
     };
 };
 

@@ -9,15 +9,15 @@ import type { InternalMcpCatalog, McpServer } from "@/types";
  * Returns true (manual reinstall required) when:
  * - Server name changed (local servers) - affects secret paths
  * - Prompted env vars changed: added, removed, or key/required/type changed (local servers)
- * - ANY required userConfig field exists (remote servers)
- * - OAuth config exists (remote servers)
+ * - OAuth config changed: added or removed (remote servers)
+ * - Required userConfig fields changed: added, removed, or type changed (remote servers)
  *
  * Returns false (auto-reinstall possible) when:
  * - Only non-prompted config changed (local servers) - existing secrets can be reused
- * - No required userConfig fields or OAuth (remote servers)
+ * - Only non-auth config changed (remote servers) - existing auth can be reused
  *
- * Note: For local servers, we can reuse existing secrets when prompted env vars
- * haven't changed. This allows auto-reinstall when only command/args/docker image changes.
+ * Note: We compare old vs new config to allow auto-reinstall when auth-related
+ * settings haven't changed. This enables auto-reinstall for name/URL changes.
  */
 export function requiresNewUserInputForReinstall(
   oldCatalogItem: InternalMcpCatalog,
@@ -50,30 +50,32 @@ export function requiresNewUserInputForReinstall(
     return false;
   }
 
-  // Remote servers: check for OAuth or required userConfig
+  // Remote servers: check if OAuth or required userConfig changed
   if (newCatalogItem.serverType === "remote") {
-    // OAuth requires user auth flow
-    if (newCatalogItem.oauthConfig) {
+    // Check if OAuth config changed (added or removed)
+    const hadOAuth = !!oldCatalogItem.oauthConfig;
+    const hasOAuth = !!newCatalogItem.oauthConfig;
+    if (hadOAuth !== hasOAuth) {
       logger.info(
         { catalogId: newCatalogItem.id },
-        "Catalog has OAuth config - manual reinstall required",
+        "OAuth config changed - manual reinstall required",
       );
       return true;
     }
 
-    // Check for any required userConfig fields
-    const hasRequiredUserConfig = Object.values(
-      newCatalogItem.userConfig || {},
-    ).some((field) => field.required);
+    // Check if required userConfig fields changed
+    const oldRequiredFields = getRequiredUserConfigFields(oldCatalogItem);
+    const newRequiredFields = getRequiredUserConfigFields(newCatalogItem);
 
-    if (hasRequiredUserConfig) {
+    if (requiredUserConfigChanged(oldRequiredFields, newRequiredFields)) {
       logger.info(
         { catalogId: newCatalogItem.id },
-        "Catalog has required userConfig fields - manual reinstall required",
+        "Required userConfig fields changed - manual reinstall required",
       );
       return true;
     }
 
+    // No auth-related changes - auto-reinstall can proceed
     return false;
   }
 
@@ -176,6 +178,46 @@ function promptedEnvVarsChanged(
     const newVal = newMap.get(key);
     if (!newVal) return true; // Removed
     if (newVal.required !== oldVal.required) return true; // Required changed
+    if (newVal.type !== oldVal.type) return true; // Type changed
+  }
+
+  // Check for additions
+  for (const key of newMap.keys()) {
+    if (!oldMap.has(key)) return true; // Added
+  }
+
+  return false;
+}
+
+type UserConfigFieldInfo = { type: string };
+
+/**
+ * Extract required userConfig fields from a catalog item as a map of key -> { type }
+ */
+function getRequiredUserConfigFields(
+  catalog: InternalMcpCatalog,
+): Map<string, UserConfigFieldInfo> {
+  const map = new Map<string, UserConfigFieldInfo>();
+  for (const [key, field] of Object.entries(catalog.userConfig || {})) {
+    if (field.required) {
+      map.set(key, { type: field.type });
+    }
+  }
+  return map;
+}
+
+/**
+ * Check if required userConfig fields changed between old and new catalog items.
+ * Returns true if any required field was added, removed, or had its type changed.
+ */
+function requiredUserConfigChanged(
+  oldMap: Map<string, UserConfigFieldInfo>,
+  newMap: Map<string, UserConfigFieldInfo>,
+): boolean {
+  // Check for removals or changes
+  for (const [key, oldVal] of oldMap) {
+    const newVal = newMap.get(key);
+    if (!newVal) return true; // Removed
     if (newVal.type !== oldVal.type) return true; // Type changed
   }
 

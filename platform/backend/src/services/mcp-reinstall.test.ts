@@ -387,7 +387,42 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(false);
       });
 
-      test("returns true when ANY required user config field exists", () => {
+      test("returns false when only name changes (no auth config)", () => {
+        const oldConfig = { ...createRemoteCatalog({}), name: "Old Name" };
+        const newConfig = { ...createRemoteCatalog({}), name: "New Name" };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when only name changes (with existing OAuth)", () => {
+        const oauthConfig = { authorizationUrl: "https://example.com/auth" };
+        const oldConfig = {
+          ...createRemoteCatalog({}, oauthConfig),
+          name: "Old Name",
+        };
+        const newConfig = {
+          ...createRemoteCatalog({}, oauthConfig),
+          name: "New Name",
+        };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when only name changes (with existing required userConfig)", () => {
+        const config = { field: { type: "string", required: true } };
+        const oldConfig = { ...createRemoteCatalog(config), name: "Old Name" };
+        const newConfig = { ...createRemoteCatalog(config), name: "New Name" };
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when required userConfig field is ADDED", () => {
         const oldConfig = createRemoteCatalog({});
         const newConfig = createRemoteCatalog({
           field: { type: "string", required: true },
@@ -398,17 +433,41 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
-      test("returns true when required user config exists (even if unchanged)", () => {
+      test("returns false when required userConfig is UNCHANGED", () => {
         const config = { field: { type: "string", required: true } };
         const oldConfig = createRemoteCatalog(config);
         const newConfig = createRemoteCatalog(config);
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
+        expect(result).toBe(false);
+      });
+
+      test("returns true when required userConfig field is REMOVED", () => {
+        const oldConfig = createRemoteCatalog({
+          field: { type: "string", required: true },
+        });
+        const newConfig = createRemoteCatalog({});
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
         expect(result).toBe(true);
       });
 
-      test("returns true when OAuth config exists", () => {
+      test("returns true when required userConfig field TYPE changes", () => {
+        const oldConfig = createRemoteCatalog({
+          field: { type: "string", required: true },
+        });
+        const newConfig = createRemoteCatalog({
+          field: { type: "number", required: true },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns true when OAuth config is ADDED", () => {
         const oldConfig = createRemoteCatalog({}, null);
         const newConfig = createRemoteCatalog(
           {},
@@ -422,14 +481,59 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
-      test("returns true when OAuth config exists (even if unchanged)", () => {
+      test("returns false when OAuth config is UNCHANGED", () => {
         const oauthConfig = { authorizationUrl: "https://example.com/auth" };
         const oldConfig = createRemoteCatalog({}, oauthConfig);
         const newConfig = createRemoteCatalog({}, oauthConfig);
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
+        expect(result).toBe(false);
+      });
+
+      test("returns true when OAuth config is REMOVED", () => {
+        const oauthConfig = { authorizationUrl: "https://example.com/auth" };
+        const oldConfig = createRemoteCatalog({}, oauthConfig);
+        const newConfig = createRemoteCatalog({}, null);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
         expect(result).toBe(true);
+      });
+
+      test("returns false when only optional userConfig is added (with existing required)", () => {
+        const oldConfig = createRemoteCatalog({
+          requiredField: { type: "string", required: true },
+        });
+        const newConfig = createRemoteCatalog({
+          requiredField: { type: "string", required: true },
+          optionalField: { type: "string", required: false },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("handles null userConfig gracefully", () => {
+        const oldConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "remote",
+          userConfig: null,
+          oauthConfig: null,
+        } as InternalMcpCatalog;
+        const newConfig = {
+          id: "test-id",
+          name: "Test Server",
+          serverType: "remote",
+          userConfig: null,
+          oauthConfig: null,
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
       });
     });
 

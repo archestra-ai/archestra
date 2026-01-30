@@ -691,6 +691,13 @@ class WebSocketService {
       abortController,
     });
 
+    // Get the appropriate kubectl command based on pod status
+    const command = await McpServerRuntimeManager.getAppropriateCommand(
+      serverId,
+      lines,
+    );
+    let isFirstChunk = true;
+
     // Set up stream data handler
     stream.on("data", (chunk: Buffer) => {
       if (ws.readyState === WS.OPEN) {
@@ -699,8 +706,11 @@ class WebSocketService {
           payload: {
             serverId,
             logs: chunk.toString(),
+            // Only send command with the first chunk
+            ...(isFirstChunk ? { command } : {}),
           },
         });
+        isFirstChunk = false;
       }
     });
 

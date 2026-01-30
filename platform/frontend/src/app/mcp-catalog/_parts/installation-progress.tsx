@@ -11,12 +11,10 @@ type InstallationStatus =
   | "pending"
   | "discovering-tools"
   | "success"
-  | "error"
   | null;
 
 interface InstallationProgressProps {
   status: InstallationStatus;
-  errorMessage?: string | null;
   serverId?: string;
   serverName?: string;
 }
@@ -33,10 +31,6 @@ const PHASES = {
   success: {
     progress: 100,
     description: "Installation complete",
-  },
-  error: {
-    progress: 100,
-    description: "Installation failed",
   },
 } as const;
 
@@ -76,7 +70,6 @@ function useAnimatedProgress(targetProgress: number, isActive: boolean) {
 
 export function InstallationProgress({
   status,
-  errorMessage,
   serverId,
   serverName,
 }: InstallationProgressProps) {
@@ -91,8 +84,6 @@ export function InstallationProgress({
   const targetProgress = phaseInfo?.progress ?? 0;
   const animatedProgress = useAnimatedProgress(targetProgress, isActive);
 
-  const isError = status === "error";
-
   if (!status || status === "idle" || status === "success") {
     return null;
   }
@@ -103,16 +94,9 @@ export function InstallationProgress({
 
   return (
     <div className="w-full space-y-2">
-      <Progress
-        value={animatedProgress}
-        className={isError ? "[&>div]:bg-destructive" : undefined}
-      />
+      <Progress value={animatedProgress} />
       <div className="flex items-center justify-between text-xs">
-        <span
-          className={isError ? "text-destructive" : "text-muted-foreground"}
-        >
-          {isError && errorMessage ? errorMessage : phaseInfo?.description}
-        </span>
+        <span className="text-muted-foreground">{phaseInfo?.description}</span>
         {serverId && (
           <Button
             variant="link"

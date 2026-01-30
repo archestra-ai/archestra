@@ -271,7 +271,7 @@ export function McpLogsDialog({
             <span className="truncate">Logs: {serverName}</span>
           </DialogTitle>
           <DialogDescription className="flex flex-col gap-2">
-            <span>View the recent logs from the MCP server container</span>
+            <span>View the recent logs from the MCP server deployment</span>
             {!hideInstallationSelector && installs.length > 1 && (
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">Installation:</span>
@@ -298,7 +298,7 @@ export function McpLogsDialog({
         <div className="flex flex-col gap-4 flex-1 min-h-0">
           <div className="flex flex-col gap-2 flex-1 min-h-0">
             <div className="flex items-center justify-between flex-shrink-0">
-              <h3 className="text-sm font-semibold">Container Logs</h3>
+              <h3 className="text-sm font-semibold">Deployment Logs</h3>
               {!autoScroll && (
                 <Button
                   variant="outline"
@@ -313,10 +313,7 @@ export function McpLogsDialog({
             </div>
 
             <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
-              <ScrollArea
-                ref={scrollAreaRef}
-                className="flex-1 overflow-auto"
-              >
+              <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-auto">
                 <div className="p-4">
                   {streamError ? (
                     <div className="text-red-400 font-mono text-sm">
@@ -382,9 +379,6 @@ export function McpLogsDialog({
                   {commandCopied ? " Copied!" : ""}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Run this command from your terminal to fetch the logs manually
-              </p>
             </div>
           )}
         </div>

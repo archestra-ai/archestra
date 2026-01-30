@@ -1087,6 +1087,191 @@ export default class K8sDeployment {
   }
 
   /**
+   * Check if a running pod exists for this deployment
+   */
+  async hasRunningPod(): Promise<boolean> {
+    const pod = await this.findPodForDeployment();
+    return !!pod;
+  }
+
+  /**
+   * Helper to find any pod for this deployment (not just running)
+   */
+  private async findAnyPodForDeployment(): Promise<k8s.V1Pod | undefined> {
+    try {
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const pods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+        labelSelector: `mcp-server-id=${sanitizedId}`,
+      });
+
+      // Return the first pod regardless of status
+      return pods.items[0];
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to list pods for ${this.deploymentName}`,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * Get Kubernetes events related to the deployment and its pods
+   */
+  async getDeploymentEvents(): Promise<string> {
+    try {
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+
+      // Get events from the namespace, filtering to those related to our deployment or pods
+      const events = await this.k8sApi.listNamespacedEvent({
+        namespace: this.namespace,
+      });
+
+      // Filter events related to our deployment or pods
+      const relevantEvents = events.items.filter((event) => {
+        const involvedName = event.involvedObject?.name || "";
+        // Match deployment name or pods with our label
+        return (
+          involvedName.startsWith(this.deploymentName) ||
+          involvedName.includes(sanitizedId)
+        );
+      });
+
+      if (relevantEvents.length === 0) {
+        return "No events found for this deployment";
+      }
+
+      // Sort by last timestamp (most recent first)
+      relevantEvents.sort((a, b) => {
+        const aTime =
+          a.lastTimestamp || a.eventTime || a.metadata?.creationTimestamp;
+        const bTime =
+          b.lastTimestamp || b.eventTime || b.metadata?.creationTimestamp;
+        if (!aTime || !bTime) return 0;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      });
+
+      // Format events for display
+      const formattedEvents = relevantEvents.map((event) => {
+        const timestamp =
+          event.lastTimestamp ||
+          event.eventTime ||
+          event.metadata?.creationTimestamp;
+        const timeStr = timestamp
+          ? new Date(timestamp).toISOString()
+          : "unknown";
+        const type = event.type || "Normal";
+        const reason = event.reason || "Unknown";
+        const message = event.message || "";
+        const obj = event.involvedObject?.name || "unknown";
+        const count = event.count || 1;
+
+        return `[${timeStr}] ${type} ${reason} (${obj}${count > 1 ? ` x${count}` : ""}): ${message}`;
+      });
+
+      return formattedEvents.join("\n");
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to get events for deployment ${this.deploymentName}`,
+      );
+      return "Failed to retrieve deployment events";
+    }
+  }
+
+  /**
+   * Get pod status information for display
+   */
+  private getPodStatusInfo(pod: k8s.V1Pod): string {
+    const phase = pod.status?.phase || "Unknown";
+    const conditions = pod.status?.conditions || [];
+    const containerStatuses = pod.status?.containerStatuses || [];
+
+    const lines: string[] = [];
+    lines.push(`Pod Phase: ${phase}`);
+
+    // Add container statuses
+    for (const containerStatus of containerStatuses) {
+      const name = containerStatus.name;
+      const ready = containerStatus.ready ? "Ready" : "Not Ready";
+      const restartCount = containerStatus.restartCount || 0;
+
+      let stateInfo = "";
+      if (containerStatus.state?.waiting) {
+        stateInfo = `Waiting: ${containerStatus.state.waiting.reason || "Unknown"}`;
+        if (containerStatus.state.waiting.message) {
+          stateInfo += ` - ${containerStatus.state.waiting.message}`;
+        }
+      } else if (containerStatus.state?.running) {
+        stateInfo = "Running";
+      } else if (containerStatus.state?.terminated) {
+        stateInfo = `Terminated: ${containerStatus.state.terminated.reason || "Unknown"}`;
+      }
+
+      lines.push(
+        `Container '${name}': ${ready}, Restarts: ${restartCount}, State: ${stateInfo}`,
+      );
+    }
+
+    // Add relevant conditions
+    for (const condition of conditions) {
+      if (condition.status === "False" && condition.message) {
+        lines.push(`Condition ${condition.type}: ${condition.message}`);
+      }
+    }
+
+    return lines.join("\n");
+  }
+
+  /**
+   * Write K8s events to the stream as a fallback when pod logs aren't available
+   */
+  private async streamEventsAsFallback(
+    responseStream: NodeJS.WritableStream,
+  ): Promise<void> {
+    try {
+      // Check if any pod exists (even non-running)
+      const anyPod = await this.findAnyPodForDeployment();
+
+      let output = "=== MCP Server Status ===\n\n";
+
+      if (anyPod) {
+        // Show pod status info
+        output += "--- Pod Status ---\n";
+        output += this.getPodStatusInfo(anyPod);
+        output += "\n\n";
+      } else {
+        output += "No pod found for this deployment.\n\n";
+      }
+
+      // Get and show events
+      output += "--- Kubernetes Events ---\n";
+      const events = await this.getDeploymentEvents();
+      output += events;
+      output += "\n";
+
+      // Write to stream
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        responseStream.write(output);
+        // End the stream since we're not following logs
+        responseStream.end();
+      }
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to stream events fallback for ${this.deploymentName}`,
+      );
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        responseStream.write(
+          `Error fetching deployment status: ${error instanceof Error ? error.message : "Unknown error"}\n`,
+        );
+        responseStream.end();
+      }
+    }
+  }
+
+  /**
    * Check if this MCP server needs an HTTP port
    */
   private async needsHttpPort(): Promise<boolean> {
@@ -1335,7 +1520,8 @@ export default class K8sDeployment {
   }
 
   /**
-   * Stream logs from the pod with follow enabled
+   * Stream logs from the pod with follow enabled.
+   * If no running pod is found, falls back to showing K8s events.
    */
   async streamLogs(
     responseStream: NodeJS.WritableStream,
@@ -1344,7 +1530,9 @@ export default class K8sDeployment {
     try {
       const pod = await this.findPodForDeployment();
       if (!pod || !pod.metadata?.name) {
-        throw new Error("No running pod found for deployment");
+        // No running pod - try to show events instead
+        await this.streamEventsAsFallback(responseStream);
+        return;
       }
 
       // Create a PassThrough stream to handle the log data

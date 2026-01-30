@@ -510,6 +510,7 @@ export function McpServerCard({
     </>
   );
 
+  // Show error banner with link to logs dialog
   const errorBanner = isCurrentUserAuthenticated &&
     hasError &&
     errorMessage && (
@@ -517,7 +518,14 @@ export function McpServerCard({
         className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
         data-testid={`${E2eTestId.McpServerError}-${item.name}`}
       >
-        {errorMessage}
+        Failed to start MCP server,{" "}
+        <button
+          type="button"
+          onClick={() => setIsLogsDialogOpen(true)}
+          className="text-primary hover:underline cursor-pointer"
+        >
+          click here for more details
+        </button>
       </div>
     );
 
@@ -645,11 +653,9 @@ export function McpServerCard({
         </TooltipProvider>
       )}
       {(installationStatus === "pending" ||
-        installationStatus === "discovering-tools" ||
-        installationStatus === "error") && (
+        installationStatus === "discovering-tools") && (
         <InstallationProgress
           status={installationStatus}
-          errorMessage={errorMessage}
           serverId={installedServer?.id}
           serverName={installedServer?.name}
         />

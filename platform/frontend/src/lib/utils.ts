@@ -32,5 +32,10 @@ export function formatDate({
 export function showErrorToastFromApiError(error: {
   error: Partial<ApiError> | Error;
 }) {
-  toast.error(error.error?.message ?? "API request failed");
+  if (typeof window !== "undefined") {
+    // we show toast only on the client side
+    toast.error(error.error?.message ?? "API request failed");
+  }
+  // we log the error on the server side
+  console.error(error);
 }

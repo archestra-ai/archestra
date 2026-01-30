@@ -1,3 +1,16 @@
+# Build KinD from source with Go 1.25.6 to fix CVE-2025-61726
+# (KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability)
+FROM alpine:3.23 AS kind-builder
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
+        echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
+        exit 1; \
+    fi
+RUN apk add --no-cache go=1.25.6-r0 git
+RUN git clone --depth 1 --branch v0.31.0 https://github.com/kubernetes-sigs/kind.git /kind && \
+    cd /kind && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
+
 FROM node:24-alpine3.23 AS base
 
 # Enable pnpm
@@ -126,20 +139,27 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-RUN apk add --no-cache docker-cli && \
-    ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then \
-        KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"; \
-        KIND_SHA256="eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa"; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-        KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"; \
-        KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"; \
-    else \
-        echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
-        exit 1; \
-    fi && \
-    wget -O /usr/local/bin/kind "${KIND_URL}" && \
-    chmod +x /usr/local/bin/kind
+# KinD binary is built from source in kind-builder stage with Go 1.25.6 (CVE-2025-61726 fix)
+RUN apk add --no-cache docker-cli
+COPY --from=kind-builder /kind-binary /usr/local/bin/kind
+RUN chmod +x /usr/local/bin/kind
+# TODO: Once KinD releases a version compiled with Go >= 1.25.6, remove the kind-builder stage
+# at the top of this file and restore the pre-built binary download below for faster builds.
+# Track releases at: https://github.com/kubernetes-sigs/kind/releases
+# RUN ARCH=$(uname -m) && \
+#     if [ "$ARCH" = "x86_64" ]; then \
+#         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"; \
+#         KIND_SHA256="eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa"; \
+#     elif [ "$ARCH" = "aarch64" ]; then \
+#         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"; \
+#         KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"; \
+#     else \
+#         echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
+#         exit 1; \
+#     fi && \
+#     wget -O /usr/local/bin/kind "${KIND_URL}" && \
+#     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
+#     chmod +x /usr/local/bin/kind
 
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482

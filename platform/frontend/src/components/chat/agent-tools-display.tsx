@@ -3,6 +3,8 @@
 import { Bot, Wrench } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ExpandableText } from "@/components/ui/expandable-text";
 import {
   HoverCard,
   HoverCardContent,
@@ -153,35 +155,29 @@ export function AgentToolsDisplay({
                 <span>{delegatedAgent.name}</span>
               </Button>
             </HoverCardTrigger>
-            <HoverCardContent
-              className="w-80 cursor-pointer"
-              align="start"
-              onClick={() => handleToggle(delegatedAgent.id)}
-            >
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold">
-                    {delegatedAgent.name}
-                  </h4>
-                  <span
-                    className={cn(
-                      "text-xs px-2 py-0.5 rounded",
-                      enabled
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700",
-                    )}
-                  >
-                    {enabled ? "Enabled" : "Disabled"}
-                  </span>
-                </div>
+            <HoverCardContent className="w-80" align="start">
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold">{delegatedAgent.name}</h4>
                 {delegatedAgent.description && (
-                  <p className="text-xs text-muted-foreground">
-                    {delegatedAgent.description}
-                  </p>
+                  <ExpandableText
+                    text={delegatedAgent.description}
+                    maxLines={2}
+                    className="text-xs text-muted-foreground"
+                  />
                 )}
-                <p className="text-xs text-muted-foreground">
-                  Click to {enabled ? "disable" : "enable"} this agent
-                </p>
+                <label
+                  htmlFor={`chat-subagent-toggle-${delegatedAgent.id}`}
+                  className="flex items-center gap-3 cursor-pointer"
+                >
+                  <Checkbox
+                    id={`chat-subagent-toggle-${delegatedAgent.id}`}
+                    checked={enabled}
+                    onCheckedChange={() => handleToggle(delegatedAgent.id)}
+                  />
+                  <span className="text-sm font-medium">
+                    {enabled ? "Enabled" : "Enable"}
+                  </span>
+                </label>
                 <AgentToolsList agentId={delegatedAgent.id} />
               </div>
             </HoverCardContent>

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { authClient } from "./clients/auth/auth-client";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const {
   deleteMcpServer,
@@ -87,7 +87,7 @@ export function useInstallMcpServer() {
         body: data,
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
       }
       return { installedServer, dontShowToast: data.dontShowToast };
     },
@@ -157,7 +157,7 @@ export function useMcpServerTools(mcpServerId: string | null) {
         path: { id: mcpServerId },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];
       }
       return data ?? [];
@@ -254,7 +254,7 @@ export function useReinstallMcpServer() {
         body,
       });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return { data: response.data, name };

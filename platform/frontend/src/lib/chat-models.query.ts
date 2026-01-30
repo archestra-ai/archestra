@@ -5,7 +5,7 @@ import {
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const { getChatModels, getModelsWithApiKeys } = archestraApiSdk;
 
@@ -29,7 +29,7 @@ export function useChatModels() {
     queryFn: async (): Promise<ChatModel[]> => {
       const { data, error } = await getChatModels();
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];
       }
       return data ?? [];
@@ -86,7 +86,7 @@ export function useModelsWithApiKeys() {
     queryFn: async (): Promise<ModelWithApiKeys[]> => {
       const { data, error } = await getModelsWithApiKeys();
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];
       }
       return data ?? [];

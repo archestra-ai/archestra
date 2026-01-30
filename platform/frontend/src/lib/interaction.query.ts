@@ -2,7 +2,7 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { DEFAULT_TABLE_LIMIT, showErrorToastFromApiError } from "./utils";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
 
 const {
   getInteraction,
@@ -80,7 +80,7 @@ export function useInteractions({
         },
       };
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return emptyResponse;
       }
       return response.data ?? emptyResponse;
@@ -117,7 +117,7 @@ export function useInteraction({
     queryFn: async () => {
       const response = await getInteraction({ path: { interactionId } });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data ?? null;
@@ -133,7 +133,7 @@ export function useUniqueExternalAgentIds() {
     queryFn: async () => {
       const response = await getUniqueExternalAgentIds();
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return [];
       }
       return response.data ?? [];
@@ -147,7 +147,7 @@ export function useUniqueUserIds() {
     queryFn: async () => {
       const response = await getUniqueUserIds();
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return [];
       }
       return response.data ?? [];
@@ -215,7 +215,7 @@ export function useInteractionSessions({
       };
 
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return emptyResponse;
       }
       return response.data ?? emptyResponse;

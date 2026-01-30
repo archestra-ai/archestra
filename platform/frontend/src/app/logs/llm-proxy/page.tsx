@@ -6,7 +6,7 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
-import { DEFAULT_TABLE_LIMIT, showErrorToastFromApiError } from "@/lib/utils";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "@/lib/utils";
 import LlmProxyLogsPage from "./page.client";
 
 export const dynamic = "force-dynamic";
@@ -44,10 +44,10 @@ export default async function LlmProxyLogsPageServer() {
       archestraApiSdk.getAllAgents({ headers }),
     ]);
     if (interactionsResponse.error) {
-      showErrorToastFromApiError(interactionsResponse.error);
+      handleApiError(interactionsResponse.error);
     }
     if (agentsResponse.error) {
-      showErrorToastFromApiError(agentsResponse.error);
+      handleApiError(agentsResponse.error);
     }
     initialData = {
       interactions: interactionsResponse.data || {

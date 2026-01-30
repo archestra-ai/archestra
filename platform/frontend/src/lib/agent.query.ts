@@ -4,7 +4,7 @@ import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
-  showErrorToastFromApiError,
+  handleApiError,
 } from "./utils";
 
 const {
@@ -179,7 +179,7 @@ export function useDeleteProfile() {
     mutationFn: async (id: string) => {
       const { data, error } = await deleteAgent({ path: { id } });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;

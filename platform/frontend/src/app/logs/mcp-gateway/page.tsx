@@ -6,7 +6,7 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
-import { DEFAULT_TABLE_LIMIT, showErrorToastFromApiError } from "@/lib/utils";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "@/lib/utils";
 import McpGatewayLogsPage from "./page.client";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +45,10 @@ export default async function McpGatewayLogsPageServer() {
       archestraApiSdk.getAllAgents({ headers }),
     ]);
     if (mcpToolCallsResponse.error) {
-      showErrorToastFromApiError(mcpToolCallsResponse.error);
+      handleApiError(mcpToolCallsResponse.error);
     }
     if (agentsResponse.error) {
-      showErrorToastFromApiError(agentsResponse.error);
+      handleApiError(agentsResponse.error);
     }
     initialData = {
       mcpToolCalls: mcpToolCallsResponse.data || {

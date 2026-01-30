@@ -10,7 +10,7 @@ import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
-  showErrorToastFromApiError,
+  handleApiError,
 } from "@/lib/utils";
 import McpGatewaysPage from "./page.client";
 
@@ -40,10 +40,10 @@ export default async function McpGatewaysPageServer() {
       archestraApiSdk.getTeams({ headers }),
     ]);
     if (agentsResponse.error) {
-      showErrorToastFromApiError(agentsResponse.error);
+      handleApiError(agentsResponse.error);
     }
     if (teamsResponse.error) {
-      showErrorToastFromApiError(teamsResponse.error);
+      handleApiError(teamsResponse.error);
     }
     initialData = {
       agents: agentsResponse.data || null,

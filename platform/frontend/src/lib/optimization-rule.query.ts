@@ -3,7 +3,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const {
   getOptimizationRules,
@@ -30,7 +30,7 @@ export function useOptimizationRules() {
     queryFn: async () => {
       const response = await getOptimizationRules();
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
       }
       return response.data ?? [];
     },
@@ -47,7 +47,7 @@ export function useCreateOptimizationRule() {
         body: data,
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return responseData;
@@ -74,7 +74,7 @@ export function useUpdateOptimizationRule() {
         body: updates,
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return responseData;
@@ -97,7 +97,7 @@ export function useDeleteOptimizationRule() {
         path: { id },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return { success: true };

@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 export type SupportedChatProvider =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
@@ -27,7 +27,7 @@ export function useChatApiKeys() {
     queryFn: async () => {
       const { data, error } = await getChatApiKeys();
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];
       }
       return data ?? [];
@@ -43,7 +43,7 @@ export function useAvailableChatApiKeys(provider?: SupportedChatProvider) {
         query: provider ? { provider } : undefined,
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];
       }
       return data ?? [];
@@ -61,7 +61,7 @@ export function useCreateChatApiKey() {
         body: data,
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return responseData;
@@ -91,7 +91,7 @@ export function useUpdateChatApiKey() {
         body: data,
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return responseData;
@@ -112,7 +112,7 @@ export function useDeleteChatApiKey() {
         path: { id },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return responseData;
@@ -133,7 +133,7 @@ export function useSyncChatModels() {
     mutationFn: async () => {
       const { data: responseData, error } = await syncChatModels();
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return responseData;

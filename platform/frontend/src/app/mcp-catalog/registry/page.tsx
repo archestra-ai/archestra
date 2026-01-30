@@ -6,7 +6,7 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
-import { showErrorToastFromApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils";
 import McpRegistryClient from "./page.client";
 
 export const dynamic = "force-dynamic";
@@ -27,10 +27,10 @@ export default async function McpRegistryPage() {
       archestraApiSdk.getMcpServers({ headers }),
     ]);
     if (catalogResponse.error) {
-      showErrorToastFromApiError(catalogResponse.error);
+      handleApiError(catalogResponse.error);
     }
     if (serversResponse.error) {
-      showErrorToastFromApiError(serversResponse.error);
+      handleApiError(serversResponse.error);
     }
     initialData = {
       catalog: catalogResponse.data || [],

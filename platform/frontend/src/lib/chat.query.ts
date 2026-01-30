@@ -5,7 +5,7 @@ import {
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const {
   getChatConversations,
@@ -34,7 +34,7 @@ export function useConversation(conversationId?: string) {
         const status = response.response.status;
         // Only show toast for unexpected errors (not 400/404 which are handled gracefully)
         if (status !== 400 && status !== 404) {
-          showErrorToastFromApiError(response.error);
+          handleApiError(response.error);
         }
         return null;
       }
@@ -66,7 +66,7 @@ export function useConversations({
       });
 
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];
       }
       return data;
@@ -101,7 +101,7 @@ export function useCreateConversation() {
         },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -143,7 +143,7 @@ export function useUpdateConversation() {
         body: { title, selectedModel, selectedProvider, chatApiKeyId, agentId },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -169,7 +169,7 @@ export function useDeleteConversation() {
         path: { id },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -198,7 +198,7 @@ export function useGenerateConversationTitle() {
         body: { regenerate },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -221,7 +221,7 @@ export function useChatProfileMcpTools(agentId: string | undefined) {
         path: { agentId },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];
       }
       return data;
@@ -258,7 +258,7 @@ export function useConversationEnabledTools(
       if (!conversationId) return null;
       const data = await fetchConversationEnabledTools(conversationId);
       if (!data) {
-        showErrorToastFromApiError({
+        handleApiError({
           error: new Error("Failed to fetch enabled tools"),
         });
         return null;
@@ -291,7 +291,7 @@ export function useUpdateConversationEnabledTools() {
         body: { toolIds },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -316,7 +316,7 @@ export function useClearConversationEnabledTools() {
         path: { id: conversationId },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -343,7 +343,7 @@ export function useProfileToolsWithIds(agentId: string | undefined) {
         query: { excludeLlmProxyOrigin: true },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];
       }
       return data;
@@ -368,7 +368,7 @@ export function useAgentDelegationTools(agentId: string | undefined) {
         query: { excludeLlmProxyOrigin: true },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];
       }
       // Filter for delegation tools (tools with name starting with "delegate_to_")

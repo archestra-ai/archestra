@@ -14,7 +14,7 @@ import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TOOLS_PAGE_SIZE,
-  showErrorToastFromApiError,
+  handleApiError,
 } from "@/lib/utils";
 import { ToolsClient } from "./page.client";
 
@@ -66,16 +66,16 @@ export default async function ToolsPage() {
       archestraApiSdk.getTrustedDataPolicies({ headers }),
     ]);
     if (toolsResponse.error) {
-      showErrorToastFromApiError(toolsResponse.error);
+      handleApiError(toolsResponse.error);
     }
     if (catalogResponse.error) {
-      showErrorToastFromApiError(catalogResponse.error);
+      handleApiError(catalogResponse.error);
     }
     if (invocationPoliciesResponse.error) {
-      showErrorToastFromApiError(invocationPoliciesResponse.error);
+      handleApiError(invocationPoliciesResponse.error);
     }
     if (trustedDataPoliciesResponse.error) {
-      showErrorToastFromApiError(trustedDataPoliciesResponse.error);
+      handleApiError(trustedDataPoliciesResponse.error);
     }
     initialData = {
       toolsWithAssignments:

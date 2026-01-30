@@ -2,7 +2,7 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { DEFAULT_TABLE_LIMIT, showErrorToastFromApiError } from "./utils";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
 
 const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 
@@ -55,7 +55,7 @@ export function useMcpToolCalls({
         },
       });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return {
           data: [],
           pagination: {
@@ -108,7 +108,7 @@ export function useMcpToolCall({
     queryFn: async () => {
       const response = await getMcpToolCall({ path: { mcpToolCallId } });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data ?? null;

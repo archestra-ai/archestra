@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const {
   getTeamVaultFolder,
@@ -29,7 +29,7 @@ export function useTeamVaultFolder(teamId: string | null) {
         path: { teamId },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -57,7 +57,7 @@ export function useSetTeamVaultFolder() {
         body: { vaultPath },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -82,7 +82,7 @@ export function useDeleteTeamVaultFolder() {
         path: { teamId },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -113,7 +113,7 @@ export function useCheckTeamVaultFolderConnectivity() {
         body: { vaultPath },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -133,7 +133,7 @@ export function useTeamVaultFolderSecrets(teamId: string | null) {
         path: { teamId },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data ?? [];
@@ -159,7 +159,7 @@ export function useTeamVaultSecretKeys(
         body: { secretPath },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return { keys: [] };
       }
       return data ?? { keys: [] };

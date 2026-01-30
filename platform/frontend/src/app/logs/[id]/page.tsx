@@ -6,7 +6,7 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
-import { showErrorToastFromApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils";
 import { ChatPage } from "./page.client";
 
 export default async function ChatPageServer({
@@ -32,10 +32,10 @@ export default async function ChatPageServer({
       archestraApiSdk.getAllAgents({ headers }),
     ]);
     if (interactionResponse.error) {
-      showErrorToastFromApiError(interactionResponse.error);
+      handleApiError(interactionResponse.error);
     }
     if (agentsResponse.error) {
-      showErrorToastFromApiError(agentsResponse.error);
+      handleApiError(agentsResponse.error);
     }
     initialData = {
       interaction: interactionResponse.data,

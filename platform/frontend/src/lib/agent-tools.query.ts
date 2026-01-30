@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const {
   assignToolToAgent,
@@ -78,7 +78,7 @@ export function useAllProfileTools({
         },
       });
       if (result.error) {
-        showErrorToastFromApiError(result.error);
+        handleApiError(result.error);
       }
       return (
         result.data ?? {
@@ -270,7 +270,7 @@ export function useProfileToolPatchMutation() {
         path: { id: updatedProfileTool.id },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data ?? null;
@@ -304,7 +304,7 @@ export function useAutoConfigurePolicies() {
       });
 
       if (result.error) {
-        showErrorToastFromApiError(result.error);
+        handleApiError(result.error);
         return null;
       }
 
@@ -351,7 +351,7 @@ export function useAllDelegationConnections() {
     queryFn: async () => {
       const response = await getAllDelegationConnections();
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
       }
       return (
         response.data ?? {
@@ -373,7 +373,7 @@ export function useAgentDelegations(agentId: string | undefined) {
       if (!agentId) return [];
       const response = await getAgentDelegations({ path: { agentId } });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
       }
       return response.data ?? [];
     },
@@ -400,7 +400,7 @@ export function useSyncAgentDelegations() {
         body: { targetAgentIds },
       });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data;
@@ -444,7 +444,7 @@ export function useRemoveAgentDelegation() {
         path: { agentId, targetAgentId },
       });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data;

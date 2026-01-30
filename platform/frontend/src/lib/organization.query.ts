@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { appearanceKeys } from "@/lib/appearance.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 /**
  * Query key factory for organization-related queries
@@ -241,7 +241,7 @@ export function useOrganizationOnboardingStatus(enabled: boolean) {
       const { data, error } = await archestraApiSdk.getOnboardingStatus();
 
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return {
           hasProfilesConfigured: false,
           hasToolsConfigured: false,

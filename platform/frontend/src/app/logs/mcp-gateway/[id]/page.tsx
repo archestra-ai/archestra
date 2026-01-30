@@ -6,7 +6,7 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
-import { showErrorToastFromApiError } from "@/lib/utils";
+import { handleApiError } from "@/lib/utils";
 import { McpToolCallDetailPage } from "./page.client";
 
 export default async function McpToolCallDetailPageServer({
@@ -32,10 +32,10 @@ export default async function McpToolCallDetailPageServer({
       archestraApiSdk.getAllAgents({ headers }),
     ]);
     if (mcpToolCallResponse.error) {
-      showErrorToastFromApiError(mcpToolCallResponse.error);
+      handleApiError(mcpToolCallResponse.error);
     }
     if (agentsResponse.error) {
-      showErrorToastFromApiError(agentsResponse.error);
+      handleApiError(agentsResponse.error);
     }
     initialData = {
       mcpToolCall: mcpToolCallResponse.data,

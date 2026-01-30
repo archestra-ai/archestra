@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsAuthenticated } from "./auth.hook";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
   archestraApiSdk;
@@ -50,7 +50,7 @@ export function useCreateRole() {
     mutationFn: async (data: archestraApiTypes.CreateRoleData["body"]) => {
       const response = await createRole({ body: data });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data;
@@ -80,7 +80,7 @@ export function useUpdateRole() {
         body: data,
       });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data;
@@ -104,7 +104,7 @@ export function useDeleteRole() {
     mutationFn: async (roleId: string) => {
       const response = await deleteRole({ path: { roleId } });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data;

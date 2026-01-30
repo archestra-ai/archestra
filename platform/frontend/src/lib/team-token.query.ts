@@ -1,7 +1,7 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const { getTokens, getTokenValue, rotateToken } = archestraApiSdk;
 
@@ -53,7 +53,7 @@ export function useTokens(params?: { profileId?: string }) {
     queryFn: async () => {
       const response = await getTokens({ query: { profileId } });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
       }
       const data = response.data as TokensListResponse | undefined;
       return {
@@ -91,7 +91,7 @@ export function useFetchTeamTokenValue() {
     mutationFn: async (tokenId: string) => {
       const { data, error } = await getTokenValue({ path: { tokenId } });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data as { value: string };

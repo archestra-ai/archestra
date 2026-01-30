@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const {
   getIncomingEmailStatus,
@@ -24,7 +24,7 @@ export function useIncomingEmailStatus() {
     queryFn: async () => {
       const { data, error } = await getIncomingEmailStatus();
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data as archestraApiTypes.GetIncomingEmailStatusResponses["200"];
@@ -41,7 +41,7 @@ export function useSetupIncomingEmailWebhook() {
         body: { webhookUrl },
       });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data as archestraApiTypes.SetupIncomingEmailWebhookResponses["200"];
@@ -60,7 +60,7 @@ export function useRenewIncomingEmailSubscription() {
     mutationFn: async () => {
       const response = await renewIncomingEmailSubscription();
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data as archestraApiTypes.RenewIncomingEmailSubscriptionResponses["200"];
@@ -79,7 +79,7 @@ export function useDeleteIncomingEmailSubscription() {
     mutationFn: async () => {
       const response = await deleteIncomingEmailSubscription();
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data as archestraApiTypes.DeleteIncomingEmailSubscriptionResponses["200"];
@@ -104,7 +104,7 @@ export function useAgentEmailAddress(agentId: string | null) {
         path: { agentId },
       });
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data as archestraApiTypes.GetAgentEmailAddressResponses["200"];

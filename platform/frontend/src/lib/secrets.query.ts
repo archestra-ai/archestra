@@ -1,6 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 const { getSecretsType, checkSecretsConnectivity, getSecret } = archestraApiSdk;
 
@@ -30,7 +30,7 @@ export function useGetSecret(secretId: string | null | undefined) {
       }
       const response = await getSecret({ path: { id: secretId } });
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data;
@@ -44,7 +44,7 @@ export function useCheckSecretsConnectivity() {
     mutationFn: async () => {
       const response = await checkSecretsConnectivity();
       if (response.error) {
-        showErrorToastFromApiError(response.error);
+        handleApiError(response.error);
         return null;
       }
       return response.data as archestraApiTypes.CheckSecretsConnectivityResponses["200"];

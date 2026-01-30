@@ -31,6 +31,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
+import { useInitiateOAuth } from "@/lib/oauth.query";
 import { useTeams } from "@/lib/team.query";
 
 interface ManageUsersDialogProps {
@@ -111,6 +112,7 @@ export function ManageUsersDialog({
   };
 
   const deleteMcpServerMutation = useDeleteMcpServer();
+  const initiateOAuthMutation = useInitiateOAuth();
 
   const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
     await deleteMcpServerMutation.mutateAsync({
@@ -132,22 +134,10 @@ export function ManageUsersDialog({
       sessionStorage.setItem("oauth_mcp_server_id", mcpServer.id);
 
       // Call backend to initiate OAuth flow
-      const response = await fetch("/api/oauth/initiate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const { authorizationUrl, state } =
+        await initiateOAuthMutation.mutateAsync({
           catalogId: catalogItem.id,
-        }),
-      });
-
-      if (!response.ok) {
-        sessionStorage.removeItem("oauth_mcp_server_id");
-        throw new Error("Failed to initiate OAuth flow");
-      }
-
-      const { authorizationUrl, state } = await response.json();
+        });
 
       // Store state in session storage for the callback
       sessionStorage.setItem("oauth_state", state);

@@ -549,18 +549,65 @@ export class McpServerRuntimeManager {
 
   /**
    * Stream logs from an MCP server deployment with follow enabled
+   * @param mcpServerId - The MCP server ID
+   * @param responseStream - The stream to write logs to
+   * @param lines - Number of initial lines to fetch
+   * @param abortSignal - Optional abort signal to cancel the stream
    */
   async streamMcpServerLogs(
     mcpServerId: string,
     responseStream: NodeJS.WritableStream,
     lines: number = 100,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
     if (!k8sDeployment) {
       throw new Error(`Deployment not found for MCP server ${mcpServerId}`);
     }
 
-    await k8sDeployment.streamLogs(responseStream, lines);
+    await k8sDeployment.streamLogs(responseStream, lines, abortSignal);
+  }
+
+  /**
+   * Get the kubectl command for streaming logs from an MCP server
+   */
+  getMcpServerLogsCommand(mcpServerId: string, lines: number = 100): string {
+    const sanitizedId = K8sDeployment.sanitizeLabelValue(mcpServerId);
+    return `kubectl logs -n ${this.namespace} -l mcp-server-id=${sanitizedId} --tail=${lines} -f`;
+  }
+
+  /**
+   * Get the kubectl command for describing pods for an MCP server
+   */
+  getMcpServerDescribeCommand(mcpServerId: string): string {
+    const sanitizedId = K8sDeployment.sanitizeLabelValue(mcpServerId);
+    return `kubectl describe pods -n ${this.namespace} -l mcp-server-id=${sanitizedId}`;
+  }
+
+  /**
+   * Check if an MCP server has a running pod
+   */
+  async hasRunningPod(mcpServerId: string): Promise<boolean> {
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
+      return false;
+    }
+    return k8sDeployment.hasRunningPod();
+  }
+
+  /**
+   * Get the appropriate kubectl command based on pod status
+   * Returns logs command if pod is running, describe command otherwise
+   */
+  async getAppropriateCommand(
+    mcpServerId: string,
+    lines: number = 100,
+  ): Promise<string> {
+    const hasRunning = await this.hasRunningPod(mcpServerId);
+    if (hasRunning) {
+      return this.getMcpServerLogsCommand(mcpServerId, lines);
+    }
+    return this.getMcpServerDescribeCommand(mcpServerId);
   }
 
   /**

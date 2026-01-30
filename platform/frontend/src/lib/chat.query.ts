@@ -218,6 +218,18 @@ export function useChatProfileMcpTools(agentId: string | undefined) {
 }
 
 /**
+ * Fetch enabled tools for a conversation (non-hook version for use in callbacks)
+ * Returns { hasCustomSelection: boolean, enabledToolIds: string[] } or null on error
+ */
+export async function fetchConversationEnabledTools(conversationId: string) {
+  const { data, error } = await getConversationEnabledTools({
+    path: { id: conversationId },
+  });
+  if (error) return null;
+  return data;
+}
+
+/**
  * Get enabled tools for a conversation
  * Returns { hasCustomSelection: boolean, enabledToolIds: string[] }
  * Empty enabledToolIds with hasCustomSelection=false means all tools enabled (default)
@@ -229,10 +241,8 @@ export function useConversationEnabledTools(
     queryKey: ["conversation", conversationId, "enabled-tools"],
     queryFn: async () => {
       if (!conversationId) return null;
-      const { data, error } = await getConversationEnabledTools({
-        path: { id: conversationId },
-      });
-      if (error) throw new Error("Failed to fetch enabled tools");
+      const data = await fetchConversationEnabledTools(conversationId);
+      if (!data) throw new Error("Failed to fetch enabled tools");
       return data;
     },
     enabled: !!conversationId,

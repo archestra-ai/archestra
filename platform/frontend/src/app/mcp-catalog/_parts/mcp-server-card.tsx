@@ -7,14 +7,13 @@ import {
   Info,
   MoreVertical,
   Pencil,
-  RefreshCcw,
   RefreshCw,
+  RotateCw,
   Trash2,
   User,
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { LoadingSpinner } from "@/components/loading";
 import {
   WithoutPermissions,
   WithPermissions,
@@ -42,6 +41,7 @@ import { useFeatureFlag } from "@/lib/features.hook";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
+import { InstallationProgress } from "./installation-progress";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpAssignmentsDialog } from "./mcp-assignments-dialog";
 import { McpLogsDialog } from "./mcp-logs-dialog";
@@ -237,8 +237,11 @@ export function McpServerCard({
       : false;
   const toolsDiscoveredCount = tools?.length ?? 0;
   const getToolsAssignedCount = () => {
-    if (installationStatus === "discovering-tools")
-      return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+    if (
+      installationStatus === "pending" ||
+      installationStatus === "discovering-tools"
+    )
+      return "—";
     return !tools
       ? 0
       : tools.filter((tool) => tool.assignedAgentCount > 0).length;
@@ -252,7 +255,95 @@ export function McpServerCard({
     item.oauthConfig
   );
 
-  // JSX parts
+  // Check if logs are available (local variant with at least one installation)
+  const hasLocalInstallations = localInstalls.length > 0;
+  const isLogsAvailable = variant === "local" && hasLocalInstallations;
+
+  // JSX parts - Action buttons for Edit, Logs, Restart
+  const actionButtons = (
+    <div className="flex gap-1 mb-2">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 h-8 text-xs"
+              onClick={onEdit}
+            >
+              <Pencil className="h-3 w-3 mr-1" />
+              Edit
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Edit server configuration</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full h-8 text-xs"
+                onClick={() => setIsLogsDialogOpen(true)}
+                disabled={!isLogsAvailable}
+              >
+                <FileText className="h-3 w-3 mr-1" />
+                Logs
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>
+              {variant !== "local"
+                ? "Local servers only"
+                : !hasLocalInstallations
+                  ? "Connect first"
+                  : "View container logs"}
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <WithPermissions
+        permissions={{ mcpServer: ["admin"] }}
+        noPermissionHandle="hide"
+      >
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-8 text-xs"
+                  onClick={onRestartAll}
+                  disabled={variant !== "local" || !hasLocalInstallations}
+                >
+                  <RotateCw className="h-3 w-3 mr-1" />
+                  Restart
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>
+                {variant !== "local"
+                  ? "Local servers only"
+                  : !hasLocalInstallations
+                    ? "Connect first"
+                    : "Restart all installations"}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </WithPermissions>
+    </div>
+  );
+
   const manageCatalogItemDropdownMenu = (
     <div className="flex flex-wrap gap-1 items-center flex-shrink-0">
       <DropdownMenu>
@@ -262,60 +353,11 @@ export function McpServerCard({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div>
-                  <DropdownMenuItem
-                    onClick={() => setIsLogsDialogOpen(true)}
-                    disabled={variant !== "local"}
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    Logs
-                  </DropdownMenuItem>
-                </div>
-              </TooltipTrigger>
-              {variant !== "local" && (
-                <TooltipContent>
-                  <p>Only available for local MCP servers</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-          <WithPermissions
-            permissions={{ mcpServer: ["admin"] }}
-            noPermissionHandle="hide"
-          >
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <DropdownMenuItem
-                      onClick={onRestartAll}
-                      disabled={variant !== "local"}
-                    >
-                      <RefreshCcw className="mr-2 h-4 w-4" />
-                      Restart
-                    </DropdownMenuItem>
-                  </div>
-                </TooltipTrigger>
-                {variant !== "local" && (
-                  <TooltipContent>
-                    <p>Only available for local MCP servers</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          </WithPermissions>
           <DropdownMenuItem onClick={onDetails}>
             <Info className="mr-2 h-4 w-4" />
             About
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onEdit}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onDelete}>
+          <DropdownMenuItem onClick={onDelete} className="text-destructive">
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
           </DropdownMenuItem>
@@ -468,6 +510,7 @@ export function McpServerCard({
     </>
   );
 
+  // Show error banner with link to logs dialog
   const errorBanner = isCurrentUserAuthenticated &&
     hasError &&
     errorMessage && (
@@ -475,7 +518,14 @@ export function McpServerCard({
         className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
         data-testid={`${E2eTestId.McpServerError}-${item.name}`}
       >
-        {errorMessage}
+        Failed to start MCP server,{" "}
+        <button
+          type="button"
+          onClick={() => setIsLogsDialogOpen(true)}
+          className="text-primary hover:underline cursor-pointer"
+        >
+          click here for more details
+        </button>
       </div>
     );
 
@@ -602,12 +652,13 @@ export function McpServerCard({
           </Tooltip>
         </TooltipProvider>
       )}
-      {(installationStatus === "discovering-tools" || isInstalling) && (
-        <Button size="sm" variant={"outline"} className="w-full" disabled>
-          {installationStatus === "discovering-tools"
-            ? "Discovering tools..."
-            : "Installing..."}
-        </Button>
+      {(installationStatus === "pending" ||
+        installationStatus === "discovering-tools") && (
+        <InstallationProgress
+          status={installationStatus}
+          serverId={installedServer?.id}
+          serverName={installedServer?.name}
+        />
       )}
     </>
   );
@@ -668,18 +719,12 @@ export function McpServerCard({
       <CardHeader>
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="text-lg font-semibold mb-1 cursor-help overflow-hidden whitespace-nowrap text-ellipsis w-full">
-                    {item.name}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs break-words">{item.name}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              className="text-lg font-semibold mb-1 overflow-hidden whitespace-nowrap text-ellipsis w-full"
+              title={item.name}
+            >
+              {item.name}
+            </div>
             <div className="flex items-center gap-2">
               {isBuiltinVariant && (
                 <Badge
@@ -714,6 +759,7 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 flex-grow">
+        {userIsMcpServerAdmin && !isBuiltinVariant && actionButtons}
         {isBuiltinVariant
           ? builtinCardContent
           : isRemoteVariant

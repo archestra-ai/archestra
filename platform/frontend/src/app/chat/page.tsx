@@ -55,6 +55,7 @@ import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
+  fetchConversationEnabledTools,
   useConversation,
   useCreateConversation,
   useHasPlaywrightMcpTools,
@@ -820,11 +821,10 @@ export default function ChatPage() {
                 try {
                   // The backend creates conversation with default enabled tools
                   // We need to apply pending actions to modify that default
-                  const response = await fetch(
-                    `/api/chat/conversations/${newConversation.id}/enabled-tools`,
+                  const data = await fetchConversationEnabledTools(
+                    newConversation.id,
                   );
-                  if (response.ok) {
-                    const data = await response.json();
+                  if (data) {
                     const baseEnabledToolIds = data.enabledToolIds || [];
                     const newEnabledToolIds = applyPendingActions(
                       baseEnabledToolIds,

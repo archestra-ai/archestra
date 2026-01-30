@@ -1,3 +1,4 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { InvitationModel, UserModel } from "@/models";
@@ -12,6 +13,10 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     "/api/invitation/:id/check",
     {
       schema: {
+        operationId: RouteId.CheckInvitation,
+        description:
+          "Check if an invitation is valid and whether the user exists",
+        tags: ["Invitation"],
         params: z.object({
           id: z.string(),
         }),

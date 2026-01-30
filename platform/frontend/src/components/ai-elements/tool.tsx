@@ -62,6 +62,8 @@ export type ToolHeaderProps = {
   icon?: React.ReactNode;
   errorText?: ToolUIPart["errorText"];
   isCollapsible?: boolean;
+  /** Optional action button to display in the header (e.g., View Logs) */
+  actionButton?: React.ReactNode;
 };
 
 const getStatusBadge = (
@@ -107,6 +109,7 @@ export const ToolHeader = ({
   errorText,
   icon,
   isCollapsible = true,
+  actionButton,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
@@ -117,7 +120,7 @@ export const ToolHeader = ({
     )}
     {...props}
   >
-    <div>
+    <div className="flex-1">
       <div className="flex items-center gap-2">
         {icon ?? <WrenchIcon className={`size-4 text-muted-foreground`} />}
         <span className="font-medium text-sm">
@@ -141,6 +144,17 @@ export const ToolHeader = ({
           tabIndex={-1}
         >
           {errorText}
+        </div>
+      )}
+      {actionButton && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: Wrapper needs to stop event propagation
+        <div
+          className="mt-2"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {actionButton}
         </div>
       )}
     </div>

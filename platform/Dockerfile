@@ -98,9 +98,21 @@ ENV ARCHESTRA_AUTH_DISABLE_INVITATIONS="false"
 ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
+# Cloud database CA bundle for SSL certificate validation
+# This allows sslmode=require to work with AWS RDS and Google Cloud SQL
+ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
+
 RUN apk --no-cache upgrade && \
     # Install PostgreSQL 17, supervisord, and wget (needed for KinD download and health checks)
     apk add --no-cache postgresql17 postgresql17-contrib su-exec wget && \
+    # Download cloud database CA bundles for SSL certificate validation
+    # AWS RDS global CA bundle
+    wget -qO /tmp/aws-rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
+    # Google Cloud SQL global CA bundle
+    wget -qO /tmp/gcloud-sql-ca.pem https://storage.googleapis.com/cloudsql-ca-bundles/global.pem && \
+    # Combine all CA bundles
+    cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
+    rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625
     rm -rf /usr/local/lib/node_modules/npm && \
@@ -448,14 +460,15 @@ EOSQL
     fi
 else
     echo "Using external PostgreSQL database"
-    # Extract credentials from DATABASE_URL if needed (postgresql://user:pass@host:port/db)
-    POSTGRES_USER=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
-    POSTGRES_PASSWORD=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
-    POSTGRES_DB=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+    # Note: POSTGRES_USER/PASSWORD/DB extraction removed - not needed for external databases
+    # The application uses EFFECTIVE_DATABASE_URL directly
 fi
 
 # Update supervisord config with actual environment variables
-sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${EFFECTIVE_DATABASE_URL}\"|" /etc/supervisord.conf
+# Escape % as %% for supervisord (it uses % for string interpolation like %(ENV_VAR)s)
+# Then use awk to handle other special characters in DATABASE_URL (like |, &, \)
+ESCAPED_DATABASE_URL=$(echo "$EFFECTIVE_DATABASE_URL" | sed 's/%/%%/g')
+awk -v url="$ESCAPED_DATABASE_URL" '{gsub(/DATABASE_URL="[^"]*"/, "DATABASE_URL=\"" url "\""); print}' /etc/supervisord.conf > /etc/supervisord.conf.tmp && mv /etc/supervisord.conf.tmp /etc/supervisord.conf
 
 # Propagate analytics setting to frontend (enabled by default, set to "disabled" to opt-out)
 if [ -n "$ARCHESTRA_ANALYTICS" ]; then

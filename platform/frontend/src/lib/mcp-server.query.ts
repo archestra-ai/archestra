@@ -10,8 +10,6 @@ const {
   getMcpServerTools,
   installMcpServer,
   getMcpServer,
-  restartMcpServer,
-  restartAllMcpServerInstallations,
   reauthenticateMcpServer,
   reinstallMcpServer,
 } = archestraApiSdk;
@@ -149,53 +147,6 @@ export function useDeleteMcpServer() {
     onError: (error, variables) => {
       console.error("Uninstall error:", error);
       toast.error(`Failed to uninstall ${variables.name}`);
-    },
-  });
-}
-
-export function useRestartMcpServer() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: { id: string; name: string }) => {
-      const response = await restartMcpServer({ path: { id: data.id } });
-      return response.data;
-    },
-    onSuccess: async (_, variables) => {
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-      toast.success(`Successfully restarted ${variables.name}`);
-    },
-    onError: (_error, variables) => {
-      toast.error(`Failed to restart ${variables.name}`);
-    },
-  });
-}
-
-export function useRestartAllMcpServerInstallations() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: { catalogId: string; name: string }) => {
-      const response = await restartAllMcpServerInstallations({
-        path: { catalogId: data.catalogId },
-      });
-      return response.data;
-    },
-    onSuccess: async (result, variables) => {
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-      if (result?.summary) {
-        const { succeeded, failed, total } = result.summary;
-        if (failed === 0) {
-          toast.success(
-            `Successfully restarted all ${succeeded} installation(s) of ${variables.name}`,
-          );
-        } else {
-          toast.warning(
-            `Restarted ${succeeded}/${total} installation(s) of ${variables.name}, ${failed} failed`,
-          );
-        }
-      }
-    },
-    onError: (_error, variables) => {
-      toast.error(`Failed to restart installations of ${variables.name}`);
     },
   });
 }

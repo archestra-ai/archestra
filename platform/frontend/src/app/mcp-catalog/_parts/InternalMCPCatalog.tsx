@@ -21,7 +21,6 @@ import {
   useInstallMcpServer,
   useMcpServers,
   useReinstallMcpServer,
-  useRestartAllMcpServerInstallations,
 } from "@/lib/mcp-server.query";
 import { useInitiateOAuth } from "@/lib/oauth.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -76,7 +75,6 @@ export function InternalMCPCatalog({
   });
   const installMutation = useInstallMcpServer();
   const reinstallMutation = useReinstallMcpServer();
-  const restartAllMutation = useRestartAllMcpServerInstallations();
   const initiateOAuthMutation = useInitiateOAuth();
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
@@ -696,12 +694,6 @@ export function InternalMCPCatalog({
                   }
                   onInstallLocalServer={() => handleInstallLocalServer(item)}
                   onReinstall={() => handleReinstall(item)}
-                  onRestartAll={() => {
-                    restartAllMutation.mutate({
-                      catalogId: item.id,
-                      name: item.name,
-                    });
-                  }}
                   onEdit={() => setEditingItem(item)}
                   onDetails={() => {
                     setDetailsServerName(item.name);

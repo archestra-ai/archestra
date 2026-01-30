@@ -52,6 +52,9 @@ export function useTokens(params?: { profileId?: string }) {
     queryKey: ["tokens", { profileId }],
     queryFn: async () => {
       const response = await getTokens({ query: { profileId } });
+      if (response.error) {
+        showErrorToastFromApiError(response.error);
+      }
       const data = response.data as TokensListResponse | undefined;
       return {
         tokens: data?.tokens ?? [],

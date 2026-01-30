@@ -77,6 +77,9 @@ export function useAllProfileTools({
           skipPagination,
         },
       });
+      if (result.error) {
+        showErrorToastFromApiError(result.error);
+      }
       return (
         result.data ?? {
           data: [],
@@ -347,6 +350,9 @@ export function useAllDelegationConnections() {
     queryKey: agentDelegationsQueryKeys.connections,
     queryFn: async () => {
       const response = await getAllDelegationConnections();
+      if (response.error) {
+        showErrorToastFromApiError(response.error);
+      }
       return (
         response.data ?? {
           connections: [],
@@ -366,6 +372,9 @@ export function useAgentDelegations(agentId: string | undefined) {
     queryFn: async () => {
       if (!agentId) return [];
       const response = await getAgentDelegations({ path: { agentId } });
+      if (response.error) {
+        showErrorToastFromApiError(response.error);
+      }
       return response.data ?? [];
     },
     enabled: !!agentId,

@@ -43,6 +43,9 @@ export function useUserTokenValue() {
     queryKey: ["userTokenValue"],
     queryFn: async () => {
       const response = await getUserTokenValue();
+      if (response.error) {
+        showErrorToastFromApiError(response.error);
+      }
       return response.data as { value: string };
     },
     enabled: false, // Only fetch on demand

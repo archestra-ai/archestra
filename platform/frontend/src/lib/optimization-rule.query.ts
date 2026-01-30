@@ -29,6 +29,9 @@ export function useOptimizationRules() {
     queryKey: ["optimization-rules"],
     queryFn: async () => {
       const response = await getOptimizationRules();
+      if (response.error) {
+        showErrorToastFromApiError(response.error);
+      }
       return response.data ?? [];
     },
   });

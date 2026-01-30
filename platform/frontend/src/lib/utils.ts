@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import type { ApiError } from "@shared";
 import { type ClassValue, clsx } from "clsx";
 import { format } from "date-fns";
@@ -34,6 +35,8 @@ export function handleApiError(error: { error: Partial<ApiError> | Error }) {
     // we show toast only on the client side
     toast.error(error.error?.message ?? "API request failed");
   }
+  // capture exception on Sentry
+  Sentry.captureException(error);
   // we log the error on the server side
   console.error(error);
 }

@@ -1415,9 +1415,11 @@ export default class K8sDeployment {
                   "CrashLoopBackOff",
                   "ImagePullBackOff",
                   "ErrImagePull",
+                  "ErrImageNeverPull",
                   "CreateContainerConfigError",
                   "CreateContainerError",
                   "RunContainerError",
+                  "InvalidImageName",
                 ];
                 if (failureStates.includes(waitingReason)) {
                   const message =
@@ -1522,10 +1524,14 @@ export default class K8sDeployment {
   /**
    * Stream logs from the pod with follow enabled.
    * If no running pod is found, falls back to showing K8s events.
+   * @param responseStream - The stream to write logs to
+   * @param lines - Number of initial lines to fetch
+   * @param abortSignal - Optional abort signal to cancel the stream
    */
   async streamLogs(
     responseStream: NodeJS.WritableStream,
     lines: number = 100,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     try {
       const pod = await this.findPodForDeployment();
@@ -1579,12 +1585,6 @@ export default class K8sDeployment {
         }
       });
 
-      responseStream.on("close", () => {
-        if (logStream.destroy) {
-          logStream.destroy();
-        }
-      });
-
       // Use the Log client to stream logs with follow=true
       const req = await this.k8sLog.log(
         this.namespace,
@@ -1599,11 +1599,45 @@ export default class K8sDeployment {
         },
       );
 
+      // Track abort handler for cleanup
+      let abortHandler: (() => void) | null = null;
+
+      // Handle abort signal
+      if (abortSignal) {
+        abortHandler = () => {
+          if (req) {
+            req.abort();
+          }
+          logStream.destroy();
+          if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+            responseStream.end();
+          }
+        };
+
+        if (abortSignal.aborted) {
+          abortHandler();
+          return;
+        }
+
+        abortSignal.addEventListener("abort", abortHandler, { once: true });
+      }
+
+      // Cleanup function to remove abort listener
+      const cleanupAbortListener = () => {
+        if (abortSignal && abortHandler) {
+          abortSignal.removeEventListener("abort", abortHandler);
+        }
+      };
+
       // Handle cleanup when response stream closes
       responseStream.on("close", () => {
         if (req) {
           req.abort();
         }
+        if (logStream.destroy) {
+          logStream.destroy();
+        }
+        cleanupAbortListener();
       });
     } catch (error: unknown) {
       logger.error(

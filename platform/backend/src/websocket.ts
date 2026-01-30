@@ -5,6 +5,7 @@ import {
   type ClientWebSocketMessage,
   ClientWebSocketMessageSchema,
   type ClientWebSocketMessageType,
+  MCP_DEFAULT_LOG_LINES,
   type ServerWebSocketMessage,
 } from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
@@ -136,7 +137,7 @@ class WebSocketService {
         return this.handleSubscribeMcpLogs(
           ws,
           message.payload.serverId,
-          message.payload.lines ?? 500,
+          message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
           clientContext,
         );
       },
@@ -739,6 +740,7 @@ class WebSocketService {
         serverId,
         stream,
         lines,
+        abortController.signal,
       );
     } catch (error) {
       logger.error({ error, serverId }, "Failed to start MCP logs stream");

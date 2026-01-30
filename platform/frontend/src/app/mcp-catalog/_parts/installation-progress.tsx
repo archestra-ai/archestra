@@ -22,17 +22,39 @@ interface InstallationProgressProps {
 const PHASES = {
   pending: {
     progress: 33,
-    description: "Starting container...",
+    description: "Starting container",
   },
   "discovering-tools": {
     progress: 66,
-    description: "Discovering tools...",
+    description: "Discovering tools",
   },
   success: {
     progress: 100,
     description: "Installation complete",
   },
 } as const;
+
+/**
+ * Hook that returns animated dots that cycle through ".", "..", "..."
+ */
+function useAnimatedDots(isActive: boolean) {
+  const [dotCount, setDotCount] = useState(1);
+
+  useEffect(() => {
+    if (!isActive) {
+      setDotCount(1);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setDotCount((prev) => (prev % 3) + 1);
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  return ".".repeat(dotCount);
+}
 
 /**
  * Hook that returns animated progress value that smoothly increments
@@ -83,6 +105,16 @@ export function InstallationProgress({
   const isActive = status === "pending" || status === "discovering-tools";
   const targetProgress = phaseInfo?.progress ?? 0;
   const animatedProgress = useAnimatedProgress(targetProgress, isActive);
+  const animatedDots = useAnimatedDots(isActive);
+
+  // Build description with animated dots for active phases
+  const description = useMemo(() => {
+    if (!phaseInfo) return "";
+    if (isActive) {
+      return `${phaseInfo.description}${animatedDots}`;
+    }
+    return phaseInfo.description;
+  }, [phaseInfo, isActive, animatedDots]);
 
   if (!status || status === "idle" || status === "success") {
     return null;
@@ -96,7 +128,7 @@ export function InstallationProgress({
     <div className="w-full space-y-2">
       <Progress value={animatedProgress} />
       <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">{phaseInfo?.description}</span>
+        <span className="text-muted-foreground">{description}</span>
         {serverId && (
           <Button
             variant="link"

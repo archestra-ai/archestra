@@ -23,6 +23,7 @@ import {
   useReinstallMcpServer,
   useRestartAllMcpServerInstallations,
 } from "@/lib/mcp-server.query";
+import { useInitiateOAuth } from "@/lib/oauth.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
@@ -76,6 +77,7 @@ export function InternalMCPCatalog({
   const installMutation = useInstallMcpServer();
   const reinstallMutation = useReinstallMcpServer();
   const restartAllMutation = useRestartAllMcpServerInstallations();
+  const initiateOAuthMutation = useInitiateOAuth();
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
 
@@ -390,21 +392,10 @@ export function InternalMCPCatalog({
 
     try {
       // Call backend to initiate OAuth flow
-      const response = await fetch("/api/oauth/initiate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const { authorizationUrl, state } =
+        await initiateOAuthMutation.mutateAsync({
           catalogId: selectedCatalogItem.id,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to initiate OAuth flow");
-      }
-
-      const { authorizationUrl, state } = await response.json();
+        });
 
       // Store state in session storage for the callback
       sessionStorage.setItem("oauth_state", state);

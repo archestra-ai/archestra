@@ -3082,67 +3082,6 @@ export type ZhipuaiChatCompletionResponseInput = {
     }>;
 };
 
-export type WebSocketMessageInput = {
-    type: string;
-    payload: {
-        [key: string]: unknown;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        tabIndex?: number;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        url: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        element?: string;
-        x?: number;
-        y?: number;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        text: string;
-        element?: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        key: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        zoomPercent: number;
-    };
-};
-
 export type OpenAiChatCompletionRequest = {
     model: string;
     /**
@@ -6219,67 +6158,6 @@ export type ZhipuaiChatCompletionResponse = {
         refer: string;
         publish_date: string;
     }>;
-};
-
-export type WebSocketMessage = {
-    type: string;
-    payload: {
-        [key: string]: never;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        tabIndex?: number;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        url: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        element?: string;
-        x?: number;
-        y?: number;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        text: string;
-        element?: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        key: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        zoomPercent: number;
-    };
 };
 
 export type GetHealthData = {
@@ -18732,6 +18610,92 @@ export type DeleteInternalMcpCatalogItemByNameResponses = {
 
 export type DeleteInternalMcpCatalogItemByNameResponse = DeleteInternalMcpCatalogItemByNameResponses[keyof DeleteInternalMcpCatalogItemByNameResponses];
 
+export type CheckInvitationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/invitation/{id}/check';
+};
+
+export type CheckInvitationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CheckInvitationError = CheckInvitationErrors[keyof CheckInvitationErrors];
+
+export type CheckInvitationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        invitation: {
+            id: string;
+            email: string;
+            organizationId: string;
+            status: 'pending' | 'accepted' | 'canceled';
+            expiresAt: string | null;
+        };
+        userExists: boolean;
+    };
+};
+
+export type CheckInvitationResponse = CheckInvitationResponses[keyof CheckInvitationResponses];
+
 export type GetLimitsData = {
     body?: never;
     path?: never;
@@ -21458,91 +21422,6 @@ export type GetMcpServerToolsResponses = {
 };
 
 export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpServerToolsResponses];
-
-export type GetMcpServerLogsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: {
-        lines?: number;
-        follow?: boolean;
-    };
-    url: '/api/mcp_server/{id}/logs';
-};
-
-export type GetMcpServerLogsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetMcpServerLogsError = GetMcpServerLogsErrors[keyof GetMcpServerLogsErrors];
-
-export type GetMcpServerLogsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        logs: string;
-        containerName: string;
-        command: string;
-        namespace: string;
-    };
-};
-
-export type GetMcpServerLogsResponse = GetMcpServerLogsResponses[keyof GetMcpServerLogsResponses];
 
 export type RestartMcpServerData = {
     body?: never;

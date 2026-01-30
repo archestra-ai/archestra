@@ -11,7 +11,6 @@ const {
   getMcpServerTools,
   installMcpServer,
   getMcpServer,
-  getMcpServerLogs,
   restartMcpServer,
   restartAllMcpServerInstallations,
   reauthenticateMcpServer,
@@ -256,27 +255,6 @@ export function useMcpServerInstallationStatus(
       );
     },
     enabled: !!installingMcpServerId,
-  });
-}
-
-export function useMcpServerLogs(mcpServerId: string | null) {
-  return useQuery({
-    queryKey: ["mcp-servers", mcpServerId, "logs"],
-    queryFn: async () => {
-      if (!mcpServerId) return null;
-      const { data, error } = await getMcpServerLogs({
-        path: { id: mcpServerId },
-        query: { lines: 100 },
-      });
-      if (error) {
-        showErrorToastFromApiError(error);
-        return null;
-      }
-      return data ?? null;
-    },
-    enabled: !!mcpServerId,
-    refetchOnWindowFocus: false,
-    retry: false,
   });
 }
 

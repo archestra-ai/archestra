@@ -1,9 +1,8 @@
 import { z } from "zod";
 
 /**
- * WebSocket Message Payload Schemas
+ * WebSocket Message Payload Schemas (Client -> Server)
  */
-const HelloWorldWebsocketPayloadSchema = z.object({});
 
 // Browser stream payloads
 const SubscribeBrowserStreamPayloadSchema = z.object({
@@ -53,14 +52,20 @@ const BrowserSetZoomPayloadSchema = z.object({
   zoomPercent: z.number().min(10).max(200), // Zoom percentage (10% to 200%)
 });
 
+// MCP Server Logs payloads
+const SubscribeMcpLogsPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+  lines: z.number().int().min(1).max(10000).default(500), // Number of initial lines to fetch
+});
+
+const UnsubscribeMcpLogsPayloadSchema = z.object({
+  serverId: z.string().uuid(),
+});
+
 /**
  * Discriminated union of all possible websocket messages (client -> server)
  */
-export const WebSocketMessageSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("hello-world"),
-    payload: HelloWorldWebsocketPayloadSchema,
-  }),
+export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("subscribe_browser_stream"),
     payload: SubscribeBrowserStreamPayloadSchema,
@@ -97,12 +102,25 @@ export const WebSocketMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("browser_set_zoom"),
     payload: BrowserSetZoomPayloadSchema,
   }),
+  z.object({
+    type: z.literal("subscribe_mcp_logs"),
+    payload: SubscribeMcpLogsPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_mcp_logs"),
+    payload: UnsubscribeMcpLogsPayloadSchema,
+  }),
 ]);
 
-export type WebSocketMessage = z.infer<typeof WebSocketMessageSchema>;
+export type ClientWebSocketMessage = z.infer<typeof ClientWebSocketMessageSchema>;
 
 /**
- * Server -> Client message types (not validated, just typed)
+ * All possible client message types (for handler maps)
+ */
+export type ClientWebSocketMessageType = ClientWebSocketMessage["type"];
+
+/**
+ * Server -> Client message types
  */
 export type BrowserScreenshotMessage = {
   type: "browser_screenshot";
@@ -185,6 +203,31 @@ export type BrowserNavigateBackResultMessage = {
   };
 };
 
+// MCP Logs server -> client messages
+export type McpLogsMessage = {
+  type: "mcp_logs";
+  payload: {
+    serverId: string;
+    logs: string;
+    command?: string; // kubectl command for manual execution
+  };
+};
+
+export type McpLogsErrorMessage = {
+  type: "mcp_logs_error";
+  payload: {
+    serverId: string;
+    error: string;
+  };
+};
+
+export type ErrorMessage = {
+  type: "error";
+  payload: {
+    message: string;
+  };
+};
+
 export type ServerWebSocketMessage =
   | BrowserScreenshotMessage
   | BrowserNavigateResultMessage
@@ -195,4 +238,11 @@ export type ServerWebSocketMessage =
   | BrowserPressKeyResultMessage
   | BrowserSnapshotMessage
   | BrowserSetZoomResultMessage
-  | { type: "error"; payload: { message: string } };
+  | McpLogsMessage
+  | McpLogsErrorMessage
+  | ErrorMessage;
+
+/**
+ * All possible server message types (for handler maps)
+ */
+export type ServerWebSocketMessageType = ServerWebSocketMessage["type"];

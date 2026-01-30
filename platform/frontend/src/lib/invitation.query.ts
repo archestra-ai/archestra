@@ -1,16 +1,11 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { showErrorToastFromApiError } from "./utils";
 
-export type InvitationCheckResponse = {
-  invitation: {
-    id: string;
-    email: string;
-    organizationId: string;
-    status: "pending" | "accepted" | "canceled";
-    expiresAt: string | null;
-  };
-  userExists: boolean;
-};
+const { checkInvitation } = archestraApiSdk;
+
+export type InvitationCheckResponse =
+  archestraApiTypes.CheckInvitationResponses["200"];
 
 export function useInvitationCheck(invitationId: string | null | undefined) {
   return useQuery({
@@ -18,20 +13,12 @@ export function useInvitationCheck(invitationId: string | null | undefined) {
     queryFn: async () => {
       if (!invitationId) return null;
 
-      const response = await fetch(`/api/invitation/${invitationId}/check`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        toast.error(error.message || "Failed to check invitation");
+      const response = await checkInvitation({ path: { id: invitationId } });
+      if (response.error) {
+        showErrorToastFromApiError(response.error);
         return null;
       }
-
-      return (await response.json()) as InvitationCheckResponse;
+      return response.data ?? null;
     },
     enabled: !!invitationId,
     staleTime: 5000, // 5 seconds

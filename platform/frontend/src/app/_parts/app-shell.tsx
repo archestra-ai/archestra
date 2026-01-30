@@ -30,7 +30,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <main className="h-screen w-full flex flex-col bg-background min-w-0">
+      <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
         <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
           <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
         </header>

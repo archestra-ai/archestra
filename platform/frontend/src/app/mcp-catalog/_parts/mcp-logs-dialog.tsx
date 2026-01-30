@@ -264,8 +264,8 @@ export function McpLogsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-5xl h-[70vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 overflow-hidden">
             <Terminal className="h-5 w-5 flex-shrink-0" />
             <span className="truncate">Logs: {serverName}</span>
@@ -297,7 +297,7 @@ export function McpLogsDialog({
 
         <div className="flex flex-col gap-4 flex-1 min-h-0">
           <div className="flex flex-col gap-2 flex-1 min-h-0">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-shrink-0">
               <h3 className="text-sm font-semibold">Container Logs</h3>
               {!autoScroll && (
                 <Button
@@ -312,40 +312,55 @@ export function McpLogsDialog({
               )}
             </div>
 
-            <ScrollArea
-              ref={scrollAreaRef}
-              className="relative flex-[100%] min-h-[250px] rounded-md border bg-slate-950 overflow-auto"
-            >
-              <div className="p-4">
-                {streamError ? (
-                  <div className="text-red-400 font-mono text-sm">
-                    Error loading logs: {streamError}
-                  </div>
-                ) : isWaitingForLogs ? (
-                  <div className="text-emerald-400 font-mono text-sm">
-                    {streamingText}
-                  </div>
-                ) : streamedLogs ? (
-                  <pre className="text-emerald-400 font-mono text-xs whitespace-pre-wrap">
-                    {streamedLogs}
-                  </pre>
-                ) : (
-                  <div className="text-slate-400 font-mono text-sm">
-                    No logs available
-                  </div>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopyLogs}
-                disabled={!!streamError || !streamedLogs}
-                className="absolute top-2 right-4 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+            <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
+              <ScrollArea
+                ref={scrollAreaRef}
+                className="flex-1 overflow-auto"
               >
-                <Copy className="h-3 w-3" />
-                {copied ? " Copied!" : ""}
-              </Button>
-            </ScrollArea>
+                <div className="p-4">
+                  {streamError ? (
+                    <div className="text-red-400 font-mono text-sm">
+                      Error loading logs: {streamError}
+                    </div>
+                  ) : isWaitingForLogs ? (
+                    <div className="text-emerald-400 font-mono text-sm">
+                      {streamingText}
+                    </div>
+                  ) : streamedLogs ? (
+                    <pre className="text-emerald-400 font-mono text-xs whitespace-pre-wrap">
+                      {streamedLogs}
+                    </pre>
+                  ) : (
+                    <div className="text-slate-400 font-mono text-sm">
+                      No logs available
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+              <div className="flex items-center justify-between px-3 py-2 border-t border-slate-800">
+                {isStreaming && !streamError ? (
+                  <div className="flex items-center gap-1.5 text-red-400 text-xs font-mono">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                    </span>
+                    Streaming
+                  </div>
+                ) : (
+                  <div />
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyLogs}
+                  disabled={!!streamError || !streamedLogs}
+                  className="h-6 px-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  {copied ? "Copied!" : "Copy"}
+                </Button>
+              </div>
+            </div>
           </div>
 
           {command && (

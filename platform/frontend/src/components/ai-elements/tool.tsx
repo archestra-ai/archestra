@@ -1,6 +1,8 @@
 "use client";
 
 import type { ToolUIPart } from "ai";
+import { MCPUIRenderer } from "@/components/chat/mcp-ui-renderer";
+import { detectMCPUIResource, isValidMCPUIResourceUri } from "@/lib/mcp-ui-utils";
 import {
   CheckCircleIcon,
   ChevronDownIcon,
@@ -209,6 +211,23 @@ export const ToolOutput = ({
 
   if (!(output || errorText || conversations)) {
     return null;
+  }
+
+  // Check for MCP UI resource
+  const mcpUIResource = detectMCPUIResource(output);
+  if (mcpUIResource && isValidMCPUIResourceUri(mcpUIResource.resourceUri)) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {label ?? "Interactive UI"}
+        </h4>
+        <MCPUIRenderer
+          resourceUri={mcpUIResource.resourceUri}
+          toolName={label ?? "tool"}
+          onError={(error) => console.error("MCP UI Error:", error)}
+        />
+      </div>
+    );
   }
 
   // Render conversations as chat bubbles if provided

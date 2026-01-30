@@ -15,6 +15,11 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
+import {
+  preserveUIMetadata,
+  transformToolResultForUI,
+  enhanceToolWithUICapabilities,
+} from "./mcp-gateway-ui";
 import { userHasPermission } from "@/auth/utils";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
@@ -91,13 +96,13 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
+    const toolsList = mcpTools.map(({ name, description, parameters, _meta }) => ({
       name,
       title: archestraToolTitles.get(name) || name,
       description,
       inputSchema: parameters,
       annotations: {},
-      _meta: {},
+      _meta: _meta || {},
     }));
 
     // Log tools/list request
@@ -116,6 +121,15 @@ export async function createAgentServer(
       );
     } catch (dbError) {
       logger.info({ err: dbError }, "Failed to persist tools/list request:");
+    }
+
+    // Log tools with UI capabilities
+    const toolsWithUI = toolsList.filter((t: any) => t._meta?.ui?.resourceUri);
+    if (toolsWithUI.length > 0) {
+      logger.info(
+        { agentId, toolsWithUI: toolsWithUI.map((t: any) => t.name) },
+        "Tools with UI capabilities detected",
+      );
     }
 
     return { tools: toolsList };
@@ -207,11 +221,15 @@ export async function createAgentServer(
         // Transform CommonToolResult to MCP response format
         // When isError is true, we still return the content so the LLM can see
         // the error message and potentially try a different approach
+        
+        // Preserve UI metadata in tool results
+        const uiPreservedResult = transformToolResultForUI(result);
+        
         return {
-          content: Array.isArray(result.content)
-            ? result.content
-            : [{ type: "text", text: JSON.stringify(result.content) }],
-          isError: result.isError,
+          content: Array.isArray(uiPreservedResult.content)
+            ? uiPreservedResult.content
+            : [{ type: "text", text: JSON.stringify(uiPreservedResult.content) }],
+          isError: uiPreservedResult.isError,
         };
       } catch (error) {
         if (typeof error === "object" && error !== null && "code" in error) {

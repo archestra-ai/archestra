@@ -15,8 +15,7 @@ setup("authenticate as admin", async ({ page }) => {
   expect(signedIn, "Admin sign-in failed").toBe(true);
 
   // Navigate to trigger cookie storage
-  await page.goto(`${UI_BASE_URL}/chat`);
-  await page.waitForLoadState("networkidle");
+  await page.goto(`${UI_BASE_URL}/chat`, { waitUntil: "domcontentloaded" });
 
   // Mark onboarding as complete and set restrictive policy via API
   // Setting globalToolPolicy to "restrictive" prevents the permissive policy overlay from blocking UI interactions
@@ -36,8 +35,7 @@ setup("authenticate as admin", async ({ page }) => {
   );
 
   // Reload page to dismiss onboarding dialog (on fresh env it renders before API call)
-  await page.reload();
-  await page.waitForLoadState("networkidle");
+  await page.reload({ waitUntil: "domcontentloaded" });
 
   // Verify we're authenticated
   await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({

@@ -2,6 +2,7 @@ import * as k8s from "@kubernetes/client-node";
 import type { Locator, Page as PlaywrightPage } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { archestraApiSdk, E2eTestId } from "@shared";
+import { testMcpServerCommand } from "@shared/test-mcp-server";
 import { goToPage, type Page, test } from "../../fixtures";
 import { clickButton } from "../../utils";
 
@@ -469,17 +470,15 @@ test.describe("MCP Install", () => {
     // Cleanup
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
   });
-});
 
-test("Local server with bogus image shows error, logs, and can be fixed", async ({
+  test("Local server with bogus image shows error, logs, and can be fixed", async ({
     adminPage,
     extractCookieHeaders,
   }) => {
-    // Increase timeout to 3 minutes to allow for K8s deployment attempts
-    test.setTimeout(180_000);
+    // Increase timeout to 4 minutes to allow for K8s deployment attempts
+    test.setTimeout(240_000);
     const CATALOG_ITEM_NAME = "e2e__bogus_image_test";
-    const BOGUS_IMAGE = "bogus-registry.invalid/nonexistent-image:v999";
-    const VALID_IMAGE = "alpine:latest";
+    const BOGUS_IMAGE = "image-that-doesnt-exist:123";
 
     // Cleanup any existing catalog item
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
@@ -554,11 +553,20 @@ test("Local server with bogus image shows error, logs, and can be fixed", async 
     const logsContent = adminPage.getByTestId(E2eTestId.McpLogsContent);
     await logsContent.waitFor({ state: "visible", timeout: 30000 });
 
-    // Verify logs contain relevant K8s events (image pull failure)
-    const logsText = await logsContent.textContent();
-    expect(logsText).toBeTruthy();
-    // Logs should contain at least some K8s event info
-    expect(logsText?.length).toBeGreaterThan(10);
+    // Verify logs contain deployment events and image pull failure info
+    await expect
+      .poll(async () => (await logsContent.textContent()) ?? "", {
+        timeout: 30_000,
+      })
+      .toMatch(/\S/);
+
+    const logsText = (await logsContent.textContent()) ?? "";
+    expect(logsText).toMatch(
+      /(Normal|Warning|Scheduled|Pulling|Created|Started|Back-off)/i,
+    );
+    expect(logsText).toMatch(
+      /(ErrImagePull|ImagePullBackOff|Failed to pull|pull access denied|manifest unknown|repository does not exist|not found|denied)/i,
+    );
 
     // Close the logs dialog
     await adminPage.keyboard.press("Escape");
@@ -579,12 +587,33 @@ test("Local server with bogus image shows error, logs, and can be fixed", async 
     });
     await editDialog.waitFor({ state: "visible", timeout: 10000 });
 
-    // Update the Docker image to a valid one
+    // Update the config to a valid MCP server that should start successfully
     const dockerImageInput = editDialog.getByRole("textbox", {
       name: "Docker Image",
     });
     await dockerImageInput.clear();
-    await dockerImageInput.fill(VALID_IMAGE);
+    await dockerImageInput.fill("");
+
+    const commandInput = editDialog.getByRole("textbox", {
+      name: "Command",
+    });
+    await commandInput.clear();
+    await commandInput.fill("sh");
+
+    const argumentsInput = editDialog.getByRole("textbox", {
+      name: "Arguments (one per line)",
+    });
+    const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
+    await argumentsInput.clear();
+    await argumentsInput.fill(`-c\n${singleLineCommand}`);
+
+    // Force manual reinstall by adding a prompted env var
+    await editDialog.getByRole("button", { name: "Add Variable" }).click();
+    await editDialog.getByPlaceholder("API_KEY").first().fill("E2E_PROMPT");
+    await editDialog
+      .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
+      .first()
+      .click({ force: true });
 
     // Save changes
     await clickButton({ page: adminPage, options: { name: "Save Changes" } });
@@ -594,24 +623,48 @@ test("Local server with bogus image shows error, logs, and can be fixed", async 
     await editDialog.waitFor({ state: "hidden", timeout: 10000 });
 
     // ========================================
-    // STEP 5: Reinstall and verify server starts
+    // STEP 5: Click reinstall and wait for tools discovery
     // ========================================
-    // After editing critical config, server should show "Reinstall Required" button
     const reinstallButton = serverCard.getByRole("button", {
-      name: /Reinstall Required/i,
+      name: "Reinstall Required",
     });
-    await reinstallButton.waitFor({ state: "visible", timeout: 30000 });
+    await reinstallButton.waitFor({ state: "visible", timeout: 120_000 });
     await reinstallButton.click();
 
-    // Wait for the reinstall to complete (error banner should disappear)
-    // Since alpine:latest with "sleep infinity" won't be an MCP server,
-    // it should at least not show the image pull error anymore
-    await adminPage.waitForTimeout(30000);
+    const reinstallDialog = adminPage
+      .getByRole("dialog")
+      .filter({ hasText: /Reinstall -/ });
+    await reinstallDialog.waitFor({ state: "visible", timeout: 30_000 });
+    await reinstallDialog
+      .getByRole("textbox", { name: "E2E_PROMPT" })
+      .fill("ready");
+    await clickButton({ page: adminPage, options: { name: "Reinstall" } });
+    await reinstallDialog.waitFor({ state: "hidden", timeout: 30_000 });
 
-    // Verify the error banner is gone (deployment succeeded, even if no tools)
-    // Note: With alpine:latest + sleep infinity, there won't be MCP tools,
-    // but the deployment should succeed
-    await expect(errorBanner).not.toBeVisible({ timeout: 60000 });
+    await expect(errorBanner).not.toBeVisible({ timeout: 120_000 });
+
+    await expect(async () => {
+      await goToPage(adminPage, "/mcp-catalog/registry");
+      await adminPage.waitForLoadState("networkidle");
+
+      const refreshedServerCard = adminPage.getByTestId(
+        `${E2eTestId.McpServerCard}-${CATALOG_ITEM_NAME}`,
+      );
+      await refreshedServerCard.waitFor({ state: "visible", timeout: 30_000 });
+
+      const refreshedErrorBanner = adminPage.getByTestId(
+        `${E2eTestId.McpServerError}-${CATALOG_ITEM_NAME}`,
+      );
+      if (await refreshedErrorBanner.isVisible()) {
+        const errorText = await refreshedErrorBanner.innerText();
+        throw new Error(`MCP Server still in error: ${errorText}`);
+      }
+
+      const manageToolsButton = adminPage.getByTestId(
+        `${E2eTestId.ManageToolsButton}-${CATALOG_ITEM_NAME}`,
+      );
+      await expect(manageToolsButton).toBeVisible({ timeout: 5000 });
+    }).toPass({ timeout: 120_000, intervals: [3000, 5000, 7000, 10000] });
 
     // Cleanup
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);

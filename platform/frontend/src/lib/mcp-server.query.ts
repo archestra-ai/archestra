@@ -10,7 +10,6 @@ const {
   getMcpServerTools,
   installMcpServer,
   getMcpServer,
-  getMcpServerLogs,
   restartMcpServer,
   restartAllMcpServerInstallations,
   reauthenticateMcpServer,
@@ -258,28 +257,6 @@ export function useMcpServerInstallationStatus(
       );
     },
     enabled: !!installingMcpServerId,
-  });
-}
-
-export function useMcpServerLogs(mcpServerId: string | null) {
-  return useQuery({
-    queryKey: ["mcp-servers", mcpServerId, "logs"],
-    queryFn: async () => {
-      if (!mcpServerId) return null;
-      try {
-        const response = await getMcpServerLogs({
-          path: { id: mcpServerId },
-          query: { lines: 100 },
-        });
-        return response.data ?? null;
-      } catch (error) {
-        console.error("Failed to fetch MCP server logs:", error);
-        throw error;
-      }
-    },
-    enabled: !!mcpServerId,
-    refetchOnWindowFocus: false,
-    retry: false,
   });
 }
 

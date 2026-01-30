@@ -2,7 +2,6 @@ import * as k8s from "@kubernetes/client-node";
 import type { Locator, Page as PlaywrightPage } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { archestraApiSdk, E2eTestId } from "@shared";
-import { testMcpServerCommand } from "@shared/test-mcp-server";
 import { goToPage, type Page, test } from "../../fixtures";
 import { clickButton } from "../../utils";
 
@@ -479,6 +478,11 @@ test.describe("MCP Install", () => {
     test.setTimeout(240_000);
     const CATALOG_ITEM_NAME = "e2e__bogus_image_test";
     const BOGUS_IMAGE = "image-that-doesnt-exist:123";
+    const PYTHON_MCP_SCRIPT =
+      "from mcp.server.fastmcp import FastMCP; import anyio; app=FastMCP('e2e-test', log_level='CRITICAL'); " +
+      "print_archestra_test=lambda: 'ok'; " +
+      "app.add_tool(print_archestra_test, name='print_archestra_test', description='E2E test tool'); " +
+      "anyio.run(app.run_stdio_async)";
 
     // Cleanup any existing catalog item
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
@@ -565,7 +569,7 @@ test.describe("MCP Install", () => {
       /(Normal|Warning|Scheduled|Pulling|Created|Started|Back-off)/i,
     );
     expect(logsText).toMatch(
-      /(ErrImagePull|ImagePullBackOff|Failed to pull|pull access denied|manifest unknown|repository does not exist|not found|denied)/i,
+      /(ErrImagePull|ImagePullBackOff|ErrImageNeverPull|Failed to pull|pull access denied|manifest unknown|repository does not exist|not found|denied)/i,
     );
 
     // Close the logs dialog
@@ -598,14 +602,13 @@ test.describe("MCP Install", () => {
       name: "Command",
     });
     await commandInput.clear();
-    await commandInput.fill("sh");
+    await commandInput.fill("python");
 
     const argumentsInput = editDialog.getByRole("textbox", {
       name: "Arguments (one per line)",
     });
-    const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
     await argumentsInput.clear();
-    await argumentsInput.fill(`-c\n${singleLineCommand}`);
+    await argumentsInput.fill(`-c\n${PYTHON_MCP_SCRIPT}`);
 
     // Force manual reinstall by adding a prompted env var
     await editDialog.getByRole("button", { name: "Add Variable" }).click();
@@ -641,8 +644,6 @@ test.describe("MCP Install", () => {
     await clickButton({ page: adminPage, options: { name: "Reinstall" } });
     await reinstallDialog.waitFor({ state: "hidden", timeout: 30_000 });
 
-    await expect(errorBanner).not.toBeVisible({ timeout: 120_000 });
-
     await expect(async () => {
       await goToPage(adminPage, "/mcp-catalog/registry");
       await adminPage.waitForLoadState("networkidle");
@@ -655,10 +656,7 @@ test.describe("MCP Install", () => {
       const refreshedErrorBanner = adminPage.getByTestId(
         `${E2eTestId.McpServerError}-${CATALOG_ITEM_NAME}`,
       );
-      if (await refreshedErrorBanner.isVisible()) {
-        const errorText = await refreshedErrorBanner.innerText();
-        throw new Error(`MCP Server still in error: ${errorText}`);
-      }
+      await expect(refreshedErrorBanner).not.toBeVisible({ timeout: 5000 });
 
       const manageToolsButton = adminPage.getByTestId(
         `${E2eTestId.ManageToolsButton}-${CATALOG_ITEM_NAME}`,

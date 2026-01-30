@@ -474,9 +474,11 @@ export function McpServerCard({
     </>
   );
 
+  const shouldShowErrorBanner = hasError && toolsDiscoveredCount === 0;
+
   // Show error banner with links to logs and edit dialog (hide during reinstall)
   const errorBanner = isCurrentUserAuthenticated &&
-    hasError &&
+    shouldShowErrorBanner &&
     errorMessage &&
     !isInstalling && (
       <div

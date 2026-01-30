@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import {
   forwardRef,
@@ -24,6 +24,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
   useAssignTool,
@@ -102,7 +103,7 @@ const AgentToolsEditorContent = forwardRef<
   },
   ref,
 ) {
-  const queryClient = useQueryClient();
+  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
 
@@ -211,27 +212,6 @@ const AgentToolsEditorContent = forwardRef<
       onSelectedCountChange?.(calculateTotalSelectedCount());
     },
     [calculateTotalSelectedCount, onSelectedCountChange],
-  );
-
-  // Helper function to invalidate all related queries once
-  const invalidateAllQueries = useCallback(
-    (affectedAgentId: string) => {
-      queryClient.invalidateQueries({
-        queryKey: ["agents", affectedAgentId, "tools"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["chat", "agents", affectedAgentId, "mcp-tools"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
-      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
-      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
-      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
-    },
-    [queryClient],
   );
 
   // Expose saveChanges method to parent

@@ -4,7 +4,6 @@ import {
   type archestraApiTypes,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -29,6 +28,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useProfiles } from "@/lib/agent.query";
+import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
   useBulkAssignTools,
@@ -134,7 +134,7 @@ export function McpAssignmentsDialog({
   const [agentsSearchOpen, setAgentsSearchOpen] = useState(false);
   const [agentsShowAll, setAgentsShowAll] = useState(false);
 
-  const queryClient = useQueryClient();
+  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const unassignTool = useUnassignTool();
   const bulkAssign = useBulkAssignTools();
   const patchTool = useProfileToolPatchMutation();
@@ -171,32 +171,6 @@ export function McpAssignmentsDialog({
     }
     return false;
   }, [pendingChanges, assignmentsByProfile]);
-
-  // Helper function to invalidate all related queries once
-  const invalidateAllQueries = useCallback(
-    (affectedAgentIds: Set<string>) => {
-      // Invalidate agent-specific queries
-      for (const agentId of affectedAgentIds) {
-        queryClient.invalidateQueries({
-          queryKey: ["agents", agentId, "tools"],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["chat", "agents", agentId, "mcp-tools"],
-        });
-      }
-
-      // Invalidate global queries
-      queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
-      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
-      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
-      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
-    },
-    [queryClient],
-  );
 
   // Save all pending changes
   const handleSaveAll = async () => {

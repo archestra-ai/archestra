@@ -690,7 +690,7 @@ class McpClient {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
         const url =
-          McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
+          await McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
         if (!url) {
           throw new Error(
             "No HTTP endpoint URL found for streamable-http server",

@@ -1,6 +1,7 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { showErrorToastFromApiError } from "./utils";
 
 const { getTokens, getTokenValue, rotateToken } = archestraApiSdk;
 
@@ -75,6 +76,23 @@ export function useTokenValue(tokenId: string | undefined) {
       return response.data as { value: string };
     },
     enabled: false, // Only fetch on demand
+  });
+}
+
+/**
+ * Mutation hook to fetch team token value on demand
+ * Use this in components that need to fetch the token on button click
+ */
+export function useFetchTeamTokenValue() {
+  return useMutation({
+    mutationFn: async (tokenId: string) => {
+      const { data, error } = await getTokenValue({ path: { tokenId } });
+      if (error) {
+        showErrorToastFromApiError(error);
+        return null;
+      }
+      return data as { value: string };
+    },
   });
 }
 

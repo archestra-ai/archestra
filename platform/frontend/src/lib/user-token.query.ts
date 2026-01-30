@@ -50,6 +50,23 @@ export function useUserTokenValue() {
 }
 
 /**
+ * Mutation hook to fetch personal token value on demand
+ * Use this in components that need to fetch the token on button click
+ */
+export function useFetchUserTokenValue() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await getUserTokenValue();
+      if (error) {
+        showErrorToastFromApiError(error);
+        return null;
+      }
+      return data as { value: string };
+    },
+  });
+}
+
+/**
  * Hook to rotate personal token
  */
 export function useRotateUserToken() {

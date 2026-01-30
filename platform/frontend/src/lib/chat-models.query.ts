@@ -32,7 +32,7 @@ export function useChatModels() {
         showErrorToastFromApiError(error);
         return [];
       }
-      return (data ?? [])
+      return data ?? [];
     },
   });
 }
@@ -89,7 +89,7 @@ export function useModelsWithApiKeys() {
         showErrorToastFromApiError(error);
         return [];
       }
-      return (data ?? [])
+      return data ?? [];
     },
   });
 }

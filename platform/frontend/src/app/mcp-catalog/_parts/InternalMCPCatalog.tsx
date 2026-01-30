@@ -21,7 +21,6 @@ import {
   useInstallMcpServer,
   useMcpServers,
   useReinstallMcpServer,
-  useRestartAllMcpServerInstallations,
 } from "@/lib/mcp-server.query";
 import { useInitiateOAuth } from "@/lib/oauth.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -76,7 +75,6 @@ export function InternalMCPCatalog({
   });
   const installMutation = useInstallMcpServer();
   const reinstallMutation = useReinstallMcpServer();
-  const restartAllMutation = useRestartAllMcpServerInstallations();
   const initiateOAuthMutation = useInitiateOAuth();
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
@@ -200,9 +198,8 @@ export function InternalMCPCatalog({
                   });
                 }
               }
-            } else if (server.localInstallationStatus === "error") {
-              toast.error(`Failed to install ${server.name}`);
             }
+            // Note: No error toast - the error banner on the card provides feedback
           }
         });
       }
@@ -299,19 +296,30 @@ export function InternalMCPCatalog({
     if (reinstallServerId) {
       // Reinstall mode - call reinstall endpoint with new environment values
       setInstallingItemId(localServerCatalogItem.id);
-      await reinstallMutation.mutateAsync({
-        id: reinstallServerId,
-        name: localServerCatalogItem.name,
-        environmentValues: installResult.environmentValues,
-        isByosVault: installResult.isByosVault,
-        serviceAccount: installResult.serviceAccount,
-      });
-
+      setInstallingServerIds((prev) => new Set(prev).add(reinstallServerId));
       closeDialog("local-install");
       setLocalServerCatalogItem(null);
       setReinstallServerId(null);
       setReinstallServerTeamId(null);
-      setInstallingItemId(null);
+
+      const serverIdToReinstall = reinstallServerId;
+      try {
+        await reinstallMutation.mutateAsync({
+          id: serverIdToReinstall,
+          name: localServerCatalogItem.name,
+          environmentValues: installResult.environmentValues,
+          isByosVault: installResult.isByosVault,
+          serviceAccount: installResult.serviceAccount,
+        });
+      } finally {
+        // Clear installing state whether success or error
+        setInstallingItemId(null);
+        setInstallingServerIds((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(serverIdToReinstall);
+          return newSet;
+        });
+      }
       return;
     }
 
@@ -523,10 +531,23 @@ export function InternalMCPCatalog({
         openDialog("local-install");
       } else {
         // No prompted env vars - reinstall directly
-        await reinstallMutation.mutateAsync({
-          id: installedServer.id,
-          name: catalogItem.name,
-        });
+        // Set installing state for immediate UI feedback (progress bar)
+        setInstallingItemId(catalogItem.id);
+        setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+        try {
+          await reinstallMutation.mutateAsync({
+            id: installedServer.id,
+            name: catalogItem.name,
+          });
+        } finally {
+          // Clear installing state whether success or error
+          setInstallingItemId(null);
+          setInstallingServerIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(installedServer.id);
+            return newSet;
+          });
+        }
       }
     } else {
       // Remote server - show confirmation dialog (may need OAuth re-auth)
@@ -553,10 +574,23 @@ export function InternalMCPCatalog({
     closeDialog("reinstall");
 
     // Remote server - reinstall directly
-    await reinstallMutation.mutateAsync({
-      id: installedServer.id,
-      name: catalogItemForReinstall.name,
-    });
+    // Set installing state for immediate UI feedback (progress bar)
+    setInstallingItemId(catalogItemForReinstall.id);
+    setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+    try {
+      await reinstallMutation.mutateAsync({
+        id: installedServer.id,
+        name: catalogItemForReinstall.name,
+      });
+    } finally {
+      // Clear installing state whether success or error
+      setInstallingItemId(null);
+      setInstallingServerIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(installedServer.id);
+        return newSet;
+      });
+    }
 
     setCatalogItemForReinstall(null);
   };
@@ -696,12 +730,6 @@ export function InternalMCPCatalog({
                   }
                   onInstallLocalServer={() => handleInstallLocalServer(item)}
                   onReinstall={() => handleReinstall(item)}
-                  onRestartAll={() => {
-                    restartAllMutation.mutate({
-                      catalogId: item.id,
-                      name: item.name,
-                    });
-                  }}
                   onEdit={() => setEditingItem(item)}
                   onDetails={() => {
                     setDetailsServerName(item.name);
@@ -756,7 +784,14 @@ export function InternalMCPCatalog({
           if (item) {
             setEditingItem(null);
             const serverInfo = getInstalledServerInfo(item);
-            if (serverInfo.installedServer?.reinstallRequired) {
+            // Only auto-trigger reinstall if not already in error state
+            // (user should click "Reinstall Required" button to retry after error)
+            const isInErrorState =
+              serverInfo.installedServer?.localInstallationStatus === "error";
+            if (
+              serverInfo.installedServer?.reinstallRequired &&
+              !isInErrorState
+            ) {
               handleReinstall(item);
             }
           }

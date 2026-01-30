@@ -320,12 +320,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ReauthenticateMcpServer]: {
     mcpServer: ["update"],
   },
-  [RouteId.RestartMcpServer]: {
-    mcpServer: ["update"],
-  },
-  [RouteId.RestartAllMcpServerInstallations]: {
-    mcpServer: ["admin"],
-  },
   [RouteId.ReinstallMcpServer]: {
     mcpServer: ["update"],
   },

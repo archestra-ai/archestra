@@ -11,8 +11,6 @@ const {
   getMcpServerTools,
   installMcpServer,
   getMcpServer,
-  restartMcpServer,
-  restartAllMcpServerInstallations,
   reauthenticateMcpServer,
   reinstallMcpServer,
 } = archestraApiSdk;
@@ -150,53 +148,6 @@ export function useDeleteMcpServer() {
   });
 }
 
-export function useRestartMcpServer() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: { id: string; name: string }) => {
-      const response = await restartMcpServer({ path: { id: data.id } });
-      return response.data;
-    },
-    onSuccess: async (_, variables) => {
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-      toast.success(`Successfully restarted ${variables.name}`);
-    },
-    onError: (_error, variables) => {
-      toast.error(`Failed to restart ${variables.name}`);
-    },
-  });
-}
-
-export function useRestartAllMcpServerInstallations() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: { catalogId: string; name: string }) => {
-      const response = await restartAllMcpServerInstallations({
-        path: { catalogId: data.catalogId },
-      });
-      return response.data;
-    },
-    onSuccess: async (result, variables) => {
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-      if (result?.summary) {
-        const { succeeded, failed, total } = result.summary;
-        if (failed === 0) {
-          toast.success(
-            `Successfully restarted all ${succeeded} installation(s) of ${variables.name}`,
-          );
-        } else {
-          toast.warning(
-            `Restarted ${succeeded}/${total} installation(s) of ${variables.name}, ${failed} failed`,
-          );
-        }
-      }
-    },
-    onError: (_error, variables) => {
-      toast.error(`Failed to restart installations of ${variables.name}`);
-    },
-  });
-}
-
 export function useMcpServerTools(mcpServerId: string | null) {
   return useQuery({
     queryKey: ["mcp-servers", mcpServerId, "tools"],
@@ -308,9 +259,8 @@ export function useReinstallMcpServer() {
       }
       return { data: response.data, name };
     },
-    onSuccess: async (result, variables) => {
-      if (!result) return;
-      // Refetch servers to get updated status
+    onSuccess: async (_result, variables) => {
+      // Refetch servers to get updated status (will show "pending" initially)
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate tools queries since tools may have been synced
       queryClient.invalidateQueries({ queryKey: ["tools"] });
@@ -322,7 +272,8 @@ export function useReinstallMcpServer() {
           queryKey: ["mcp-servers", variables.id, "tools"],
         });
       }
-      toast.success(`Successfully reinstalled ${result.name}`);
+      // Note: No success toast here - the progress bar provides feedback
+      // Success toast is shown when polling detects status changed to "success"
     },
   });
 }

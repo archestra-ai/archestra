@@ -8,7 +8,6 @@ import {
   MoreVertical,
   Pencil,
   RefreshCw,
-  RotateCw,
   Trash2,
   User,
   Wrench,
@@ -72,7 +71,6 @@ export type McpServerCardProps = {
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   onReinstall: () => void;
-  onRestartAll: () => void;
   onDetails: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -98,7 +96,6 @@ export function McpServerCard({
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
-  onRestartAll,
   onDetails,
   onEdit,
   onDelete,
@@ -259,7 +256,7 @@ export function McpServerCard({
   const hasLocalInstallations = localInstalls.length > 0;
   const isLogsAvailable = variant === "local" && hasLocalInstallations;
 
-  // JSX parts - Action buttons for Edit, Logs, Restart
+  // JSX parts - Action buttons for Edit and Logs
   const actionButtons = (
     <div className="flex gap-1 mb-2">
       <TooltipProvider>
@@ -308,39 +305,6 @@ export function McpServerCard({
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-
-      <WithPermissions
-        permissions={{ mcpServer: ["admin"] }}
-        noPermissionHandle="hide"
-      >
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full h-8 text-xs"
-                  onClick={onRestartAll}
-                  disabled={variant !== "local" || !hasLocalInstallations}
-                >
-                  <RotateCw className="h-3 w-3 mr-1" />
-                  Restart
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {variant !== "local"
-                  ? "Local servers only"
-                  : !hasLocalInstallations
-                    ? "Connect first"
-                    : "Restart all installations"}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </WithPermissions>
     </div>
   );
 
@@ -510,10 +474,11 @@ export function McpServerCard({
     </>
   );
 
-  // Show error banner with link to logs dialog
+  // Show error banner with links to logs and edit dialog (hide during reinstall)
   const errorBanner = isCurrentUserAuthenticated &&
     hasError &&
-    errorMessage && (
+    errorMessage &&
+    !isInstalling && (
       <div
         className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
         data-testid={`${E2eTestId.McpServerError}-${item.name}`}
@@ -524,8 +489,17 @@ export function McpServerCard({
           onClick={() => setIsLogsDialogOpen(true)}
           className="text-primary hover:underline cursor-pointer"
         >
-          click here for more details
+          view the logs
+        </button>{" "}
+        or{" "}
+        <button
+          type="button"
+          onClick={onEdit}
+          className="text-primary hover:underline cursor-pointer"
+        >
+          edit your config
         </button>
+        .
       </div>
     );
 
@@ -545,45 +519,50 @@ export function McpServerCard({
         </div>
       </WithPermissions>
       {errorBanner}
-      {isCurrentUserAuthenticated && (needsReinstall || hasError) && (
-        <PermissionButton
-          permissions={{ mcpServer: ["update"] }}
-          onClick={onReinstall}
-          size="sm"
-          variant="default"
-          className="w-full"
-          disabled={isInstalling}
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          {isInstalling ? "Reconnecting..." : "Reconnect Required"}
-        </PermissionButton>
-      )}
-      {!isInstalling && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="w-full">
-                <PermissionButton
-                  permissions={{ mcpServer: ["create"] }}
-                  onClick={onInstallRemoteServer}
-                  disabled={isInstalling || !canCreateNewInstallation}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <User className="mr-2 h-4 w-4" />
-                  {isInstalling ? "Connecting..." : "Connect"}
-                </PermissionButton>
-              </div>
-            </TooltipTrigger>
-            {!canCreateNewInstallation && (
-              <TooltipContent side="bottom">
-                <p>All connect options exhausted (personal and all teams)</p>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
-      )}
+      {/* Show reconnect button only when NOT installing */}
+      {isCurrentUserAuthenticated &&
+        (needsReinstall || hasError) &&
+        !isInstalling && (
+          <PermissionButton
+            permissions={{ mcpServer: ["update"] }}
+            onClick={onReinstall}
+            size="sm"
+            variant="default"
+            className="w-full"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Reconnect Required
+          </PermissionButton>
+        )}
+      {/* Spacer + Connect button pinned to bottom */}
+      <div className="mt-auto pt-2">
+        {!isInstalling && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-full">
+                  <PermissionButton
+                    permissions={{ mcpServer: ["create"] }}
+                    onClick={onInstallRemoteServer}
+                    disabled={isInstalling || !canCreateNewInstallation}
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <User className="mr-2 h-4 w-4" />
+                    {isInstalling ? "Connecting..." : "Connect"}
+                  </PermissionButton>
+                </div>
+              </TooltipTrigger>
+              {!canCreateNewInstallation && (
+                <TooltipContent side="bottom">
+                  <p>All connect options exhausted (personal and all teams)</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
     </>
   );
 
@@ -603,63 +582,67 @@ export function McpServerCard({
         </div>
       </WithPermissions>
       {errorBanner}
-      {isCurrentUserAuthenticated && needsReinstall && (
+      {/* Show reinstall button only when NOT installing (hide during reinstall to show progress bar) */}
+      {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
         <PermissionButton
           permissions={{ mcpServer: ["update"] }}
           onClick={onReinstall}
           size="sm"
           variant="default"
           className="w-full"
-          disabled={isInstalling}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
-          {isInstalling ? "Reinstalling..." : "Reinstall Required"}
+          Reinstall Required
         </PermissionButton>
       )}
-      {/* Show Connect button when user can create new installation */}
-      {!isInstalling && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="w-full">
-                <PermissionButton
-                  permissions={{ mcpServer: ["create"] }}
-                  onClick={onInstallLocalServer}
-                  disabled={
-                    isInstalling ||
-                    !isLocalMcpEnabled ||
-                    !canCreateNewInstallation
-                  }
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
-                >
-                  <User className="mr-2 h-4 w-4" />
-                  Connect
-                </PermissionButton>
-              </div>
-            </TooltipTrigger>
-            {(!isLocalMcpEnabled || !canCreateNewInstallation) && (
-              <TooltipContent side="bottom">
-                <p>
-                  {!isLocalMcpEnabled
-                    ? LOCAL_MCP_DISABLED_MESSAGE
-                    : "All connect options exhausted (personal and all teams)"}
-                </p>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
-      )}
-      {(installationStatus === "pending" ||
-        installationStatus === "discovering-tools") && (
-        <InstallationProgress
-          status={installationStatus}
-          serverId={installedServer?.id}
-          serverName={installedServer?.name}
-        />
-      )}
+      {/* Spacer + Connect button pinned to bottom */}
+      <div className="mt-auto pt-2">
+        {/* Show Connect button when user can create new installation */}
+        {!isInstalling && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-full">
+                  <PermissionButton
+                    permissions={{ mcpServer: ["create"] }}
+                    onClick={onInstallLocalServer}
+                    disabled={!isLocalMcpEnabled || !canCreateNewInstallation}
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
+                  >
+                    <User className="mr-2 h-4 w-4" />
+                    Connect
+                  </PermissionButton>
+                </div>
+              </TooltipTrigger>
+              {(!isLocalMcpEnabled || !canCreateNewInstallation) && (
+                <TooltipContent side="bottom">
+                  <p>
+                    {!isLocalMcpEnabled
+                      ? LOCAL_MCP_DISABLED_MESSAGE
+                      : "All connect options exhausted (personal and all teams)"}
+                  </p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        {/* Show progress bar during installation or reinstallation */}
+        {isInstalling && (
+          <InstallationProgress
+            status={
+              installationStatus === "pending" ||
+              installationStatus === "discovering-tools"
+                ? installationStatus
+                : "pending"
+            }
+            serverId={installedServer?.id}
+            serverName={installedServer?.name}
+          />
+        )}
+      </div>
     </>
   );
 

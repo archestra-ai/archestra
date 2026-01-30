@@ -22,7 +22,7 @@ interface InstallationProgressProps {
 const PHASES = {
   pending: {
     progress: 33,
-    description: "Starting container",
+    description: "Starting the Deployment",
   },
   "discovering-tools": {
     progress: 66,

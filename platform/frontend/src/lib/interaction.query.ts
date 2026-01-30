@@ -68,33 +68,22 @@ export function useInteractions({
           sortDirection,
         },
       });
+      const emptyResponse = {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      };
       if (response.error) {
         showErrorToastFromApiError(response.error);
-        return {
-          data: [],
-          pagination: {
-            currentPage: 1,
-            limit,
-            total: 0,
-            totalPages: 0,
-            hasNext: false,
-            hasPrev: false,
-          },
-        };
+        return emptyResponse;
       }
-      return (
-        response.data ?? {
-          data: [],
-          pagination: {
-            currentPage: 1,
-            limit,
-            total: 0,
-            totalPages: 0,
-            hasNext: false,
-            hasPrev: false,
-          },
-        }
-      );
+      return response.data ?? emptyResponse;
     },
     // Only use initialData for the first page (offset 0) with default sorting and default limit
     initialData:
@@ -213,33 +202,23 @@ export function useInteractionSessions({
           offset,
         },
       });
+      const emptyResponse = {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      };
+
       if (response.error) {
         showErrorToastFromApiError(response.error);
-        return {
-          data: [],
-          pagination: {
-            currentPage: 1,
-            limit,
-            total: 0,
-            totalPages: 0,
-            hasNext: false,
-            hasPrev: false,
-          },
-        };
+        return emptyResponse;
       }
-      return (
-        response.data ?? {
-          data: [],
-          pagination: {
-            currentPage: 1,
-            limit,
-            total: 0,
-            totalPages: 0,
-            hasNext: false,
-            hasPrev: false,
-          },
-        }
-      );
+      return response.data ?? emptyResponse;
     },
     initialData:
       offset === 0 &&

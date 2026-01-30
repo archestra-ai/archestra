@@ -26,13 +26,13 @@ export type ModelCapabilities = NonNullable<ChatModel["capabilities"]>;
 export function useChatModels() {
   return useQuery({
     queryKey: ["chat-models"],
-    queryFn: async () => {
+    queryFn: async (): Promise<ChatModel[]> => {
       const { data, error } = await getChatModels();
       if (error) {
         showErrorToastFromApiError(error);
-        return [] as ChatModel[];
+        return [];
       }
-      return (data ?? []) as ChatModel[];
+      return (data ?? [])
     },
   });
 }
@@ -83,13 +83,13 @@ export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
 export function useModelsWithApiKeys() {
   return useQuery({
     queryKey: ["models-with-api-keys"],
-    queryFn: async () => {
+    queryFn: async (): Promise<ModelWithApiKeys[]> => {
       const { data, error } = await getModelsWithApiKeys();
       if (error) {
         showErrorToastFromApiError(error);
-        return [] as ModelWithApiKeys[];
+        return [];
       }
-      return (data ?? []) as ModelWithApiKeys[];
+      return (data ?? [])
     },
   });
 }

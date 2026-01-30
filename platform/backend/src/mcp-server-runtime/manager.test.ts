@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { PassThrough } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
@@ -74,7 +75,11 @@ vi.mock("@/models/mcp-server", () => ({
 }));
 
 vi.mock("./k8s-deployment", () => ({
-  default: vi.fn(),
+  default: class MockK8sDeployment {
+    static sanitizeLabelValue(value: string): string {
+      return value;
+    }
+  },
 }));
 
 describe("validateKubeconfig", () => {
@@ -426,6 +431,40 @@ describe("McpServerRuntimeManager", () => {
 
       mockLoadFromDefault.mockRestore();
       mockMakeApiClient.mockRestore();
+    });
+  });
+
+  describe("streamMcpServerLogs", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+    });
+
+    test("writes a helpful message when runtime is not configured", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {
+          throw new Error("Config load failed");
+        });
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      const stream = new PassThrough();
+      let output = "";
+      stream.on("data", (chunk) => {
+        output += chunk.toString();
+      });
+
+      await manager.streamMcpServerLogs("test-server-id", stream);
+
+      expect(output).toContain("Unable to stream logs");
+      expect(output).toContain(
+        "Kubernetes runtime is not configured on this instance.",
+      );
+      expect(output).toContain("mcp-server-id=test-server-id");
+
+      mockLoadFromDefault.mockRestore();
     });
   });
 });

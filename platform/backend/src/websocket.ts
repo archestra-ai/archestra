@@ -698,7 +698,17 @@ class WebSocketService {
       serverId,
       lines,
     );
-    let isFirstChunk = true;
+    let isFirstChunk = false;
+
+    // Send an initial message to confirm subscription and provide the command
+    this.sendToClient(ws, {
+      type: "mcp_logs",
+      payload: {
+        serverId,
+        logs: "",
+        command,
+      },
+    });
 
     // Set up stream data handler
     stream.on("data", (chunk: Buffer) => {

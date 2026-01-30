@@ -561,7 +561,8 @@ export class McpServerRuntimeManager {
     // Try to get from memory first, or lazy-load from database
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
-      throw new Error(`MCP server not found`);
+      this.writeLogsUnavailableMessage(responseStream, mcpServerId);
+      return;
     }
 
     await k8sDeployment.streamLogs(responseStream, lines, abortSignal);
@@ -657,6 +658,30 @@ export class McpServerRuntimeManager {
 
     await Promise.allSettled(stopPromises);
     logger.info("MCP Server Runtime shutdown complete");
+  }
+
+  private writeLogsUnavailableMessage(
+    responseStream: NodeJS.WritableStream,
+    mcpServerId: string,
+  ): void {
+    if ("destroyed" in responseStream && responseStream.destroyed) {
+      return;
+    }
+
+    const reason = this.k8sApi
+      ? "Deployment not loaded in runtime."
+      : "Kubernetes runtime is not configured on this instance.";
+    const command = this.getMcpServerDescribeCommand(mcpServerId);
+    const message = [
+      "Unable to stream logs for this MCP server.",
+      reason,
+      "Try running:",
+      command,
+      "",
+    ].join("\n");
+
+    responseStream.write(message);
+    responseStream.end();
   }
 }
 

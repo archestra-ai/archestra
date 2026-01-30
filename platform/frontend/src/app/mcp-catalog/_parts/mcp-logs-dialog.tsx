@@ -147,7 +147,10 @@ export function McpLogsDialog({
       // Set up connection timeout - if no logs received within 10 seconds, show error
       connectionTimeoutRef.current = setTimeout(() => {
         // Only trigger timeout if we're still streaming and haven't received any logs
-        if (currentServerIdRef.current === targetServerId) {
+        if (
+          currentServerIdRef.current === targetServerId &&
+          !websocketService.isConnected()
+        ) {
           setStreamError("Connection timeout - unable to connect to server");
           setIsStreaming(false);
         }

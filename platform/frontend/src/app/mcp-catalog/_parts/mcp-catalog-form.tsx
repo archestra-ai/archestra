@@ -1,13 +1,25 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { archestraApiTypes } from "@shared";
-import { AlertCircle } from "lucide-react";
-import { lazy, useEffect, useState } from "react";
+import { type archestraApiTypes, MCP_ORCHESTRATOR_DEFAULTS } from "@shared";
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  Settings2,
+} from "lucide-react";
+import { lazy, useCallback, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { Editor } from "@/components/editor";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
@@ -28,13 +40,63 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
-import { ServiceAccountField } from "./service-account-field";
 
 const ExternalSecretSelector = lazy(
   () =>
     // biome-ignore lint/style/noRestrictedImports: lazy loading
     import("@/components/external-secret-selector.ee"),
 );
+
+/**
+ * JSON editor for key-value pairs (labels, annotations).
+ * Provides a Monaco editor with JSON syntax highlighting.
+ */
+function JsonKeyValueEditor({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string | undefined;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const handleEditorChange = useCallback(
+    (newValue: string | undefined) => {
+      onChange(newValue ?? "");
+    },
+    [onChange],
+  );
+
+  return (
+    <div className="border rounded-md overflow-hidden">
+      <Editor
+        height="100px"
+        defaultLanguage="json"
+        value={value || ""}
+        onChange={handleEditorChange}
+        options={{
+          minimap: { enabled: false },
+          lineNumbers: "off",
+          folding: false,
+          scrollBeyondLastLine: false,
+          wordWrap: "on",
+          fontSize: 13,
+          fontFamily: "monospace",
+          padding: { top: 8, bottom: 8 },
+          renderLineHighlight: "none",
+          overviewRulerLanes: 0,
+          hideCursorInOverviewRuler: true,
+          scrollbar: {
+            vertical: "auto",
+            horizontal: "hidden",
+            verticalScrollbarSize: 8,
+          },
+          placeholder,
+        }}
+      />
+    </div>
+  );
+}
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";
@@ -56,8 +118,10 @@ export function McpCatalogForm({
     initialValues?.localConfigSecretId ?? null,
   );
 
-  // Get MCP server base image from backend features endpoint
+  // Get MCP server base image and K8s namespace from backend features endpoint
   const mcpServerBaseImage = useFeatureValue("mcpServerBaseImage") ?? "";
+  const orchestratorK8sNamespace =
+    useFeatureValue("orchestratorK8sNamespace") ?? "default";
 
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
@@ -87,9 +151,23 @@ export function McpCatalogForm({
             transportType: "stdio",
             httpPort: "",
             httpPath: "/mcp",
+            advancedK8sConfig: {
+              replicas: "",
+              namespace: "",
+              annotations: "",
+              labels: "",
+              resourceRequestsMemory: "",
+              resourceRequestsCpu: "",
+              resourceLimitsMemory: "",
+              resourceLimitsCpu: "",
+            },
+            serviceAccount: "",
           },
         },
   });
+
+  // State for advanced configuration collapsed section
+  const [advancedConfigOpen, setAdvancedConfigOpen] = useState(false);
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
@@ -283,19 +361,6 @@ export function McpCatalogForm({
                 )}
               />
 
-              {initialValues?.localConfig?.serviceAccount !== undefined && (
-                <FormField
-                  control={form.control}
-                  name="localConfig.serviceAccount"
-                  render={({ field }) => (
-                    <ServiceAccountField
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  )}
-                />
-              )}
-
               <EnvironmentVariablesFormField
                 control={form.control}
                 fields={fields}
@@ -398,6 +463,245 @@ export function McpCatalogForm({
                   />
                 </>
               )}
+
+              {/* Advanced Kubernetes Configuration */}
+              <Collapsible
+                open={advancedConfigOpen}
+                onOpenChange={setAdvancedConfigOpen}
+                className="border rounded-lg"
+              >
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full flex items-center justify-between p-4 h-auto"
+                    type="button"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Settings2 className="h-4 w-4" />
+                      <span className="font-medium">
+                        Advanced Configuration
+                      </span>
+                    </div>
+                    {advancedConfigOpen ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pt-2 pb-4 space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Customize Kubernetes deployment settings. These options are
+                    optional and have sensible defaults.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="localConfig.advancedK8sConfig.replicas"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Replicas</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder={String(
+                                MCP_ORCHESTRATOR_DEFAULTS.replicas,
+                              )}
+                              min={1}
+                              className="font-mono"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Number of pod replicas
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="localConfig.advancedK8sConfig.namespace"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Namespace</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder={orchestratorK8sNamespace}
+                              className="font-mono"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Override K8s namespace
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="localConfig.serviceAccount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Account</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="default"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          K8s service account for the deployment pods
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="space-y-2">
+                    <FormLabel>Resource Requests</FormLabel>
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="localConfig.advancedK8sConfig.resourceRequestsMemory"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-muted-foreground">
+                              Memory
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder={
+                                  MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory
+                                }
+                                className="font-mono"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="localConfig.advancedK8sConfig.resourceRequestsCpu"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-muted-foreground">
+                              CPU
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder={
+                                  MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu
+                                }
+                                className="font-mono"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <FormLabel>Resource Limits</FormLabel>
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="localConfig.advancedK8sConfig.resourceLimitsMemory"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-muted-foreground">
+                              Memory
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="256Mi"
+                                className="font-mono"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="localConfig.advancedK8sConfig.resourceLimitsCpu"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-muted-foreground">
+                              CPU
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="500m"
+                                className="font-mono"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="localConfig.advancedK8sConfig.labels"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Custom Labels (JSON)</FormLabel>
+                        <FormControl>
+                          <JsonKeyValueEditor
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder='{ "team": "backend" }'
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Custom labels to add to pods (JSON key-value format)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="localConfig.advancedK8sConfig.annotations"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Custom Annotations (JSON)</FormLabel>
+                        <FormControl>
+                          <JsonKeyValueEditor
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder='{ "prometheus.io/scrape": "true" }'
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Custom annotations to add to pods (JSON key-value
+                          format)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
             </>
           )}
         </div>

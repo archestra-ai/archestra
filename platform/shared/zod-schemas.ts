@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  isValidJsonKeyValueString,
+  isValidK8sCpuQuantity,
+  isValidK8sMemoryQuantity,
+} from "./mcp-orchestrator";
 import { SUPPORTED_THEMES } from "./themes/theme-config";
 
 export const OAuthConfigSchema = z.object({
@@ -36,6 +41,36 @@ export const EnvironmentVariableSchema = z.object({
   mounted: z.boolean().optional(), // When true for secret type, mount as file at /secrets/<key> instead of env var
 });
 
+// Resource requests/limits schema for K8s containers
+export const K8sResourcesSchema = z.object({
+  requests: z
+    .object({
+      memory: z.string().optional(), // e.g., "128Mi", "1Gi"
+      cpu: z.string().optional(), // e.g., "50m", "1"
+    })
+    .optional(),
+  limits: z
+    .object({
+      memory: z.string().optional(),
+      cpu: z.string().optional(),
+    })
+    .optional(),
+});
+
+// Advanced Kubernetes configuration for MCP server deployments
+export const AdvancedK8sConfigSchema = z.object({
+  // Number of pod replicas (default: 1)
+  replicas: z.number().int().min(1).max(10).optional(),
+  // Custom namespace override (defaults to configured orchestrator namespace)
+  namespace: z.string().optional(),
+  // Custom annotations to add to the pod
+  annotations: z.record(z.string(), z.string()).optional(),
+  // Custom labels to add to the pod (merged with required labels)
+  labels: z.record(z.string(), z.string()).optional(),
+  // Resource requests and limits for the container
+  resources: K8sResourcesSchema.optional(),
+});
+
 export const LocalConfigSchema = z
   .object({
     command: z.string().optional(),
@@ -50,6 +85,8 @@ export const LocalConfigSchema = z
     // Specify just the role (e.g., "operator") - the platform automatically constructs the full name:
     // {releaseName}-mcp-k8s-{role} (e.g., "archestra-platform-mcp-k8s-operator")
     serviceAccount: z.string().optional(),
+    // Advanced Kubernetes configuration
+    advancedK8sConfig: AdvancedK8sConfigSchema.optional(),
   })
   .refine(
     (data) => {
@@ -63,6 +100,43 @@ export const LocalConfigSchema = z
     },
   );
 
+/**
+ * Zod schema that validates JSON key-value strings.
+ * Uses the shared isValidJsonKeyValueString function.
+ */
+const jsonKeyValueStringSchema = z
+  .string()
+  .optional()
+  .refine((val) => isValidJsonKeyValueString(val), {
+    message: 'Must be valid JSON with string values, e.g. { "key": "value" }',
+  });
+
+const k8sMemoryQuantitySchema = z
+  .string()
+  .optional()
+  .refine((val) => !val || !val.trim() || isValidK8sMemoryQuantity(val), {
+    message: "Invalid memory format. Use K8s format like 128Mi, 1Gi, 256M",
+  });
+
+const k8sCpuQuantitySchema = z
+  .string()
+  .optional()
+  .refine((val) => !val || !val.trim() || isValidK8sCpuQuantity(val), {
+    message: "Invalid CPU format. Use K8s format like 100m, 0.5, 1",
+  });
+
+// Form version of advanced K8s config for UI (using strings that get parsed)
+export const AdvancedK8sConfigFormSchema = z.object({
+  replicas: z.string().optional(), // UI uses string, gets parsed to number
+  namespace: z.string().optional(), // Custom namespace override
+  annotations: jsonKeyValueStringSchema, // UI uses JSON string, gets parsed to object
+  labels: jsonKeyValueStringSchema, // UI uses JSON string, gets parsed to object
+  resourceRequestsMemory: k8sMemoryQuantitySchema,
+  resourceRequestsCpu: k8sCpuQuantitySchema,
+  resourceLimitsMemory: k8sMemoryQuantitySchema,
+  resourceLimitsCpu: k8sCpuQuantitySchema,
+});
+
 // Form version of LocalConfigSchema for UI forms (using strings that get parsed)
 export const LocalConfigFormSchema = z.object({
   command: z.string().optional(),
@@ -73,6 +147,7 @@ export const LocalConfigFormSchema = z.object({
   httpPort: z.string().optional(), // UI uses string, gets parsed to number
   httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
   serviceAccount: z.string().optional(), // K8s service account for the MCP server pod
+  advancedK8sConfig: AdvancedK8sConfigFormSchema.optional(), // Advanced K8s configuration
 });
 
 /**

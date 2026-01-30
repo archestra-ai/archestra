@@ -13,10 +13,11 @@
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
     "type-check": "tsc --noEmit",
+    "test": "vitest",
     "codegen:api-client": "tsx hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
     "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",
     "codegen": "pnpm codegen:api-client && pnpm codegen:theme-css",
-    "check:ci": "pnpm type-check && pnpm knip && biome ci",
+    "check:ci": "pnpm type-check && pnpm test && pnpm knip && biome ci",
     "check:commit": "pnpm type-check && pnpm knip && biome ci",
     "knip": "knip"
   },
@@ -32,6 +33,7 @@
     "@types/node": "^25",
     "knip": "^5.81.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.18"
   }
 }

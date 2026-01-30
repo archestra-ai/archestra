@@ -19,6 +19,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@kubernetes/client-node": "^1.4.0",
     "@shared": "workspace:*",
     "dotenv": "^17.2.2"
   },

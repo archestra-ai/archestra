@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
-import type { LocalConfigSchema } from "@shared";
+import { type LocalConfigSchema, MCP_ORCHESTRATOR_DEFAULTS } from "@shared";
 import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
@@ -168,7 +168,7 @@ export default class K8sDeployment {
   private k8sAppsApi: k8s.AppsV1Api;
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
-  private namespace: string;
+  private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
   private state: K8sDeploymentState = "not_created";
   private errorMessage: string | null = null;
@@ -197,11 +197,22 @@ export default class K8sDeployment {
     this.k8sAppsApi = k8sAppsApi;
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
-    this.namespace = namespace;
+    this.defaultNamespace = namespace;
     this.catalogItem = catalogItem;
     this.userConfigValues = userConfigValues;
     this.environmentValues = environmentValues;
     this.deploymentName = K8sDeployment.constructDeploymentName(mcpServer);
+  }
+
+  /**
+   * Returns the effective namespace for this deployment.
+   * Uses the namespace from advancedK8sConfig if specified, otherwise falls back to the default.
+   */
+  private get namespace(): string {
+    return (
+      this.catalogItem?.localConfig?.advancedK8sConfig?.namespace ||
+      this.defaultNamespace
+    );
   }
 
   /**
@@ -271,14 +282,22 @@ export default class K8sDeployment {
   }
 
   /**
-   * Get catalog item for this MCP server
+   * Get catalog item for this MCP server.
+   * Caches the result in this.catalogItem for subsequent calls.
    */
   private async getCatalogItem(): Promise<InternalMcpCatalog | null> {
+    if (this.catalogItem) {
+      return this.catalogItem;
+    }
+
     if (!this.mcpServer.catalogId) {
       return null;
     }
 
-    return await InternalMcpCatalogModel.findById(this.mcpServer.catalogId);
+    this.catalogItem = await InternalMcpCatalogModel.findById(
+      this.mcpServer.catalogId,
+    );
+    return this.catalogItem;
   }
 
   /**
@@ -491,8 +510,13 @@ export default class K8sDeployment {
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
   ): k8s.V1Deployment {
+    const advancedConfig = localConfig.advancedK8sConfig;
+
     // Labels common to Deployment, RS, and Pods
+    // Merge custom labels from advanced config with required labels
+    // Required labels are spread last to prevent custom labels from overriding them
     const labels = K8sDeployment.sanitizeMetadataLabels({
+      ...(advancedConfig?.labels || {}),
       app: "mcp-server",
       "mcp-server-id": this.mcpServer.id,
       "mcp-server-name": this.mcpServer.name,
@@ -588,16 +612,40 @@ export default class K8sDeployment {
             : undefined,
           // Add volume mounts for mounted secrets
           ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
-          // Set resource requests for the container
+          // Set resource requests/limits for the container (with defaults)
           resources: {
             requests: {
-              memory: "128Mi",
-              cpu: "50m",
+              memory:
+                advancedConfig?.resources?.requests?.memory ||
+                MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
+              cpu:
+                advancedConfig?.resources?.requests?.cpu ||
+                MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
             },
+            ...(advancedConfig?.resources?.limits
+              ? {
+                  limits: {
+                    ...(advancedConfig.resources.limits.memory
+                      ? { memory: advancedConfig.resources.limits.memory }
+                      : {}),
+                    ...(advancedConfig.resources.limits.cpu
+                      ? { cpu: advancedConfig.resources.limits.cpu }
+                      : {}),
+                  },
+                }
+              : {}),
           },
         },
       ],
       restartPolicy: "Always",
+    };
+
+    // Build pod template metadata with optional annotations
+    const podTemplateMetadata: k8s.V1ObjectMeta = {
+      labels,
+      ...(advancedConfig?.annotations
+        ? { annotations: advancedConfig.annotations }
+        : {}),
     };
 
     return {
@@ -608,14 +656,13 @@ export default class K8sDeployment {
         labels,
       },
       spec: {
-        replicas: 1,
+        replicas:
+          advancedConfig?.replicas ?? MCP_ORCHESTRATOR_DEFAULTS.replicas,
         selector: {
           matchLabels: labels,
         },
         template: {
-          metadata: {
-            labels,
-          },
+          metadata: podTemplateMetadata,
           spec: podSpec,
         },
       },

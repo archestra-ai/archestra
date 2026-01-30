@@ -1585,12 +1585,6 @@ export default class K8sDeployment {
         }
       });
 
-      responseStream.on("close", () => {
-        if (logStream.destroy) {
-          logStream.destroy();
-        }
-      });
-
       // Use the Log client to stream logs with follow=true
       const req = await this.k8sLog.log(
         this.namespace,
@@ -1605,9 +1599,12 @@ export default class K8sDeployment {
         },
       );
 
+      // Track abort handler for cleanup
+      let abortHandler: (() => void) | null = null;
+
       // Handle abort signal
       if (abortSignal) {
-        const abortHandler = () => {
+        abortHandler = () => {
           if (req) {
             req.abort();
           }
@@ -1625,11 +1622,22 @@ export default class K8sDeployment {
         abortSignal.addEventListener("abort", abortHandler, { once: true });
       }
 
+      // Cleanup function to remove abort listener
+      const cleanupAbortListener = () => {
+        if (abortSignal && abortHandler) {
+          abortSignal.removeEventListener("abort", abortHandler);
+        }
+      };
+
       // Handle cleanup when response stream closes
       responseStream.on("close", () => {
         if (req) {
           req.abort();
         }
+        if (logStream.destroy) {
+          logStream.destroy();
+        }
+        cleanupAbortListener();
       });
     } catch (error: unknown) {
       logger.error(

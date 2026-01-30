@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { showErrorToastFromApiError } from "./utils";
 
 const {
@@ -261,13 +262,18 @@ export function useProfileToolPatchMutation() {
         id: string;
       },
     ) => {
-      const result = await updateAgentTool({
+      const { data, error } = await updateAgentTool({
         body: updatedProfileTool,
         path: { id: updatedProfileTool.id },
       });
-      return result.data ?? null;
+      if (error) {
+        showErrorToastFromApiError(error);
+        return null;
+      }
+      return data ?? null;
     },
     onSuccess: () => {
+      toast.success("Tool settings saved");
       // Invalidate all agent-tools queries to refetch updated data
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],

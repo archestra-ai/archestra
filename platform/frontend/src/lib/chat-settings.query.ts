@@ -118,6 +118,7 @@ export function useDeleteChatApiKey() {
       return responseData;
     },
     onSuccess: () => {
+      toast.success("API key deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });

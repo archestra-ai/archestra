@@ -707,12 +707,10 @@ function DeleteGatewayDialog({
   const deleteGateway = useDeleteProfile();
 
   const handleDelete = useCallback(async () => {
-    try {
-      await deleteGateway.mutateAsync(agentId);
+    const result = await deleteGateway.mutateAsync(agentId);
+    if (result) {
       toast.success("MCP Gateway deleted successfully");
       onOpenChange(false);
-    } catch (_error) {
-      toast.error("Failed to delete MCP Gateway");
     }
   }, [agentId, deleteGateway, onOpenChange]);
 

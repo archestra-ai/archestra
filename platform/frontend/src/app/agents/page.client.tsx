@@ -637,12 +637,10 @@ function DeleteAgentDialog({
   const deleteAgent = useDeleteProfile();
 
   const handleDelete = useCallback(async () => {
-    try {
-      await deleteAgent.mutateAsync(agentId);
+    const result = await deleteAgent.mutateAsync(agentId);
+    if (result) {
       toast.success("Agent deleted successfully");
       onOpenChange(false);
-    } catch (_error) {
-      toast.error("Failed to delete agent");
     }
   }, [agentId, deleteAgent, onOpenChange]);
 

@@ -10,6 +10,7 @@ import {
 } from "@shared";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
+import type { TokenAuthContext } from "@/clients/mcp-client";
 import { getKnowledgeGraphProvider } from "@/knowledge-graph";
 import logger from "@/logging";
 import {
@@ -24,7 +25,6 @@ import {
   TrustedDataPolicyModel,
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
-import type { TokenAuthResult } from "@/routes/mcp-gateway.utils";
 import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
@@ -125,8 +125,8 @@ export interface ArchestraContext {
   agentId?: string;
   /** The organization ID */
   organizationId?: string;
-  /** Token authentication result */
-  tokenAuth?: TokenAuthResult;
+  /** Token authentication context */
+  tokenAuth?: TokenAuthContext;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
   /**

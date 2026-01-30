@@ -1,4 +1,8 @@
-import { LocalConfigSchema, OAuthConfigSchema } from "@shared";
+import {
+  AdvancedK8sConfigSchema,
+  LocalConfigSchema,
+  OAuthConfigSchema,
+} from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -61,6 +65,8 @@ const LocalConfigSelectSchema = z.object({
   transportType: z.enum(["stdio", "streamable-http"]).optional(),
   httpPort: z.number().optional(),
   httpPath: z.string().optional(),
+  // Advanced Kubernetes configuration
+  advancedK8sConfig: AdvancedK8sConfigSchema.optional(),
 });
 
 export const SelectInternalMcpCatalogSchema = createSelectSchema(
@@ -117,6 +123,9 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
 export type InternalMcpCatalogServerType = z.infer<
   typeof InternalMcpCatalogServerTypeSchema
 >;
+
+// Export LocalConfig type for reuse in database schema
+export type LocalConfig = z.infer<typeof LocalConfigSelectSchema>;
 
 export type InternalMcpCatalog = z.infer<typeof SelectInternalMcpCatalogSchema>;
 export type InsertInternalMcpCatalog = z.infer<

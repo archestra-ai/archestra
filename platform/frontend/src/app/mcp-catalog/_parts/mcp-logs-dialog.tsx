@@ -8,7 +8,7 @@ import {
   Square,
   Terminal,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,34 @@ interface McpLogsDialogProps {
     id: string;
     name: string;
   }[];
+  /** Hide the installation dropdown selector */
+  hideInstallationSelector?: boolean;
+}
+
+/**
+ * Hook that returns an animated "Streaming" text with cycling dots
+ */
+function useStreamingAnimation(isActive: boolean) {
+  const [dotCount, setDotCount] = useState(0);
+
+  useEffect(() => {
+    if (!isActive) {
+      setDotCount(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setDotCount((prev) => (prev + 1) % 4);
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  return useMemo(() => {
+    const dots = ".".repeat(dotCount);
+    const spaces = "\u00A0".repeat(3 - dotCount); // Non-breaking spaces to maintain width
+    return `Streaming${dots}${spaces}`;
+  }, [dotCount]);
 }
 
 export function McpLogsDialog({
@@ -43,6 +71,7 @@ export function McpLogsDialog({
   onOpenChange,
   serverName,
   installs,
+  hideInstallationSelector = false,
 }: McpLogsDialogProps) {
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
@@ -77,6 +106,10 @@ export function McpLogsDialog({
   const displayError = isFollowing ? streamError : logsError?.message;
   const displayIsLoading = isFollowing ? false : isLoading;
   const command = logsData?.command ?? "";
+
+  // Streaming animation for when following and no logs received yet
+  const isWaitingForLogs = isFollowing && !streamedLogs && !streamError;
+  const streamingText = useStreamingAnimation(isWaitingForLogs);
 
   const startFollowing = useCallback(async () => {
     if (!serverId) {
@@ -243,7 +276,7 @@ export function McpLogsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 overflow-hidden">
             <Terminal className="h-5 w-5 flex-shrink-0" />
@@ -251,7 +284,7 @@ export function McpLogsDialog({
           </DialogTitle>
           <DialogDescription className="flex flex-col gap-2">
             <span>View the recent logs from the MCP server container</span>
-            {installs.length > 1 && (
+            {!hideInstallationSelector && installs.length > 1 && (
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">Installation:</span>
                 <Select
@@ -345,8 +378,12 @@ export function McpLogsDialog({
                   <div className="text-red-400 font-mono text-sm">
                     Error loading logs: {displayError}
                   </div>
+                ) : isWaitingForLogs ? (
+                  <div className="text-emerald-400 font-mono text-sm">
+                    {streamingText}
+                  </div>
                 ) : displayLogs ? (
-                  <pre className="text-slate-200 font-mono text-xs whitespace-pre-wrap">
+                  <pre className="text-emerald-400 font-mono text-xs whitespace-pre-wrap">
                     {displayLogs}
                   </pre>
                 ) : (
@@ -362,7 +399,7 @@ export function McpLogsDialog({
             <h3 className="text-sm font-semibold">Manual Command</h3>
             <div className="relative">
               <ScrollArea className="rounded-md border bg-slate-950 p-3 pr-16">
-                <code className="text-slate-200 font-mono text-xs break-all">
+                <code className="text-emerald-400 font-mono text-xs break-all">
                   {command}
                 </code>
               </ScrollArea>
@@ -370,7 +407,7 @@ export function McpLogsDialog({
                 variant="ghost"
                 size="sm"
                 onClick={handleCopyCommand}
-                className="absolute top-1 right-1"
+                className="absolute top-1/2 -translate-y-1/2 right-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
               >
                 <Copy className="h-3 w-3" />
                 {commandCopied ? "Copied!" : ""}

@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import {
   forwardRef,
@@ -102,6 +102,7 @@ const AgentToolsEditorContent = forwardRef<
   },
   ref,
 ) {
+  const queryClient = useQueryClient();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
 
@@ -212,6 +213,27 @@ const AgentToolsEditorContent = forwardRef<
     [calculateTotalSelectedCount, onSelectedCountChange],
   );
 
+  // Helper function to invalidate all related queries once
+  const invalidateAllQueries = useCallback(
+    (affectedAgentId: string) => {
+      queryClient.invalidateQueries({
+        queryKey: ["agents", affectedAgentId, "tools"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents", affectedAgentId, "mcp-tools"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+    },
+    [queryClient],
+  );
+
   // Expose saveChanges method to parent
   useImperativeHandle(ref, () => ({
     saveChanges: async (overrideAgentId?: string) => {
@@ -219,6 +241,7 @@ const AgentToolsEditorContent = forwardRef<
       if (!targetAgentId) return;
 
       const allChanges = Array.from(pendingChangesRef.current.entries());
+      let hasChanges = false;
 
       for (const [catalogId, changes] of allChanges) {
         const currentAssigned = assignedToolsByCatalog.get(catalogId) ?? [];
@@ -233,14 +256,22 @@ const AgentToolsEditorContent = forwardRef<
           (id) => !changes.selectedToolIds.has(id),
         );
 
-        const isLocal = changes.catalogItem.serverType === "local";
-
-        // Remove tools (only for existing agents)
-        for (const toolId of toRemove) {
-          await unassignTool.mutateAsync({ agentId: targetAgentId, toolId });
+        if (toAdd.length > 0 || toRemove.length > 0) {
+          hasChanges = true;
         }
 
-        // Add tools
+        const isLocal = changes.catalogItem.serverType === "local";
+
+        // Remove tools (skip invalidation, will do it once at the end)
+        for (const toolId of toRemove) {
+          await unassignTool.mutateAsync({
+            agentId: targetAgentId,
+            toolId,
+            skipInvalidation: true,
+          });
+        }
+
+        // Add tools (skip invalidation, will do it once at the end)
         for (const toolId of toAdd) {
           await assignTool.mutateAsync({
             agentId: targetAgentId,
@@ -253,8 +284,14 @@ const AgentToolsEditorContent = forwardRef<
               : undefined,
             useDynamicTeamCredential:
               changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE,
+            skipInvalidation: true,
           });
         }
+      }
+
+      // Invalidate all queries once at the end
+      if (hasChanges) {
+        invalidateAllQueries(targetAgentId);
       }
 
       // Clear all pending changes after save

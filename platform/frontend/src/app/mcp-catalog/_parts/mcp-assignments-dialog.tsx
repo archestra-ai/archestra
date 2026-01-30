@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -133,6 +134,7 @@ export function McpAssignmentsDialog({
   const [agentsSearchOpen, setAgentsSearchOpen] = useState(false);
   const [agentsShowAll, setAgentsShowAll] = useState(false);
 
+  const queryClient = useQueryClient();
   const unassignTool = useUnassignTool();
   const bulkAssign = useBulkAssignTools();
   const patchTool = useProfileToolPatchMutation();
@@ -170,9 +172,37 @@ export function McpAssignmentsDialog({
     return false;
   }, [pendingChanges, assignmentsByProfile]);
 
+  // Helper function to invalidate all related queries once
+  const invalidateAllQueries = useCallback(
+    (affectedAgentIds: Set<string>) => {
+      // Invalidate agent-specific queries
+      for (const agentId of affectedAgentIds) {
+        queryClient.invalidateQueries({
+          queryKey: ["agents", agentId, "tools"],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["chat", "agents", agentId, "mcp-tools"],
+        });
+      }
+
+      // Invalidate global queries
+      queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+    },
+    [queryClient],
+  );
+
   // Save all pending changes
   const handleSaveAll = async () => {
     setIsSaving(true);
+    const affectedAgentIds = new Set<string>();
+
     try {
       for (const [profileId, changes] of pendingChanges) {
         const current = assignmentsByProfile.get(profileId);
@@ -189,15 +219,21 @@ export function McpAssignmentsDialog({
         const useDynamicCredential =
           changes.credentialId === DYNAMIC_CREDENTIAL_VALUE;
 
-        // Remove tools
+        // Track affected agents for invalidation
+        if (toAdd.length > 0 || toRemove.length > 0) {
+          affectedAgentIds.add(profileId);
+        }
+
+        // Remove tools (skip invalidation, will do it once at the end)
         for (const toolId of toRemove) {
           await unassignTool.mutateAsync({
             agentId: profileId,
             toolId,
+            skipInvalidation: true,
           });
         }
 
-        // Add new tools
+        // Add new tools (skip invalidation, will do it once at the end)
         if (toAdd.length > 0) {
           const assignments = toAdd.map((toolId) => ({
             agentId: profileId,
@@ -213,7 +249,7 @@ export function McpAssignmentsDialog({
             useDynamicTeamCredential: useDynamicCredential,
           }));
 
-          await bulkAssign.mutateAsync({ assignments });
+          await bulkAssign.mutateAsync({ assignments, skipInvalidation: true });
         }
 
         // Update credential for existing tools if it changed
@@ -222,6 +258,7 @@ export function McpAssignmentsDialog({
           current?.tools.length &&
           toRemove.length === 0
         ) {
+          affectedAgentIds.add(profileId);
           const toolsToUpdate = current.tools.filter(
             (at) => !toRemove.includes(at.tool.id),
           );
@@ -237,10 +274,14 @@ export function McpAssignmentsDialog({
                   ? changes.credentialId
                   : null,
               useDynamicTeamCredential: useDynamicCredential,
+              skipInvalidation: true,
             });
           }
         }
       }
+
+      // Invalidate all queries once at the end
+      invalidateAllQueries(affectedAgentIds);
 
       toast.success("Changes saved");
       setPendingChanges(new Map());
@@ -248,6 +289,8 @@ export function McpAssignmentsDialog({
     } catch (error) {
       console.error("Failed to save changes:", error);
       toast.error("Failed to save changes");
+      // Still invalidate on error to ensure UI is in sync
+      invalidateAllQueries(affectedAgentIds);
     } finally {
       setIsSaving(false);
     }

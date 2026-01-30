@@ -1,6 +1,5 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { handleApiError } from "./utils";
 
 const { getTokens, getTokenValue, rotateToken } = archestraApiSdk;
@@ -107,14 +106,14 @@ export function useRotateToken() {
   return useMutation({
     mutationFn: async (tokenId: string) => {
       const response = await rotateToken({ path: { tokenId } });
+      if (response.error) {
+        handleApiError(response.error);
+      }
       return response.data as { value: string };
     },
     onSuccess: (_data, tokenId) => {
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
       queryClient.invalidateQueries({ queryKey: ["tokenValue", tokenId] });
-    },
-    onError: () => {
-      toast.error("Failed to rotate token");
     },
   });
 }

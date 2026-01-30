@@ -319,7 +319,7 @@ This pattern:
 
 ### Never Throw on HTTP Errors
 
-**NEVER throw errors on HTTP failures in query/mutation functions.** Instead, use `showErrorToastFromApiError` for user notification and return appropriate default values:
+**NEVER throw errors on HTTP failures in query/mutation functions.** Instead, use `handleApiError` for user notification and return appropriate default values:
 
 ```typescript
 // ❌ Bad: Throwing on API errors
@@ -337,7 +337,7 @@ export function useSomething() {
 }
 
 // ✅ Good: Toast + return default value
-import { showErrorToastFromApiError } from "./utils";
+import { handleApiError } from "./utils";
 
 export function useSomething() {
   return useQuery({
@@ -345,7 +345,7 @@ export function useSomething() {
     queryFn: async () => {
       const { data, error } = await getSomething();
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return [];  // Return appropriate default ([], null, {})
       }
       return data ?? [];
@@ -359,7 +359,7 @@ export function useUpdateSomething() {
     mutationFn: async (input: UpdateInput) => {
       const { data, error } = await updateSomething(input);
       if (error) {
-        showErrorToastFromApiError(error);
+        handleApiError(error);
         return null;
       }
       return data;
@@ -373,7 +373,7 @@ export function useUpdateSomething() {
 ```
 
 **Key rules:**
-- Use `showErrorToastFromApiError(error)` for consistent error toasts
+- Use `handleApiError(error)` for consistent error toasts
 - Return appropriate defaults: `[]` for lists, `null` for single items, `{}` for objects
 - **No try/catch in components** - all API error handling belongs in `.query.ts` files
 - Remove `onError` callbacks that duplicate toast logic from mutationFn
@@ -745,7 +745,7 @@ export default async function DashboardPage() {
 4. ✅ Use shadcn/ui components over plain HTML elements (Button over button, Input over input, etc.)
 5. ✅ Use TanStack Query with useQuery and explicit loading states (LoadingWrapper or inline)
 6. ✅ Handle toast notifications in .query.ts files, not in components
-7. ✅ Never throw on HTTP errors - use `showErrorToastFromApiError` and return defaults
+7. ✅ Never throw on HTTP errors - use `handleApiError` and return defaults
 8. ✅ Use error boundaries for error handling
 9. ✅ Handle loading states explicitly with LoadingWrapper or inline checks
 10. ✅ Prefetch data on server, pass as initial data to queries

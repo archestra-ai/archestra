@@ -1,7 +1,14 @@
 "use client";
 
+import { isAgentTool } from "@shared";
 import { Bot, Wrench } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ExpandableText } from "@/components/ui/expandable-text";
@@ -11,7 +18,18 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
-import { useChatProfileMcpTools } from "@/lib/chat.query";
+import {
+  useChatProfileMcpTools,
+  useConversationEnabledTools,
+  useProfileToolsWithIds,
+  useUpdateConversationEnabledTools,
+} from "@/lib/chat.query";
+import {
+  addPendingAction,
+  applyPendingActions,
+  getPendingActions,
+  type PendingToolAction,
+} from "@/lib/pending-tool-state";
 import { cn } from "@/lib/utils";
 
 // Component to display tools for a specific agent
@@ -52,78 +70,145 @@ interface AgentToolsDisplayProps {
   addAgentsButton: ReactNode;
 }
 
-// Local storage key for disabled delegations
-const getStorageKey = (agentId: string, conversationId?: string) =>
-  `disabled-delegations:${agentId}:${conversationId || "initial"}`;
-
 /**
  * Display agent delegations (agents this agent can delegate to).
- * Uses the agent_tools/delegations data like the canvas.
- * Supports enable/disable toggle with state persisted in localStorage.
+ * Uses database-backed enabled tools state (same as ChatToolsDisplay for MCP tools).
+ * Supports enable/disable toggle persisted via conversation_enabled_tools API.
  */
 export function AgentToolsDisplay({
   agentId,
   conversationId,
   addAgentsButton,
 }: AgentToolsDisplayProps) {
-  // Fetch delegated agents from agent_tools (like canvas)
-  const { data: delegatedAgents = [], isLoading } =
+  // Fetch delegated agents for display info (name, description)
+  const { data: delegatedAgents = [], isLoading: isLoadingAgents } =
     useAgentDelegations(agentId);
 
-  // Track disabled delegation agent IDs
-  const [disabledAgentIds, setDisabledAgentIds] = useState<Set<string>>(
-    new Set(),
+  // Fetch all profile tools to get delegation tool IDs
+  const { data: profileTools = [], isLoading: isLoadingTools } =
+    useProfileToolsWithIds(agentId);
+
+  // Filter for delegation tools only (tools with name starting with agent__)
+  const delegationTools = useMemo(
+    () => profileTools.filter((tool) => isAgentTool(tool.name)),
+    [profileTools],
   );
 
-  // Load disabled state from localStorage on mount
-  useEffect(() => {
-    const storageKey = getStorageKey(agentId, conversationId);
-    const stored = localStorage.getItem(storageKey);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setDisabledAgentIds(new Set(parsed));
-        }
-      } catch {
-        // Ignore invalid JSON
+  // Create a map from target agent ID to tool ID for quick lookup
+  const targetAgentToToolId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const tool of delegationTools) {
+      if (tool.delegateToAgentId) {
+        map.set(tool.delegateToAgentId, tool.id);
       }
+    }
+    return map;
+  }, [delegationTools]);
+
+  // Local pending actions for display (synced with localStorage)
+  const [localPendingActions, setLocalPendingActions] = useState<
+    PendingToolAction[]
+  >([]);
+
+  // Load pending actions from localStorage on mount and when context changes
+  useEffect(() => {
+    if (!conversationId) {
+      const actions = getPendingActions(agentId);
+      setLocalPendingActions(actions);
     } else {
-      setDisabledAgentIds(new Set());
+      setLocalPendingActions([]);
     }
   }, [agentId, conversationId]);
 
-  // Save disabled state to localStorage
-  const saveDisabledState = useCallback(
-    (newDisabled: Set<string>) => {
-      const storageKey = getStorageKey(agentId, conversationId);
-      localStorage.setItem(storageKey, JSON.stringify([...newDisabled]));
-    },
-    [agentId, conversationId],
+  // Fetch enabled tools for the conversation
+  const { data: enabledToolsData } =
+    useConversationEnabledTools(conversationId);
+  const enabledToolIds = enabledToolsData?.enabledToolIds ?? [];
+  const hasCustomSelection = enabledToolsData?.hasCustomSelection ?? false;
+
+  // Mutation for updating enabled tools
+  const updateEnabledTools = useUpdateConversationEnabledTools();
+
+  // Default enabled tools: all delegation tools are enabled by default
+  const defaultEnabledToolIds = useMemo(
+    () => delegationTools.map((t) => t.id),
+    [delegationTools],
   );
 
-  // Toggle delegation enabled/disabled
+  // Compute current enabled tools (same pattern as ChatToolsDisplay)
+  const currentEnabledToolIds = useMemo(() => {
+    if (conversationId && hasCustomSelection) {
+      return enabledToolIds;
+    }
+
+    // Start with defaults (all delegation tools enabled)
+    const baseIds = defaultEnabledToolIds;
+
+    // If no conversation, apply pending actions for display
+    if (!conversationId && localPendingActions.length > 0) {
+      return applyPendingActions(baseIds, localPendingActions);
+    }
+
+    return baseIds;
+  }, [
+    conversationId,
+    hasCustomSelection,
+    enabledToolIds,
+    defaultEnabledToolIds,
+    localPendingActions,
+  ]);
+
+  const enabledToolIdsSet = new Set(currentEnabledToolIds);
+
+  // Check if a delegation is enabled (by target agent ID)
+  const isEnabled = useCallback(
+    (targetAgentId: string) => {
+      const toolId = targetAgentToToolId.get(targetAgentId);
+      if (!toolId) return true; // Default to enabled if tool not found
+      return enabledToolIdsSet.has(toolId);
+    },
+    [targetAgentToToolId, enabledToolIdsSet],
+  );
+
+  // Handle toggling a delegation (by target agent ID)
   const handleToggle = useCallback(
     (targetAgentId: string) => {
-      setDisabledAgentIds((prev) => {
-        const newSet = new Set(prev);
-        if (newSet.has(targetAgentId)) {
-          newSet.delete(targetAgentId);
-        } else {
-          newSet.add(targetAgentId);
-        }
-        saveDisabledState(newSet);
-        return newSet;
+      const toolId = targetAgentToToolId.get(targetAgentId);
+      if (!toolId) return;
+
+      const currentlyEnabled = enabledToolIdsSet.has(toolId);
+
+      if (!conversationId) {
+        // Store in localStorage and update local state
+        const action: PendingToolAction = currentlyEnabled
+          ? { type: "disable", toolId }
+          : { type: "enable", toolId };
+        addPendingAction(action, agentId);
+        setLocalPendingActions((prev) => [...prev, action]);
+        return;
+      }
+
+      // Update via API
+      const newEnabledToolIds = currentlyEnabled
+        ? currentEnabledToolIds.filter((id) => id !== toolId)
+        : [...currentEnabledToolIds, toolId];
+
+      updateEnabledTools.mutateAsync({
+        conversationId,
+        toolIds: newEnabledToolIds,
       });
     },
-    [saveDisabledState],
+    [
+      targetAgentToToolId,
+      enabledToolIdsSet,
+      conversationId,
+      agentId,
+      currentEnabledToolIds,
+      updateEnabledTools,
+    ],
   );
 
-  // Check if a delegation is enabled
-  const isEnabled = useCallback(
-    (targetAgentId: string) => !disabledAgentIds.has(targetAgentId),
-    [disabledAgentIds],
-  );
+  const isLoading = isLoadingAgents || isLoadingTools;
 
   if (isLoading || delegatedAgents.length === 0) {
     return null;

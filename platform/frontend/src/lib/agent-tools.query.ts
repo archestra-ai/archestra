@@ -109,12 +109,14 @@ export function useAssignTool() {
       credentialSourceMcpServerId,
       executionSourceMcpServerId,
       useDynamicTeamCredential,
+      skipInvalidation,
     }: {
       agentId: string;
       toolId: string;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
       useDynamicTeamCredential?: boolean;
+      skipInvalidation?: boolean;
     }) => {
       const { data } = await assignToolToAgent({
         path: { agentId, toolId },
@@ -131,9 +133,12 @@ export function useAssignTool() {
               }
             : undefined,
       });
-      return data?.success ?? false;
+      return { success: data?.success ?? false, agentId, skipInvalidation };
     },
-    onSuccess: (_, { agentId }) => {
+    onSuccess: (result) => {
+      if (result.skipInvalidation) return;
+
+      const { agentId } = result;
       // Invalidate queries to refetch data
       queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
@@ -163,23 +168,27 @@ export function useBulkAssignTools() {
     mutationFn: async ({
       assignments,
       mcpServerId,
+      skipInvalidation,
     }: {
       assignments: Array<{
         agentId: string;
         toolId: string;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
       }>;
       mcpServerId?: string | null;
+      skipInvalidation?: boolean;
     }) => {
       const { data } = await bulkAssignTools({
         body: { assignments },
       });
       if (!data) return null;
-      return { ...data, mcpServerId };
+      return { ...data, mcpServerId, skipInvalidation };
     },
     onSuccess: (result) => {
       if (!result) return;
+      if (result.skipInvalidation) return;
 
       // Invalidate specific agent tools queries for agents that had successful assignments
       const agentIds = result.succeeded.map((a) => a.agentId);
@@ -226,16 +235,21 @@ export function useUnassignTool() {
     mutationFn: async ({
       agentId,
       toolId,
+      skipInvalidation,
     }: {
       agentId: string;
       toolId: string;
+      skipInvalidation?: boolean;
     }) => {
       const { data } = await unassignToolFromAgent({
         path: { agentId, toolId },
       });
-      return data?.success ?? false;
+      return { success: data?.success ?? false, agentId, skipInvalidation };
     },
-    onSuccess: (_, { agentId }) => {
+    onSuccess: (result) => {
+      if (result.skipInvalidation) return;
+
+      const { agentId } = result;
       queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: ["tools"] });
@@ -263,20 +277,22 @@ export function useProfileToolPatchMutation() {
     mutationFn: async (
       updatedProfileTool: archestraApiTypes.UpdateAgentToolData["body"] & {
         id: string;
+        skipInvalidation?: boolean;
       },
     ) => {
-      const { data, error } = await updateAgentTool({
-        body: updatedProfileTool,
+      const { skipInvalidation, ...body } = updatedProfileTool;
+      const result = await updateAgentTool({
+        body,
         path: { id: updatedProfileTool.id },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
+      if (result.error) {
+        handleApiError(result.error);
       }
-      return data ?? null;
+      return { data: result.data ?? null, skipInvalidation };
     },
-    onSuccess: () => {
-      toast.success("Tool settings saved");
+    onSuccess: (result) => {
+      if (result.skipInvalidation) return;
+
       // Invalidate all agent-tools queries to refetch updated data
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],

@@ -28,6 +28,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useProfiles } from "@/lib/agent.query";
+import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
   useBulkAssignTools,
@@ -133,6 +134,7 @@ export function McpAssignmentsDialog({
   const [agentsSearchOpen, setAgentsSearchOpen] = useState(false);
   const [agentsShowAll, setAgentsShowAll] = useState(false);
 
+  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const unassignTool = useUnassignTool();
   const bulkAssign = useBulkAssignTools();
   const patchTool = useProfileToolPatchMutation();
@@ -173,6 +175,8 @@ export function McpAssignmentsDialog({
   // Save all pending changes
   const handleSaveAll = async () => {
     setIsSaving(true);
+    const affectedAgentIds = new Set<string>();
+
     try {
       for (const [profileId, changes] of pendingChanges) {
         const current = assignmentsByProfile.get(profileId);
@@ -189,15 +193,21 @@ export function McpAssignmentsDialog({
         const useDynamicCredential =
           changes.credentialId === DYNAMIC_CREDENTIAL_VALUE;
 
-        // Remove tools
+        // Track affected agents for invalidation
+        if (toAdd.length > 0 || toRemove.length > 0) {
+          affectedAgentIds.add(profileId);
+        }
+
+        // Remove tools (skip invalidation, will do it once at the end)
         for (const toolId of toRemove) {
           await unassignTool.mutateAsync({
             agentId: profileId,
             toolId,
+            skipInvalidation: true,
           });
         }
 
-        // Add new tools
+        // Add new tools (skip invalidation, will do it once at the end)
         if (toAdd.length > 0) {
           const assignments = toAdd.map((toolId) => ({
             agentId: profileId,
@@ -213,7 +223,7 @@ export function McpAssignmentsDialog({
             useDynamicTeamCredential: useDynamicCredential,
           }));
 
-          await bulkAssign.mutateAsync({ assignments });
+          await bulkAssign.mutateAsync({ assignments, skipInvalidation: true });
         }
 
         // Update credential for existing tools if it changed
@@ -222,6 +232,7 @@ export function McpAssignmentsDialog({
           current?.tools.length &&
           toRemove.length === 0
         ) {
+          affectedAgentIds.add(profileId);
           const toolsToUpdate = current.tools.filter(
             (at) => !toRemove.includes(at.tool.id),
           );
@@ -237,10 +248,14 @@ export function McpAssignmentsDialog({
                   ? changes.credentialId
                   : null,
               useDynamicTeamCredential: useDynamicCredential,
+              skipInvalidation: true,
             });
           }
         }
       }
+
+      // Invalidate all queries once at the end
+      invalidateAllQueries(affectedAgentIds);
 
       toast.success("Changes saved");
       setPendingChanges(new Map());
@@ -248,6 +263,8 @@ export function McpAssignmentsDialog({
     } catch (error) {
       console.error("Failed to save changes:", error);
       toast.error("Failed to save changes");
+      // Still invalidate on error to ensure UI is in sync
+      invalidateAllQueries(affectedAgentIds);
     } finally {
       setIsSaving(false);
     }

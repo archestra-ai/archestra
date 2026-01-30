@@ -345,7 +345,8 @@ export class McpServerRuntimeManager {
    * Stop a single MCP server deployment
    */
   async stopServer(mcpServerId: string): Promise<void> {
-    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    // Try to get from memory first, or lazy-load from database
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
 
     if (k8sDeployment) {
       // Delete deployment first
@@ -359,13 +360,6 @@ export class McpServerRuntimeManager {
 
       this.mcpServerIdToDeploymentMap.delete(mcpServerId);
     }
-  }
-
-  /**
-   * Get a deployment by MCP server ID
-   */
-  getDeployment(mcpServerId: string): K8sDeployment | undefined {
-    return this.mcpServerIdToDeploymentMap.get(mcpServerId);
   }
 
   /**
@@ -447,7 +441,8 @@ export class McpServerRuntimeManager {
   async removeMcpServer(mcpServerId: string): Promise<void> {
     logger.info(`Removing MCP server deployment for: ${mcpServerId}`);
 
-    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    // Try to get from memory first, or lazy-load from database
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
       logger.warn(`No deployment found for MCP server ${mcpServerId}`);
       return;
@@ -506,7 +501,8 @@ export class McpServerRuntimeManager {
    * Check if an MCP server uses streamable HTTP transport
    */
   async usesStreamableHttp(mcpServerId: string): Promise<boolean> {
-    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    // Try to get from memory first, or lazy-load from database
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
       return false;
     }
@@ -516,8 +512,9 @@ export class McpServerRuntimeManager {
   /**
    * Get the HTTP endpoint URL for a streamable-http server
    */
-  getHttpEndpointUrl(mcpServerId: string): string | undefined {
-    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+  async getHttpEndpointUrl(mcpServerId: string): Promise<string | undefined> {
+    // Try to get from memory first, or lazy-load from database
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
       return undefined;
     }
@@ -531,9 +528,10 @@ export class McpServerRuntimeManager {
     mcpServerId: string,
     lines: number = 100,
   ): Promise<McpServerContainerLogs> {
-    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    // Try to get from memory first, or lazy-load from database
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
-      throw new Error(`Deployment not found for MCP server ${mcpServerId}`);
+      throw new Error(`MCP server not found`);
     }
 
     const containerName = k8sDeployment.containerName;
@@ -560,9 +558,10 @@ export class McpServerRuntimeManager {
     lines: number = 100,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    // Try to get from memory first, or lazy-load from database
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
-      throw new Error(`Deployment not found for MCP server ${mcpServerId}`);
+      throw new Error(`MCP server not found`);
     }
 
     await k8sDeployment.streamLogs(responseStream, lines, abortSignal);
@@ -588,7 +587,8 @@ export class McpServerRuntimeManager {
    * Check if an MCP server has a running pod
    */
   async hasRunningPod(mcpServerId: string): Promise<boolean> {
-    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    // Try to get from memory first, or lazy-load from database
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
       return false;
     }

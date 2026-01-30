@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 /**
+ * MCP Logs defaults
+ */
+export const MCP_DEFAULT_LOG_LINES = 500;
+
+/**
  * WebSocket Message Payload Schemas (Client -> Server)
  */
 
@@ -55,7 +60,7 @@ const BrowserSetZoomPayloadSchema = z.object({
 // MCP Server Logs payloads
 const SubscribeMcpLogsPayloadSchema = z.object({
   serverId: z.string().uuid(),
-  lines: z.number().int().min(1).max(10000).default(500), // Number of initial lines to fetch
+  lines: z.number().int().min(1).max(10000).default(MCP_DEFAULT_LOG_LINES), // Number of initial lines to fetch
 });
 
 const UnsubscribeMcpLogsPayloadSchema = z.object({

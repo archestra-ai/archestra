@@ -1,6 +1,10 @@
 "use client";
 
-import type { McpLogsErrorMessage, McpLogsMessage } from "@shared";
+import {
+  MCP_DEFAULT_LOG_LINES,
+  type McpLogsErrorMessage,
+  type McpLogsMessage,
+} from "@shared";
 import { ArrowDown, Copy, Terminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -76,6 +80,9 @@ export function McpLogsDialog({
   const [isStreaming, setIsStreaming] = useState(false);
   const unsubscribeLogsRef = useRef<(() => void) | null>(null);
   const unsubscribeErrorRef = useRef<(() => void) | null>(null);
+  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const currentServerIdRef = useRef<string | null>(null);
 
@@ -94,6 +101,12 @@ export function McpLogsDialog({
   const streamingText = useStreamingAnimation(isWaitingForLogs);
 
   const stopStreaming = useCallback(() => {
+    // Clear connection timeout
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+
     // Unsubscribe from WebSocket messages
     if (unsubscribeLogsRef.current) {
       unsubscribeLogsRef.current();
@@ -130,11 +143,26 @@ export function McpLogsDialog({
       // Connect to WebSocket if not already connected
       websocketService.connect();
 
+      // Set up connection timeout - if no logs received within 10 seconds, show error
+      connectionTimeoutRef.current = setTimeout(() => {
+        // Only trigger timeout if we're still streaming and haven't received any logs
+        if (currentServerIdRef.current === targetServerId) {
+          setStreamError("Connection timeout - unable to connect to server");
+          setIsStreaming(false);
+        }
+      }, 10000);
+
       // Subscribe to log messages for this server
       unsubscribeLogsRef.current = websocketService.subscribe(
         "mcp_logs",
         (message: McpLogsMessage) => {
           if (message.payload.serverId !== targetServerId) return;
+
+          // Clear connection timeout on first message
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
 
           // Capture the command from the first message
           if (message.payload.command) {
@@ -169,6 +197,12 @@ export function McpLogsDialog({
         (message: McpLogsErrorMessage) => {
           if (message.payload.serverId !== targetServerId) return;
 
+          // Clear connection timeout on error
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
+
           setStreamError(message.payload.error);
           toast.error(`Streaming failed: ${message.payload.error}`);
           setIsStreaming(false);
@@ -178,7 +212,7 @@ export function McpLogsDialog({
       // Send subscribe message to server
       websocketService.send({
         type: "subscribe_mcp_logs",
-        payload: { serverId: targetServerId, lines: 500 },
+        payload: { serverId: targetServerId, lines: MCP_DEFAULT_LOG_LINES },
       });
     },
     [autoScroll, stopStreaming],

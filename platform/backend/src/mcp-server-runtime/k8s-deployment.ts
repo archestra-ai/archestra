@@ -1415,9 +1415,11 @@ export default class K8sDeployment {
                   "CrashLoopBackOff",
                   "ImagePullBackOff",
                   "ErrImagePull",
+                  "ErrImageNeverPull",
                   "CreateContainerConfigError",
                   "CreateContainerError",
                   "RunContainerError",
+                  "InvalidImageName",
                 ];
                 if (failureStates.includes(waitingReason)) {
                   const message =
@@ -1522,10 +1524,14 @@ export default class K8sDeployment {
   /**
    * Stream logs from the pod with follow enabled.
    * If no running pod is found, falls back to showing K8s events.
+   * @param responseStream - The stream to write logs to
+   * @param lines - Number of initial lines to fetch
+   * @param abortSignal - Optional abort signal to cancel the stream
    */
   async streamLogs(
     responseStream: NodeJS.WritableStream,
     lines: number = 100,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     try {
       const pod = await this.findPodForDeployment();
@@ -1598,6 +1604,26 @@ export default class K8sDeployment {
           timestamps: false,
         },
       );
+
+      // Handle abort signal
+      if (abortSignal) {
+        const abortHandler = () => {
+          if (req) {
+            req.abort();
+          }
+          logStream.destroy();
+          if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+            responseStream.end();
+          }
+        };
+
+        if (abortSignal.aborted) {
+          abortHandler();
+          return;
+        }
+
+        abortSignal.addEventListener("abort", abortHandler, { once: true });
+      }
 
       // Handle cleanup when response stream closes
       responseStream.on("close", () => {

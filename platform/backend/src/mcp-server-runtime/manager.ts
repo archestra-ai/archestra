@@ -549,18 +549,23 @@ export class McpServerRuntimeManager {
 
   /**
    * Stream logs from an MCP server deployment with follow enabled
+   * @param mcpServerId - The MCP server ID
+   * @param responseStream - The stream to write logs to
+   * @param lines - Number of initial lines to fetch
+   * @param abortSignal - Optional abort signal to cancel the stream
    */
   async streamMcpServerLogs(
     mcpServerId: string,
     responseStream: NodeJS.WritableStream,
     lines: number = 100,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
     if (!k8sDeployment) {
       throw new Error(`Deployment not found for MCP server ${mcpServerId}`);
     }
 
-    await k8sDeployment.streamLogs(responseStream, lines);
+    await k8sDeployment.streamLogs(responseStream, lines, abortSignal);
   }
 
   /**

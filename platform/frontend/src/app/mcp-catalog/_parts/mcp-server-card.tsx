@@ -474,10 +474,11 @@ export function McpServerCard({
     </>
   );
 
-  // Show error banner with links to logs and edit dialog
+  // Show error banner with links to logs and edit dialog (hide during reinstall)
   const errorBanner = isCurrentUserAuthenticated &&
     hasError &&
-    errorMessage && (
+    errorMessage &&
+    !isInstalling && (
       <div
         className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
         data-testid={`${E2eTestId.McpServerError}-${item.name}`}
@@ -518,19 +519,21 @@ export function McpServerCard({
         </div>
       </WithPermissions>
       {errorBanner}
-      {isCurrentUserAuthenticated && (needsReinstall || hasError) && (
-        <PermissionButton
-          permissions={{ mcpServer: ["update"] }}
-          onClick={onReinstall}
-          size="sm"
-          variant="default"
-          className="w-full"
-          disabled={isInstalling}
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          {isInstalling ? "Reconnecting..." : "Reconnect Required"}
-        </PermissionButton>
-      )}
+      {/* Show reconnect button only when NOT installing */}
+      {isCurrentUserAuthenticated &&
+        (needsReinstall || hasError) &&
+        !isInstalling && (
+          <PermissionButton
+            permissions={{ mcpServer: ["update"] }}
+            onClick={onReinstall}
+            size="sm"
+            variant="default"
+            className="w-full"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Reconnect Required
+          </PermissionButton>
+        )}
       {/* Spacer + Connect button pinned to bottom */}
       <div className="mt-auto pt-2">
         {!isInstalling && (
@@ -579,17 +582,17 @@ export function McpServerCard({
         </div>
       </WithPermissions>
       {errorBanner}
-      {isCurrentUserAuthenticated && needsReinstall && (
+      {/* Show reinstall button only when NOT installing (hide during reinstall to show progress bar) */}
+      {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
         <PermissionButton
           permissions={{ mcpServer: ["update"] }}
           onClick={onReinstall}
           size="sm"
           variant="default"
           className="w-full"
-          disabled={isInstalling}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
-          {isInstalling ? "Reinstalling..." : "Reinstall Required"}
+          Reinstall Required
         </PermissionButton>
       )}
       {/* Spacer + Connect button pinned to bottom */}
@@ -603,11 +606,7 @@ export function McpServerCard({
                   <PermissionButton
                     permissions={{ mcpServer: ["create"] }}
                     onClick={onInstallLocalServer}
-                    disabled={
-                      isInstalling ||
-                      !isLocalMcpEnabled ||
-                      !canCreateNewInstallation
-                    }
+                    disabled={!isLocalMcpEnabled || !canCreateNewInstallation}
                     size="sm"
                     variant="outline"
                     className="w-full"
@@ -630,10 +629,15 @@ export function McpServerCard({
             </Tooltip>
           </TooltipProvider>
         )}
-        {(installationStatus === "pending" ||
-          installationStatus === "discovering-tools") && (
+        {/* Show progress bar during installation or reinstallation */}
+        {isInstalling && (
           <InstallationProgress
-            status={installationStatus}
+            status={
+              installationStatus === "pending" ||
+              installationStatus === "discovering-tools"
+                ? installationStatus
+                : "pending"
+            }
             serverId={installedServer?.id}
             serverName={installedServer?.name}
           />

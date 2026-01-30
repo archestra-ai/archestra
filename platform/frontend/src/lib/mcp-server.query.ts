@@ -264,8 +264,8 @@ export function useReinstallMcpServer() {
       }
       return { data: response.data, name };
     },
-    onSuccess: async ({ name }, variables) => {
-      // Refetch servers to get updated status
+    onSuccess: async (_result, variables) => {
+      // Refetch servers to get updated status (will show "pending" initially)
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate tools queries since tools may have been synced
       queryClient.invalidateQueries({ queryKey: ["tools"] });
@@ -277,13 +277,12 @@ export function useReinstallMcpServer() {
           queryKey: ["mcp-servers", variables.id, "tools"],
         });
       }
-      toast.success(`Successfully reinstalled ${name}`);
+      // Note: No success toast here - the progress bar provides feedback
+      // Success toast is shown when polling detects status changed to "success"
     },
-    onError: (error, variables) => {
+    onError: (error) => {
       console.error("Reinstall error:", error);
-      toast.error(
-        `Failed to reinstall ${variables.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+      // Note: No toast here - the error banner on the card provides feedback
     },
   });
 }

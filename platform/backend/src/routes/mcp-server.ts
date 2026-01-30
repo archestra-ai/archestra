@@ -1106,36 +1106,48 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Refetch the server with potentially updated secretId
+      // Set status to "pending" immediately so UI shows progress bar
+      await McpServerModel.update(id, {
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      });
+
+      // Refetch the server with updated status
       const updatedServer = await McpServerModel.findById(id);
       if (!updatedServer) {
         throw new ApiError(500, "Server not found after update");
       }
 
-      // Perform the reinstall
-      try {
-        await autoReinstallServer(updatedServer, catalogItem);
-        logger.info(
-          { serverId: id, serverName: mcpServer.name },
-          "MCP server reinstalled successfully",
-        );
-      } catch (error) {
-        logger.error(
-          { err: error, serverId: id },
-          "Failed to reinstall MCP server",
-        );
-        throw new ApiError(
-          500,
-          `Failed to reinstall MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-      }
+      // Perform the reinstall asynchronously (don't block the response)
+      // Use setImmediate to fully detach from the request lifecycle
+      // This allows the frontend to show the progress bar immediately
+      setImmediate(async () => {
+        try {
+          await autoReinstallServer(updatedServer, catalogItem);
+          // Set status to success when done
+          await McpServerModel.update(id, {
+            localInstallationStatus: "success",
+          });
+          logger.info(
+            { serverId: id, serverName: mcpServer.name },
+            "MCP server reinstalled successfully",
+          );
+        } catch (error) {
+          // Set status to error if reinstall fails
+          await McpServerModel.update(id, {
+            localInstallationStatus: "error",
+            localInstallationError:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+          logger.error(
+            { err: error, serverId: id },
+            "Failed to reinstall MCP server",
+          );
+        }
+      });
 
-      // Return the updated server
-      const finalServer = await McpServerModel.findById(id);
-      if (!finalServer) {
-        throw new ApiError(500, "Server not found after reinstall");
-      }
-      return reply.send(finalServer);
+      // Return the server immediately with "pending" status
+      return reply.send(updatedServer);
     },
   );
 };

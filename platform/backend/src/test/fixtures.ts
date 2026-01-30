@@ -363,7 +363,7 @@ async function makeMember(
  */
 async function makeMcpServer(
   overrides: Partial<
-    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId">
+    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "teamId">
   > = {},
 ) {
   // Create a catalog if catalogId is not provided

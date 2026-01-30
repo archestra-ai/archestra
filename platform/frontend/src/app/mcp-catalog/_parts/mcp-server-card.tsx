@@ -488,6 +488,7 @@ export function McpServerCard({
           type="button"
           onClick={() => setIsLogsDialogOpen(true)}
           className="text-primary hover:underline cursor-pointer"
+          data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}`}
         >
           view the logs
         </button>{" "}
@@ -496,6 +497,7 @@ export function McpServerCard({
           type="button"
           onClick={onEdit}
           className="text-primary hover:underline cursor-pointer"
+          data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}`}
         >
           edit your config
         </button>

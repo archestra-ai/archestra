@@ -77,6 +77,12 @@ export const E2eTestId = {
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
   ChatPromptTextarea: "chat-prompt-textarea",
+  // MCP Logs
+  McpLogsDialog: "mcp-logs-dialog",
+  McpLogsContent: "mcp-logs-content",
+  McpLogsError: "mcp-logs-error",
+  McpLogsViewButton: "mcp-logs-view-button",
+  McpLogsEditConfigButton: "mcp-logs-edit-config-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

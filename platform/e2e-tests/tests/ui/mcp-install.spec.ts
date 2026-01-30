@@ -471,6 +471,153 @@ test.describe("MCP Install", () => {
   });
 });
 
+test("Local server with bogus image shows error, logs, and can be fixed", async ({
+    adminPage,
+    extractCookieHeaders,
+  }) => {
+    // Increase timeout to 3 minutes to allow for K8s deployment attempts
+    test.setTimeout(180_000);
+    const CATALOG_ITEM_NAME = "e2e__bogus_image_test";
+    const BOGUS_IMAGE = "bogus-registry.invalid/nonexistent-image:v999";
+    const VALID_IMAGE = "alpine:latest";
+
+    // Cleanup any existing catalog item
+    await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
+
+    await goToPage(adminPage, "/mcp-catalog/registry");
+    await adminPage.waitForLoadState("networkidle");
+
+    // ========================================
+    // STEP 1: Create MCP server with bogus image
+    // ========================================
+    await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
+    await adminPage.waitForLoadState("networkidle");
+
+    await adminPage
+      .getByRole("button", {
+        name: "Self-hosted (orchestrated by Archestra in K8s)",
+      })
+      .click();
+
+    // Fill basic fields with bogus image
+    await adminPage
+      .getByRole("textbox", { name: "Name *" })
+      .fill(CATALOG_ITEM_NAME);
+    await adminPage
+      .getByRole("textbox", { name: "Docker Image" })
+      .fill(BOGUS_IMAGE);
+    await adminPage.getByRole("textbox", { name: "Command" }).fill("sleep");
+    await adminPage
+      .getByRole("textbox", { name: "Arguments (one per line)" })
+      .fill("infinity");
+
+    // Add catalog item to registry
+    await clickButton({ page: adminPage, options: { name: "Add Server" } });
+    await adminPage.waitForLoadState("networkidle");
+
+    // Wait for install dialog and install the server
+    await adminPage
+      .getByRole("dialog")
+      .filter({ hasText: /Install -/ })
+      .waitFor({ state: "visible", timeout: 30000 });
+    await clickButton({ page: adminPage, options: { name: "Install" } });
+    await adminPage.waitForLoadState("networkidle");
+
+    // Wait for the server card to appear
+    const serverCard = adminPage.getByTestId(
+      `${E2eTestId.McpServerCard}-${CATALOG_ITEM_NAME}`,
+    );
+    await serverCard.waitFor({ state: "visible", timeout: 30000 });
+
+    // ========================================
+    // STEP 2: Wait for failure status (error banner)
+    // ========================================
+    const errorBanner = adminPage.getByTestId(
+      `${E2eTestId.McpServerError}-${CATALOG_ITEM_NAME}`,
+    );
+    await errorBanner.waitFor({ state: "visible", timeout: 120_000 });
+
+    // ========================================
+    // STEP 3: Check logs show deployment events
+    // ========================================
+    // Click "view the logs" link in the error banner
+    const viewLogsButton = adminPage.getByTestId(
+      `${E2eTestId.McpLogsViewButton}-${CATALOG_ITEM_NAME}`,
+    );
+    await viewLogsButton.click();
+
+    // Wait for logs dialog to open
+    const logsDialog = adminPage.getByTestId(E2eTestId.McpLogsDialog);
+    await logsDialog.waitFor({ state: "visible", timeout: 10000 });
+
+    // Wait for logs content to appear (should show K8s events like image pull failure)
+    const logsContent = adminPage.getByTestId(E2eTestId.McpLogsContent);
+    await logsContent.waitFor({ state: "visible", timeout: 30000 });
+
+    // Verify logs contain relevant K8s events (image pull failure)
+    const logsText = await logsContent.textContent();
+    expect(logsText).toBeTruthy();
+    // Logs should contain at least some K8s event info
+    expect(logsText?.length).toBeGreaterThan(10);
+
+    // Close the logs dialog
+    await adminPage.keyboard.press("Escape");
+    await logsDialog.waitFor({ state: "hidden", timeout: 5000 });
+
+    // ========================================
+    // STEP 4: Edit config to fix the image
+    // ========================================
+    // Click "edit your config" link in the error banner
+    const editConfigButton = adminPage.getByTestId(
+      `${E2eTestId.McpLogsEditConfigButton}-${CATALOG_ITEM_NAME}`,
+    );
+    await editConfigButton.click();
+
+    // Wait for edit dialog to open
+    const editDialog = adminPage.getByRole("dialog", {
+      name: /Edit MCP Server/i,
+    });
+    await editDialog.waitFor({ state: "visible", timeout: 10000 });
+
+    // Update the Docker image to a valid one
+    const dockerImageInput = editDialog.getByRole("textbox", {
+      name: "Docker Image",
+    });
+    await dockerImageInput.clear();
+    await dockerImageInput.fill(VALID_IMAGE);
+
+    // Save changes
+    await clickButton({ page: adminPage, options: { name: "Save Changes" } });
+    await adminPage.waitForLoadState("networkidle");
+
+    // Wait for edit dialog to close
+    await editDialog.waitFor({ state: "hidden", timeout: 10000 });
+
+    // ========================================
+    // STEP 5: Reinstall and verify server starts
+    // ========================================
+    // After editing critical config, server should show "Reinstall Required" button
+    const reinstallButton = serverCard.getByRole("button", {
+      name: /Reinstall Required/i,
+    });
+    await reinstallButton.waitFor({ state: "visible", timeout: 30000 });
+    await reinstallButton.click();
+
+    // Wait for the reinstall to complete (error banner should disappear)
+    // Since alpine:latest with "sleep infinity" won't be an MCP server,
+    // it should at least not show the image pull error anymore
+    await adminPage.waitForTimeout(30000);
+
+    // Verify the error banner is gone (deployment succeeded, even if no tools)
+    // Note: With alpine:latest + sleep infinity, there won't be MCP tools,
+    // but the deployment should succeed
+    await expect(errorBanner).not.toBeVisible({ timeout: 60000 });
+
+    // Cleanup
+    await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
+  });
+});
+
 async function deleteCatalogItem(
   adminPage: Page,
   extractCookieHeaders: (page: Page) => Promise<string>,

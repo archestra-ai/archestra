@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  E2eTestId,
   MCP_DEFAULT_LOG_LINES,
   type McpLogsErrorMessage,
   type McpLogsMessage,
@@ -298,7 +299,10 @@ export function McpLogsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[70vh] flex flex-col">
+      <DialogContent
+        className="max-w-5xl h-[70vh] flex flex-col"
+        data-testid={E2eTestId.McpLogsDialog}
+      >
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 overflow-hidden">
             <Terminal className="h-5 w-5 flex-shrink-0" />
@@ -350,7 +354,10 @@ export function McpLogsDialog({
               <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-auto">
                 <div className="p-4">
                   {streamError ? (
-                    <div className="text-red-400 font-mono text-sm">
+                    <div
+                      className="text-red-400 font-mono text-sm"
+                      data-testid={E2eTestId.McpLogsError}
+                    >
                       Error loading logs: {streamError}
                     </div>
                   ) : isWaitingForLogs ? (
@@ -358,7 +365,10 @@ export function McpLogsDialog({
                       {streamingText}
                     </div>
                   ) : streamedLogs ? (
-                    <pre className="text-emerald-400 font-mono text-xs whitespace-pre-wrap">
+                    <pre
+                      className="text-emerald-400 font-mono text-xs whitespace-pre-wrap"
+                      data-testid={E2eTestId.McpLogsContent}
+                    >
                       {streamedLogs}
                     </pre>
                   ) : (

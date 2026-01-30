@@ -57,6 +57,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             /** MCP server base Docker image (shown in UI for reference) */
             mcpServerBaseImage: z.string(),
+            /** Default K8s namespace for MCP server pods */
+            orchestratorK8sNamespace: z.string(),
           }),
         },
       },
@@ -80,6 +82,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         incomingEmail: getEmailProviderInfo(),
         knowledgeGraph: getKnowledgeGraphProviderInfo(),
         mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
+        orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
       });
     },
   );

@@ -231,37 +231,6 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
       );
       expect(testTool).toBeDefined();
     });
-
-    test("should restart local MCP server successfully", async ({
-      request,
-      makeApiRequest,
-      restartMcpServer,
-    }) => {
-      // Get tools count before restart
-      const toolsBefore = await getMcpServerTools(
-        request,
-        makeApiRequest,
-        serverId,
-      );
-      const toolsCountBefore = toolsBefore.length;
-
-      // Restart the MCP server
-      const restartResponse = await restartMcpServer(request, serverId);
-      expect(restartResponse.status()).toBe(200);
-      const restartResult = await restartResponse.json();
-      expect(restartResult.success).toBe(true);
-
-      // Wait for the server to be ready after restart
-      await waitForServerInstallation(request, serverId);
-
-      // Verify tools are still available after restart
-      const toolsAfter = await getMcpServerTools(
-        request,
-        makeApiRequest,
-        serverId,
-      );
-      expect(toolsAfter.length).toBe(toolsCountBefore);
-    });
   });
 
   test.describe("Local MCP Server - Docker Image", () => {

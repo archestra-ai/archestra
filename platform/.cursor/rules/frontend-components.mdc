@@ -317,6 +317,67 @@ This pattern:
 - Keeps components focused on UI concerns
 - Makes testing easier
 
+### Never Throw on HTTP Errors
+
+**NEVER throw errors on HTTP failures in query/mutation functions.** Instead, use `handleApiError` for user notification and return appropriate default values:
+
+```typescript
+// ❌ Bad: Throwing on API errors
+export function useSomething() {
+  return useQuery({
+    queryKey: ['something'],
+    queryFn: async () => {
+      const { data, error } = await getSomething();
+      if (error) {
+        throw new Error(error.message);  // Don't throw!
+      }
+      return data;
+    },
+  });
+}
+
+// ✅ Good: Toast + return default value
+import { handleApiError } from "./utils";
+
+export function useSomething() {
+  return useQuery({
+    queryKey: ['something'],
+    queryFn: async () => {
+      const { data, error } = await getSomething();
+      if (error) {
+        handleApiError(error);
+        return [];  // Return appropriate default ([], null, {})
+      }
+      return data ?? [];
+    },
+  });
+}
+
+// ✅ Good: Mutation with error handling
+export function useUpdateSomething() {
+  return useMutation({
+    mutationFn: async (input: UpdateInput) => {
+      const { data, error } = await updateSomething(input);
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Updated successfully");
+    },
+    // No onError needed - handled in mutationFn
+  });
+}
+```
+
+**Key rules:**
+- Use `handleApiError(error)` for consistent error toasts
+- Return appropriate defaults: `[]` for lists, `null` for single items, `{}` for objects
+- **No try/catch in components** - all API error handling belongs in `.query.ts` files
+- Remove `onError` callbacks that duplicate toast logic from mutationFn
+
 ## shadcn/ui Components
 
 **ALWAYS use shadcn/ui** instead of direct Radix UI:
@@ -684,15 +745,16 @@ export default async function DashboardPage() {
 4. ✅ Use shadcn/ui components over plain HTML elements (Button over button, Input over input, etc.)
 5. ✅ Use TanStack Query with useQuery and explicit loading states (LoadingWrapper or inline)
 6. ✅ Handle toast notifications in .query.ts files, not in components
-7. ✅ Use error boundaries for error handling
-8. ✅ Handle loading states explicitly with LoadingWrapper or inline checks
-9. ✅ Prefetch data on server, pass as initial data to queries
-10. ✅ Avoid index/barrel files - use direct imports
-11. ✅ Use flat, feature-based file colocation (e.g., chat.query.ts, chat.utils.ts)
-12. ✅ Apply colors via global theme, not inline
-13. ✅ Avoid React Context - use TanStack Query for shared data
-14. ✅ Extract business logic to pure functions or queries
-15. ✅ Only export what needs to be used by other modules - keep internal helpers private
-16. ✅ Prefer TanStack Query hooks over prop drilling - pass only identifiers, let components fetch their own data
-17. ✅ Use react-hook-form for forms - pass form object to child components, parent handles mutations
-18. ✅ Reuse API types from archestraApiTypes (e.g., CreateXxxData["body"]) instead of defining duplicate types
+7. ✅ Never throw on HTTP errors - use `handleApiError` and return defaults
+8. ✅ Use error boundaries for error handling
+9. ✅ Handle loading states explicitly with LoadingWrapper or inline checks
+10. ✅ Prefetch data on server, pass as initial data to queries
+11. ✅ Avoid index/barrel files - use direct imports
+12. ✅ Use flat, feature-based file colocation (e.g., chat.query.ts, chat.utils.ts)
+13. ✅ Apply colors via global theme, not inline
+14. ✅ Avoid React Context - use TanStack Query for shared data
+15. ✅ Extract business logic to pure functions or queries
+16. ✅ Only export what needs to be used by other modules - keep internal helpers private
+17. ✅ Prefer TanStack Query hooks over prop drilling - pass only identifiers, let components fetch their own data
+18. ✅ Use react-hook-form for forms - pass form object to child components, parent handles mutations
+19. ✅ Reuse API types from archestraApiTypes (e.g., CreateXxxData["body"]) instead of defining duplicate types

@@ -27,6 +27,9 @@ export const Response = memo(
         "[&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto",
         // Fix streamdown code blocks - remove padding from code elements inside them
         "[&_[data-streamdown='code-block']_code]:p-0 [&_[data-streamdown='code-block']_code]:bg-transparent",
+        // Fix button link styling - use group variant to match parent's is-user/is-assistant class
+        "group-[.is-user]:[&_[data-streamdown='link']]:text-primary-foreground",
+        "group-[.is-assistant]:[&_[data-streamdown='link']]:text-secondary-foreground",
         className,
       )}
       {...props}

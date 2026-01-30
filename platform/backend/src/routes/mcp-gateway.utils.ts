@@ -6,6 +6,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
+  AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
@@ -124,20 +125,29 @@ export async function createAgentServer(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
       try {
-        // Check if this is an Archestra tool
+        // Check if this is an Archestra tool or agent delegation tool
         const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-        if (name.startsWith(archestraToolPrefix)) {
+        const isArchestraTool = name.startsWith(archestraToolPrefix);
+        const isAgentTool = name.startsWith(AGENT_TOOL_PREFIX);
+
+        if (isArchestraTool || isAgentTool) {
           logger.info(
             {
               agentId,
               toolName: name,
+              toolType: isAgentTool ? "agent-delegation" : "archestra",
             },
-            "Archestra MCP tool call received",
+            isAgentTool
+              ? "Agent delegation tool call received"
+              : "Archestra MCP tool call received",
           );
 
-          // Handle Archestra tools directly
-          const archestraResponse = await executeArchestraTool(name, args, {
+          // Handle Archestra and agent delegation tools directly
+          const response = await executeArchestraTool(name, args, {
             agent: { id: agent.id, name: agent.name },
+            agentId: agent.id,
+            organizationId: tokenAuth?.organizationId,
+            tokenAuth,
           });
 
           logger.info(
@@ -145,10 +155,12 @@ export async function createAgentServer(
               agentId,
               toolName: name,
             },
-            "Archestra MCP tool call completed",
+            isAgentTool
+              ? "Agent delegation tool call completed"
+              : "Archestra MCP tool call completed",
           );
 
-          return archestraResponse;
+          return response;
         }
 
         logger.info(
@@ -381,11 +393,6 @@ export async function validateUserToken(
     profileTeamIds.includes(teamId),
   );
 
-  logger.debug(
-    { profileId, userId: token.userId, userTeamIds, profileTeamIds, hasAccess },
-    "validateUserToken: checking team access",
-  );
-
   if (!hasAccess) {
     logger.warn(
       { profileId, userId: token.userId, userTeamIds, profileTeamIds },
@@ -422,10 +429,6 @@ export async function validateMCPGatewayToken(
   // Then try user token validation
   const userTokenResult = await validateUserToken(profileId, tokenValue);
   if (userTokenResult) {
-    // logger.debug(
-    //   { profileId, userId: userTokenResult.userId },
-    //   "validateMCPGatewayToken: validated as user token",
-    // );
     return userTokenResult;
   }
 

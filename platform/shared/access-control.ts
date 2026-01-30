@@ -311,9 +311,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetMcpServerTools]: {
     mcpServer: ["read"],
   },
-  [RouteId.GetMcpServerLogs]: {
-    mcpServer: ["read"],
-  },
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },
@@ -323,11 +320,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ReauthenticateMcpServer]: {
     mcpServer: ["update"],
   },
-  [RouteId.RestartMcpServer]: {
+  [RouteId.ReinstallMcpServer]: {
     mcpServer: ["update"],
-  },
-  [RouteId.RestartAllMcpServerInstallations]: {
-    mcpServer: ["admin"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],

@@ -52,6 +52,8 @@ export type TokenAuthContext = {
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
+  /** Organization ID the token belongs to (required for agent delegation tools) */
+  organizationId?: string;
   /** True if this is a personal user token */
   isUserToken?: boolean;
   /** Optional user ID for user-owned server priority (set when called from chat or from user token) */
@@ -688,7 +690,7 @@ class McpClient {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
         const url =
-          McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
+          await McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
         if (!url) {
           throw new Error(
             "No HTTP endpoint URL found for streamable-http server",

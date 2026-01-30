@@ -328,6 +328,7 @@ export function AssignedToolsTable({
 
     try {
       const result = await autoConfigureMutation.mutateAsync(toolIds);
+      if (!result) return;
 
       const successCount = result.results.filter(
         (r: { success: boolean }) => r.success,

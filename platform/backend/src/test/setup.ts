@@ -68,8 +68,13 @@ beforeAll(async () => {
     await pgliteClient.exec(migrationSql);
   }
 
-  // Replace the database module's default export with our test database
+  // Set the test database via the internal setter (for getDb() and proxy)
   const dbModule = await import("../database/index.js");
+  dbModule.__setTestDb(
+    testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
+  );
+
+  // Also replace the default export for compatibility
   Object.defineProperty(dbModule, "default", {
     value: testDb,
     writable: true,

@@ -10188,297 +10188,6 @@
           "object"
         ]
       },
-      "WebSocketMessageInput": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "hello-world"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {}
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "subscribe_browser_stream"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "tabIndex": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ]
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "unsubscribe_browser_stream"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ]
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_navigate"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "url": {
-                    "type": "string",
-                    "format": "uri"
-                  }
-                },
-                "required": [
-                  "conversationId",
-                  "url"
-                ]
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_click"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "element": {
-                    "type": "string"
-                  },
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ]
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_type"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "text": {
-                    "type": "string"
-                  },
-                  "element": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "conversationId",
-                  "text"
-                ]
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_press_key"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "key": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "conversationId",
-                  "key"
-                ]
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_get_snapshot"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ]
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_navigate_back"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ]
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_set_zoom"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "zoomPercent": {
-                    "type": "number",
-                    "minimum": 10,
-                    "maximum": 200
-                  }
-                },
-                "required": [
-                  "conversationId",
-                  "zoomPercent"
-                ]
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ]
-          }
-        ]
-      },
       "OpenAiChatCompletionRequest": {
         "type": "object",
         "properties": {
@@ -21088,317 +20797,6 @@
           "object"
         ],
         "additionalProperties": false
-      },
-      "WebSocketMessage": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "hello-world"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "subscribe_browser_stream"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "tabIndex": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "unsubscribe_browser_stream"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_navigate"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "url": {
-                    "type": "string",
-                    "format": "uri"
-                  }
-                },
-                "required": [
-                  "conversationId",
-                  "url"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_click"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "element": {
-                    "type": "string"
-                  },
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_type"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "text": {
-                    "type": "string"
-                  },
-                  "element": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "conversationId",
-                  "text"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_press_key"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "key": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "conversationId",
-                  "key"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_get_snapshot"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_navigate_back"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  }
-                },
-                "required": [
-                  "conversationId"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "browser_set_zoom"
-              },
-              "payload": {
-                "type": "object",
-                "properties": {
-                  "conversationId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "zoomPercent": {
-                    "type": "number",
-                    "minimum": 10,
-                    "maximum": 200
-                  }
-                },
-                "required": [
-                  "conversationId",
-                  "zoomPercent"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          }
-        ]
       }
     }
   },
@@ -53284,6 +52682,9 @@
                     },
                     "mcpServerBaseImage": {
                       "type": "string"
+                    },
+                    "orchestratorK8sNamespace": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -53298,7 +52699,8 @@
                     "browserStreamingEnabled",
                     "incomingEmail",
                     "knowledgeGraph",
-                    "mcpServerBaseImage"
+                    "mcpServerBaseImage",
+                    "orchestratorK8sNamespace"
                   ],
                   "additionalProperties": false
                 }
@@ -63732,6 +63134,62 @@
                           },
                           "httpPath": {
                             "type": "string"
+                          },
+                          "advancedK8sConfig": {
+                            "type": "object",
+                            "properties": {
+                              "replicas": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 10
+                              },
+                              "namespace": {
+                                "type": "string"
+                              },
+                              "annotations": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              },
+                              "labels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              },
+                              "resources": {
+                                "type": "object",
+                                "properties": {
+                                  "requests": {
+                                    "type": "object",
+                                    "properties": {
+                                      "memory": {
+                                        "type": "string"
+                                      },
+                                      "cpu": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "limits": {
+                                    "type": "object",
+                                    "properties": {
+                                      "memory": {
+                                        "type": "string"
+                                      },
+                                      "cpu": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -64326,6 +63784,58 @@
                       },
                       "serviceAccount": {
                         "type": "string"
+                      },
+                      "advancedK8sConfig": {
+                        "type": "object",
+                        "properties": {
+                          "replicas": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "namespace": {
+                            "type": "string"
+                          },
+                          "annotations": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "labels": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "resources": {
+                            "type": "object",
+                            "properties": {
+                              "requests": {
+                                "type": "object",
+                                "properties": {
+                                  "memory": {
+                                    "type": "string"
+                                  },
+                                  "cpu": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "limits": {
+                                "type": "object",
+                                "properties": {
+                                  "memory": {
+                                    "type": "string"
+                                  },
+                                  "cpu": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -64686,6 +64196,62 @@
                         },
                         "httpPath": {
                           "type": "string"
+                        },
+                        "advancedK8sConfig": {
+                          "type": "object",
+                          "properties": {
+                            "replicas": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10
+                            },
+                            "namespace": {
+                              "type": "string"
+                            },
+                            "annotations": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "labels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "resources": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -65295,6 +64861,62 @@
                         },
                         "httpPath": {
                           "type": "string"
+                        },
+                        "advancedK8sConfig": {
+                          "type": "object",
+                          "properties": {
+                            "replicas": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10
+                            },
+                            "namespace": {
+                              "type": "string"
+                            },
+                            "annotations": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "labels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "resources": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -65883,6 +65505,58 @@
                       },
                       "serviceAccount": {
                         "type": "string"
+                      },
+                      "advancedK8sConfig": {
+                        "type": "object",
+                        "properties": {
+                          "replicas": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "namespace": {
+                            "type": "string"
+                          },
+                          "annotations": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "labels": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "resources": {
+                            "type": "object",
+                            "properties": {
+                              "requests": {
+                                "type": "object",
+                                "properties": {
+                                  "memory": {
+                                    "type": "string"
+                                  },
+                                  "cpu": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "limits": {
+                                "type": "object",
+                                "properties": {
+                                  "memory": {
+                                    "type": "string"
+                                  },
+                                  "cpu": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -66250,6 +65924,62 @@
                         },
                         "httpPath": {
                           "type": "string"
+                        },
+                        "advancedK8sConfig": {
+                          "type": "object",
+                          "properties": {
+                            "replicas": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10
+                            },
+                            "namespace": {
+                              "type": "string"
+                            },
+                            "annotations": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "labels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "resources": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "properties": {
+                                    "memory": {
+                                      "type": "string"
+                                    },
+                                    "cpu": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -67233,6 +66963,293 @@
                   },
                   "required": [
                     "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/invitation/{id}/check": {
+      "get": {
+        "operationId": "checkInvitation",
+        "tags": [
+          "Invitation"
+        ],
+        "description": "Check if an invitation is valid and whether the user exists",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "invitation": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string",
+                          "format": "email",
+                          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                        },
+                        "organizationId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "accepted",
+                            "canceled"
+                          ]
+                        },
+                        "expiresAt": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "organizationId",
+                        "status",
+                        "expiresAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "userExists": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "invitation",
+                    "userExists"
                   ],
                   "additionalProperties": false
                 }
@@ -69623,6 +69640,62 @@
                                   },
                                   "serviceAccount": {
                                     "type": "string"
+                                  },
+                                  "advancedK8sConfig": {
+                                    "type": "object",
+                                    "properties": {
+                                      "replicas": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 10
+                                      },
+                                      "namespace": {
+                                        "type": "string"
+                                      },
+                                      "annotations": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "labels": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "resources": {
+                                        "type": "object",
+                                        "properties": {
+                                          "requests": {
+                                            "type": "object",
+                                            "properties": {
+                                              "memory": {
+                                                "type": "string"
+                                              },
+                                              "cpu": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          "limits": {
+                                            "type": "object",
+                                            "properties": {
+                                              "memory": {
+                                                "type": "string"
+                                              },
+                                              "cpu": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "additionalProperties": false
                                   }
                                 },
                                 "additionalProperties": false
@@ -70178,6 +70251,58 @@
                               },
                               "serviceAccount": {
                                 "type": "string"
+                              },
+                              "advancedK8sConfig": {
+                                "type": "object",
+                                "properties": {
+                                  "replicas": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10
+                                  },
+                                  "namespace": {
+                                    "type": "string"
+                                  },
+                                  "annotations": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "labels": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "resources": {
+                                    "type": "object",
+                                    "properties": {
+                                      "requests": {
+                                        "type": "object",
+                                        "properties": {
+                                          "memory": {
+                                            "type": "string"
+                                          },
+                                          "cpu": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      },
+                                      "limits": {
+                                        "type": "object",
+                                        "properties": {
+                                          "memory": {
+                                            "type": "string"
+                                          },
+                                          "cpu": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -70464,6 +70589,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -71048,6 +71229,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -71606,6 +71843,58 @@
                               },
                               "serviceAccount": {
                                 "type": "string"
+                              },
+                              "advancedK8sConfig": {
+                                "type": "object",
+                                "properties": {
+                                  "replicas": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10
+                                  },
+                                  "namespace": {
+                                    "type": "string"
+                                  },
+                                  "annotations": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "labels": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "resources": {
+                                    "type": "object",
+                                    "properties": {
+                                      "requests": {
+                                        "type": "object",
+                                        "properties": {
+                                          "memory": {
+                                            "type": "string"
+                                          },
+                                          "cpu": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      },
+                                      "limits": {
+                                        "type": "object",
+                                        "properties": {
+                                          "memory": {
+                                            "type": "string"
+                                          },
+                                          "cpu": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -71942,6 +72231,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -72790,6 +73135,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -73388,6 +73789,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -73991,6 +74448,62 @@
                                 },
                                 "serviceAccount": {
                                   "type": "string"
+                                },
+                                "advancedK8sConfig": {
+                                  "type": "object",
+                                  "properties": {
+                                    "replicas": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 10
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "annotations": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "labels": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "resources": {
+                                      "type": "object",
+                                      "properties": {
+                                        "requests": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        },
+                                        "limits": {
+                                          "type": "object",
+                                          "properties": {
+                                            "memory": {
+                                              "type": "string"
+                                            },
+                                            "cpu": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -76825,295 +77338,36 @@
         }
       }
     },
-    "/api/mcp_server/{id}/logs": {
-      "get": {
-        "operationId": "getMcpServerLogs",
-        "tags": [
-          "MCP Server"
-        ],
-        "description": "Get logs for a specific MCP server deployment",
-        "parameters": [
-          {
-            "schema": {
-              "default": 100,
-              "type": "number"
-            },
-            "in": "query",
-            "name": "lines",
-            "required": false
-          },
-          {
-            "schema": {
-              "default": false,
-              "type": "boolean"
-            },
-            "in": "query",
-            "name": "follow",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "logs": {
-                      "type": "string"
-                    },
-                    "containerName": {
-                      "type": "string"
-                    },
-                    "command": {
-                      "type": "string"
-                    },
-                    "namespace": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "logs",
-                    "containerName",
-                    "command",
-                    "namespace"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp_server/{id}/restart": {
+    "/api/mcp_server/{id}/reinstall": {
       "post": {
-        "operationId": "restartMcpServer",
+        "operationId": "reinstallMcpServer",
         "tags": [
           "MCP Server"
         ],
-        "description": "Restart a single MCP server deployment",
+        "description": "Reinstall an MCP server without losing tool assignments and policies",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "environmentValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "isByosVault": {
+                    "type": "boolean"
+                  },
+                  "serviceAccount": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {
@@ -77134,320 +77388,164 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": {
-                      "type": "boolean"
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "success",
-                    "message"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp_catalog/{catalogId}/restart-all-installations": {
-      "post": {
-        "operationId": "restartAllMcpServerInstallations",
-        "tags": [
-          "MCP Server"
-        ],
-        "description": "Restart all MCP server installations for a given catalog item",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "catalogId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "message": {
+                    "name": {
                       "type": "string"
                     },
-                    "results": {
+                    "catalogId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "serverType": {
+                      "type": "string",
+                      "enum": [
+                        "local",
+                        "remote",
+                        "builtin"
+                      ]
+                    },
+                    "secretId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ownerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teamId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "reinstallRequired": {
+                      "type": "boolean"
+                    },
+                    "localInstallationStatus": {
+                      "type": "string",
+                      "enum": [
+                        "idle",
+                        "pending",
+                        "discovering-tools",
+                        "success",
+                        "error"
+                      ]
+                    },
+                    "localInstallationError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "oauthRefreshError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "refresh_failed",
+                        "no_refresh_token"
+                      ]
+                    },
+                    "oauthRefreshFailedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ownerEmail": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "catalogName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "userDetails": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
-                          "serverId": {
+                          "userId": {
                             "type": "string"
                           },
-                          "serverName": {
+                          "email": {
                             "type": "string"
                           },
-                          "success": {
-                            "type": "boolean"
-                          },
-                          "error": {
-                            "type": "string"
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
-                          "serverId",
-                          "serverName",
-                          "success"
+                          "userId",
+                          "email",
+                          "createdAt"
                         ],
                         "additionalProperties": false
                       }
                     },
-                    "summary": {
+                    "teamDetails": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
-                        "total": {
-                          "type": "number"
+                        "teamId": {
+                          "type": "string"
                         },
-                        "succeeded": {
-                          "type": "number"
+                        "name": {
+                          "type": "string"
                         },
-                        "failed": {
-                          "type": "number"
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
                         }
                       },
                       "required": [
-                        "total",
-                        "succeeded",
-                        "failed"
+                        "teamId",
+                        "name",
+                        "createdAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "secretStorageType": {
+                      "type": "string",
+                      "enum": [
+                        "vault",
+                        "external_vault",
+                        "database",
+                        "none"
+                      ]
                     }
                   },
                   "required": [
-                    "success",
-                    "message",
-                    "results",
-                    "summary"
+                    "id",
+                    "name",
+                    "catalogId",
+                    "serverType",
+                    "secretId",
+                    "ownerId",
+                    "teamId",
+                    "reinstallRequired",
+                    "localInstallationStatus",
+                    "localInstallationError",
+                    "oauthRefreshError",
+                    "oauthRefreshFailedAt",
+                    "createdAt",
+                    "updatedAt"
                   ],
                   "additionalProperties": false
                 }

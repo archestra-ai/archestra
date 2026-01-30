@@ -1,10 +1,10 @@
 import type { IncomingMessage } from "node:http";
+import type { ClientWebSocketMessage } from "@shared";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
 import type * as originalConfigModule from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
-import type { WebSocketMessage } from "@/types";
 
 vi.mock("@/config", async (importOriginal) => {
   const actual = await importOriginal<typeof originalConfigModule>();
@@ -28,7 +28,7 @@ const service = websocketService as unknown as {
   authenticateConnection: (
     request: IncomingMessage,
   ) => Promise<{ userId: string; organizationId: string } | null>;
-  handleMessage: (message: WebSocketMessage, ws: WS) => Promise<void>;
+  handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
   clientContexts: Map<WS, { userId: string; organizationId: string }>;
   browserSubscriptions: Map<WS, unknown>;
 };

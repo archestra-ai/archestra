@@ -44,7 +44,7 @@ import {
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
-import { isDatabaseHealthy } from "@/database";
+import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import {
   cleanupKnowledgeGraphProvider,
@@ -67,7 +67,6 @@ import {
   Ollama,
   OpenAi,
   Vllm,
-  WebSocketMessageSchema,
   Zhipuai,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -154,9 +153,6 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
-  });
-  z.globalRegistry.add(WebSocketMessageSchema, {
-    id: "WebSocketMessage",
   });
 }
 
@@ -556,6 +552,9 @@ const start = async () => {
   fastify.register(enterpriseLicenseMiddleware);
 
   try {
+    // Initialize database connection first
+    await initializeDatabase();
+
     await seedRequiredStartingData();
 
     // Sync system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)

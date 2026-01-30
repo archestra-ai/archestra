@@ -664,6 +664,112 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
 });
 
 test.describe("SSO Role Mapping E2E", () => {
+  test("should evaluate second rule when first rule does not match", async ({
+    page,
+    browser,
+    goToPage,
+  }) => {
+    test.slow();
+    const providerName = `MultiRuleOIDC${Date.now()}`;
+
+    // STEP 1: Authenticate and clean up any existing provider
+    await ensureAdminAuthenticated(page);
+    await deleteExistingProviderIfExists(page, "Generic OIDC");
+
+    // STEP 2: Fill in OIDC provider form
+    await fillOidcProviderForm(page, providerName);
+
+    // STEP 3: Configure Role Mapping with TWO rules
+    // The first rule will NOT match (looks for a non-existent group)
+    // The second rule WILL match (looks for archestra-admins group)
+    await page.getByText("Role Mapping (Optional)").click();
+
+    const addRuleButton = page.getByTestId(E2eTestId.SsoRoleMappingAddRule);
+    await expect(addRuleButton).toBeVisible();
+
+    // Add FIRST rule - will NOT match (non-existent group -> editor role)
+    await addRuleButton.click();
+    await page
+      .getByTestId(E2eTestId.SsoRoleMappingRuleTemplate)
+      .first()
+      .fill('{{#includes groups "non-existent-group"}}true{{/includes}}');
+    await page.getByTestId(E2eTestId.SsoRoleMappingRuleRole).first().click();
+    await page.getByRole("option", { name: "Editor" }).click();
+
+    // Add SECOND rule - WILL match (archestra-admins group -> admin role)
+    await addRuleButton.click();
+    await page
+      .getByTestId(E2eTestId.SsoRoleMappingRuleTemplate)
+      .last()
+      .fill('{{#includes groups "archestra-admins"}}true{{/includes}}');
+    await page.getByTestId(E2eTestId.SsoRoleMappingRuleRole).last().click();
+    await page.getByRole("option", { name: "Admin" }).click();
+
+    // Set default role to member (so we can verify role mapping works, not just fallback)
+    const defaultRoleSelect = page.getByTestId(
+      E2eTestId.SsoRoleMappingDefaultRole,
+    );
+    if (await defaultRoleSelect.isVisible()) {
+      await defaultRoleSelect.click();
+      await page.getByRole("option", { name: "Member" }).click();
+    }
+
+    // Submit the form
+    await clickButton({ page, options: { name: "Create Provider" } });
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // STEP 4: Test SSO login with admin user (in archestra-admins group)
+    // The first rule should NOT match, but the second rule SHOULD match
+    const ssoContext = await browser.newContext({
+      storageState: undefined,
+    });
+    const ssoPage = await ssoContext.newPage();
+
+    try {
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      const ssoButton = ssoPage.getByRole("button", {
+        name: new RegExp(providerName, "i"),
+      });
+      await expect(ssoButton).toBeVisible({ timeout: 10000 });
+
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
+
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
+
+      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // STEP 5: Verify the user has admin role (from second rule, not editor from first)
+      // The Roles settings page is only accessible to admins
+      await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // If user has admin role, they should see the Roles page
+      // If they got editor role (from rule 1) or member role (default), they would not see this
+      await expect(
+        ssoPage.getByText("Roles", { exact: true }).first(),
+      ).toBeVisible({ timeout: 10000 });
+
+      // Success! The second rule matched and assigned admin role
+    } finally {
+      await ssoContext.close();
+    }
+
+    // STEP 6: Cleanup - delete the provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+    await page.getByText("Generic OIDC", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await deleteProviderViaDialog(page);
+  });
+
   test("should map admin group to admin role via OIDC", async ({
     page,
     browser,

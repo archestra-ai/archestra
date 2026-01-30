@@ -24,6 +24,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
   useAssignTool,
@@ -102,6 +103,7 @@ const AgentToolsEditorContent = forwardRef<
   },
   ref,
 ) {
+  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
 
@@ -219,6 +221,7 @@ const AgentToolsEditorContent = forwardRef<
       if (!targetAgentId) return;
 
       const allChanges = Array.from(pendingChangesRef.current.entries());
+      let hasChanges = false;
 
       for (const [catalogId, changes] of allChanges) {
         const currentAssigned = assignedToolsByCatalog.get(catalogId) ?? [];
@@ -233,14 +236,22 @@ const AgentToolsEditorContent = forwardRef<
           (id) => !changes.selectedToolIds.has(id),
         );
 
-        const isLocal = changes.catalogItem.serverType === "local";
-
-        // Remove tools (only for existing agents)
-        for (const toolId of toRemove) {
-          await unassignTool.mutateAsync({ agentId: targetAgentId, toolId });
+        if (toAdd.length > 0 || toRemove.length > 0) {
+          hasChanges = true;
         }
 
-        // Add tools
+        const isLocal = changes.catalogItem.serverType === "local";
+
+        // Remove tools (skip invalidation, will do it once at the end)
+        for (const toolId of toRemove) {
+          await unassignTool.mutateAsync({
+            agentId: targetAgentId,
+            toolId,
+            skipInvalidation: true,
+          });
+        }
+
+        // Add tools (skip invalidation, will do it once at the end)
         for (const toolId of toAdd) {
           await assignTool.mutateAsync({
             agentId: targetAgentId,
@@ -253,8 +264,14 @@ const AgentToolsEditorContent = forwardRef<
               : undefined,
             useDynamicTeamCredential:
               changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE,
+            skipInvalidation: true,
           });
         }
+      }
+
+      // Invalidate all queries once at the end
+      if (hasChanges) {
+        invalidateAllQueries(targetAgentId);
       }
 
       // Clear all pending changes after save

@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import config from "@/config";
-import db from "@/database";
+import db, { initializeDatabase } from "@/database";
 import logger from "@/logging";
 
 /**
@@ -80,7 +80,8 @@ export const clearDb = async (): Promise<void> => {
  * CLI entry point for clearing the database
  */
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  clearDb()
+  initializeDatabase()
+    .then(() => clearDb())
     .then(() => {
       logger.info("\n✅ Done!");
       process.exit(0);

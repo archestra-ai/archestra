@@ -18,11 +18,11 @@ import { useDialogs } from "@/lib/dialog.hook";
 import { useMcpRegistryServer } from "@/lib/external-mcp-catalog.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
-  useDeleteMcpServer,
   useInstallMcpServer,
   useMcpServers,
-  useRestartAllMcpServerInstallations,
+  useReinstallMcpServer,
 } from "@/lib/mcp-server.query";
+import { useInitiateOAuth } from "@/lib/oauth.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
@@ -74,8 +74,8 @@ export function InternalMCPCatalog({
     hasInstallingServers: installingServerIds.size > 0,
   });
   const installMutation = useInstallMcpServer();
-  const deleteMutation = useDeleteMcpServer();
-  const restartAllMutation = useRestartAllMcpServerInstallations();
+  const reinstallMutation = useReinstallMcpServer();
+  const initiateOAuthMutation = useInitiateOAuth();
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
 
@@ -116,6 +116,14 @@ export function InternalMCPCatalog({
     useState<CatalogItem | null>(null);
   const [localServerCatalogItem, setLocalServerCatalogItem] =
     useState<CatalogItem | null>(null);
+  // Track server ID when reinstalling (vs new installation)
+  const [reinstallServerId, setReinstallServerId] = useState<string | null>(
+    null,
+  );
+  // Track the team ID of the server being reinstalled (to pre-select credential type)
+  const [reinstallServerTeamId, setReinstallServerTeamId] = useState<
+    string | null
+  >(null);
   const [detailsServerName, setDetailsServerName] = useState<string | null>(
     null,
   );
@@ -190,9 +198,8 @@ export function InternalMCPCatalog({
                   });
                 }
               }
-            } else if (server.localInstallationStatus === "error") {
-              toast.error(`Failed to install ${server.name}`);
             }
+            // Note: No error toast - the error banner on the card provides feedback
           }
         });
       }
@@ -285,6 +292,38 @@ export function InternalMCPCatalog({
   ) => {
     if (!localServerCatalogItem) return;
 
+    // Check if this is a reinstall (updating existing server) vs new installation
+    if (reinstallServerId) {
+      // Reinstall mode - call reinstall endpoint with new environment values
+      setInstallingItemId(localServerCatalogItem.id);
+      setInstallingServerIds((prev) => new Set(prev).add(reinstallServerId));
+      closeDialog("local-install");
+      setLocalServerCatalogItem(null);
+      setReinstallServerId(null);
+      setReinstallServerTeamId(null);
+
+      const serverIdToReinstall = reinstallServerId;
+      try {
+        await reinstallMutation.mutateAsync({
+          id: serverIdToReinstall,
+          name: localServerCatalogItem.name,
+          environmentValues: installResult.environmentValues,
+          isByosVault: installResult.isByosVault,
+          serviceAccount: installResult.serviceAccount,
+        });
+      } finally {
+        // Clear installing state whether success or error
+        setInstallingItemId(null);
+        setInstallingServerIds((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(serverIdToReinstall);
+          return newSet;
+        });
+      }
+      return;
+    }
+
+    // New installation flow
     // Check if this is the first installation for this catalog item
     const isFirstInstallation = !installedServers?.some(
       (s) => s.catalogId === localServerCatalogItem.id,
@@ -361,21 +400,10 @@ export function InternalMCPCatalog({
 
     try {
       // Call backend to initiate OAuth flow
-      const response = await fetch("/api/oauth/initiate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const { authorizationUrl, state } =
+        await initiateOAuthMutation.mutateAsync({
           catalogId: selectedCatalogItem.id,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to initiate OAuth flow");
-      }
-
-      const { authorizationUrl, state } = await response.json();
+        });
 
       // Store state in session storage for the callback
       sessionStorage.setItem("oauth_state", state);
@@ -465,29 +493,76 @@ export function InternalMCPCatalog({
     return aggregated;
   };
 
-  const handleReinstall = (catalogItem: CatalogItem) => {
-    // Show confirmation dialog before reinstalling
-    setCatalogItemForReinstall(catalogItem);
-    openDialog("reinstall");
+  const handleReinstall = async (catalogItem: CatalogItem) => {
+    // For local servers, find the current user's specific installation
+    // For remote servers, find any installation (there should be only one per catalog)
+    let installedServer: InstalledServer | undefined;
+    if (catalogItem.serverType === "local" && currentUserId) {
+      installedServer = installedServers?.find(
+        (server) =>
+          server.catalogId === catalogItem.id &&
+          server.ownerId === currentUserId,
+      );
+    } else {
+      installedServer = installedServers?.find(
+        (server) => server.catalogId === catalogItem.id,
+      );
+    }
+
+    if (!installedServer) {
+      toast.error("Server not found, cannot reinstall");
+      return;
+    }
+
+    // For local servers: check if there are prompted env vars that require user input
+    // If so, open the install dialog directly in reinstall mode
+    // For remote servers: show confirmation dialog (since they may need OAuth re-auth)
+    if (catalogItem.serverType === "local") {
+      const promptedEnvVars =
+        catalogItem.localConfig?.environment?.filter(
+          (env) => env.promptOnInstallation === true,
+        ) || [];
+
+      if (promptedEnvVars.length > 0) {
+        // Has prompted env vars - open dialog to collect values (reinstall mode)
+        setLocalServerCatalogItem(catalogItem);
+        setReinstallServerId(installedServer.id);
+        setReinstallServerTeamId(installedServer.teamId ?? null);
+        openDialog("local-install");
+      } else {
+        // No prompted env vars - reinstall directly
+        // Set installing state for immediate UI feedback (progress bar)
+        setInstallingItemId(catalogItem.id);
+        setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+        try {
+          await reinstallMutation.mutateAsync({
+            id: installedServer.id,
+            name: catalogItem.name,
+          });
+        } finally {
+          // Clear installing state whether success or error
+          setInstallingItemId(null);
+          setInstallingServerIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(installedServer.id);
+            return newSet;
+          });
+        }
+      }
+    } else {
+      // Remote server - show confirmation dialog (may need OAuth re-auth)
+      setCatalogItemForReinstall(catalogItem);
+      openDialog("reinstall");
+    }
   };
 
   const handleReinstallConfirm = async () => {
     if (!catalogItemForReinstall) return;
 
-    // For local servers, find the current user's specific installation
-    // For remote servers, find any installation (there should be only one per catalog)
-    let installedServer: InstalledServer | undefined;
-    if (catalogItemForReinstall.serverType === "local" && currentUserId) {
-      installedServer = installedServers?.find(
-        (server) =>
-          server.catalogId === catalogItemForReinstall.id &&
-          server.ownerId === currentUserId,
-      );
-    } else {
-      installedServer = installedServers?.find(
-        (server) => server.catalogId === catalogItemForReinstall.id,
-      );
-    }
+    // Find the installed server for this remote catalog item
+    const installedServer = installedServers?.find(
+      (server) => server.catalogId === catalogItemForReinstall.id,
+    );
 
     if (!installedServer) {
       toast.error("Server not found, cannot reinstall");
@@ -498,17 +573,23 @@ export function InternalMCPCatalog({
 
     closeDialog("reinstall");
 
-    // Delete the installed server using its server ID
-    await deleteMutation.mutateAsync({
-      id: installedServer.id,
-      name: catalogItemForReinstall.name,
-    });
-
-    // Then reinstall (for local servers, this will prompt for credentials again)
-    if (catalogItemForReinstall.serverType === "local") {
-      await handleInstallLocalServer(catalogItemForReinstall);
-    } else {
-      await handleInstallRemoteServer(catalogItemForReinstall, false);
+    // Remote server - reinstall directly
+    // Set installing state for immediate UI feedback (progress bar)
+    setInstallingItemId(catalogItemForReinstall.id);
+    setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+    try {
+      await reinstallMutation.mutateAsync({
+        id: installedServer.id,
+        name: catalogItemForReinstall.name,
+      });
+    } finally {
+      // Clear installing state whether success or error
+      setInstallingItemId(null);
+      setInstallingServerIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(installedServer.id);
+        return newSet;
+      });
     }
 
     setCatalogItemForReinstall(null);
@@ -649,12 +730,6 @@ export function InternalMCPCatalog({
                   }
                   onInstallLocalServer={() => handleInstallLocalServer(item)}
                   onReinstall={() => handleReinstall(item)}
-                  onRestartAll={() => {
-                    restartAllMutation.mutate({
-                      catalogId: item.id,
-                      name: item.name,
-                    });
-                  }}
                   onEdit={() => setEditingItem(item)}
                   onDetails={() => {
                     setDetailsServerName(item.name);
@@ -709,7 +784,14 @@ export function InternalMCPCatalog({
           if (item) {
             setEditingItem(null);
             const serverInfo = getInstalledServerInfo(item);
-            if (serverInfo.installedServer?.reinstallRequired) {
+            // Only auto-trigger reinstall if not already in error state
+            // (user should click "Reinstall Required" button to retry after error)
+            const isInErrorState =
+              serverInfo.installedServer?.localInstallationStatus === "error";
+            if (
+              serverInfo.installedServer?.reinstallRequired &&
+              !isInErrorState
+            ) {
               handleReinstall(item);
             }
           }
@@ -771,7 +853,7 @@ export function InternalMCPCatalog({
         isRemoteServer={catalogItemForReinstall?.serverType === "remote"}
         onConfirm={handleReinstallConfirm}
         serverName={catalogItemForReinstall?.name || ""}
-        isReinstalling={installMutation.isPending}
+        isReinstalling={reinstallMutation.isPending}
       />
 
       <NoAuthInstallDialog
@@ -791,10 +873,16 @@ export function InternalMCPCatalog({
           onClose={() => {
             closeDialog("local-install");
             setLocalServerCatalogItem(null);
+            setReinstallServerId(null);
+            setReinstallServerTeamId(null);
           }}
           onConfirm={handleLocalServerInstallConfirm}
           catalogItem={localServerCatalogItem}
-          isInstalling={installMutation.isPending}
+          isInstalling={
+            installMutation.isPending || reinstallMutation.isPending
+          }
+          isReinstall={!!reinstallServerId}
+          existingTeamId={reinstallServerTeamId}
         />
       )}
     </div>

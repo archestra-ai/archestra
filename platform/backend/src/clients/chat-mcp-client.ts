@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { isArchestraMcpServerTool, isBrowserMcpTool, TimeInMs } from "@shared";
+import {
+  isAgentTool,
+  isArchestraMcpServerTool,
+  isBrowserMcpTool,
+  TimeInMs,
+} from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
 import {
   type ArchestraContext,
@@ -575,12 +580,15 @@ export async function getChatMcpTools({
     logger.info({ agentId, userId }, "MCP client available, listing tools...");
     const { tools: mcpTools } = await client.listTools();
 
+    // Filter out agent skills (tools starting with "agent__")
+    const filteredMcpTools = mcpTools.filter((tool) => !isAgentTool(tool.name));
+
     logger.info(
       {
         agentId,
         userId,
-        toolCount: mcpTools.length,
-        toolNames: mcpTools.map((t) => t.name),
+        toolCount: filteredMcpTools.length,
+        toolNames: filteredMcpTools.map((t) => t.name),
       },
       "Fetched tools from MCP Gateway for agent/user",
     );
@@ -588,7 +596,7 @@ export async function getChatMcpTools({
     // Convert MCP tools to AI SDK Tool format
     const aiTools: Record<string, Tool> = {};
 
-    for (const mcpTool of mcpTools) {
+    for (const mcpTool of filteredMcpTools) {
       try {
         // Normalize the schema and wrap with jsonSchema() helper
         const normalizedSchema = normalizeJsonSchema(mcpTool.inputSchema);
@@ -705,7 +713,7 @@ export async function getChatMcpTools({
                 name: mcpTool.name,
                 arguments: toolArguments ?? {},
               };
-
+              logger.info({ toolCall, userId }, "Executing MCP tool call");
               const result = await mcpClient.executeToolCall(
                 toolCall,
                 agentId,
@@ -713,6 +721,7 @@ export async function getChatMcpTools({
                   tokenId: mcpGwToken.tokenId,
                   teamId: mcpGwToken.teamId,
                   isOrganizationToken: mcpGwToken.isOrganizationToken,
+                  organizationId,
                   userId, // Pass userId for user-owned server priority
                 },
               );

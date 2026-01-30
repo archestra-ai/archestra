@@ -85,61 +85,6 @@ jobs:
           echo "::error::❄️ Release freeze is active. Merging release-please PRs is blocked."
           exit 1
 
-  version-clash-check:
-    name: Version Clash Check
-    # Only run on release-please PRs
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Extract version from PR title
-        id: extract-version
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          # PR title format: "chore(main): release platform vX.Y.Z" or "chore(release/vX.Y.Z): release platform vX.Y.Z"
-          VERSION=$(echo "$PR_TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | tail -1)
-          if [ -z "$VERSION" ]; then
-            echo "⚠️ Could not extract version from PR title: $PR_TITLE"
-            echo "version=" >> "$GITHUB_OUTPUT"
-          else
-            echo "📦 Extracted version: $VERSION"
-            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check if version tag already exists
-        if: steps.extract-version.outputs.version != ''
-        env:
-          VERSION: ${{ steps.extract-version.outputs.version }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          # Check if the tag already exists
-          if git rev-parse "platform-$VERSION" >/dev/null 2>&1; then
-            echo "::error::❌ Version clash detected! Tag 'platform-$VERSION' already exists."
-            echo ""
-            echo "This usually happens when a hotfix release was created while this PR was open."
-            echo ""
-            echo "To fix this, bump the version on your target branch:"
-            echo ""
-            echo "  git checkout $BASE_REF"
-            echo "  git pull"
-            echo "  git commit -m \"chore(release): bump version\" -m \"release-as: X.Y.Z\" --allow-empty"
-            echo "  git push"
-            echo ""
-            echo "Replace X.Y.Z with the next available version number."
-            echo "See RELEASE.md for more details on handling version clashes."
-            exit 1
-          else
-            echo "✅ No version clash - tag 'platform-$VERSION' does not exist yet"
-          fi
-
   lint-pr-title:
     name: PR Title Linter
     if: github.event_name == 'pull_request'

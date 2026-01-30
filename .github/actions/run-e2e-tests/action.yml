@@ -106,6 +106,14 @@ runs:
           echo "Loaded ${#ENV_ARGS[@]} environment variable flags"
         fi
 
+        # Mount kubeconfig if available (for K8s e2e tests)
+        KUBE_ARGS=()
+        if [ -f "$HOME/.kube/config" ]; then
+          echo "Mounting kubeconfig for K8s access in e2e tests"
+          KUBE_ARGS+=("-v" "$HOME/.kube:/root/.kube:ro")
+          KUBE_ARGS+=("-e" "KUBECONFIG=/root/.kube/config")
+        fi
+
         docker run --rm \
           --network host \
           --ipc=host \
@@ -113,6 +121,7 @@ runs:
           -w "/work/${WORKING_DIRECTORY#./}" \
           -e CI=true \
           -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+          "${KUBE_ARGS[@]}" \
           "${ENV_ARGS[@]}" \
           "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
           /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=${PROJECTS} ${SHARD} ${EXTRA_ARGS}" \

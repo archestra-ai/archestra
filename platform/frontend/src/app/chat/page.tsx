@@ -22,7 +22,6 @@ import {
   useState,
   Suspense,
 } from "react";
-import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -56,6 +55,7 @@ import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
+  fetchConversationEnabledTools,
   useConversation,
   useCreateConversation,
   useHasPlaywrightMcpTools,
@@ -353,7 +353,7 @@ function ChatContent() {
   // Mutation for updating conversation model
   const updateConversationMutation = useUpdateConversation();
 
-  // Handle model change with error handling
+  // Handle model change
   const handleModelChange = useCallback(
     (model: string) => {
       if (!conversation) return;
@@ -362,20 +362,11 @@ function ChatContent() {
       const modelInfo = chatModels.find((m) => m.id === model);
       const provider = modelInfo?.provider as SupportedChatProvider | undefined;
 
-      updateConversationMutation.mutate(
-        {
-          id: conversation.id,
-          selectedModel: model,
-          selectedProvider: provider,
-        },
-        {
-          onError: (error) => {
-            toast.error(
-              `Failed to change model: ${error instanceof Error ? error.message : "Unknown error"}`,
-            );
-          },
-        },
-      );
+      updateConversationMutation.mutate({
+        id: conversation.id,
+        selectedModel: model,
+        selectedProvider: provider,
+      });
     },
     [conversation, chatModels, updateConversationMutation],
   );
@@ -389,20 +380,11 @@ function ChatContent() {
       if (providerModels && providerModels.length > 0) {
         // Select first model from the new provider
         const firstModel = providerModels[0];
-        updateConversationMutation.mutate(
-          {
-            id: conversation.id,
-            selectedModel: firstModel.id,
-            selectedProvider: newProvider,
-          },
-          {
-            onError: (error) => {
-              toast.error(
-                `Failed to change model: ${error instanceof Error ? error.message : "Unknown error"}`,
-              );
-            },
-          },
-        );
+        updateConversationMutation.mutate({
+          id: conversation.id,
+          selectedModel: firstModel.id,
+          selectedProvider: newProvider,
+        });
       }
     },
     [conversation, modelsByProvider, updateConversationMutation],
@@ -821,11 +803,10 @@ function ChatContent() {
                 try {
                   // The backend creates conversation with default enabled tools
                   // We need to apply pending actions to modify that default
-                  const response = await fetch(
-                    `/api/chat/conversations/${newConversation.id}/enabled-tools`,
+                  const data = await fetchConversationEnabledTools(
+                    newConversation.id,
                   );
-                  if (response.ok) {
-                    const data = await response.json();
+                  if (data) {
                     const baseEnabledToolIds = data.enabledToolIds || [];
                     const newEnabledToolIds = applyPendingActions(
                       baseEnabledToolIds,

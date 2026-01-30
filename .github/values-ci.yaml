@@ -5,6 +5,11 @@ archestra:
   # Image will be set via --set during deployment
   # image: archestra/platform:ci-test
 
+  # Deploy multiple replicas for the e2e environment to test issues we may face
+  # which could be caused by storing state in pod memory, which may only be discovered
+  # when replicas is > 1
+  replicaCount: 5
+
   # Environment variables for e2e testing
   env:
     ARCHESTRA_ANALYTICS: disabled

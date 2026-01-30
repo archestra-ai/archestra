@@ -6,7 +6,7 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
-import { DEFAULT_TABLE_LIMIT } from "@/lib/utils";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "@/lib/utils";
 import McpGatewayLogsPage from "./page.client";
 
 export const dynamic = "force-dynamic";
@@ -32,19 +32,26 @@ export default async function McpGatewayLogsPageServer() {
 
   try {
     const headers = await getServerApiHeaders();
-
+    const [mcpToolCallsResponse, agentsResponse] = await Promise.all([
+      archestraApiSdk.getMcpToolCalls({
+        headers,
+        query: {
+          limit: DEFAULT_TABLE_LIMIT,
+          offset: 0,
+          sortBy: "createdAt",
+          sortDirection: "desc",
+        },
+      }),
+      archestraApiSdk.getAllAgents({ headers }),
+    ]);
+    if (mcpToolCallsResponse.error) {
+      handleApiError(mcpToolCallsResponse.error);
+    }
+    if (agentsResponse.error) {
+      handleApiError(agentsResponse.error);
+    }
     initialData = {
-      mcpToolCalls: (
-        await archestraApiSdk.getMcpToolCalls({
-          headers,
-          query: {
-            limit: DEFAULT_TABLE_LIMIT,
-            offset: 0,
-            sortBy: "createdAt",
-            sortDirection: "desc",
-          },
-        })
-      ).data || {
+      mcpToolCalls: mcpToolCallsResponse.data || {
         data: [],
         pagination: {
           currentPage: 1,
@@ -55,10 +62,9 @@ export default async function McpGatewayLogsPageServer() {
           hasPrev: false,
         },
       },
-      agents: (await archestraApiSdk.getAllAgents({ headers })).data || [],
+      agents: agentsResponse.data || [],
     };
   } catch (error) {
-    console.error(error);
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
 

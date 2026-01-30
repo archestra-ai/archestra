@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
+import { handleApiError } from "./utils";
 
 const { checkInvitation } = archestraApiSdk;
 
@@ -14,11 +15,8 @@ export function useInvitationCheck(invitationId: string | null | undefined) {
 
       const response = await checkInvitation({ path: { id: invitationId } });
       if (response.error) {
-        const msg =
-          typeof response.error.error === "string"
-            ? response.error.error
-            : response.error.error?.message || "Failed to check invitation";
-        throw new Error(msg);
+        handleApiError(response.error);
+        return null;
       }
       return response.data ?? null;
     },

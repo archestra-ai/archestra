@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { handleApiError } from "./utils";
 
 const {
   getChatConversations,
@@ -28,13 +29,14 @@ export function useConversation(conversationId?: string) {
       const response = await getChatConversation({
         path: { id: conversationId },
       });
-      // Return null for 400 (invalid UUID) or 404 (not found) - handled gracefully by UI
+      // Return null for any error - handled gracefully by UI
       if (response.error) {
         const status = response.response.status;
-        if (status === 400 || status === 404) {
-          return null;
+        // Only show toast for unexpected errors (not 400/404 which are handled gracefully)
+        if (status !== 400 && status !== 404) {
+          handleApiError(response.error);
         }
-        throw new Error("Failed to fetch conversation");
+        return null;
       }
       return response.data;
     },
@@ -63,7 +65,10 @@ export function useConversations({
         query: trimmedSearch ? { search: trimmedSearch } : undefined,
       });
 
-      if (error) throw new Error("Failed to fetch conversations");
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
       return data;
     },
     staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
@@ -95,7 +100,10 @@ export function useCreateConversation() {
           chatApiKeyId: chatApiKeyId ?? undefined,
         },
       });
-      if (error) throw new Error("Failed to create conversation");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (newConversation) => {
@@ -134,7 +142,10 @@ export function useUpdateConversation() {
         path: { id },
         body: { title, selectedModel, selectedProvider, chatApiKeyId, agentId },
       });
-      if (error) throw new Error("Failed to update conversation");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, variables) => {
@@ -145,11 +156,6 @@ export function useUpdateConversation() {
       if (variables.chatApiKeyId) {
         queryClient.invalidateQueries({ queryKey: ["chat-models"] });
       }
-    },
-    onError: (error) => {
-      toast.error(
-        `Failed to update conversation: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
     },
   });
 }
@@ -162,7 +168,10 @@ export function useDeleteConversation() {
       const { data, error } = await deleteChatConversation({
         path: { id },
       });
-      if (error) throw new Error("Failed to delete conversation");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, deletedId) => {
@@ -188,7 +197,10 @@ export function useGenerateConversationTitle() {
         path: { id },
         body: { regenerate },
       });
-      if (error) throw new Error("Failed to generate conversation title");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, variables) => {
@@ -208,7 +220,10 @@ export function useChatProfileMcpTools(agentId: string | undefined) {
       const { data, error } = await getChatAgentMcpTools({
         path: { agentId },
       });
-      if (error) throw new Error("Failed to fetch MCP tools");
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
       return data;
     },
     enabled: !!agentId,
@@ -242,7 +257,12 @@ export function useConversationEnabledTools(
     queryFn: async () => {
       if (!conversationId) return null;
       const data = await fetchConversationEnabledTools(conversationId);
-      if (!data) throw new Error("Failed to fetch enabled tools");
+      if (!data) {
+        handleApiError({
+          error: new Error("Failed to fetch enabled tools"),
+        });
+        return null;
+      }
       return data;
     },
     enabled: !!conversationId,
@@ -270,7 +290,10 @@ export function useUpdateConversationEnabledTools() {
         path: { id: conversationId },
         body: { toolIds },
       });
-      if (error) throw new Error("Failed to update enabled tools");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, variables) => {
@@ -292,7 +315,10 @@ export function useClearConversationEnabledTools() {
       const { data, error } = await deleteConversationEnabledTools({
         path: { id: conversationId },
       });
-      if (error) throw new Error("Failed to clear enabled tools");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, conversationId) => {
@@ -316,7 +342,10 @@ export function useProfileToolsWithIds(agentId: string | undefined) {
         path: { agentId },
         query: { excludeLlmProxyOrigin: true },
       });
-      if (error) throw new Error("Failed to fetch profile tools");
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
       return data;
     },
     enabled: !!agentId,
@@ -338,7 +367,10 @@ export function useAgentDelegationTools(agentId: string | undefined) {
         path: { agentId },
         query: { excludeLlmProxyOrigin: true },
       });
-      if (error) throw new Error("Failed to fetch agent tools");
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
       // Filter for delegation tools (tools with name starting with "delegate_to_")
       return (data ?? []).filter((tool) =>
         tool.name.startsWith("delegate_to_"),

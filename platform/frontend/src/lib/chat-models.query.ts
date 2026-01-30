@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { handleApiError } from "./utils";
 
 const { getChatModels, getModelsWithApiKeys } = archestraApiSdk;
 
@@ -25,17 +26,13 @@ export type ModelCapabilities = NonNullable<ChatModel["capabilities"]>;
 export function useChatModels() {
   return useQuery({
     queryKey: ["chat-models"],
-    queryFn: async () => {
+    queryFn: async (): Promise<ChatModel[]> => {
       const { data, error } = await getChatModels();
       if (error) {
-        console.error("[DEBUG chat-models] API error:", error);
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch chat models",
-        );
+        handleApiError(error);
+        return [];
       }
-      return (data ?? []) as ChatModel[];
+      return data ?? [];
     },
   });
 }
@@ -86,16 +83,13 @@ export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
 export function useModelsWithApiKeys() {
   return useQuery({
     queryKey: ["models-with-api-keys"],
-    queryFn: async () => {
+    queryFn: async (): Promise<ModelWithApiKeys[]> => {
       const { data, error } = await getModelsWithApiKeys();
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch models",
-        );
+        handleApiError(error);
+        return [];
       }
-      return (data ?? []) as ModelWithApiKeys[];
+      return data ?? [];
     },
   });
 }

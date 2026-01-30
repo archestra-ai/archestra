@@ -4,6 +4,7 @@ import {
   DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
+  handleApiError,
 } from "./utils";
 
 const {
@@ -176,8 +177,12 @@ export function useDeleteProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await deleteAgent({ path: { id } });
-      return response.data;
+      const { data, error } = await deleteAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { authClient } from "./clients/auth/auth-client";
+import { handleApiError } from "./utils";
 
 const {
   deleteMcpServer,
@@ -86,11 +87,7 @@ export function useInstallMcpServer() {
         body: data,
       });
       if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Unknown error";
-        toast.error(msg);
+        handleApiError(error);
       }
       return { installedServer, dontShowToast: data.dontShowToast };
     },
@@ -156,13 +153,14 @@ export function useMcpServerTools(mcpServerId: string | null) {
     queryKey: ["mcp-servers", mcpServerId, "tools"],
     queryFn: async () => {
       if (!mcpServerId) return [];
-      try {
-        const response = await getMcpServerTools({ path: { id: mcpServerId } });
-        return response.data ?? [];
-      } catch (error) {
-        console.error("Failed to fetch MCP server tools:", error);
+      const { data, error } = await getMcpServerTools({
+        path: { id: mcpServerId },
+      });
+      if (error) {
+        handleApiError(error);
         return [];
       }
+      return data ?? [];
     },
     enabled: !!mcpServerId,
   });
@@ -256,11 +254,8 @@ export function useReinstallMcpServer() {
         body,
       });
       if (response.error) {
-        const msg =
-          typeof response.error.error === "string"
-            ? response.error.error
-            : response.error.error?.message || "Unknown error";
-        throw new Error(msg);
+        handleApiError(response.error);
+        return null;
       }
       return { data: response.data, name };
     },
@@ -279,10 +274,6 @@ export function useReinstallMcpServer() {
       }
       // Note: No success toast here - the progress bar provides feedback
       // Success toast is shown when polling detects status changed to "success"
-    },
-    onError: (error) => {
-      console.error("Reinstall error:", error);
-      // Note: No toast here - the error banner on the card provides feedback
     },
   });
 }

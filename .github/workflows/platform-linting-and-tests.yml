@@ -315,13 +315,20 @@ jobs:
             shard: "--shard=3/3"
             extra_args: "--grep-invert '@firefox|@webkit'"
             artifact: blob-report-ui-3
-          # Multi-browser tests - run sequentially to avoid race conditions on shared backend state
-          - name: Multi-browser
+          # Firefox tests - run sequentially to avoid race conditions on shared backend state
+          - name: UI Firefox
             runner: e2e-runner-16cpu
-            projects: chromium --project=firefox --project=webkit
+            projects: firefox
             shard: ""
-            extra_args: "--grep '@firefox|@webkit' --workers=1"
-            artifact: blob-report-multi-browser
+            extra_args: "--grep '@firefox' --workers=1"
+            artifact: blob-report-ui-firefox
+          # Webkit tests - run sequentially to avoid race conditions on shared backend state
+          - name: UI Webkit
+            runner: e2e-runner-16cpu
+            projects: webkit
+            shard: ""
+            extra_args: "--grep '@webkit' --workers=1"
+            artifact: blob-report-ui-webkit
           # Vault tests - isolated to avoid race conditions with secrets manager switching
           - name: Vault
             runner: e2e-runner-16cpu

@@ -610,12 +610,10 @@ function DeleteProxyDialog({
   const deleteProxy = useDeleteProfile();
 
   const handleDelete = useCallback(async () => {
-    try {
-      await deleteProxy.mutateAsync(agentId);
+    const result = await deleteProxy.mutateAsync(agentId);
+    if (result) {
       toast.success("LLM Proxy deleted successfully");
       onOpenChange(false);
-    } catch (_error) {
-      toast.error("Failed to delete LLM Proxy");
     }
   }, [agentId, deleteProxy, onOpenChange]);
 

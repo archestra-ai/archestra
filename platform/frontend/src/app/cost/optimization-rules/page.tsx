@@ -2,7 +2,6 @@
 
 import { Edit, Plus, Save, Trash2, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { Rule } from "@/app/cost/optimization-rules/_parts/rule";
 import {
   AlertDialog,
@@ -174,21 +173,13 @@ export default function OptimizationRulesPage() {
 
   const handleCreateRule = useCallback(
     async (data: RuleFormData) => {
-      try {
-        const entityId =
-          data.entityType === "organization"
-            ? (organization?.id ?? "")
-            : data.entityId;
-        await createRule.mutateAsync({ ...data, entityId });
+      const entityId =
+        data.entityType === "organization"
+          ? (organization?.id ?? "")
+          : data.entityId;
+      const result = await createRule.mutateAsync({ ...data, entityId });
+      if (result) {
         setNewRuleData(null);
-        toast.success("Optimization rule created");
-      } catch (error) {
-        console.error("Failed to create optimization rule:", error);
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to create optimization rule";
-        toast.error(message);
       }
     },
     [createRule, organization?.id],
@@ -196,34 +187,14 @@ export default function OptimizationRulesPage() {
 
   const handleDeleteRule = useCallback(
     async (id: string) => {
-      try {
-        await deleteRule.mutateAsync(id);
-        toast.success("Optimization rule deleted");
-      } catch (error) {
-        console.error("Failed to delete optimization rule:", error);
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to delete optimization rule";
-        toast.error(message);
-      }
+      await deleteRule.mutateAsync(id);
     },
     [deleteRule],
   );
 
   const handleToggleEnabled = useCallback(
     async (id: string, enabled: boolean) => {
-      try {
-        await updateRule.mutateAsync({ id, enabled });
-        toast.success(`Optimization rule ${enabled ? "enabled" : "disabled"}`);
-      } catch (error) {
-        console.error("Failed to toggle optimization rule:", error);
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to toggle optimization rule";
-        toast.error(message);
-      }
+      await updateRule.mutateAsync({ id, enabled });
     },
     [updateRule],
   );
@@ -238,27 +209,19 @@ export default function OptimizationRulesPage() {
     const dataToSave = editedRuleDataRef.current;
     if (!editingRuleId || !dataToSave) return;
 
-    try {
-      const entityId =
-        dataToSave.entityType === "organization"
-          ? (organization?.id ?? "")
-          : dataToSave.entityId;
-      await updateRule.mutateAsync({
-        ...dataToSave,
-        id: editingRuleId,
-        entityId,
-      });
+    const entityId =
+      dataToSave.entityType === "organization"
+        ? (organization?.id ?? "")
+        : dataToSave.entityId;
+    const result = await updateRule.mutateAsync({
+      ...dataToSave,
+      id: editingRuleId,
+      entityId,
+    });
+    if (result) {
       setEditingRuleId(null);
       setEditedRuleData(null);
       editedRuleDataRef.current = null;
-      toast.success("Optimization rule updated");
-    } catch (error) {
-      console.error("Failed to update optimization rule:", error);
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to update optimization rule";
-      toast.error(message);
     }
   }, [editingRuleId, updateRule, organization?.id]);
 

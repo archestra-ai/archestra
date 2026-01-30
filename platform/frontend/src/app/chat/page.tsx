@@ -21,7 +21,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -353,7 +352,7 @@ export default function ChatPage() {
   // Mutation for updating conversation model
   const updateConversationMutation = useUpdateConversation();
 
-  // Handle model change with error handling
+  // Handle model change
   const handleModelChange = useCallback(
     (model: string) => {
       if (!conversation) return;
@@ -362,20 +361,11 @@ export default function ChatPage() {
       const modelInfo = chatModels.find((m) => m.id === model);
       const provider = modelInfo?.provider as SupportedChatProvider | undefined;
 
-      updateConversationMutation.mutate(
-        {
-          id: conversation.id,
-          selectedModel: model,
-          selectedProvider: provider,
-        },
-        {
-          onError: (error) => {
-            toast.error(
-              `Failed to change model: ${error instanceof Error ? error.message : "Unknown error"}`,
-            );
-          },
-        },
-      );
+      updateConversationMutation.mutate({
+        id: conversation.id,
+        selectedModel: model,
+        selectedProvider: provider,
+      });
     },
     [conversation, chatModels, updateConversationMutation],
   );
@@ -389,20 +379,11 @@ export default function ChatPage() {
       if (providerModels && providerModels.length > 0) {
         // Select first model from the new provider
         const firstModel = providerModels[0];
-        updateConversationMutation.mutate(
-          {
-            id: conversation.id,
-            selectedModel: firstModel.id,
-            selectedProvider: newProvider,
-          },
-          {
-            onError: (error) => {
-              toast.error(
-                `Failed to change model: ${error instanceof Error ? error.message : "Unknown error"}`,
-              );
-            },
-          },
-        );
+        updateConversationMutation.mutate({
+          id: conversation.id,
+          selectedModel: firstModel.id,
+          selectedProvider: newProvider,
+        });
       }
     },
     [conversation, modelsByProvider, updateConversationMutation],

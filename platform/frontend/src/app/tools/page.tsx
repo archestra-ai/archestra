@@ -14,6 +14,7 @@ import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TOOLS_PAGE_SIZE,
+  handleApiError,
 } from "@/lib/utils";
 import { ToolsClient } from "./page.client";
 
@@ -45,31 +46,49 @@ export default async function ToolsPage() {
   };
   try {
     const headers = await getServerApiHeaders();
+    const [
+      toolsResponse,
+      catalogResponse,
+      invocationPoliciesResponse,
+      trustedDataPoliciesResponse,
+    ] = await Promise.all([
+      archestraApiSdk.getToolsWithAssignments({
+        headers,
+        query: {
+          limit: DEFAULT_TOOLS_PAGE_SIZE,
+          offset: 0,
+          sortBy: DEFAULT_SORT_BY,
+          sortDirection: DEFAULT_SORT_DIRECTION,
+        },
+      }),
+      archestraApiSdk.getInternalMcpCatalog({ headers }),
+      archestraApiSdk.getToolInvocationPolicies({ headers }),
+      archestraApiSdk.getTrustedDataPolicies({ headers }),
+    ]);
+    if (toolsResponse.error) {
+      handleApiError(toolsResponse.error);
+    }
+    if (catalogResponse.error) {
+      handleApiError(catalogResponse.error);
+    }
+    if (invocationPoliciesResponse.error) {
+      handleApiError(invocationPoliciesResponse.error);
+    }
+    if (trustedDataPoliciesResponse.error) {
+      handleApiError(trustedDataPoliciesResponse.error);
+    }
     initialData = {
       toolsWithAssignments:
-        (
-          await archestraApiSdk.getToolsWithAssignments({
-            headers,
-            query: {
-              limit: DEFAULT_TOOLS_PAGE_SIZE,
-              offset: 0,
-              sortBy: DEFAULT_SORT_BY,
-              sortDirection: DEFAULT_SORT_DIRECTION,
-            },
-          })
-        ).data || initialData.toolsWithAssignments,
-      internalMcpCatalog:
-        (await archestraApiSdk.getInternalMcpCatalog({ headers })).data || [],
+        toolsResponse.data || initialData.toolsWithAssignments,
+      internalMcpCatalog: catalogResponse.data || [],
       toolInvocationPolicies: transformToolInvocationPolicies(
-        (await archestraApiSdk.getToolInvocationPolicies({ headers })).data ||
-          [],
+        invocationPoliciesResponse.data || [],
       ),
       toolResultPolicies: transformToolResultPolicies(
-        (await archestraApiSdk.getTrustedDataPolicies({ headers })).data || [],
+        trustedDataPoliciesResponse.data || [],
       ),
     };
   } catch (error) {
-    console.error(error);
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
   return <ToolsClient initialData={initialData} />;

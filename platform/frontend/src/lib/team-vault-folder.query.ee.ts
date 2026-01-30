@@ -68,9 +68,6 @@ export function useSetTeamVaultFolder() {
         queryKey: ["team-vault-folder", variables.teamId],
       });
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to configure Vault folder");
-    },
   });
 }
 
@@ -95,9 +92,6 @@ export function useDeleteTeamVaultFolder() {
       queryClient.invalidateQueries({
         queryKey: ["team-vault-folder", teamId],
       });
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to remove Vault folder");
     },
   });
 }

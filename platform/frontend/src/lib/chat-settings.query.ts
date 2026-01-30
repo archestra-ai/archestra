@@ -132,11 +132,8 @@ export function useSyncChatModels() {
     mutationFn: async () => {
       const { data: responseData, error } = await syncChatModels();
       if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to sync models";
-        toast.error(msg);
+        showErrorToastFromApiError(error);
+        return null;
       }
       return responseData;
     },

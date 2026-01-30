@@ -5,7 +5,7 @@ import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
 import type * as originalConfigModule from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 vi.mock("@/config", async (importOriginal) => {
   const actual = await importOriginal<typeof originalConfigModule>();
@@ -220,6 +220,14 @@ describe("websocket MCP logs", () => {
     service.mcpLogsSubscriptions.clear();
   });
 
+  afterEach(() => {
+    for (const subscription of service.mcpLogsSubscriptions.values()) {
+      subscription.abortController.abort();
+      subscription.stream.destroy();
+    }
+    service.mcpLogsSubscriptions.clear();
+  });
+
   test("rejects logs subscription for MCP server the user does not have access to", async ({
     makeOrganization,
     makeUser,
@@ -335,14 +343,6 @@ describe("websocket MCP logs", () => {
     );
     expect(errorCalls).toHaveLength(0);
     expect(service.mcpLogsSubscriptions.has(ws)).toBe(true);
-
-    // Clean up subscription
-    const subscription = service.mcpLogsSubscriptions.get(ws);
-    if (subscription) {
-      subscription.abortController.abort();
-      subscription.stream.destroy();
-      service.mcpLogsSubscriptions.delete(ws);
-    }
   });
 
   test("allows team member to access MCP server logs", async ({
@@ -411,14 +411,6 @@ describe("websocket MCP logs", () => {
     );
     expect(errorCalls).toHaveLength(0);
     expect(service.mcpLogsSubscriptions.has(ws)).toBe(true);
-
-    // Clean up subscription
-    const subscription = service.mcpLogsSubscriptions.get(ws);
-    if (subscription) {
-      subscription.abortController.abort();
-      subscription.stream.destroy();
-      service.mcpLogsSubscriptions.delete(ws);
-    }
   });
 
   test("returns error for non-existent MCP server", async ({
@@ -545,12 +537,5 @@ describe("websocket MCP logs", () => {
     const secondSubscription = service.mcpLogsSubscriptions.get(ws);
     expect(secondSubscription).toBeDefined();
     expect(secondSubscription?.serverId).toBe(mcpServer2.id);
-
-    // Clean up
-    if (secondSubscription) {
-      secondSubscription.abortController.abort();
-      secondSubscription.stream.destroy();
-      service.mcpLogsSubscriptions.delete(ws);
-    }
   });
 });

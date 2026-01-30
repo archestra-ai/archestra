@@ -698,8 +698,6 @@ class WebSocketService {
       serverId,
       lines,
     );
-    let isFirstChunk = false;
-
     // Send an initial message to confirm subscription and provide the command
     this.sendToClient(ws, {
       type: "mcp_logs",
@@ -718,11 +716,8 @@ class WebSocketService {
           payload: {
             serverId,
             logs: chunk.toString(),
-            // Only send command with the first chunk
-            ...(isFirstChunk ? { command } : {}),
           },
         });
-        isFirstChunk = false;
       }
     });
 

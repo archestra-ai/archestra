@@ -84,6 +84,7 @@ export function McpLogsDialog({
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const hasReceivedMessageRef = useRef(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const currentServerIdRef = useRef<string | null>(null);
 
@@ -139,6 +140,7 @@ export function McpLogsDialog({
       setStreamedLogs("");
       setCommand("");
       setIsStreaming(true);
+      hasReceivedMessageRef.current = false;
       currentServerIdRef.current = targetServerId;
 
       // Connect to WebSocket if not already connected
@@ -147,10 +149,12 @@ export function McpLogsDialog({
       // Set up connection timeout - if no logs received within 10 seconds, show error
       connectionTimeoutRef.current = setTimeout(() => {
         // Only trigger timeout if we're still streaming and haven't received any logs
-        if (
-          currentServerIdRef.current === targetServerId &&
-          !websocketService.isConnected()
-        ) {
+        if (currentServerIdRef.current === targetServerId) {
+          const isStillWaiting =
+            !websocketService.isConnected() || !hasReceivedMessageRef.current;
+          if (!isStillWaiting) {
+            return;
+          }
           setStreamError("Connection timeout - unable to connect to server");
           setIsStreaming(false);
         }
@@ -161,6 +165,8 @@ export function McpLogsDialog({
         "mcp_logs",
         (message: McpLogsMessage) => {
           if (message.payload.serverId !== targetServerId) return;
+
+          hasReceivedMessageRef.current = true;
 
           // Clear connection timeout on first message
           if (connectionTimeoutRef.current) {

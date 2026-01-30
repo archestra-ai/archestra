@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { showErrorToastFromApiError } from "./utils";
 
 const {
   getTeamVaultFolder,
@@ -28,11 +29,8 @@ export function useTeamVaultFolder(teamId: string | null) {
         path: { teamId },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch team Vault folder",
-        );
+        showErrorToastFromApiError(error);
+        return null;
       }
       return data;
     },
@@ -59,11 +57,8 @@ export function useSetTeamVaultFolder() {
         body: { vaultPath },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to set Vault folder",
-        );
+        showErrorToastFromApiError(error);
+        return null;
       }
       return data;
     },
@@ -90,11 +85,8 @@ export function useDeleteTeamVaultFolder() {
         path: { teamId },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to delete Vault folder",
-        );
+        showErrorToastFromApiError(error);
+        return null;
       }
       return data;
     },
@@ -127,11 +119,8 @@ export function useCheckTeamVaultFolderConnectivity() {
         body: { vaultPath },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to check Vault connectivity",
-        );
+        showErrorToastFromApiError(error);
+        return null;
       }
       return data;
     },
@@ -150,11 +139,8 @@ export function useTeamVaultFolderSecrets(teamId: string | null) {
         path: { teamId },
       });
       if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to list Vault secrets",
-        );
+        showErrorToastFromApiError(error);
+        return null;
       }
       return data ?? [];
     },
@@ -179,13 +165,8 @@ export function useTeamVaultSecretKeys(
         body: { secretPath },
       });
       if (error) {
-        const errorMessage =
-          (error as { error?: { message?: string } })?.error?.message ||
-          (typeof error === "object" && "message" in error
-            ? (error as { message: string }).message
-            : null) ||
-          "Failed to get secret keys";
-        throw new Error(errorMessage);
+        showErrorToastFromApiError(error);
+        return { keys: [] };
       }
       return data ?? { keys: [] };
     },

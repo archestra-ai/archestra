@@ -821,7 +821,9 @@ export default function ChatPage() {
                 try {
                   // The backend creates conversation with default enabled tools
                   // We need to apply pending actions to modify that default
-                  const data = await fetchConversationEnabledTools(newConversation.id);
+                  const data = await fetchConversationEnabledTools(
+                    newConversation.id,
+                  );
                   if (data) {
                     const baseEnabledToolIds = data.enabledToolIds || [];
                     const newEnabledToolIds = applyPendingActions(

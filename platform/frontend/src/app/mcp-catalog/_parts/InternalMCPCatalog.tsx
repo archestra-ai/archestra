@@ -392,9 +392,10 @@ export function InternalMCPCatalog({
 
     try {
       // Call backend to initiate OAuth flow
-      const { authorizationUrl, state } = await initiateOAuthMutation.mutateAsync({
-        catalogId: selectedCatalogItem.id,
-      });
+      const { authorizationUrl, state } =
+        await initiateOAuthMutation.mutateAsync({
+          catalogId: selectedCatalogItem.id,
+        });
 
       // Store state in session storage for the callback
       sessionStorage.setItem("oauth_state", state);

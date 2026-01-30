@@ -90,11 +90,7 @@ export function useInstallMcpServer() {
         body: data,
       });
       if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Unknown error";
-        toast.error(msg);
+        showErrorToastFromApiError(error);
       }
       return { installedServer, dontShowToast: data.dontShowToast };
     },

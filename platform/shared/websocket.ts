@@ -117,7 +117,9 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export type ClientWebSocketMessage = z.infer<typeof ClientWebSocketMessageSchema>;
+export type ClientWebSocketMessage = z.infer<
+  typeof ClientWebSocketMessageSchema
+>;
 
 /**
  * All possible client message types (for handler maps)

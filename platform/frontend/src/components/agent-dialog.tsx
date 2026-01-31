@@ -36,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ExpandableText } from "@/components/ui/expandable-text";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -137,10 +138,12 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
         <div className="p-4 border-b flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <h4 className="font-semibold truncate">{agent.name}</h4>
-            {(agent.description || agent.systemPrompt) && (
-              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                {agent.description || agent.systemPrompt}
-              </p>
+            {agent.description && (
+              <ExpandableText
+                text={agent.description}
+                maxLines={2}
+                className="text-sm text-muted-foreground mt-1"
+              />
             )}
           </div>
           <Button
@@ -714,6 +717,24 @@ export function AgentDialog({
               />
             </div>
 
+            {/* Description (Agent only) */}
+            {isInternalAgent && (
+              <div className="space-y-2">
+                <Label htmlFor="agentDescription">Description</Label>
+                <p className="text-sm text-muted-foreground">
+                  A brief summary of what this agent does. Helps other agents
+                  quickly understand if this agent is relevant for their task.
+                </p>
+                <Textarea
+                  id="agentDescription"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe what this agent does"
+                  className="min-h-[60px]"
+                />
+              </div>
+            )}
+
             {/* Tools (MCP Gateway and Agent only) */}
             {showToolsAndSubagents && (
               <div className="space-y-2">
@@ -834,24 +855,6 @@ export function AgentDialog({
                   onChange={(e) => setUserPrompt(e.target.value)}
                   placeholder="Enter user prompt (shown to user, sent to LLM)"
                   className="min-h-[150px] font-mono"
-                />
-              </div>
-            )}
-
-            {/* Description (Agent only) */}
-            {isInternalAgent && (
-              <div className="space-y-2">
-                <Label htmlFor="agentDescription">Description</Label>
-                <p className="text-sm text-muted-foreground">
-                  A brief summary of what this agent does. Helps other agents
-                  quickly understand if this agent is relevant for their task.
-                </p>
-                <Textarea
-                  id="agentDescription"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe what this agent does"
-                  className="min-h-[60px]"
                 />
               </div>
             )}

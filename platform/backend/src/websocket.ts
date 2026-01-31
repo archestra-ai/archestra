@@ -1,18 +1,27 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, Server } from "node:http";
+import { PassThrough } from "node:stream";
+import {
+  type ClientWebSocketMessage,
+  ClientWebSocketMessageSchema,
+  type ClientWebSocketMessageType,
+  MCP_DEFAULT_LOG_LINES,
+  type ServerWebSocketMessage,
+} from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import { ConversationModel, MessageModel, UserModel } from "@/models";
+import McpServerRuntimeManager from "@/mcp-server-runtime/manager";
+import {
+  ConversationModel,
+  McpServerModel,
+  MessageModel,
+  UserModel,
+} from "@/models";
 import type { BrowserUserContext } from "@/services/browser-stream";
 import { browserStreamFeature } from "@/services/browser-stream-feature";
-import {
-  type ServerWebSocketMessage,
-  type WebSocketMessage,
-  WebSocketMessageSchema,
-} from "@/types";
 
 const SCREENSHOT_INTERVAL_MS = 3000; // Stream at ~0.33 FPS (every 3 seconds)
 
@@ -24,22 +33,119 @@ interface BrowserStreamSubscription {
   isSending: boolean;
 }
 
+interface McpLogsSubscription {
+  serverId: string;
+  stream: PassThrough;
+  abortController: AbortController;
+}
+
 interface WebSocketClientContext {
   userId: string;
   organizationId: string;
   userIsProfileAdmin: boolean;
 }
 
+type MessageHandler = (
+  ws: WebSocket,
+  message: ClientWebSocketMessage,
+  clientContext: WebSocketClientContext,
+) => Promise<void> | void;
+
 class WebSocketService {
   private wss: WebSocketServer | null = null;
-  // Track browser stream subscriptions per client
   private browserSubscriptions: Map<WebSocket, BrowserStreamSubscription> =
     new Map();
+  private mcpLogsSubscriptions: Map<WebSocket, McpLogsSubscription> = new Map();
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
 
-  /**
-   * Start the WebSocket server
-   */
+  private messageHandlers: Record<ClientWebSocketMessageType, MessageHandler> =
+    {
+      subscribe_browser_stream: (ws, message, clientContext) => {
+        if (message.type !== "subscribe_browser_stream") return;
+        return this.handleSubscribeBrowserStream(
+          ws,
+          message.payload.conversationId,
+          clientContext,
+        );
+      },
+      unsubscribe_browser_stream: (ws) => {
+        this.unsubscribeBrowserStream(ws);
+      },
+      browser_navigate: (ws, message) => {
+        if (message.type !== "browser_navigate") return;
+        return this.handleBrowserNavigate(
+          ws,
+          message.payload.conversationId,
+          message.payload.url,
+        );
+      },
+      browser_navigate_back: (ws, message) => {
+        if (message.type !== "browser_navigate_back") return;
+        return this.handleBrowserNavigateBack(
+          ws,
+          message.payload.conversationId,
+        );
+      },
+      browser_click: (ws, message) => {
+        if (message.type !== "browser_click") return;
+        return this.handleBrowserClick(
+          ws,
+          message.payload.conversationId,
+          message.payload.element,
+          message.payload.x,
+          message.payload.y,
+        );
+      },
+      browser_type: (ws, message) => {
+        if (message.type !== "browser_type") return;
+        return this.handleBrowserType(
+          ws,
+          message.payload.conversationId,
+          message.payload.text,
+          message.payload.element,
+        );
+      },
+      browser_press_key: (ws, message) => {
+        if (message.type !== "browser_press_key") return;
+        return this.handleBrowserPressKey(
+          ws,
+          message.payload.conversationId,
+          message.payload.key,
+        );
+      },
+      browser_get_snapshot: (ws, message) => {
+        if (message.type !== "browser_get_snapshot") return;
+        return this.handleBrowserGetSnapshot(
+          ws,
+          message.payload.conversationId,
+        );
+      },
+      browser_set_zoom: (ws, message) => {
+        if (message.type !== "browser_set_zoom") return;
+        // TODO: Implement setZoom when browserStreamFeature supports it
+        this.sendToClient(ws, {
+          type: "browser_set_zoom_result",
+          payload: {
+            conversationId: message.payload.conversationId,
+            success: false,
+            error: "Set zoom is not yet implemented",
+          },
+        });
+      },
+      subscribe_mcp_logs: (ws, message, clientContext) => {
+        if (message.type !== "subscribe_mcp_logs") return;
+        return this.handleSubscribeMcpLogs(
+          ws,
+          message.payload.serverId,
+          message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
+          clientContext,
+        );
+      },
+      unsubscribe_mcp_logs: (ws) => {
+        this.unsubscribeMcpLogs(ws);
+      },
+    };
+
   start(httpServer: Server) {
     const { path } = config.websocket;
 
@@ -81,16 +187,11 @@ class WebSocketService {
         ws.on("message", async (data) => {
           try {
             const message = JSON.parse(data.toString());
-
-            // Validate the message against our schema
-            const validatedMessage = WebSocketMessageSchema.parse(message);
-
-            // Handle different message types
+            const validatedMessage =
+              ClientWebSocketMessageSchema.parse(message);
             await this.handleMessage(validatedMessage, ws);
           } catch (error) {
             logger.error({ error }, "Failed to parse WebSocket message");
-
-            // Send error back to client
             this.sendToClient(ws, {
               type: "error",
               payload: {
@@ -102,9 +203,8 @@ class WebSocketService {
         });
 
         ws.on("close", () => {
-          // Clean up browser stream subscription
           this.unsubscribeBrowserStream(ws);
-
+          this.unsubscribeMcpLogs(ws);
           logger.info(
             `WebSocket client disconnected. Remaining connections: ${this.wss?.clients.size}`,
           );
@@ -113,8 +213,8 @@ class WebSocketService {
 
         ws.on("error", (error) => {
           logger.error({ error }, "WebSocket error");
-          // Clean up browser stream subscription on error
           this.unsubscribeBrowserStream(ws);
+          this.unsubscribeMcpLogs(ws);
           this.clientContexts.delete(ws);
         });
       },
@@ -125,11 +225,8 @@ class WebSocketService {
     });
   }
 
-  /**
-   * Handle incoming websocket messages
-   */
   private async handleMessage(
-    message: WebSocketMessage,
+    message: ClientWebSocketMessage,
     ws: WebSocket,
   ): Promise<void> {
     const clientContext = this.getClientContext(ws);
@@ -146,9 +243,6 @@ class WebSocketService {
         type: "browser_stream_error",
         payload: {
           conversationId:
-            "payload" in message &&
-            message.payload &&
-            typeof message.payload === "object" &&
             "conversationId" in message.payload
               ? String(message.payload.conversationId)
               : "",
@@ -158,86 +252,21 @@ class WebSocketService {
       return;
     }
 
-    switch (message.type) {
-      case "hello-world":
-        logger.info("Received hello-world message");
-        break;
-
-      case "subscribe_browser_stream":
-        await this.handleSubscribeBrowserStream(
-          ws,
-          message.payload.conversationId,
-          clientContext,
-        );
-        break;
-
-      case "unsubscribe_browser_stream":
-        this.unsubscribeBrowserStream(ws);
-        break;
-
-      case "browser_navigate":
-        await this.handleBrowserNavigate(
-          ws,
-          message.payload.conversationId,
-          message.payload.url,
-        );
-        break;
-
-      case "browser_navigate_back":
-        await this.handleBrowserNavigateBack(
-          ws,
-          message.payload.conversationId,
-        );
-        break;
-
-      case "browser_click":
-        await this.handleBrowserClick(
-          ws,
-          message.payload.conversationId,
-          message.payload.element,
-          message.payload.x,
-          message.payload.y,
-        );
-        break;
-
-      case "browser_type":
-        await this.handleBrowserType(
-          ws,
-          message.payload.conversationId,
-          message.payload.text,
-          message.payload.element,
-        );
-        break;
-
-      case "browser_press_key":
-        await this.handleBrowserPressKey(
-          ws,
-          message.payload.conversationId,
-          message.payload.key,
-        );
-        break;
-
-      case "browser_get_snapshot":
-        await this.handleBrowserGetSnapshot(ws, message.payload.conversationId);
-        break;
-
-      default:
-        logger.warn({ message }, "Unknown WebSocket message type");
+    const handler = this.messageHandlers[message.type];
+    if (handler) {
+      await handler(ws, message, clientContext);
+    } else {
+      logger.warn({ message }, "Unknown WebSocket message type");
     }
   }
 
-  /**
-   * Subscribe client to browser stream for a conversation
-   */
   private async handleSubscribeBrowserStream(
     ws: WebSocket,
     conversationId: string,
     clientContext: WebSocketClientContext,
   ): Promise<void> {
-    // Unsubscribe from any existing stream first
     this.unsubscribeBrowserStream(ws);
 
-    // Get agentId from conversation with user/org scoping
     const agentId = await ConversationModel.getAgentIdForUser(
       conversationId,
       clientContext.userId,
@@ -272,7 +301,6 @@ class WebSocketService {
       userIsProfileAdmin: clientContext.userIsProfileAdmin,
     };
 
-    // Select or create the tab for this conversation
     const tabResult = await browserStreamFeature.selectOrCreateTab(
       agentId,
       conversationId,
@@ -283,10 +311,8 @@ class WebSocketService {
         { conversationId, agentId, error: tabResult.error },
         "Failed to select/create browser tab",
       );
-      // Continue anyway - screenshot will work on current tab
     }
 
-    // Send initial screenshot
     const sendTick = async () => {
       const subscription = this.browserSubscriptions.get(ws);
       if (!subscription) return;
@@ -300,7 +326,6 @@ class WebSocketService {
       }
     };
 
-    // Set up interval for continuous streaming
     const intervalId = setInterval(() => {
       if (ws.readyState === WS.OPEN) {
         void sendTick();
@@ -309,7 +334,6 @@ class WebSocketService {
       }
     }, SCREENSHOT_INTERVAL_MS);
 
-    // Store subscription
     this.browserSubscriptions.set(ws, {
       conversationId,
       agentId,
@@ -321,9 +345,6 @@ class WebSocketService {
     void sendTick();
   }
 
-  /**
-   * Unsubscribe client from browser stream
-   */
   private unsubscribeBrowserStream(ws: WebSocket): void {
     const subscription = this.browserSubscriptions.get(ws);
     if (subscription) {
@@ -336,9 +357,6 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Handle browser navigation request
-   */
   private async handleBrowserNavigate(
     ws: WebSocket,
     conversationId: string,
@@ -365,7 +383,6 @@ class WebSocketService {
         subscription.userContext,
       );
 
-      // Add navigation context to conversation so AI knows the page changed
       if (result.success) {
         await this.addNavigationMessageToConversation(conversationId, url);
       }
@@ -392,9 +409,6 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Handle browser navigate back request
-   */
   private async handleBrowserNavigateBack(
     ws: WebSocket,
     conversationId: string,
@@ -419,7 +433,6 @@ class WebSocketService {
         subscription.userContext,
       );
 
-      // Add navigation context to conversation so AI knows the page changed
       if (result.success) {
         await this.addNavigationBackMessageToConversation(conversationId);
       }
@@ -446,9 +459,6 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Handle browser click request
-   */
   private async handleBrowserClick(
     ws: WebSocket,
     conversationId: string,
@@ -502,9 +512,6 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Handle browser type request
-   */
   private async handleBrowserType(
     ws: WebSocket,
     conversationId: string,
@@ -553,9 +560,6 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Handle browser press key request
-   */
   private async handleBrowserPressKey(
     ws: WebSocket,
     conversationId: string,
@@ -602,9 +606,6 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Handle browser get snapshot request
-   */
   private async handleBrowserGetSnapshot(
     ws: WebSocket,
     conversationId: string,
@@ -647,9 +648,127 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Take and send a screenshot to a client
-   */
+  private async handleSubscribeMcpLogs(
+    ws: WebSocket,
+    serverId: string,
+    lines: number,
+    clientContext: WebSocketClientContext,
+  ): Promise<void> {
+    // Unsubscribe from any existing MCP logs stream first
+    this.unsubscribeMcpLogs(ws);
+
+    // Verify the user has access to this MCP server
+    // Note: findById checks access control based on userId
+    const mcpServer = await McpServerModel.findById(
+      serverId,
+      clientContext.userId,
+      false, // not admin - let the model check team/personal access
+    );
+
+    if (!mcpServer) {
+      logger.warn(
+        { serverId, organizationId: clientContext.organizationId },
+        "MCP server not found or unauthorized for logs streaming",
+      );
+      this.sendToClient(ws, {
+        type: "mcp_logs_error",
+        payload: {
+          serverId,
+          error: "MCP server not found",
+        },
+      });
+      return;
+    }
+
+    logger.info({ serverId, lines }, "MCP logs client subscribed");
+
+    const abortController = new AbortController();
+    const stream = new PassThrough();
+
+    // Store subscription
+    this.mcpLogsSubscriptions.set(ws, {
+      serverId,
+      stream,
+      abortController,
+    });
+
+    // Get the appropriate kubectl command based on pod status
+    const command = await McpServerRuntimeManager.getAppropriateCommand(
+      serverId,
+      lines,
+    );
+    let isFirstChunk = true;
+
+    // Set up stream data handler
+    stream.on("data", (chunk: Buffer) => {
+      if (ws.readyState === WS.OPEN) {
+        this.sendToClient(ws, {
+          type: "mcp_logs",
+          payload: {
+            serverId,
+            logs: chunk.toString(),
+            // Only send command with the first chunk
+            ...(isFirstChunk ? { command } : {}),
+          },
+        });
+        isFirstChunk = false;
+      }
+    });
+
+    stream.on("error", (error) => {
+      logger.error({ error, serverId }, "MCP logs stream error");
+      if (ws.readyState === WS.OPEN) {
+        this.sendToClient(ws, {
+          type: "mcp_logs_error",
+          payload: {
+            serverId,
+            error: error.message,
+          },
+        });
+      }
+      this.unsubscribeMcpLogs(ws);
+    });
+
+    stream.on("end", () => {
+      logger.info({ serverId }, "MCP logs stream ended");
+      this.unsubscribeMcpLogs(ws);
+    });
+
+    try {
+      // Start streaming logs
+      await McpServerRuntimeManager.streamMcpServerLogs(
+        serverId,
+        stream,
+        lines,
+        abortController.signal,
+      );
+    } catch (error) {
+      logger.error({ error, serverId }, "Failed to start MCP logs stream");
+      this.sendToClient(ws, {
+        type: "mcp_logs_error",
+        payload: {
+          serverId,
+          error:
+            error instanceof Error ? error.message : "Failed to stream logs",
+        },
+      });
+      this.unsubscribeMcpLogs(ws);
+    }
+  }
+
+  private unsubscribeMcpLogs(ws: WebSocket): void {
+    const subscription = this.mcpLogsSubscriptions.get(ws);
+    if (subscription) {
+      subscription.abortController.abort();
+      subscription.stream.destroy();
+      this.mcpLogsSubscriptions.delete(ws);
+      logger.info(
+        { serverId: subscription.serverId },
+        "MCP logs client unsubscribed",
+      );
+    }
+  }
+
   private async sendScreenshot(
     ws: WebSocket,
     agentId: string,
@@ -703,18 +822,12 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Send a message to a specific client
-   */
   private sendToClient(ws: WebSocket, message: ServerWebSocketMessage): void {
     if (ws.readyState === WS.OPEN) {
       ws.send(JSON.stringify(message));
     }
   }
 
-  /**
-   * Broadcast a message to all connected clients
-   */
   broadcast(message: ServerWebSocketMessage) {
     if (!this.wss) {
       logger.warn("WebSocket server not initialized");
@@ -744,9 +857,6 @@ class WebSocketService {
     );
   }
 
-  /**
-   * Send a message to specific clients (filtered by a predicate)
-   */
   sendToClients(
     message: ServerWebSocketMessage,
     filter?: (client: WebSocket) => boolean,
@@ -772,14 +882,14 @@ class WebSocketService {
     );
   }
 
-  /**
-   * Stop the WebSocket server
-   */
   stop() {
-    // Clear all browser stream subscriptions
+    // Clear all subscriptions
     for (const [ws, subscription] of this.browserSubscriptions) {
       clearInterval(subscription.intervalId);
       this.browserSubscriptions.delete(ws);
+    }
+    for (const [ws] of this.mcpLogsSubscriptions) {
+      this.unsubscribeMcpLogs(ws);
     }
     this.clientContexts.clear();
 
@@ -795,16 +905,10 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Get the number of connected clients
-   */
   getClientCount(): number {
     return this.wss?.clients.size ?? 0;
   }
 
-  /**
-   * Authenticate websocket connections using the same auth mechanisms as HTTP routes.
-   */
   private async authenticateConnection(
     request: IncomingMessage,
   ): Promise<WebSocketClientContext | null> {
@@ -869,17 +973,11 @@ class WebSocketService {
     ws.close(4401, "Unauthorized");
   }
 
-  /**
-   * Add a navigation message to the conversation so AI knows the browser navigated
-   * This is called when user manually navigates via browser panel address bar
-   */
   private async addNavigationMessageToConversation(
     conversationId: string,
     url: string,
   ): Promise<void> {
     try {
-      // Create a user message that tells the AI about the navigation
-      // This uses the UIMessage format expected by AI SDK
       const navigationMessage = {
         id: randomUUID(),
         role: "user",
@@ -902,7 +1000,6 @@ class WebSocketService {
         "Added navigation context message to conversation",
       );
     } catch (error) {
-      // Don't fail the navigation if message save fails
       logger.error(
         { error, conversationId, url },
         "Failed to add navigation message to conversation",
@@ -910,10 +1007,6 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Add a navigation back message to the conversation
-   * This is called when user clicks the back button in browser panel
-   */
   private async addNavigationBackMessageToConversation(
     conversationId: string,
   ): Promise<void> {

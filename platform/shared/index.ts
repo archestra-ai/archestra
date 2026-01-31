@@ -13,9 +13,9 @@ export * from "./policy-conditions";
 export * from "./roles";
 export * from "./routes";
 export * from "./test-mcp-server";
-// Theme utilities and config
 export * from "./themes/theme-config";
 export * from "./themes/theme-utils";
 export * from "./types";
 export * from "./utils";
+export * from "./websocket";
 export * from "./zod-schemas";

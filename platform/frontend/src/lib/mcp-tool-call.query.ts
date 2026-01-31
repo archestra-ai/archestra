@@ -2,7 +2,7 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { DEFAULT_TABLE_LIMIT } from "./utils";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
 
 const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 
@@ -55,14 +55,32 @@ export function useMcpToolCalls({
         },
       });
       if (response.error) {
-        throw new Error(
-          response.error.error?.message ?? "Failed to fetch MCP tool calls",
-        );
+        handleApiError(response.error);
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        };
       }
-      if (!response.data) {
-        throw new Error("Failed to fetch MCP tool calls");
-      }
-      return response.data;
+      return (
+        response.data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
     },
     // Only use initialData for the first page (offset 0) with default sorting and default limit
     initialData:
@@ -90,14 +108,10 @@ export function useMcpToolCall({
     queryFn: async () => {
       const response = await getMcpToolCall({ path: { mcpToolCallId } });
       if (response.error) {
-        throw new Error(
-          response.error.error?.message ?? "Failed to fetch MCP tool call",
-        );
+        handleApiError(response.error);
+        return null;
       }
-      if (!response.data) {
-        throw new Error("Failed to fetch MCP tool call");
-      }
-      return response.data;
+      return response.data ?? null;
     },
     initialData,
   });

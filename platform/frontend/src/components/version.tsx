@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useLatestGitHubRelease } from "@/lib/github-release.query";
 import { useHealth } from "@/lib/health.query";
 
 interface VersionProps {
@@ -9,7 +11,22 @@ interface VersionProps {
 
 export function Version({ inline = false }: VersionProps) {
   const { data } = useHealth();
+  const { data: latestRelease } = useLatestGitHubRelease();
   const [shouldHide, setShouldHide] = useState(false);
+
+  const hasNewVersion = useMemo(() => {
+    if (!data?.version || !latestRelease?.tag_name) return false;
+
+    // Clean version strings (remove 'v' prefix if present)
+    const currentVersion = data.version.replace(/^v/, "");
+    const latestVersion = latestRelease.tag_name
+      .replace(/^v/, "")
+      .replace(/^platform-/, "");
+
+    // Simple string comparison - works for semantic versioning if formatted consistently
+    // For more robust comparison, we could parse and compare version parts
+    return currentVersion !== latestVersion && currentVersion < latestVersion;
+  }, [data?.version, latestRelease?.tag_name]);
 
   useEffect(() => {
     // Only check for hide-version class if not inline
@@ -48,6 +65,19 @@ export function Version({ inline = false }: VersionProps) {
           }
         >
           Version: {data.version}
+          {hasNewVersion && latestRelease && (
+            <>
+              , new:{" "}
+              <Link
+                href={latestRelease.html_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground transition-colors"
+              >
+                {latestRelease.tag_name.replace(/^platform-/, "")}
+              </Link>
+            </>
+          )}
         </div>
       )}
     </>

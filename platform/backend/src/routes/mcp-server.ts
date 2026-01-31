@@ -910,115 +910,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.get(
-    "/api/mcp_server/:id/logs",
-    {
-      schema: {
-        operationId: RouteId.GetMcpServerLogs,
-        description: "Get logs for a specific MCP server deployment",
-        tags: ["MCP Server"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        querystring: z.object({
-          lines: z.coerce.number().optional().default(100),
-          follow: z.coerce.boolean().optional().default(false),
-        }),
-        response: constructResponseSchema(
-          z.object({
-            logs: z.string(),
-            containerName: z.string(),
-            command: z.string(),
-            namespace: z.string(),
-          }),
-        ),
-      },
-    },
-    async ({ params: { id }, query: { lines, follow } }, reply) => {
-      try {
-        // If follow is enabled, stream the logs
-        if (follow) {
-          // Hijack the response to handle streaming
-          reply.hijack();
-          reply.raw.writeHead(200, {
-            "Content-Type": "text/plain; charset=utf-8",
-            "Cache-Control": "no-cache",
-            "Transfer-Encoding": "chunked",
-          });
-
-          await McpServerRuntimeManager.streamMcpServerLogs(
-            id,
-            reply.raw,
-            lines,
-          );
-
-          return;
-        }
-
-        // Otherwise, return logs as usual
-        const logs = await McpServerRuntimeManager.getMcpServerLogs(id, lines);
-        return reply.send(logs);
-      } catch (error) {
-        fastify.log.error(
-          `Error getting logs for MCP server ${id}: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-
-        // If we've already hijacked, we can't send a normal error response
-        if (follow && reply.raw.headersSent) {
-          reply.raw.end();
-          return;
-        }
-
-        throw new ApiError(
-          404,
-          `Failed to get logs for MCP server ${id}: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-      }
-    },
-  );
-
-  fastify.post(
-    "/api/mcp_server/:id/restart",
-    {
-      schema: {
-        operationId: RouteId.RestartMcpServer,
-        description: "Restart a single MCP server deployment",
-        tags: ["MCP Server"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        response: constructResponseSchema(
-          z.object({
-            success: z.boolean(),
-            message: z.string(),
-          }),
-        ),
-      },
-    },
-    async ({ params: { id } }, reply) => {
-      try {
-        await McpServerRuntimeManager.restartServer(id);
-        return reply.send({
-          success: true,
-          message: `MCP server ${id} restarted successfully`,
-        });
-      } catch (error) {
-        fastify.log.error(
-          `Failed to restart MCP server ${id}: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-
-        if (error instanceof Error && error.message?.includes("not found")) {
-          throw new ApiError(404, error.message);
-        }
-
-        throw new ApiError(
-          500,
-          `Failed to restart MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-      }
-    },
-  );
-
   /**
    * Reinstall an MCP server without losing tool assignments and policies.
    *
@@ -1215,140 +1106,48 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Refetch the server with potentially updated secretId
+      // Set status to "pending" immediately so UI shows progress bar
+      await McpServerModel.update(id, {
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      });
+
+      // Refetch the server with updated status
       const updatedServer = await McpServerModel.findById(id);
       if (!updatedServer) {
         throw new ApiError(500, "Server not found after update");
       }
 
-      // Perform the reinstall
-      try {
-        await autoReinstallServer(updatedServer, catalogItem);
-        logger.info(
-          { serverId: id, serverName: mcpServer.name },
-          "MCP server reinstalled successfully",
-        );
-      } catch (error) {
-        logger.error(
-          { err: error, serverId: id },
-          "Failed to reinstall MCP server",
-        );
-        throw new ApiError(
-          500,
-          `Failed to reinstall MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-      }
-
-      // Return the updated server
-      const finalServer = await McpServerModel.findById(id);
-      if (!finalServer) {
-        throw new ApiError(500, "Server not found after reinstall");
-      }
-      return reply.send(finalServer);
-    },
-  );
-
-  fastify.post(
-    "/api/mcp_catalog/:catalogId/restart-all-installations",
-    {
-      schema: {
-        operationId: RouteId.RestartAllMcpServerInstallations,
-        description:
-          "Restart all MCP server installations for a given catalog item",
-        tags: ["MCP Server"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-        }),
-        response: constructResponseSchema(
-          z.object({
-            success: z.boolean(),
-            message: z.string(),
-            results: z.array(
-              z.object({
-                serverId: z.string(),
-                serverName: z.string(),
-                success: z.boolean(),
-                error: z.string().optional(),
-              }),
-            ),
-            summary: z.object({
-              total: z.number(),
-              succeeded: z.number(),
-              failed: z.number(),
-            }),
-          }),
-        ),
-      },
-    },
-    async ({ params: { catalogId } }, reply) => {
-      // Verify the catalog item exists
-      const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
-      if (!catalogItem) {
-        throw new ApiError(404, `Catalog item ${catalogId} not found`);
-      }
-
-      // Find all MCP server installations for this catalog item
-      const servers = await McpServerModel.findByCatalogId(catalogId);
-
-      if (servers.length === 0) {
-        return reply.send({
-          success: true,
-          message: "No installations found for this catalog item",
-          results: [],
-          summary: { total: 0, succeeded: 0, failed: 0 },
-        });
-      }
-
-      // Restart each server sequentially
-      const results: Array<{
-        serverId: string;
-        serverName: string;
-        success: boolean;
-        error?: string;
-      }> = [];
-
-      for (const server of servers) {
+      // Perform the reinstall asynchronously (don't block the response)
+      // Use setImmediate to fully detach from the request lifecycle
+      // This allows the frontend to show the progress bar immediately
+      setImmediate(async () => {
         try {
-          await McpServerRuntimeManager.restartServer(server.id);
-          results.push({
-            serverId: server.id,
-            serverName: server.name,
-            success: true,
+          await autoReinstallServer(updatedServer, catalogItem);
+          // Set status to success when done
+          await McpServerModel.update(id, {
+            localInstallationStatus: "success",
           });
           logger.info(
-            `Restarted MCP server ${server.id} (${server.name}) as part of restart-all for catalog ${catalogId}`,
+            { serverId: id, serverName: mcpServer.name },
+            "MCP server reinstalled successfully",
           );
         } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          results.push({
-            serverId: server.id,
-            serverName: server.name,
-            success: false,
-            error: errorMessage,
+          // Set status to error if reinstall fails
+          await McpServerModel.update(id, {
+            localInstallationStatus: "error",
+            localInstallationError:
+              error instanceof Error ? error.message : "Unknown error",
           });
           logger.error(
-            `Failed to restart MCP server ${server.id} (${server.name}): ${errorMessage}`,
+            { err: error, serverId: id },
+            "Failed to reinstall MCP server",
           );
         }
-      }
-
-      const succeeded = results.filter((r) => r.success).length;
-      const failed = results.filter((r) => !r.success).length;
-
-      return reply.send({
-        success: failed === 0,
-        message:
-          failed === 0
-            ? `Successfully restarted all ${succeeded} installation(s)`
-            : `Restarted ${succeeded} of ${servers.length} installation(s), ${failed} failed`,
-        results,
-        summary: {
-          total: servers.length,
-          succeeded,
-          failed,
-        },
       });
+
+      // Return the server immediately with "pending" status
+      return reply.send(updatedServer);
     },
   );
 };

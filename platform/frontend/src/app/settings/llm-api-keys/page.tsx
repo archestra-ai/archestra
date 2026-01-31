@@ -26,7 +26,6 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import {
   ChatApiKeyForm,
   type ChatApiKeyFormValues,
@@ -203,15 +202,10 @@ function ChatSettingsContent() {
 
   const handleDelete = useCallback(async () => {
     if (!selectedApiKey) return;
-    try {
-      await deleteMutation.mutateAsync(selectedApiKey.id);
-      toast.success("API key deleted successfully");
+    const result = await deleteMutation.mutateAsync(selectedApiKey.id);
+    if (result) {
       setIsDeleteDialogOpen(false);
       setSelectedApiKey(null);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to delete API key";
-      toast.error(message);
     }
   }, [selectedApiKey, deleteMutation]);
 

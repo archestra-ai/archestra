@@ -38,6 +38,7 @@ import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
+import { ToolErrorLogsButton } from "./tool-error-logs-button";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -918,6 +919,11 @@ function MessageTool({
       (!toolResultPart && Boolean(part.output)),
   );
 
+  // Show logs button for failed tool calls
+  const logsButton = errorText ? (
+    <ToolErrorLogsButton toolName={toolName} />
+  ) : null;
+
   return (
     <Tool className={hasContent ? "cursor-pointer" : ""}>
       <ToolHeader
@@ -929,6 +935,7 @@ function MessageTool({
         })}
         errorText={errorText}
         isCollapsible={hasContent}
+        actionButton={logsButton}
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}

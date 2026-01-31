@@ -30,7 +30,6 @@ export interface TestFixtures {
   deleteMcpCatalogItem: typeof deleteMcpCatalogItem;
   installMcpServer: typeof installMcpServer;
   uninstallMcpServer: typeof uninstallMcpServer;
-  restartMcpServer: typeof restartMcpServer;
   createRole: typeof createRole;
   deleteRole: typeof deleteRole;
   waitForAgentTool: typeof waitForAgentTool;
@@ -307,17 +306,6 @@ const uninstallMcpServer = async (
     request,
     method: "delete",
     urlSuffix: `/api/mcp_server/${serverId}`,
-  });
-
-/**
- * Restart an MCP server (local servers only)
- * (authnz is handled by the authenticated session)
- */
-const restartMcpServer = async (request: APIRequestContext, serverId: string) =>
-  makeApiRequest({
-    request,
-    method: "post",
-    urlSuffix: `/api/mcp_server/${serverId}/restart`,
   });
 
 /**
@@ -820,9 +808,6 @@ export const test = base.extend<TestFixtures>({
   },
   uninstallMcpServer: async ({}, use) => {
     await use(uninstallMcpServer);
-  },
-  restartMcpServer: async ({}, use) => {
-    await use(restartMcpServer);
   },
   createRole: async ({}, use) => {
     await use(createRole);

@@ -1,7 +1,6 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { archestraApiSdk } from "@shared";
 import { Check, Copy, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -21,8 +20,8 @@ import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/features.query";
 import { useAgentEmailAddress } from "@/lib/incoming-email.query";
-import { useTokens } from "@/lib/team-token.query";
-import { useUserToken } from "@/lib/user-token.query";
+import { useFetchTeamTokenValue, useTokens } from "@/lib/team-token.query";
+import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 import { EmailNotConfiguredMessage } from "./email-not-configured-message";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
@@ -60,8 +59,13 @@ export function A2AConnectionInstructions({
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
     null,
   );
-  const [isLoadingToken, setIsLoadingToken] = useState(false);
   const [isCopyingCode, setIsCopyingCode] = useState(false);
+
+  // Mutations for fetching token values
+  const fetchUserTokenMutation = useFetchUserTokenValue();
+  const fetchTeamTokenMutation = useFetchTeamTokenValue();
+  const isLoadingToken =
+    fetchUserTokenMutation.isPending || fetchTeamTokenMutation.isPending;
 
   // Email invocation - check both global feature AND agent-level setting
   const globalEmailEnabled = features?.incomingEmail?.enabled ?? false;
@@ -137,41 +141,34 @@ export function A2AConnectionInstructions({
       return;
     }
 
-    setIsLoadingToken(true);
-    try {
-      let tokenValue: string;
+    let tokenValue: string | null = null;
 
-      if (isPersonalTokenSelected) {
-        // Fetch personal token value
-        const response = await archestraApiSdk.getUserTokenValue();
-        if (response.error || !response.data) {
-          throw new Error("Failed to fetch personal token value");
-        }
-        tokenValue = (response.data as { value: string }).value;
-      } else {
-        // Fetch team token value
-        if (!selectedTeamToken) {
-          setIsLoadingToken(false);
-          return;
-        }
-        const response = await archestraApiSdk.getTokenValue({
-          path: { tokenId: selectedTeamToken.id },
-        });
-        if (response.error || !response.data) {
-          throw new Error("Failed to fetch token value");
-        }
-        tokenValue = (response.data as { value: string }).value;
+    if (isPersonalTokenSelected) {
+      // Fetch personal token value
+      const result = await fetchUserTokenMutation.mutateAsync();
+      tokenValue = result?.value ?? null;
+    } else {
+      // Fetch team token value
+      if (!selectedTeamToken) {
+        return;
       }
+      const result = await fetchTeamTokenMutation.mutateAsync(
+        selectedTeamToken.id,
+      );
+      tokenValue = result?.value ?? null;
+    }
 
+    if (tokenValue) {
       setExposedTokenValue(tokenValue);
       setShowExposedToken(true);
-    } catch (error) {
-      toast.error("Failed to fetch token");
-      console.error(error);
-    } finally {
-      setIsLoadingToken(false);
     }
-  }, [isPersonalTokenSelected, selectedTeamToken, showExposedToken]);
+  }, [
+    isPersonalTokenSelected,
+    selectedTeamToken,
+    showExposedToken,
+    fetchUserTokenMutation,
+    fetchTeamTokenMutation,
+  ]);
 
   const handleCopyUrl = useCallback(async () => {
     await navigator.clipboard.writeText(a2aEndpoint);
@@ -223,44 +220,39 @@ curl -X GET "${agentCardUrl}" \\
   const handleCopyCode = useCallback(
     async (code: string) => {
       setIsCopyingCode(true);
-      try {
-        // Fetch real token if available
-        let tokenValue = tokenForDisplay;
+      // Fetch real token if available
+      let tokenValue = tokenForDisplay;
 
-        if (isPersonalTokenSelected || hasProfileAdminPermission) {
-          try {
-            if (isPersonalTokenSelected) {
-              const response = await archestraApiSdk.getUserTokenValue();
-              if (response.data) {
-                tokenValue = (response.data as { value: string }).value;
-              }
-            } else if (selectedTeamToken) {
-              const response = await archestraApiSdk.getTokenValue({
-                path: { tokenId: selectedTeamToken.id },
-              });
-              if (response.data) {
-                tokenValue = (response.data as { value: string }).value;
-              }
-            }
-          } catch {
-            // Keep the display token if fetch fails
+      if (isPersonalTokenSelected || hasProfileAdminPermission) {
+        if (isPersonalTokenSelected) {
+          const result = await fetchUserTokenMutation.mutateAsync();
+          if (result?.value) {
+            tokenValue = result.value;
+          }
+        } else if (selectedTeamToken) {
+          const result = await fetchTeamTokenMutation.mutateAsync(
+            selectedTeamToken.id,
+          );
+          if (result?.value) {
+            tokenValue = result.value;
           }
         }
-
-        const codeWithRealToken = code.replace(tokenForDisplay, tokenValue);
-        await navigator.clipboard.writeText(codeWithRealToken);
-        setCopiedCode(true);
-        toast.success("Code copied with token");
-        setTimeout(() => setCopiedCode(false), 2000);
-      } finally {
-        setIsCopyingCode(false);
       }
+
+      const codeWithRealToken = code.replace(tokenForDisplay, tokenValue);
+      await navigator.clipboard.writeText(codeWithRealToken);
+      setCopiedCode(true);
+      toast.success("Code copied with token");
+      setTimeout(() => setCopiedCode(false), 2000);
+      setIsCopyingCode(false);
     },
     [
       tokenForDisplay,
       isPersonalTokenSelected,
       hasProfileAdminPermission,
       selectedTeamToken,
+      fetchUserTokenMutation,
+      fetchTeamTokenMutation,
     ],
   );
 

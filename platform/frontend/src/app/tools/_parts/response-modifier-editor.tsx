@@ -4,7 +4,6 @@ import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { toast } from "sonner";
 import { Editor } from "@/components/editor";
 import {
   Accordion,
@@ -36,16 +35,10 @@ export function ResponseModifierEditor({
   );
 
   const handleSave = useCallback(async () => {
-    try {
-      await agentToolPatchMutation.mutateAsync({
-        id,
-        responseModifierTemplate: template || null,
-      });
-      toast.success("Response modifier template saved");
-    } catch (error) {
-      toast.error("Failed to save template");
-      console.error("Save error:", error);
-    }
+    await agentToolPatchMutation.mutateAsync({
+      id,
+      responseModifierTemplate: template || null,
+    });
   }, [id, template, agentToolPatchMutation]);
 
   const handleClear = useCallback(() => {

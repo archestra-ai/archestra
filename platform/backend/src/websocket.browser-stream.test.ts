@@ -1,8 +1,8 @@
+import type { ClientWebSocketMessage } from "@shared";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import type * as originalConfigModule from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
-import type { WebSocketMessage } from "@/types";
 
 vi.mock("@/config", async (importOriginal) => {
   const actual = await importOriginal<typeof originalConfigModule>();
@@ -23,7 +23,7 @@ const { browserStreamFeature } = await import(
 const { default: websocketService } = await import("@/websocket");
 
 const service = websocketService as unknown as {
-  handleMessage: (message: WebSocketMessage, ws: WS) => Promise<void>;
+  handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
   clientContexts: Map<
     WS,
     { userId: string; organizationId: string; userIsProfileAdmin: boolean }

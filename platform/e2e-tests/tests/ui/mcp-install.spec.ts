@@ -566,7 +566,7 @@ test.describe("MCP Install", () => {
 
     const logsText = (await logsContent.textContent()) ?? "";
     expect(logsText).toMatch(
-      /(Normal|Warning|Scheduled|Pulling|Created|Started|Back-off)/i,
+      /(=== MCP Server Status|Pod Phase|Container 'mcp-server'|Kubernetes Events|Failed to retrieve deployment events)/i,
     );
     expect(logsText).toMatch(
       /(ErrImagePull|ImagePullBackOff|ErrImageNeverPull|Failed to pull|pull access denied|manifest unknown|repository does not exist|not found|denied)/i,

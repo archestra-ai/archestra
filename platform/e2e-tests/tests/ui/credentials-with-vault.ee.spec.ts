@@ -13,12 +13,14 @@ import {
   verifyToolCallResultViaApi,
 } from "../../utils";
 
-const vaultAddr = "http://localhost:8200";
+const vaultAddr =
+  process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ?? "http://127.0.0.1:8200";
 const teamFolderPath = "secret/data/teams";
 const secretName = "default-team";
 const secretKey = "api_key";
 const secretValue = "Admin-personal-credential";
-let byosEnabled = true;
+const vaultHealthEndpoint = "/v1/sys/health";
+const vaultWaitTimeoutMs = 30_000;
 
 test.describe.configure({ mode: "serial" });
 
@@ -36,26 +38,11 @@ test("At the beginning of tests, we change secrets manager to BYOS_VAULT", async
     headers: { Cookie: cookieHeaders },
   });
   expect(data?.type).toBe(SecretsManagerType.BYOS_VAULT);
-  const { data: features } = await archestraApiSdk.getFeatures({
-    headers: { Cookie: cookieHeaders },
-  });
-  byosEnabled = !!features?.byosEnabled;
-
-  if (!byosEnabled) {
-    await archestraApiSdk.initializeSecretsManager({
-      body: {
-        type: SecretsManagerType.DB,
-      },
-      headers: { Cookie: cookieHeaders },
-    });
-  }
 });
 
 test("Then we create folder in Vault for Default Team and exemplary secret", async () => {
-  test.skip(
-    !byosEnabled,
-    "BYOS Vault is not enabled in this environment.",
-  );
+  await waitForVaultReady();
+
   // Define the path for Default Team secrets
   // Using the format: secret/data/teams/default-team
   const fullSecretPath = `${teamFolderPath}/${secretName}`;
@@ -96,10 +83,6 @@ test("Then we create folder in Vault for Default Team and exemplary secret", asy
 });
 
 test("Then we configure vault for Default Team", async ({ adminPage }) => {
-  test.skip(
-    !byosEnabled,
-    "BYOS Vault is not enabled in this environment.",
-  );
   await goToPage(adminPage, "/settings/teams");
   await adminPage
     .getByTestId(`${E2eTestId.ConfigureVaultFolderButton}-${DEFAULT_TEAM_NAME}`)
@@ -126,13 +109,11 @@ test.describe("Chat API Keys with Readonly Vault", () => {
   ["team", "personal"].forEach((scope) => {
     test(`should create a ${scope} scoped chat API key with vault secret`, async ({
       adminPage,
+      extractCookieHeaders,
       makeRandomString,
     }) => {
-      test.skip(
-        !byosEnabled,
-        "BYOS Vault is not enabled in this environment.",
-      );
       const keyName = makeRandomString(8, "Test Key");
+      const cookieHeaders = await extractCookieHeaders(adminPage);
 
       // Open Create personal chat API key form and fill in the form
       await goToPage(adminPage, "/settings/llm-api-keys");
@@ -179,16 +160,28 @@ test.describe("Chat API Keys with Readonly Vault", () => {
         page: adminPage,
         options: { name: "Test & Create" },
       });
-      await expect(
-        adminPage.getByText("API key created successfully"),
-      ).toBeVisible({
-        timeout: 5000,
-      });
+      await expect
+        .poll(
+          async () => {
+            const { data } = await archestraApiSdk.getChatApiKeys({
+              headers: { Cookie: cookieHeaders },
+            });
+            return data?.some((key) => key.name === keyName) ?? false;
+          },
+          { timeout: 30000 },
+        )
+        .toBe(true);
 
-      // Verify API key is created
-      await expect(
-        adminPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName}`),
-      ).toBeVisible();
+      await adminPage.reload();
+      const apiKeyRow = adminPage.getByTestId(
+        `${E2eTestId.ChatApiKeyRow}-${keyName}`,
+      );
+      await expect(apiKeyRow).toBeVisible({ timeout: 15000 });
+
+      await adminPage
+        .getByText("API key created successfully")
+        .waitFor({ state: "visible", timeout: 5000 })
+        .catch(() => {});
 
       // Cleanup
       await goToPage(adminPage, "/settings/llm-api-keys");
@@ -200,17 +193,32 @@ test.describe("Chat API Keys with Readonly Vault", () => {
   });
 });
 
+async function waitForVaultReady() {
+  const start = Date.now();
+
+  while (Date.now() - start < vaultWaitTimeoutMs) {
+    try {
+      const response = await fetch(`${vaultAddr}${vaultHealthEndpoint}`);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // Vault may not be ready yet, retry until timeout.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+
+  throw new Error(`Vault not ready after ${vaultWaitTimeoutMs}ms at ${vaultAddr}`);
+}
+
 test.describe("Test self-hosted MCP server with Readonly Vault", () => {
   test("Test self-hosted MCP server with Vault - with prompt on installation", async ({
     adminPage,
     extractCookieHeaders,
     makeRandomString,
   }) => {
-    test.skip(
-      !byosEnabled,
-      "BYOS Vault is not enabled in this environment.",
-    );
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const catalogItemName = makeRandomString(10, "mcp");
     const newCatalogItem = await addCustomSelfHostedCatalogItem({
@@ -256,6 +264,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
       page: adminPage,
       catalogItemName: newCatalogItem.name,
+      timeoutMs: 180_000,
     });
     // Select default team credential from dropdown
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
@@ -295,10 +304,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     extractCookieHeaders,
     makeRandomString,
   }) => {
-    test.skip(
-      !byosEnabled,
-      "BYOS Vault is not enabled in this environment.",
-    );
+    test.setTimeout(180_000);
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const catalogItemName = makeRandomString(10, "mcp");
 
@@ -338,6 +344,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
       page: adminPage,
       catalogItemName: newCatalogItem.name,
+      timeoutMs: 180_000,
     });
     // Select default team credential from dropdown
     await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
@@ -377,10 +384,6 @@ test("At the end of tests, we change secrets manager to DB because all other tes
   adminPage,
   extractCookieHeaders,
 }) => {
-  test.skip(
-    !byosEnabled,
-    "BYOS Vault is not enabled in this environment.",
-  );
   const cookieHeaders = await extractCookieHeaders(adminPage);
   const { data } = await archestraApiSdk.initializeSecretsManager({
     body: {

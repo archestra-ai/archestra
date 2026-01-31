@@ -453,12 +453,22 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             try {
               for (const server of installedServers) {
                 try {
+                  await McpServerModel.update(server.id, {
+                    localInstallationStatus: "pending",
+                    localInstallationError: null,
+                  });
                   await autoReinstallServer(server, catalogItem);
+                  await McpServerModel.update(server.id, {
+                    localInstallationStatus: "success",
+                    localInstallationError: null,
+                  });
                   logger.info(
                     { serverId: server.id, serverName: server.name },
                     "Auto-reinstalled MCP server successfully",
                   );
                 } catch (error) {
+                  const errorMessage =
+                    error instanceof Error ? error.message : "Unknown error";
                   logger.error(
                     {
                       err: error,
@@ -470,6 +480,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // Mark for manual reinstall on failure
                   await McpServerModel.update(server.id, {
                     reinstallRequired: true,
+                    localInstallationStatus: "error",
+                    localInstallationError: errorMessage,
                   });
                 }
               }

@@ -124,13 +124,53 @@ export async function addCustomSelfHostedCatalogItem({
   return { id: newCatalogItem.id, name: newCatalogItem.name };
 }
 
+export async function closeOpenDialogs(
+  page: Page,
+  options?: { timeoutMs?: number },
+) {
+  const timeoutMs = options?.timeoutMs ?? 10_000;
+  const start = Date.now();
+  const dialogs = page.getByRole("dialog");
+
+  while (Date.now() - start < timeoutMs) {
+    const count = await dialogs.count();
+    let hasVisibleDialog = false;
+    for (let index = 0; index < count; index += 1) {
+      if (await dialogs.nth(index).isVisible()) {
+        hasVisibleDialog = true;
+        break;
+      }
+    }
+
+    if (!hasVisibleDialog) {
+      return;
+    }
+
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(250);
+
+    const closeButton = dialogs
+      .getByRole("button", { name: /close|done|cancel/i })
+      .first();
+    if (await closeButton.isVisible().catch(() => false)) {
+      await closeButton.click();
+      await page.waitForTimeout(250);
+    }
+  }
+
+  await expect(dialogs).not.toBeVisible({ timeout: 1000 });
+}
+
 export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   page,
   catalogItemName,
+  timeoutMs,
 }: {
   page: Page;
   catalogItemName: string;
+  timeoutMs?: number;
 }) {
+  const waitTimeoutMs = timeoutMs ?? 60_000;
   await goToPage(page, "/mcp-catalog/registry");
   await page.waitForLoadState("networkidle");
 
@@ -160,18 +200,34 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     }
 
     await expect(manageToolsButton).toBeVisible({ timeout: 5000 });
-  }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
+  }).toPass({ timeout: waitTimeoutMs, intervals: [3000, 5000, 7000, 10000] });
 
   await manageToolsButton.click();
 
   // Wait for dialog to open
+  await page
+    .getByRole("dialog")
+    .waitFor({ state: "visible", timeout: 30_000 });
   await page.waitForLoadState("networkidle");
 
   // The new McpAssignmentsDialog shows profile pills - click on "Default MCP Gateway" to open popover
-  const profilePill = page.getByRole("button", {
+  const dialog = page.getByRole("dialog");
+  const profilePill = dialog.getByRole("button", {
     name: new RegExp(`${DEFAULT_MCP_GATEWAY_NAME}.*\\(\\d+/\\d+\\)`),
   });
-  await profilePill.waitFor({ state: "visible", timeout: 10_000 });
+
+  const showMoreButton = dialog.getByRole("button", {
+    name: /^\+\d+ more$/,
+  });
+
+  if (!(await profilePill.isVisible().catch(() => false))) {
+    if (await showMoreButton.isVisible().catch(() => false)) {
+      await showMoreButton.click();
+      await page.waitForTimeout(200);
+    }
+  }
+
+  await profilePill.waitFor({ state: "visible", timeout: 30_000 });
   await profilePill.click();
 
   // Wait for the popover to open - it contains the credential selector and tool checkboxes
@@ -250,6 +306,7 @@ export async function verifyToolCallResultViaApi({
       profileId: defaultProfile.id,
       token,
       toolName,
+      timeoutMs: 60_000,
     });
   } catch (error) {
     if (expectedResult === "Error") {

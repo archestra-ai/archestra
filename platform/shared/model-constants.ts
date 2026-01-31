@@ -14,6 +14,7 @@ export const SupportedProvidersSchema = z.enum([
   "vllm",
   "ollama",
   "zhipuai",
+  "minimax",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -27,6 +28,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "vllm:chatCompletions",
   "ollama:chatCompletions",
   "zhipuai:chatCompletions",
+  "minimax:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -46,6 +48,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   vllm: "vLLM",
   ollama: "Ollama",
   zhipuai: "Zhipu AI",
+  minimax: "MiniMax",
 };
 
 /**
@@ -100,6 +103,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   },
   zhipuai: {
     fastest: ["glm-4-flash", "glm-flash"],
+    best: ["glm-4-plus", "glm-4"],
+  },
+  minimax: {
+    fastest: ["glm-4-flash", "glm-air"],
     best: ["glm-4-plus", "glm-4"],
   },
   bedrock: {

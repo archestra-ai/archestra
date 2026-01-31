@@ -2,7 +2,9 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -64,6 +66,7 @@ export async function createAgentServer(
     {
       capabilities: {
         tools: { listChanged: false },
+        resources: { subscribe: false, listChanged: false },
       },
     },
   );
@@ -121,9 +124,17 @@ export async function createAgentServer(
     return { tools: toolsList };
   });
 
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return await mcpClient.listResources(agentId, tokenAuth);
+  });
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (request: any) => {
+    return await mcpClient.readResource(request.params.uri, agentId, tokenAuth);
+  });
+
   server.setRequestHandler(
     CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }) => {
+    async ({ params: { name, arguments: args } }: any) => {
       try {
         // Check if this is an Archestra tool or agent delegation tool
         const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
@@ -437,4 +448,57 @@ export async function validateMCPGatewayToken(
     "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
   );
   return null;
+}
+
+/**
+ * Validate a session-based user for a specific profile
+ * Returns token auth info if valid, null otherwise
+ */
+export async function validateSessionAuth(
+  profileId: string,
+  userId: string,
+  organizationId: string,
+): Promise<TokenAuthResult | null> {
+  // Check if user has profile admin permission (can access all profiles)
+  const isProfileAdmin = await userHasPermission(
+    userId,
+    organizationId,
+    "profile",
+    "admin",
+  );
+
+  if (isProfileAdmin) {
+    return {
+      tokenId: `session-${userId}`, // Virtual token ID for session
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: organizationId,
+      isUserToken: true,
+      userId: userId,
+    };
+  }
+
+  // Non-admin: user can access profile if they are a member of any team assigned to the profile
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
+  const hasAccess = userTeamIds.some((teamId) =>
+    profileTeamIds.includes(teamId),
+  );
+
+  if (!hasAccess) {
+    logger.warn(
+      { profileId, userId, userTeamIds, profileTeamIds },
+      "Profile not accessible via session (no shared teams)",
+    );
+    return null;
+  }
+
+  return {
+    tokenId: `session-${userId}`,
+    teamId: null,
+    isOrganizationToken: false,
+    organizationId: organizationId,
+    isUserToken: true,
+    userId: userId,
+  };
 }

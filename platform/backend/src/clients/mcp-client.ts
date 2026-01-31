@@ -131,6 +131,182 @@ class McpClient {
   /**
    * Execute a single tool call against its assigned MCP server
    */
+
+  /**
+   * List resources from all MCP servers assigned to an agent
+   */
+  async listResources(
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<{ resources: any[] }> {
+    // Get all MCP tools assigned to this agent to identify unique servers
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+
+    // Group by catalog ID to identify unique catalog items assigned to the agent
+    const catalogItemIds = Array.from(
+      new Set(mcpTools.map((t) => t.catalogId).filter((id): id is string => id !== null)),
+    );
+
+    const allResources: any[] = [];
+
+    for (const catalogId of catalogItemIds) {
+      try {
+        const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+        if (!catalogItem) continue;
+
+        // Use the first tool from this catalog to get server metadata for resolution
+        const tool = mcpTools.find((t) => t.catalogId === catalogId);
+        if (!tool) continue;
+
+        const mcpToolMetadata: McpToolWithServerMetadata = {
+          toolName: tool.name,
+          responseModifierTemplate: tool.responseModifierTemplate,
+          mcpServerSecretId: tool.mcpServerSecretId,
+          mcpServerName: tool.mcpServerName,
+          mcpServerCatalogId: tool.mcpServerCatalogId,
+          mcpServerId: tool.mcpServerId,
+          credentialSourceMcpServerId: tool.credentialSourceMcpServerId,
+          executionSourceMcpServerId: tool.executionSourceMcpServerId,
+          useDynamicTeamCredential: tool.useDynamicTeamCredential,
+          catalogId: tool.catalogId,
+          catalogName: tool.catalogName,
+        };
+
+        const targetMcpServerIdResult =
+          await this.determineTargetMcpServerIdForCatalogItem({
+            tool: mcpToolMetadata,
+            toolCall: { name: "listResources", id: "internal", arguments: {} },
+            agentId,
+            tokenAuth,
+            catalogItem,
+          });
+
+        if ("error" in targetMcpServerIdResult) continue;
+        const { targetMcpServerId } = targetMcpServerIdResult;
+
+        const secretsResult = await this.getSecretsForMcpServer({
+          targetMcpServerId,
+          toolCall: { name: "listResources", id: "internal", arguments: {} },
+          agentId,
+        });
+
+        if ("error" in secretsResult) continue;
+        const { secrets } = secretsResult;
+
+        const connectionKey = `${catalogId}:${targetMcpServerId}`;
+        const transport = await this.getTransport(
+          catalogItem,
+          targetMcpServerId,
+          secrets,
+        );
+        const client = await this.getOrCreateClient(connectionKey, transport);
+
+        const resourcesResult = await client.listResources();
+
+        // Prefix resource URIs with the server name to allow routing in readResource
+        // The prefix should match how we'll look it up in readResource
+        const serverPrefix = ToolModel.slugifyName(tool.catalogName || tool.mcpServerName || "unknown", "");
+
+        const prefixedResources = (resourcesResult.resources || []).map((res: any) => ({
+          ...res,
+          uri: res.uri.replace(/^mcp:\/\/([^\/]+)/, `mcp://${serverPrefix}::$1`),
+        }));
+
+        allResources.push(...prefixedResources);
+      } catch (error) {
+        logger.error(
+          { err: error, catalogId, agentId },
+          "Error listing resources from MCP server:",
+        );
+      }
+    }
+
+    return { resources: allResources };
+  }
+
+  /**
+   * Read a resource from a specific MCP server
+   */
+  async readResource(
+    uri: string,
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<{ contents: any[] }> {
+    // Parse target server name from prefixed URI: mcp://server_prefix::original_authority/path
+    const match = uri.match(/^mcp:\/\/([^:]+)::([^\/]+)(.*)$/);
+    if (!match) {
+      throw new Error(`Invalid prefixed resource URI: ${uri}`);
+    }
+
+    const [, serverPrefix, originalAuthority, path] = match;
+    const originalUri = `mcp://${originalAuthority}${path}`;
+
+    // Find the server for this prefix among agent's tools
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+    const tool = mcpTools.find((t) => {
+      const slug = ToolModel.slugifyName(t.catalogName || t.mcpServerName || "unknown", "");
+      return slug === serverPrefix;
+    });
+
+    if (!tool || !tool.catalogId) {
+      throw new Error(`Server for resource not found or not assigned to agent: ${serverPrefix}`);
+    }
+
+    const catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+    if (!catalogItem) {
+      throw new Error(`Catalog item not found for ID ${tool.catalogId}`);
+    }
+
+    const mcpToolMetadata: McpToolWithServerMetadata = {
+      toolName: tool.name,
+      responseModifierTemplate: tool.responseModifierTemplate,
+      mcpServerSecretId: tool.mcpServerSecretId,
+      mcpServerName: tool.mcpServerName,
+      mcpServerCatalogId: tool.mcpServerCatalogId,
+      mcpServerId: tool.mcpServerId,
+      credentialSourceMcpServerId: tool.credentialSourceMcpServerId,
+      executionSourceMcpServerId: tool.executionSourceMcpServerId,
+      useDynamicTeamCredential: tool.useDynamicTeamCredential,
+      catalogId: tool.catalogId,
+      catalogName: tool.catalogName,
+    };
+
+    const targetMcpServerIdResult =
+      await this.determineTargetMcpServerIdForCatalogItem({
+        tool: mcpToolMetadata,
+        toolCall: { name: "readResource", id: "internal", arguments: { uri: originalUri } },
+        agentId,
+        tokenAuth,
+        catalogItem,
+      });
+
+    if ("error" in targetMcpServerIdResult) {
+      throw new Error(`Failed to resolve target server: ${JSON.stringify(targetMcpServerIdResult.error)}`);
+    }
+    const { targetMcpServerId } = targetMcpServerIdResult;
+
+    const secretsResult = await this.getSecretsForMcpServer({
+      targetMcpServerId,
+      toolCall: { name: "readResource", id: "internal", arguments: { uri: originalUri } },
+      agentId,
+    });
+
+    if ("error" in secretsResult) {
+      throw new Error(`Failed to get secrets: ${JSON.stringify(secretsResult.error)}`);
+    }
+    const { secrets } = secretsResult;
+
+    const connectionKey = `${tool.catalogId}:${targetMcpServerId}`;
+    const transport = await this.getTransport(
+      catalogItem,
+      targetMcpServerId,
+      secrets,
+    );
+    const client = await this.getOrCreateClient(connectionKey, transport);
+
+    return await client.readResource({ uri: originalUri });
+  }
+
   async executeToolCall(
     toolCall: CommonToolCall,
     agentId: string,

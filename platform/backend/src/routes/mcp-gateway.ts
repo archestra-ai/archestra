@@ -5,14 +5,16 @@ import { z } from "zod";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import { McpToolCallModel } from "@/models";
+import { McpToolCallModel, UserModel } from "@/models";
 import { UuidIdSchema } from "@/types";
 import {
   createAgentServer,
   createStatelessTransport,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
+  validateSessionAuth,
 } from "./mcp-gateway.utils";
+import { betterAuth } from "@/auth";
 
 // =============================================================================
 // MCP Gateway request handling (stateless mode)
@@ -195,17 +197,42 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { profileId, token } =
         extractProfileIdAndTokenFromRequest(request) ?? {};
+      let finalProfileId = profileId;
+      let tokenAuth = token
+        ? await validateMCPGatewayToken(profileId!, token)
+        : null;
 
-      if (!profileId || !token) {
+      // If no token auth, try session auth
+      if (!tokenAuth) {
+        finalProfileId =
+          profileId || request.url.split("/").at(-1)?.split("?")[0];
+
+        if (finalProfileId) {
+          try {
+            const headers = new Headers(request.headers as HeadersInit);
+            const session = await betterAuth.api.getSession({
+              headers,
+              query: { disableCookieCache: true },
+            });
+
+            if (session?.user?.id) {
+               const user = await UserModel.getById(session.user.id);
+               tokenAuth = await validateSessionAuth(finalProfileId, user.id, user.organizationId);
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+
+      if (!finalProfileId || !tokenAuth) {
         reply.status(401);
         return {
           error: "Unauthorized",
           message:
-            "Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
+            "Missing or invalid Authorization header/Session. Expected: Bearer <archestra_token> or valid Session",
         };
       }
-
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
 
       reply.type("application/json");
       return {
@@ -245,48 +272,63 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { profileId, token } =
         extractProfileIdAndTokenFromRequest(request) ?? {};
+      let finalProfileId = profileId;
+      let tokenAuth: TokenAuthContext | undefined;
+      let rawTokenAuthResult: any = null;
 
-      if (!profileId || !token) {
+      if (profileId && token) {
+        rawTokenAuthResult = await validateMCPGatewayToken(profileId, token);
+      }
+
+      // If no token auth, try session auth
+      if (!rawTokenAuthResult) {
+         finalProfileId = profileId || request.url.split("/").at(-1)?.split("?")[0];
+         
+         if (finalProfileId) {
+             try {
+                const headers = new Headers(request.headers as HeadersInit);
+                const session = await betterAuth.api.getSession({
+                  headers,
+                  query: { disableCookieCache: true },
+                });
+
+                if (session?.user?.id) {
+                   const user = await UserModel.getById(session.user.id);
+                   rawTokenAuthResult = await validateSessionAuth(finalProfileId, user.id, user.organizationId);
+                }
+             } catch (e) {}
+         }
+      }
+
+      if (!finalProfileId || !rawTokenAuthResult) {
         reply.status(401);
         return {
           jsonrpc: "2.0",
           error: {
             code: -32000,
             message:
-              "Unauthorized: Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
+              "Unauthorized: Missing or invalid Authorization header/Session. Expected: Bearer <archestra_token> or valid Session",
           },
           id: null,
         };
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
-      if (!tokenAuth) {
-        reply.status(401);
-        return {
-          jsonrpc: "2.0",
-          error: {
-            code: -32000,
-            message: "Unauthorized: Invalid token for this profile",
-          },
-          id: null,
-        };
-      }
-
-      const tokenAuthContext: TokenAuthContext = {
-        tokenId: tokenAuth.tokenId,
-        teamId: tokenAuth.teamId,
-        isOrganizationToken: tokenAuth.isOrganizationToken,
-        organizationId: tokenAuth.organizationId,
-        ...(tokenAuth.isUserToken && { isUserToken: true }),
-        ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+      // Map TokenAuthResult to TokenAuthContext
+      tokenAuth = {
+        tokenId: rawTokenAuthResult.tokenId,
+        teamId: rawTokenAuthResult.teamId,
+        isOrganizationToken: rawTokenAuthResult.isOrganizationToken,
+        organizationId: rawTokenAuthResult.organizationId,
+        ...(rawTokenAuthResult.isUserToken && { isUserToken: true }),
+        ...(rawTokenAuthResult.userId && { userId: rawTokenAuthResult.userId }),
       };
 
       return handleMcpPostRequest(
         fastify,
         request,
         reply,
-        profileId,
-        tokenAuthContext,
+        finalProfileId!, // Validated above
+        tokenAuth,
       );
     },
   );

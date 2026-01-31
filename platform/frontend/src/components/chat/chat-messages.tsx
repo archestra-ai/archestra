@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
+import { AppRenderer } from "@mcp-ui/client";
 import {
   Fragment,
   useCallback,
@@ -912,17 +913,98 @@ function MessageTool({
     );
   }
 
+  // Show logs button for failed tool calls
+  const logsButton = errorText ? (
+    <ToolErrorLogsButton toolName={toolName} />
+  ) : null;
+
+  // --- MCP UI INTEGRATION START ---
+  // Check for MCP UI metadata in the tool output
+  let mcpUiResourceUri: string | undefined;
+  
+  if (toolResultPart && toolResultPart.output) {
+     // Handle both stringified JSON and object output
+     try {
+       const output = typeof toolResultPart.output === 'string' 
+         ? JSON.parse(toolResultPart.output) 
+         : toolResultPart.output;
+
+       // Check for _meta.ui.resourceUri
+       if (output?._meta?.ui?.resourceUri) {
+         mcpUiResourceUri = output._meta.ui.resourceUri;
+       }
+     } catch (e) {
+       // Ignore parsing errors
+     }
+  }
+
+  // If we have a UI resource URI, render the AppRenderer
+  if (mcpUiResourceUri) {
+    // Temporary mock client
+    const mcpClient = {
+      readResource: async (uri: string) => {
+        try {
+          const response = await fetch(`/v1/mcp/agent/${agentId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              method: "resources/read",
+              params: { uri },
+              jsonrpc: "2.0",
+              id: Date.now(),
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(
+              errorData.error?.message || "Failed to read resource",
+            );
+          }
+
+          const data = await response.json();
+          return data.result || data;
+        } catch (error) {
+          console.error("MCP UI Error fetching resource:", error);
+          throw error;
+        }
+      },
+    };
+
+    return (
+      <Tool className="cursor-pointer">
+        <ToolHeader
+          type={`tool-${toolName}`}
+          state={getHeaderState({
+            state: part.state || "input-available",
+            toolResultPart,
+            errorText,
+          })}
+          errorText={errorText}
+          isCollapsible={true}
+          actionButton={logsButton}
+        />
+        <ToolContent>
+           <div className="p-4 border rounded-md bg-background">
+             <AppRenderer 
+                client={mcpClient} 
+                uri={mcpUiResourceUri} 
+             />
+           </div>
+        </ToolContent>
+      </Tool>
+    );
+  }
+  // --- MCP UI INTEGRATION END ---
+
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
       (toolResultPart && Boolean(toolResultPart.output)) ||
       (!toolResultPart && Boolean(part.output)),
   );
-
-  // Show logs button for failed tool calls
-  const logsButton = errorText ? (
-    <ToolErrorLogsButton toolName={toolName} />
-  ) : null;
 
   return (
     <Tool className={hasContent ? "cursor-pointer" : ""}>

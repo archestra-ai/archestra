@@ -110,7 +110,7 @@ export const MODEL_MARKER_PATTERNS: Record<
     best: ["nova-pro", "sonnet", "opus"],
   },
   openrouter: {
-    fastest: ["auto"],
-    best: ["auto"],
+    fastest: ["haiku", "flash", "mini"],
+    best: ["opus", "sonnet", "pro", "gpt-4o"],
   },
 };

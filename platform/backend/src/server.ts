@@ -63,6 +63,7 @@ import {
   Cerebras,
   Cohere,
   Gemini,
+  MiniMax,
   Mistral,
   Ollama,
   OpenAi,
@@ -153,6 +154,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(MiniMax.API.ChatCompletionRequestSchema, {
+    id: "MiniMaxChatCompletionRequest",
+  });
+  z.globalRegistry.add(MiniMax.API.ChatCompletionResponseSchema, {
+    id: "MiniMaxChatCompletionResponse",
   });
 }
 

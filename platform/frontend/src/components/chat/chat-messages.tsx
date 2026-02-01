@@ -36,6 +36,7 @@ import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import { McpUiRenderer, parseMcpContent } from "./mcp-ui-renderer";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -868,6 +869,19 @@ function useStreamingStallDetection(
   return isStreamingStalled;
 }
 
+/**
+ * Check if tool output contains MCP UI content and return appropriate rendering.
+ * If the output is a JSON array with resource/image items, render via McpUiRenderer.
+ * Otherwise, return the output as-is for standard rendering.
+ */
+function renderMcpUiOrPlain(output: unknown): unknown {
+  const mcpContent = parseMcpContent(output);
+  if (mcpContent) {
+    return <McpUiRenderer content={mcpContent} />;
+  }
+  return output;
+}
+
 function MessageTool({
   part,
   toolResultPart,
@@ -942,14 +956,14 @@ function MessageTool({
         {toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
+            output={renderMcpUiOrPlain(toolResultPart.output)}
             errorText={errorText}
           />
         )}
         {!toolResultPart && Boolean(part.output) && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
-            output={part.output}
+            output={renderMcpUiOrPlain(part.output)}
             errorText={errorText}
           />
         )}

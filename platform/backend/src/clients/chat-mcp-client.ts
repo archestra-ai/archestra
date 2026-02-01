@@ -747,8 +747,20 @@ export async function getChatMcpTools({
               }
 
               // Convert MCP content to string for AI SDK
-              return (result.content as Array<{ type: string; text?: string }>)
-                .map((item: { type: string; text?: string }) => {
+              // Preserve full content array as JSON when it contains resource items (for MCP UI rendering)
+              const contentArray = result.content as Array<{
+                type: string;
+                text?: string;
+                resource?: { uri?: string };
+              }>;
+              const hasResourceContent = contentArray.some(
+                (item) => item.type === "resource",
+              );
+              if (hasResourceContent) {
+                return JSON.stringify(contentArray);
+              }
+              return contentArray
+                .map((item) => {
                   if (item.type === "text" && item.text) {
                     return item.text;
                   }

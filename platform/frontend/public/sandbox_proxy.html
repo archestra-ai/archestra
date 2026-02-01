@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MCP UI Sandbox Proxy</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    /**
+     * Sandbox proxy for MCP UI resources.
+     * This page acts as an intermediary that loads MCP UI content
+     * in a sandboxed environment. It receives content via postMessage
+     * and renders it in a child iframe with restricted permissions.
+     */
+    window.addEventListener('message', function(event) {
+      // Handle content loading
+      if (event.data && event.data.type === 'mcp-ui-load') {
+        const iframe = document.createElement('iframe');
+        iframe.sandbox = 'allow-scripts';
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+
+        if (event.data.html) {
+          iframe.srcdoc = event.data.html;
+        } else if (event.data.url) {
+          iframe.src = event.data.url;
+        }
+
+        document.body.innerHTML = '';
+        document.body.appendChild(iframe);
+
+        // Forward messages from child iframe to parent
+        window.addEventListener('message', function(childEvent) {
+          if (childEvent.source === iframe.contentWindow) {
+            window.parent.postMessage(childEvent.data, '*');
+          }
+        });
+      }
+
+      // Forward messages from parent to child iframe
+      if (event.data && event.data.type !== 'mcp-ui-load') {
+        const childIframe = document.querySelector('iframe');
+        if (childIframe && childIframe.contentWindow) {
+          childIframe.contentWindow.postMessage(event.data, '*');
+        }
+      }
+    });
+
+    // Notify parent that sandbox proxy is ready
+    window.parent.postMessage({ type: 'mcp-ui-sandbox-ready' }, '*');
+  </script>
+</body>
+</html>

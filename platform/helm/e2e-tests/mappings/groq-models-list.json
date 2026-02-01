@@ -1,0 +1,43 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/groq/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "llama-3.3-70b-versatile",
+          "object": "model",
+          "created": 1700000000,
+          "owned_by": "Meta",
+          "active": true
+        },
+        {
+          "id": "mixtral-8x7b-32768",
+          "object": "model",
+          "created": 1700000000,
+          "owned_by": "Mistral",
+          "active": true
+        },
+        {
+          "id": "gemma2-9b-it",
+          "object": "model",
+          "created": 1700000000,
+          "owned_by": "Google",
+          "active": true
+        }
+      ]
+    }
+  }
+}

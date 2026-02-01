@@ -275,6 +275,7 @@ class OptimizationRuleModel {
       mistral: [],
       vllm: [], // vLLM model pricing varies by deployment, so no defaults
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
+      groq: [], // Groq model pricing varies, so no defaults
       zhipuai: [],
       bedrock: [], // Bedrock model pricing varies by region and usage, so no defaults
     };
@@ -309,6 +310,7 @@ class OptimizationRuleModel {
         mistral: [],
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
+        groq: [], // Groq optimization rules depend on available models, no defaults
         zhipuai: [],
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
       };

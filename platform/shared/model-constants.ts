@@ -10,6 +10,7 @@ export const SupportedProvidersSchema = z.enum([
   "bedrock",
   "cohere",
   "cerebras",
+  "perplexity",
   "mistral",
   "vllm",
   "ollama",
@@ -23,6 +24,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "bedrock:converse",
   "cohere:chat",
   "cerebras:chatCompletions",
+  "perplexity:chatCompletions",
   "mistral:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
@@ -42,6 +44,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   gemini: "Gemini",
   cohere: "Cohere",
   cerebras: "Cerebras",
+  perplexity: "Perplexity",
   mistral: "Mistral AI",
   vllm: "vLLM",
   ollama: "Ollama",
@@ -105,5 +108,9 @@ export const MODEL_MARKER_PATTERNS: Record<
   bedrock: {
     fastest: ["nova-lite", "nova-micro", "haiku"],
     best: ["nova-pro", "sonnet", "opus"],
+  },
+  perplexity: {
+    fastest: ["sonar", "sonar-pro"],
+    best: ["sonar-reasoning-pro", "sonar-reasoning"],
   },
 };

@@ -63,6 +63,7 @@ import {
   Cerebras,
   Cohere,
   Gemini,
+  Perplexity,
   Mistral,
   Ollama,
   OpenAi,
@@ -153,6 +154,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionRequestSchema, {
+    id: "PerplexityChatCompletionRequest",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionResponseSchema, {
+    id: "PerplexityChatCompletionResponse",
   });
 }
 

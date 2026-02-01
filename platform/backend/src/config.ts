@@ -459,6 +459,11 @@ export default {
       enabled: Boolean(process.env.ARCHESTRA_OLLAMA_BASE_URL),
       baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
     },
+    perplexity: {
+      baseUrl:
+        process.env.ARCHESTRA_PERPLEXITY_BASE_URL ||
+        "https://api.perplexity.ai",
+    },
     zhipuai: {
       baseUrl:
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
@@ -496,6 +501,9 @@ export default {
     },
     cohere: {
       apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
+    },
+    perplexity: {
+      apiKey: process.env.ARCHESTRA_CHAT_PERPLEXITY_API_KEY || "",
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",

@@ -727,6 +727,7 @@ async function getProviderApiKey({
     cerebras: () => config.chat.cerebras.apiKey || null,
     cohere: () => config.chat.cohere?.apiKey || null,
     gemini: () => config.chat.gemini.apiKey || null,
+    perplexity: () => config.chat.perplexity.apiKey || null,
     mistral: () => config.chat.mistral.apiKey || null,
     ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
     openai: () => config.chat.openai.apiKey || null,
@@ -738,6 +739,52 @@ async function getProviderApiKey({
   return envApiKeyFallbacks[provider]();
 }
 
+/**
+ * Fetch models from Perplexity API
+ * Perplexity exposes an OpenAI-compatible /models endpoint
+ * @see https://docs.perplexity.ai/api-reference/chat-completions-post
+ */
+async function fetchPerplexityModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.perplexity.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Perplexity models",
+    );
+    throw new Error(`Failed to fetch Perplexity models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      object: string;
+      created?: number;
+      owned_by?: string;
+      active?: boolean;
+    }>;
+  };
+
+  return data.data
+    .filter((model) => model.active !== false)
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "perplexity" as const,
+      createdAt: model.created
+        ? new Date(model.created * 1000).toISOString()
+        : undefined,
+    }));
+}
+
 // We need to make sure that every new provider we support has a model fetcher function
 const modelFetchers: Record<
   SupportedProvider,
@@ -747,6 +794,7 @@ const modelFetchers: Record<
   bedrock: fetchBedrockModels,
   cerebras: fetchCerebrasModels,
   gemini: fetchGeminiModels,
+  perplexity: fetchPerplexityModels,
   mistral: fetchMistralModels,
   openai: fetchOpenAiModels,
   vllm: fetchVllmModels,

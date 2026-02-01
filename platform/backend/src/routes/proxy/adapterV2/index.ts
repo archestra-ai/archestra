@@ -3,6 +3,7 @@ export { bedrockAdapterFactory } from "./bedrock";
 export { cerebrasAdapterFactory } from "./cerebras";
 export { cohereAdapterFactory } from "./cohere";
 export { geminiAdapterFactory } from "./gemini";
+export { perplexityAdapterFactory } from "./perplexity";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";
 export { openaiAdapterFactory } from "./openai";

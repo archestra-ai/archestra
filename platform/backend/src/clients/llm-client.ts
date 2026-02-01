@@ -82,6 +82,7 @@ const envApiKeyGetters: Record<
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
   gemini: () => config.chat.gemini.apiKey,
+  perplexity: () => config.chat.perplexity.apiKey,
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
   openai: () => config.chat.openai.apiKey,
@@ -167,6 +168,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
+  perplexity: "sonar", // Perplexity's fast model
   mistral: "mistral-small-latest", // Mistral's fast model
 };
 
@@ -294,6 +296,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey: apiKey || "EMPTY",
       baseURL: config.llm.ollama.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  perplexity: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
+      );
+    }
+    // Perplexity uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.perplexity.baseUrl,
     });
     return client(modelName);
   },
@@ -473,6 +490,17 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       // Use .chat() to force Chat Completions API
+      return client.chat(modelName);
+    },
+
+    perplexity: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/perplexity/:agentId (SDK appends /chat/completions)
+      // Perplexity is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("perplexity", agentId),
+        headers,
+      });
       return client.chat(modelName);
     },
 

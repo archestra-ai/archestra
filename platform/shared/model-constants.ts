@@ -7,6 +7,7 @@ export const SupportedProvidersSchema = z.enum([
   "openai",
   "gemini",
   "anthropic",
+  "deepseek",
   "bedrock",
   "cohere",
   "cerebras",
@@ -20,6 +21,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openai:chatCompletions",
   "gemini:generateContent",
   "anthropic:messages",
+  "deepseek:chatCompletions",
   "bedrock:converse",
   "cohere:chat",
   "cerebras:chatCompletions",
@@ -38,6 +40,7 @@ export type SupportedProviderDiscriminator = z.infer<
 export const providerDisplayNames: Record<SupportedProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
+  deepseek: "DeepSeek",
   bedrock: "AWS Bedrock",
   gemini: "Gemini",
   cohere: "Cohere",
@@ -77,6 +80,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   gemini: {
     fastest: ["flash"],
     best: ["pro", "ultra"],
+  },
+  deepseek: {
+    fastest: ["deepseek-chat"],
+    best: ["deepseek-reasoner"],
   },
   cerebras: {
     fastest: ["llama-3.3-70b"],

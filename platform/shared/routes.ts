@@ -162,6 +162,11 @@ export const RouteId = {
     "cerebrasChatCompletionsWithDefaultAgent",
   CerebrasChatCompletionsWithAgent: "cerebrasChatCompletionsWithAgent",
 
+  // Proxy Routes - DeepSeek
+  DeepseekChatCompletionsWithDefaultAgent:
+    "deepseekChatCompletionsWithDefaultAgent",
+  DeepseekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
+
   // Proxy Routes - Mistral
   MistralChatCompletionsWithDefaultAgent:
     "mistralChatCompletionsWithDefaultAgent",

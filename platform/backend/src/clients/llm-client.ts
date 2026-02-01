@@ -81,6 +81,7 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
@@ -167,6 +168,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
+  deepseek: "deepseek-chat", // DeepSeek's fast general-purpose model
   mistral: "mistral-small-latest", // Mistral's fast model
 };
 
@@ -309,6 +311,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.zhipuai.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  deepseek: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+      );
+    }
+    // DeepSeek uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.deepseek.baseUrl,
     });
     return client(modelName);
   },
@@ -482,6 +499,17 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("zhipuai", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    deepseek: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/deepseek/:agentId (SDK appends /chat/completions)
+      // DeepSeek is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("deepseek", agentId),
         headers,
       });
       return client.chat(modelName);

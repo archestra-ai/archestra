@@ -64,6 +64,7 @@ import {
   Cohere,
   Gemini,
   Mistral,
+  Xai,
   Ollama,
   OpenAi,
   Vllm,
@@ -153,6 +154,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Xai.API.ChatCompletionRequestSchema, {
+    id: "XaiChatCompletionRequest",
+  });
+  z.globalRegistry.add(Xai.API.ChatCompletionResponseSchema, {
+    id: "XaiChatCompletionResponse",
   });
 }
 

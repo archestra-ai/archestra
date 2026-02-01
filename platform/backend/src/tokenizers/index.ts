@@ -16,6 +16,7 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
       return new AnthropicTokenizer();
     case "cerebras":
     case "cohere":
+    case "xai":
     case "mistral":
     case "openai":
     case "vllm":

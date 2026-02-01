@@ -421,6 +421,48 @@ async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from x.ai API
+ * x.ai exposes an OpenAI-compatible /models endpoint
+ * @see https://docs.x.ai/docs/api-reference
+ */
+async function fetchXaiModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.xai.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch x.ai models",
+    );
+    throw new Error(`Failed to fetch x.ai models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "xai" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }));
+}
+
+/**
  * Fetch models from Zhipuai API
  */
 async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -727,6 +769,7 @@ async function getProviderApiKey({
     cerebras: () => config.chat.cerebras.apiKey || null,
     cohere: () => config.chat.cohere?.apiKey || null,
     gemini: () => config.chat.gemini.apiKey || null,
+    xai: () => config.chat.xai.apiKey || null,
     mistral: () => config.chat.mistral.apiKey || null,
     ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
     openai: () => config.chat.openai.apiKey || null,
@@ -747,6 +790,7 @@ const modelFetchers: Record<
   bedrock: fetchBedrockModels,
   cerebras: fetchCerebrasModels,
   gemini: fetchGeminiModels,
+  xai: fetchXaiModels,
   mistral: fetchMistralModels,
   openai: fetchOpenAiModels,
   vllm: fetchVllmModels,
@@ -819,7 +863,7 @@ export async function fetchModelsForProvider({
   try {
     let models: ModelInfo[] = [];
     if (
-      ["anthropic", "cerebras", "cohere", "mistral", "openai"].includes(
+      ["anthropic", "cerebras", "cohere", "xai", "mistral", "openai"].includes(
         provider,
       )
     ) {

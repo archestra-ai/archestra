@@ -7,6 +7,7 @@ export const SupportedProvidersSchema = z.enum([
   "openai",
   "gemini",
   "anthropic",
+  "xai",
   "bedrock",
   "cohere",
   "cerebras",
@@ -20,6 +21,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openai:chatCompletions",
   "gemini:generateContent",
   "anthropic:messages",
+  "xai:chatCompletions",
   "bedrock:converse",
   "cohere:chat",
   "cerebras:chatCompletions",
@@ -40,6 +42,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   anthropic: "Anthropic",
   bedrock: "AWS Bedrock",
   gemini: "Gemini",
+  xai: "x.ai",
   cohere: "Cohere",
   cerebras: "Cerebras",
   mistral: "Mistral AI",
@@ -77,6 +80,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   gemini: {
     fastest: ["flash"],
     best: ["pro", "ultra"],
+  },
+  xai: {
+    fastest: ["fast-non-reasoning", "grok-code-fast"],
+    best: ["grok-4"],
   },
   cerebras: {
     fastest: ["llama-3.3-70b"],

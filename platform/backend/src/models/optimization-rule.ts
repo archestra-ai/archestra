@@ -277,6 +277,7 @@ class OptimizationRuleModel {
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
       zhipuai: [],
       bedrock: [], // Bedrock model pricing varies by region and usage, so no defaults
+      openrouter: [], // OpenRouter model pricing varies by underlying model, so no defaults
     };
 
     // Define rules per provider
@@ -311,6 +312,7 @@ class OptimizationRuleModel {
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
+        openrouter: [], // OpenRouter optimization rules depend on underlying models, no defaults
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

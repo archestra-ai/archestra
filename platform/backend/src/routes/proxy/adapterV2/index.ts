@@ -6,5 +6,6 @@ export { geminiAdapterFactory } from "./gemini";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";
 export { openaiAdapterFactory } from "./openai";
+export { openrouterAdapterFactory } from "./openrouter";
 export { vllmAdapterFactory } from "./vllm";
 export { zhipuaiAdapterFactory } from "./zhipuai";

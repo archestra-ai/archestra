@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/openrouter/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "openai/gpt-4o",
+          "name": "OpenAI GPT-4o",
+          "created": 1700000000
+        },
+        {
+          "id": "openai/gpt-4o-mini",
+          "name": "OpenAI GPT-4o Mini",
+          "created": 1700000000
+        },
+        {
+          "id": "anthropic/claude-3.5-sonnet",
+          "name": "Anthropic Claude 3.5 Sonnet",
+          "created": 1700000000
+        }
+      ]
+    }
+  }
+}

@@ -210,6 +210,7 @@ class McpClient {
           result.content,
           !!result.isError,
           tool.responseModifierTemplate,
+          result._meta,
         );
       } catch (error) {
         const errorMessage =
@@ -838,6 +839,7 @@ class McpClient {
     content: unknown,
     isError: boolean,
     template: string | null,
+    _meta?: Record<string, unknown>,
   ): Promise<CommonToolResult> {
     const modifiedContent = this.applyTemplate(
       content,
@@ -850,6 +852,7 @@ class McpClient {
       name: toolCall.name,
       content: modifiedContent,
       isError,
+      _meta,
     };
 
     await this.persistToolCall(agentId, mcpServerName, toolCall, toolResult);
@@ -1142,6 +1145,61 @@ class McpClient {
 
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
     this.activeConnections.clear();
+  }
+
+  /**
+   * Read a resource from its assigned MCP server
+   */
+  async readResource(
+    uri: string,
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<{ contents: any[] }> {
+    // 1. Determine which catalog item / MCP server owns this resource
+    // For now, we assume the URI scheme or some mapping helps us find the server.
+    // In a real implementation, we might need a registry of resource templates or just search.
+    // However, the _meta.ui.resourceUri usually points to the same server that provided the tool.
+    // For the MVP, we'll try to find an MCP server installation that has access to this URI.
+
+    // Get all MCP servers assigned to this agent
+    const mcpServers = await McpServerModel.findAllForAgent(agentId);
+
+    // Try to read from each server until one succeeds or we run out
+    // In a better implementation, we'd use the URI authority to find the correct server.
+    for (const server of mcpServers) {
+      try {
+        // Resolve secrets
+        const secretResult = await this.getSecretsForMcpServer({
+          targetMcpServerId: server.id,
+          toolCall: { id: "resource-read", name: "read", arguments: {} },
+          agentId,
+        });
+
+        if ("error" in secretResult) continue;
+        const { secrets } = secretResult;
+
+        const catalogItem = await InternalMcpCatalogModel.findById(
+          server.catalogId,
+        );
+        if (!catalogItem) continue;
+
+        const transport = await this.getTransport(
+          catalogItem,
+          server.id,
+          secrets,
+        );
+        const connectionKey = `${catalogItem.id}:${server.id}`;
+        const client = await this.getOrCreateClient(connectionKey, transport);
+
+        const result = await client.readResource({ uri });
+        return result;
+      } catch (error) {
+        // Ignore and try next server
+        continue;
+      }
+    }
+
+    throw new Error(`Resource not found or no server could read it: ${uri}`);
   }
 }
 

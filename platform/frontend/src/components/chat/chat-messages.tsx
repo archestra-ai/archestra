@@ -1,5 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
+import { AppRenderer } from "@mcp-ui/client";
 import Image from "next/image";
 import {
   Fragment,
@@ -879,12 +880,43 @@ function MessageTool({
   toolName: string;
   agentId?: string;
 }) {
+  const rawOutput = toolResultPart ? toolResultPart.output : part.output;
+  const meta = (rawOutput as any)?._meta;
+  const uiResourceUri = meta?.ui?.resourceUri;
+  const output =
+    (rawOutput as any)?.content !== undefined ? (rawOutput as any).content : rawOutput;
+
   const outputError = toolResultPart
-    ? tryToExtractErrorFromOutput(toolResultPart.output)
-    : tryToExtractErrorFromOutput(part.output);
+    ? tryToExtractErrorFromOutput(output)
+    : tryToExtractErrorFromOutput(output);
   const errorText = toolResultPart
     ? (toolResultPart.errorText ?? outputError)
     : (part.errorText ?? outputError);
+
+  // Simple MCP client bridge for AppRenderer
+  const mcpClient = useMemo(() => {
+    if (!agentId) return undefined;
+    return {
+      readResource: async ({ uri }: { uri: string }) => {
+        const response = await fetch(`/v1/mcp/${agentId}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${agentId}`,
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "resources/read",
+            params: { uri },
+          }),
+        });
+        const json = await response.json();
+        if (json.error) throw new Error(json.error.message);
+        return json.result;
+      },
+    };
+  }, [agentId]);
 
   // OpenAI sends policy denials as tool errors (see case "text" above for Anthropic path)
   if (errorText) {
@@ -915,7 +947,7 @@ function MessageTool({
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
+      (toolResultPart && Boolean(output)) ||
       (!toolResultPart && Boolean(part.output)),
   );
 
@@ -939,10 +971,20 @@ function MessageTool({
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
+        {uiResourceUri && (
+          <div className="p-4 pt-0">
+            <AppRenderer
+              client={mcpClient as any}
+              toolName={toolName}
+              toolInput={part.input}
+              toolResult={output}
+            />
+          </div>
+        )}
         {toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
+            output={output}
             errorText={errorText}
           />
         )}

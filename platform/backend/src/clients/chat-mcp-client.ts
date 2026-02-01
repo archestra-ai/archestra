@@ -747,7 +747,9 @@ export async function getChatMcpTools({
               }
 
               // Convert MCP content to string for AI SDK
-              return (result.content as Array<{ type: string; text?: string }>)
+              const textContent = (
+                result.content as Array<{ type: string; text?: string }>
+              )
                 .map((item: { type: string; text?: string }) => {
                   if (item.type === "text" && item.text) {
                     return item.text;
@@ -755,6 +757,15 @@ export async function getChatMcpTools({
                   return JSON.stringify(item);
                 })
                 .join("\n");
+
+              if (result._meta) {
+                return {
+                  content: textContent,
+                  _meta: result._meta,
+                };
+              }
+
+              return textContent;
             } catch (error) {
               logger.error(
                 {

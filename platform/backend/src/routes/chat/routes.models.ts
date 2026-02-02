@@ -7,8 +7,6 @@ import {
 } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
-import { modelSyncService } from "@/services/model-sync";
-import { systemKeyManager } from "@/services/system-key-manager";
 import logger from "@/logging";
 import {
   ApiKeyModelModel,
@@ -17,6 +15,8 @@ import {
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { modelSyncService } from "@/services/model-sync";
+import { systemKeyManager } from "@/services/system-key-manager";
 import {
   type Anthropic,
   constructResponseSchema,

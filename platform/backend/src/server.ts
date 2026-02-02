@@ -46,7 +46,6 @@ import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
-import { systemKeyManager } from "@/services/system-key-manager";
 import {
   cleanupKnowledgeGraphProvider,
   initializeKnowledgeGraphProvider,
@@ -57,6 +56,7 @@ import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";
+import { systemKeyManager } from "@/services/system-key-manager";
 import {
   Anthropic,
   ApiError,

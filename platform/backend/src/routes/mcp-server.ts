@@ -2,7 +2,6 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { autoReinstallServer } from "@/services/mcp-reinstall";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
@@ -13,6 +12,7 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
   ApiError,
   constructResponseSchema,

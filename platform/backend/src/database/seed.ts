@@ -9,7 +9,6 @@ import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { modelSyncService } from "@/services/model-sync";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -25,6 +24,7 @@ import {
   UserModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { modelSyncService } from "@/services/model-sync";
 import type { InsertDualLlmConfig } from "@/types";
 
 /**

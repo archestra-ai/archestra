@@ -1,9 +1,9 @@
 import type { SupportedProvider } from "@shared";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
-import { buildCapabilitiesMap } from "@/services/model-sync";
 import logger from "@/logging";
 import { ApiKeyModelModel, ChatApiKeyModel, ModelModel } from "@/models";
+import { buildCapabilitiesMap } from "@/services/model-sync";
 import type { CreateModel } from "@/types";
 
 /**

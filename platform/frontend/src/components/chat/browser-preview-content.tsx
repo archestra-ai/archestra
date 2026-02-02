@@ -2,6 +2,10 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
+  DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
+} from "@shared";
+import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
@@ -51,6 +55,7 @@ export function BrowserPreviewContent({
 }: BrowserPreviewContentProps) {
   const [typeText, setTypeText] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const {
     screenshot,
@@ -97,49 +102,50 @@ export function BrowserPreviewContent({
       if (!isConnected || isInteracting) return;
 
       const img = imageRef.current;
-      if (!img) return;
+      const container = containerRef.current;
+      if (!img || !container) return;
 
-      const imgRect = img.getBoundingClientRect();
-      const naturalRatio = img.naturalWidth / img.naturalHeight;
-      const containerRatio = imgRect.width / imgRect.height;
+      const containerRect = container.getBoundingClientRect();
 
-      let renderedWidth: number;
-      let renderedHeight: number;
-      let offsetX = 0;
-      const offsetY = 0;
+      // Fixed viewport dimensions (backend always uses these)
+      const viewportW = DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH;
+      const viewportH = DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT;
 
-      // With object-contain object-top, we need to calculate offsets
-      // - No vertical offset needed (image aligns to top via object-top)
-      // - Horizontal offset needed when image is narrower than container (letterboxed on sides)
-      if (naturalRatio > containerRatio) {
-        // Image is wider than container - fits width, letterboxed top/bottom
-        // With object-top, image starts at top, so no offsetY needed
-        renderedWidth = imgRect.width;
-        renderedHeight = imgRect.width / naturalRatio;
-      } else {
-        // Image is taller than container - fits height, letterboxed left/right
-        // Image is centered horizontally, so we need offsetX
-        renderedHeight = imgRect.height;
-        renderedWidth = imgRect.height * naturalRatio;
-        offsetX = (imgRect.width - renderedWidth) / 2;
-      }
+      // Calculate how the image is displayed with object-contain
+      // Scale is determined by whichever dimension constrains the fit
+      const scaleX = containerRect.width / viewportW;
+      const scaleY = containerRect.height / viewportH;
+      const scale = Math.min(scaleX, scaleY);
 
-      const clickX = e.clientX - imgRect.left - offsetX;
-      const clickY = e.clientY - imgRect.top - offsetY;
+      // Actual displayed image size
+      const displayedW = viewportW * scale;
+      const displayedH = viewportH * scale;
 
+      // Offset from container edges (centering - object-contain centers by default)
+      const offsetX = (containerRect.width - displayedW) / 2;
+      const offsetY = (containerRect.height - displayedH) / 2;
+
+      // Click position relative to container
+      const clickX = e.clientX - containerRect.left;
+      const clickY = e.clientY - containerRect.top;
+
+      // Convert to image-relative coordinates (accounting for letterboxing)
+      const imageClickX = clickX - offsetX;
+      const imageClickY = clickY - offsetY;
+
+      // Check if click is within the actual image area (not in letterboxing)
       if (
-        clickX < 0 ||
-        clickX > renderedWidth ||
-        clickY < 0 ||
-        clickY > renderedHeight
+        imageClickX < 0 ||
+        imageClickX > displayedW ||
+        imageClickY < 0 ||
+        imageClickY > displayedH
       ) {
         return;
       }
 
-      const scaleX = img.naturalWidth / renderedWidth;
-      const scaleY = img.naturalHeight / renderedHeight;
-      const x = clickX * scaleX;
-      const y = clickY * scaleY;
+      // Convert to viewport coordinates
+      const x = imageClickX / scale;
+      const y = imageClickY / scale;
 
       click(x, y);
     },
@@ -329,7 +335,10 @@ export function BrowserPreviewContent({
       )}
 
       {/* Content - Screenshot with clickable overlay */}
-      <div className="flex-1 overflow-auto bg-muted min-h-0 relative">
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-hidden bg-muted min-h-0 relative"
+      >
         {isConnecting && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-2">
@@ -341,7 +350,7 @@ export function BrowserPreviewContent({
           </div>
         )}
         {!isConnecting && screenshot && (
-          <div className="relative w-full h-full bg-black/60">
+          <div className="relative w-full h-full">
             <img
               ref={imageRef}
               src={screenshot}

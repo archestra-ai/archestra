@@ -14,6 +14,9 @@ const SubscribeBrowserStreamPayloadSchema = z.object({
   conversationId: z.string().uuid(),
   // Deprecated: tabIndex was derived from chat list ordering and is ignored.
   tabIndex: z.number().int().min(0).optional(),
+  // Viewport dimensions for screenshots - frontend sends container size
+  viewportWidth: z.number().int().min(100).max(2000).optional(),
+  viewportHeight: z.number().int().min(100).max(2000).optional(),
 });
 
 const UnsubscribeBrowserStreamPayloadSchema = z.object({
@@ -135,6 +138,9 @@ export type BrowserScreenshotMessage = {
     conversationId: string;
     screenshot: string;
     url?: string;
+    // Screenshot dimensions for accurate click mapping
+    viewportWidth?: number;
+    viewportHeight?: number;
   };
 };
 

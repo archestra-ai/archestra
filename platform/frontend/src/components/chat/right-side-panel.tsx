@@ -140,7 +140,7 @@ export function RightSidePanel({
         <div
           className="min-h-0 overflow-hidden"
           style={{
-            flex: isBrowserOpen ? "1 1 50%" : "1 1 100%",
+            height: isBrowserOpen ? "50%" : "100%",
           }}
         >
           <ConversationArtifactPanel
@@ -157,7 +157,7 @@ export function RightSidePanel({
         <div
           className="flex-shrink-0"
           style={{
-            flex: isArtifactOpen ? "1 1 50%" : "1 1 100%",
+            height: isArtifactOpen ? "50%" : "100%",
           }}
         >
           <BrowserPanel

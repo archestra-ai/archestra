@@ -60,6 +60,8 @@ export interface ScreenshotResult {
   screenshot?: string;
   url?: string;
   error?: string;
+  viewportWidth?: number;
+  viewportHeight?: number;
 }
 
 export interface TabResult {
@@ -1999,6 +2001,7 @@ export class BrowserStreamService {
   /**
    * Take a screenshot of a conversation's browser tab
    * Note: Tab should already be selected via selectOrCreateTab when subscribing
+   * Uses fixed viewport dimensions for consistent rendering
    */
   async takeScreenshot(
     agentId: string,
@@ -2035,8 +2038,7 @@ export class BrowserStreamService {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
 
-    // Resize browser to ensure consistent viewport dimensions for preview
-    // This ensures screenshots match the expected preview size
+    // Always use fixed viewport dimensions for consistent page rendering
     await this.resizeBrowser(agentId, userContext);
 
     logScreenshotInfo(
@@ -2090,6 +2092,8 @@ export class BrowserStreamService {
     return {
       screenshot,
       url,
+      viewportWidth: DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
+      viewportHeight: DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
     };
   }
 
@@ -2455,6 +2459,11 @@ export class BrowserStreamService {
         500,
         tabResult.error ?? "Failed to select browser tab",
       );
+    }
+
+    // Ensure viewport matches screenshot dimensions for accurate coordinate clicks
+    if (x !== undefined && y !== undefined) {
+      await this.resizeBrowser(agentId, userContext);
     }
 
     const client = await getChatMcpClient(

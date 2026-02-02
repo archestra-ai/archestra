@@ -698,6 +698,8 @@ export class BrowserStreamSocketClientContext {
             conversationId,
             screenshot: result.screenshot,
             url: result.url,
+            viewportWidth: result.viewportWidth,
+            viewportHeight: result.viewportHeight,
           },
         });
       } else {

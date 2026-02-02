@@ -107,6 +107,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.mistral.ai/api-keys",
     consoleName: "Mistral AI Console",
   },
+  openrouter: {
+    name: "OpenRouter",
+    icon: "/icons/openrouter.svg",
+    placeholder: "sk-or-...",
+    enabled: true,
+    consoleUrl: "https://openrouter.ai/keys",
+    consoleName: "OpenRouter Dashboard",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",

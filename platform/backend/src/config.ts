@@ -451,6 +451,11 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_MISTRAL_BASE_URL || "https://api.mistral.ai/v1",
     },
+    openrouter: {
+      baseUrl:
+        process.env.ARCHESTRA_OPENROUTER_BASE_URL ||
+        "https://openrouter.ai/api/v1",
+    },
     vllm: {
       enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
@@ -487,6 +492,9 @@ export default {
     },
     mistral: {
       apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",
+    },
+    openrouter: {
+      apiKey: process.env.ARCHESTRA_CHAT_OPENROUTER_API_KEY || "",
     },
     vllm: {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",

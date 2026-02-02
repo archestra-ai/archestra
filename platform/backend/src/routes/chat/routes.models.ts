@@ -276,6 +276,84 @@ async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from OpenRouter API (OpenAI-compatible)
+ * OpenRouter aggregates models from multiple providers.
+ * Model IDs use format: provider/model-name (e.g., openai/gpt-4o, anthropic/claude-3-opus)
+ * @see https://openrouter.ai/docs/api-reference#list-available-models
+ */
+async function fetchOpenRouterModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.openrouter.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch OpenRouter models",
+    );
+    throw new Error(`Failed to fetch OpenRouter models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      name?: string;
+      created?: number;
+      description?: string;
+      context_length?: number;
+      pricing?: {
+        prompt?: string;
+        completion?: string;
+      };
+      top_provider?: {
+        is_moderated?: boolean;
+      };
+      architecture?: {
+        modality?: string;
+        tokenizer?: string;
+        instruct_type?: string | null;
+      };
+    }>;
+  };
+
+  // Filter out non-chat models (embedding, image, audio)
+  const excludePatterns = ["embed", "embedding", "image", "audio", "vision"];
+
+  return data.data
+    .filter((model) => {
+      const id = model.id.toLowerCase();
+      const modality = model.architecture?.modality?.toLowerCase() || "";
+
+      // Exclude embedding and image models
+      const hasExcludedPattern = excludePatterns.some(
+        (pattern) => id.includes(pattern) || modality.includes(pattern),
+      );
+
+      // Only include text-to-text or chat-capable models
+      const isTextModel =
+        modality === "" ||
+        modality === "text->text" ||
+        modality.includes("text");
+
+      return !hasExcludedPattern && isTextModel;
+    })
+    .map((model) => ({
+      id: model.id,
+      displayName: model.name || model.id,
+      provider: "openrouter" as const,
+      createdAt: model.created
+        ? new Date(model.created * 1000).toISOString()
+        : undefined,
+    }));
+}
+
+/**
  * Fetch models from vLLM API
  * vLLM exposes an OpenAI-compatible /models endpoint
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
@@ -730,6 +808,7 @@ async function getProviderApiKey({
     mistral: () => config.chat.mistral.apiKey || null,
     ollama: () => config.chat.ollama.apiKey || "", // Ollama typically doesn't require API keys
     openai: () => config.chat.openai.apiKey || null,
+    openrouter: () => config.chat.openrouter.apiKey || null,
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
@@ -749,6 +828,7 @@ const modelFetchers: Record<
   gemini: fetchGeminiModels,
   mistral: fetchMistralModels,
   openai: fetchOpenAiModels,
+  openrouter: fetchOpenRouterModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
@@ -819,9 +899,14 @@ export async function fetchModelsForProvider({
   try {
     let models: ModelInfo[] = [];
     if (
-      ["anthropic", "cerebras", "cohere", "mistral", "openai"].includes(
-        provider,
-      )
+      [
+        "anthropic",
+        "cerebras",
+        "cohere",
+        "mistral",
+        "openai",
+        "openrouter",
+      ].includes(provider)
     ) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);

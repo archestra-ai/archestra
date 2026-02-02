@@ -273,6 +273,7 @@ class OptimizationRuleModel {
       cohere: [],
       cerebras: [],
       mistral: [],
+      openrouter: [], // OpenRouter uses pass-through pricing from underlying providers
       vllm: [], // vLLM model pricing varies by deployment, so no defaults
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
       zhipuai: [],
@@ -307,6 +308,7 @@ class OptimizationRuleModel {
         cohere: [],
         cerebras: [],
         mistral: [],
+        openrouter: [], // OpenRouter optimization rules depend on underlying provider
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],

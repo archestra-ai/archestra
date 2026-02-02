@@ -97,6 +97,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   cerebras: "cerebras",
   cohere: "cohere",
   mistral: "mistral",
+  openrouter: "openrouter",
   vllm: "vllm",
   ollama: "ollama-cloud", // models.dev uses ollama-cloud for the Ollama provider
   zhipuai: "zhipuai",

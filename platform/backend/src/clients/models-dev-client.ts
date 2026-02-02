@@ -407,6 +407,7 @@ class ModelsDevClient {
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
       mistral: ["mistral/"],
+      openrouter: ["openrouter/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],
       vllm: ["vllm/"],

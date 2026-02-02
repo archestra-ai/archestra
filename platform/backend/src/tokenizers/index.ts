@@ -18,6 +18,7 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
     case "cohere":
     case "mistral":
     case "openai":
+    case "openrouter":
     case "vllm":
     case "ollama":
     case "zhipuai":

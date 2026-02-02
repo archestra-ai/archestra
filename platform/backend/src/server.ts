@@ -66,6 +66,7 @@ import {
   Mistral,
   Ollama,
   OpenAi,
+  OpenRouter,
   Vllm,
   Zhipuai,
 } from "@/types";
@@ -135,6 +136,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Mistral.API.ChatCompletionResponseSchema, {
     id: "MistralChatCompletionResponse",
+  });
+  z.globalRegistry.add(OpenRouter.API.ChatCompletionRequestSchema, {
+    id: "OpenRouterChatCompletionRequest",
+  });
+  z.globalRegistry.add(OpenRouter.API.ChatCompletionResponseSchema, {
+    id: "OpenRouterChatCompletionResponse",
   });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",

@@ -1,7 +1,11 @@
 import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
-import { type LocalConfigSchema, MCP_ORCHESTRATOR_DEFAULTS } from "@shared";
+import {
+  type LocalConfigSchema,
+  MCP_ORCHESTRATOR_DEFAULTS,
+  TimeInMs,
+} from "@shared";
 import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
@@ -1196,7 +1200,7 @@ export default class K8sDeployment {
       const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
 
       // Filter recent events (last 2 minutes) related to our deployment
-      const twoMinutesAgo = Date.now() - 120000;
+      const twoMinutesAgo = Date.now() - TimeInMs.Minute * 2;
       const relevantEvents = events.items.filter((event) => {
         const involvedName = event.involvedObject?.name || "";
         const eventTime =
@@ -1537,7 +1541,7 @@ export default class K8sDeployment {
                 : 0;
 
               // If pending for > 20 seconds with a condition failure, fail fast
-              if (pendingDuration > 20000) {
+              if (pendingDuration > TimeInMs.Second * 20) {
                 this.state = "failed";
                 this.errorMessage =
                   conditionCheck.message || "Pod scheduling failed";

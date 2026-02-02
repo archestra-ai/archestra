@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.0.34",
+  "version": "1.0.37",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -53,7 +53,7 @@
       "hono": "4.11.7",
       "lodash": "4.17.23",
       "lodash-es": "4.17.23",
-      "fast-xml-parser": "5.3.4" 
+      "fast-xml-parser": "5.3.4"
     }
   },
   "packageManager": "pnpm@10.28.2"

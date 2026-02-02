@@ -250,16 +250,20 @@ class WebSocketService {
     if (
       BrowserStreamSocketClientContext.isBrowserWebSocketMessage(message.type)
     ) {
-      this.sendToClient(ws, {
-        type: "browser_stream_error",
-        payload: {
-          conversationId:
-            "conversationId" in message.payload
-              ? String(message.payload.conversationId)
-              : "",
-          error: "Browser streaming feature is disabled",
-        },
-      });
+      if (this.browserStreamContext) {
+        await this.browserStreamContext.handleMessage(message, ws, clientContext);
+      } else {
+        this.sendToClient(ws, {
+          type: "browser_stream_error",
+          payload: {
+            conversationId:
+              "conversationId" in message.payload
+                ? String(message.payload.conversationId)
+                : "",
+            error: "Browser streaming feature is disabled",
+          },
+        });
+      }
       return;
     }
 

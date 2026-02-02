@@ -440,6 +440,28 @@ class ConversationModel {
       .set({ browserState: state })
       .where(eq(schema.conversationsTable.id, conversationId));
   }
+
+  /**
+   * Get all conversation IDs that have browser state for a specific agent and user.
+   * Used for orphan tab cleanup - identifies which conversations "own" browser tabs.
+   */
+  static async getConversationIdsWithBrowserStateByAgent(
+    agentId: string,
+    userId: string,
+  ): Promise<string[]> {
+    const result = await db
+      .select({ id: schema.conversationsTable.id })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.agentId, agentId),
+          eq(schema.conversationsTable.userId, userId),
+          isNotNull(schema.conversationsTable.browserState),
+        ),
+      );
+
+    return result.map((r) => r.id);
+  }
 }
 
 export default ConversationModel;

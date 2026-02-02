@@ -5,7 +5,7 @@ import {
 } from "@shared";
 import { getChatMcpClient } from "@/clients/chat-mcp-client";
 import logger from "@/logging";
-import { ToolModel } from "@/models";
+import { ConversationModel, ToolModel } from "@/models";
 import { ApiError } from "@/types";
 import {
   shouldLogBrowserStreamScreenshots,
@@ -1637,6 +1637,144 @@ export class BrowserStreamService {
         conversationId,
       });
       return { success: true };
+    }
+  }
+
+  /**
+   * Clean up orphaned browser tabs that don't belong to any active conversation.
+   * This is called in the background after subscribing to prevent tab accumulation.
+   *
+   * An orphaned tab is a tab in the browser that doesn't match any conversation's
+   * stored browser state. This can happen when:
+   * - Server restarts and state is stale
+   * - Conversations are deleted but tabs weren't closed
+   * - State/browser mismatches create extra tabs during recovery
+   *
+   * @returns Number of tabs closed
+   */
+  async cleanupOrphanedTabs(
+    agentId: string,
+    userContext: BrowserUserContext,
+  ): Promise<number> {
+    const tabsTool = await this.findTabsTool(agentId);
+    if (!tabsTool) {
+      return 0;
+    }
+
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
+    if (!client) {
+      return 0;
+    }
+
+    try {
+      // Get current browser tabs
+      const listData = await this.getTabsList({
+        agentId,
+        userContext,
+        client,
+        tabsTool,
+        forceRefresh: true,
+      });
+
+      if (!listData || listData.tabs.length <= 1) {
+        // Only 0 or 1 tab - nothing to clean up (keep at least one tab)
+        return 0;
+      }
+
+      // Get all conversations that have browser state for this agent/user
+      const conversationIds =
+        await ConversationModel.getConversationIdsWithBrowserStateByAgent(
+          agentId,
+          userContext.userId,
+        );
+
+      // Build set of tab indices owned by active conversations
+      const ownedTabIndices = new Set<number>();
+
+      for (const conversationId of conversationIds) {
+        const loadResult = await browserStateManager.getOrLoad({
+          agentId,
+          userId: userContext.userId,
+          conversationId,
+        });
+
+        if (isOk(loadResult) && loadResult.value) {
+          const state = loadResult.value;
+          for (const tab of state.tabs) {
+            if (isSome(tab.index)) {
+              ownedTabIndices.add(tab.index.value);
+            }
+          }
+        }
+      }
+
+      // Find orphaned tabs (not owned by any conversation, and not tab 0 which we always keep)
+      const orphanedTabIndices = listData.tabs
+        .filter((tab) => tab.index > 0 && !ownedTabIndices.has(tab.index))
+        .map((tab) => tab.index)
+        .sort((a, b) => b - a); // Sort descending to close from highest index first
+
+      if (orphanedTabIndices.length === 0) {
+        return 0;
+      }
+
+      logger.info(
+        {
+          agentId,
+          userId: userContext.userId,
+          orphanedTabIndices,
+          totalTabs: listData.tabs.length,
+          ownedTabCount: ownedTabIndices.size,
+        },
+        "Cleaning up orphaned browser tabs",
+      );
+
+      // Close orphaned tabs (from highest to lowest to avoid index shifting issues)
+      let closedCount = 0;
+      for (const tabIndex of orphanedTabIndices) {
+        try {
+          await this.callTabsTool({
+            agentId,
+            conversationId: "orphan-cleanup", // Placeholder - not tied to a conversation
+            userContext,
+            client,
+            tabsTool,
+            action: "close",
+            index: tabIndex,
+          });
+          closedCount++;
+        } catch (error) {
+          logger.warn(
+            { agentId, tabIndex, error },
+            "Failed to close orphaned tab",
+          );
+        }
+      }
+
+      // Invalidate cache after cleanup
+      this.invalidateTabsListCache({ agentId, userContext, tabsTool });
+
+      logger.info(
+        {
+          agentId,
+          userId: userContext.userId,
+          closedCount,
+          attemptedCount: orphanedTabIndices.length,
+        },
+        "Completed orphan tab cleanup",
+      );
+
+      return closedCount;
+    } catch (error) {
+      logger.warn(
+        { agentId, userId: userContext.userId, error },
+        "Orphan tab cleanup failed",
+      );
+      return 0;
     }
   }
 

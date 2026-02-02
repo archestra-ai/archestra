@@ -8,6 +8,12 @@ import { ConversationModel } from "@/models";
 
 const SCREENSHOT_INTERVAL_MS = 3000; // Stream at ~0.33 FPS (every 3 seconds)
 
+/**
+ * Debounce interval for orphan tab cleanup.
+ * Only run cleanup once per minute per agent to avoid excessive overhead.
+ */
+const ORPHAN_CLEANUP_DEBOUNCE_MS = 60_000;
+
 export type BrowserStreamSubscription = {
   conversationId: string;
   agentId: string;
@@ -29,6 +35,8 @@ export class BrowserStreamSocketClientContext {
   >();
   private sendToClient: BrowserStreamClientContextParams["sendToClient"];
   private screenshotIntervalMs = SCREENSHOT_INTERVAL_MS;
+  /** Track last orphan cleanup time per agent to debounce cleanup calls */
+  private lastOrphanCleanupTime = new Map<string, number>();
 
   constructor(params: BrowserStreamClientContextParams) {
     this.wss = params.wss;
@@ -312,6 +320,38 @@ export class BrowserStreamSocketClientContext {
     });
 
     void sendTick();
+
+    // Trigger background orphan cleanup (debounced, fire-and-forget)
+    this.maybeCleanupOrphanedTabs(agentId, userContext);
+  }
+
+  /**
+   * Trigger orphan tab cleanup if enough time has passed since last cleanup.
+   * This is fire-and-forget - errors are logged but don't affect the caller.
+   */
+  private maybeCleanupOrphanedTabs(
+    agentId: string,
+    userContext: BrowserUserContext,
+  ): void {
+    const lastCleanup = this.lastOrphanCleanupTime.get(agentId) ?? 0;
+    const now = Date.now();
+
+    if (now - lastCleanup < ORPHAN_CLEANUP_DEBOUNCE_MS) {
+      // Skip - cleaned up recently
+      return;
+    }
+
+    this.lastOrphanCleanupTime.set(agentId, now);
+
+    // Fire and forget - don't await
+    void browserStreamFeature
+      .cleanupOrphanedTabs(agentId, userContext)
+      .catch((error) => {
+        logger.warn(
+          { agentId, error },
+          "Background orphan tab cleanup failed (non-fatal)",
+        );
+      });
   }
 
   async handleBrowserNavigate(

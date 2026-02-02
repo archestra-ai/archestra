@@ -201,6 +201,10 @@ class BrowserStreamFeature {
   ) {
     return this.getService().getSnapshot(agentId, conversationId, userContext);
   }
+
+  cleanupOrphanedTabs(agentId: string, userContext: BrowserUserContext) {
+    return this.getService().cleanupOrphanedTabs(agentId, userContext);
+  }
 }
 
 export const browserStreamFeature = new BrowserStreamFeature();

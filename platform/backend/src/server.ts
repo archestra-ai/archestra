@@ -154,6 +154,18 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
   });
+  z.globalRegistry.add(Groq.API.ChatCompletionRequestSchema, {
+    id: "GroqChatCompletionRequest",
+  });
+  z.globalRegistry.add(Groq.API.ChatCompletionResponseSchema, {
+    id: "GroqChatCompletionResponse",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionRequestSchema, {
+    id: "PerplexityChatCompletionRequest",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionResponseSchema, {
+    id: "PerplexityChatCompletionResponse",
+  });
 }
 
 // Register schemas at module load time

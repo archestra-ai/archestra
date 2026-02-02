@@ -4,8 +4,10 @@ import { createCerebras } from "@ai-sdk/cerebras";
 import { createCohere } from "@ai-sdk/cohere";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createVertex } from "@ai-sdk/google-vertex";
+import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createPerplexity } from "@ai-sdk/perplexity";
 import {
   EXTERNAL_AGENT_ID_HEADER,
   SESSION_ID_HEADER,
@@ -57,6 +59,14 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "openai";
   }
 
+  if (lowerModel.includes("llama") || lowerModel.includes("mixtral") || lowerModel.includes("gemma")) {
+    return "groq";
+  }
+
+  if (lowerModel.includes("sonar")) {
+    return "perplexity";
+  }
+
   if (lowerModel.includes("command")) {
     return "cohere";
   }
@@ -82,9 +92,11 @@ const envApiKeyGetters: Record<
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
   gemini: () => config.chat.gemini.apiKey,
+  groq: () => config.chat.groq.apiKey,
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
   openai: () => config.chat.openai.apiKey,
+  perplexity: () => config.chat.perplexity.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
 };
@@ -123,6 +135,8 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.openaiApiKey ??
       secret?.secret?.zhipuaiApiKey ??
       secret?.secret?.cohereApiKey ??
+      secret?.secret?.groqApiKey ??
+      secret?.secret?.perplexityApiKey ??
       secret?.secret?.bedrockApiKey;
     if (secretValue) {
       return { apiKey: secretValue as string, source: resolvedApiKey.scope };
@@ -161,6 +175,8 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   anthropic: "claude-3-5-haiku-20241022",
   openai: "gpt-4o-mini",
   gemini: "gemini-2.0-flash-001",
+  groq: "llama-3.3-70b-versatile",
+  perplexity: "llama-3.1-sonar-small-128k-online",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   cohere: "command-light", // Cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
@@ -235,6 +251,34 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
       );
     }
     const client = createGoogleGenerativeAI({ apiKey });
+    return client(modelName);
+  },
+
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure GROQ_API_KEY.",
+      );
+    }
+    const client = createGroq({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  perplexity: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
+      );
+    }
+    const client = createPerplexity({
+      apiKey,
+      baseURL: config.llm.perplexity.baseUrl,
+    });
     return client(modelName);
   },
 
@@ -404,6 +448,26 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createGoogleGenerativeAI({
         apiKey: apiKey || "vertex-ai-mode",
         baseURL: `${buildProxyBaseUrl("gemini", agentId)}/v1beta`,
+        headers,
+      });
+      return client(modelName);
+    },
+
+    groq: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+      const client = createGroq({
+        apiKey,
+        baseURL: buildProxyBaseUrl("groq", agentId),
+        headers,
+      });
+      return client(modelName);
+    },
+
+    perplexity: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/perplexity/:agentId (SDK appends /chat/completions)
+      const client = createPerplexity({
+        apiKey,
+        baseURL: buildProxyBaseUrl("perplexity", agentId),
         headers,
       });
       return client(modelName);

@@ -152,7 +152,7 @@ export function BrowserPreviewContent({
       )}
     >
       {/* Header */}
-      <div className="flex flex-col px-2 py-3 bg-muted/50 border-b">
+      <div className="flex flex-col px-2 py-3 border-b">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Globe className="h-4 w-4 text-muted-foreground" />

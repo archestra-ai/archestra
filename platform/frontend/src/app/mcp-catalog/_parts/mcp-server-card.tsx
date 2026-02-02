@@ -366,11 +366,10 @@ export function McpServerCard({
       </div>
       {mcpServersCount > 0 && (
         <Button
-          onClick={() => !isInstalling && setIsManageUsersDialogOpen(true)}
+          onClick={() => setIsManageUsersDialogOpen(true)}
           size="sm"
           variant="link"
           className="h-7 text-xs"
-          disabled={isInstalling}
           data-testid={`${E2eTestId.ManageCredentialsButton}-${installedServer?.catalogName}`}
         >
           Manage
@@ -415,11 +414,10 @@ export function McpServerCard({
       </div>
       {mcpServersCount > 0 && (
         <Button
-          onClick={() => !isInstalling && setIsManageUsersDialogOpen(true)}
+          onClick={() => setIsManageUsersDialogOpen(true)}
           size="sm"
           variant="link"
           className="h-7 text-xs"
-          disabled={isInstalling}
         >
           Manage
         </Button>
@@ -448,7 +446,6 @@ export function McpServerCard({
           size="sm"
           variant="link"
           className="h-7 text-xs gap-1"
-          disabled={isInstalling}
           data-testid={`${E2eTestId.ManageToolsButton}-${installedServer?.catalogName}`}
         >
           {isZeroAssignments && (
@@ -684,7 +681,7 @@ export function McpServerCard({
 
       <ManageUsersDialog
         catalogId={item.id}
-        isOpen={isManageUsersDialogOpen && !isInstalling}
+        isOpen={isManageUsersDialogOpen}
         onClose={() => setIsManageUsersDialogOpen(false)}
         label={item.label || item.name}
       />

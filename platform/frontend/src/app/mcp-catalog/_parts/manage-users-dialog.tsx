@@ -3,6 +3,7 @@
 import { E2eTestId, formatSecretStorageType } from "@shared";
 import { format } from "date-fns";
 import { AlertTriangle, RefreshCw, Trash, User } from "lucide-react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -150,6 +151,13 @@ export function ManageUsersDialog({
       toast.error("Failed to initiate re-authentication");
     }
   };
+
+  // Close dialog when all credentials are revoked
+  useEffect(() => {
+    if (isOpen && !firstServer) {
+      onClose();
+    }
+  }, [isOpen, firstServer, onClose]);
 
   if (!firstServer) {
     return null;

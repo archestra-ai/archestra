@@ -6,7 +6,7 @@ import type { BrowserUserContext } from "@/features/browser-stream/services/brow
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
 
-const SCREENSHOT_INTERVAL_MS = 3000; // Stream at ~0.33 FPS (every 3 seconds)
+const SCREENSHOT_INTERVAL_MS = 2_000; // Stream at ~0.5 FPS (every 2 seconds)
 
 /**
  * Debounce interval for orphan tab cleanup.

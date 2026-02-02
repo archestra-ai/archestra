@@ -30,6 +30,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useBrowserStream } from "@/hooks/use-browser-stream";
 import { cn } from "@/lib/utils";
+import { LoadingSpinner } from "../loading";
 
 interface BrowserPreviewContentProps {
   conversationId: string | undefined;
@@ -304,7 +305,7 @@ export function BrowserPreviewContent({
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             onFocus={() => setIsEditingUrl(true)}
-            className="h-7 text-xs"
+            className="h-7 text-xs!"
             disabled={isNavigating || !isConnected}
           />
           <Button
@@ -333,9 +334,7 @@ export function BrowserPreviewContent({
         {isConnecting && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-2">
-              <div className="animate-pulse">
-                <Globe className="h-12 w-12 text-muted-foreground mx-auto" />
-              </div>
+              <LoadingSpinner />
               <p className="text-sm text-muted-foreground">Connecting...</p>
             </div>
           </div>

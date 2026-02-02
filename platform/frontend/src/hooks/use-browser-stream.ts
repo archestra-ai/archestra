@@ -1,14 +1,11 @@
 "use client";
 
-import type { UIMessage } from "@ai-sdk/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import websocketService from "@/lib/websocket";
 
 interface UseBrowserStreamOptions {
   conversationId: string | undefined;
   isActive: boolean;
-  chatMessages?: UIMessage[];
-  setChatMessages?: (messages: UIMessage[]) => void;
 }
 
 interface UseBrowserStreamReturn {
@@ -32,8 +29,6 @@ interface UseBrowserStreamReturn {
 export function useBrowserStream({
   conversationId,
   isActive,
-  chatMessages = [],
-  setChatMessages,
 }: UseBrowserStreamOptions): UseBrowserStreamReturn {
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [urlInput, setUrlInput] = useState<string>("");
@@ -47,32 +42,6 @@ export function useBrowserStream({
   const subscribedConversationIdRef = useRef<string | null>(null);
   const prevConversationIdRef = useRef<string | undefined>(undefined);
   const isEditingUrlRef = useRef(false);
-  const chatMessagesRef = useRef<UIMessage[]>([]);
-  const setChatMessagesRef = useRef<((messages: UIMessage[]) => void) | null>(
-    null,
-  );
-
-  chatMessagesRef.current = chatMessages;
-  setChatMessagesRef.current = setChatMessages ?? null;
-
-  const appendNavigationMessage = useCallback((text: string) => {
-    const updateMessages = setChatMessagesRef.current;
-    if (!updateMessages) return;
-
-    const messageId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `nav-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-    const navigationMessage: UIMessage = {
-      id: messageId,
-      role: "user",
-      parts: [{ type: "text", text }],
-    };
-
-    updateMessages([...chatMessagesRef.current, navigationMessage]);
-  }, []);
-
   // Keep ref in sync with state for use in subscription callbacks
   useEffect(() => {
     isEditingUrlRef.current = isEditingUrl;
@@ -142,9 +111,7 @@ export function useBrowserStream({
         if (message.payload.conversationId === conversationId) {
           setIsNavigating(false);
           if (message.payload.success && message.payload.url) {
-            appendNavigationMessage(
-              `[User manually navigated browser to: ${message.payload.url}]`,
-            );
+            // Navigation message removed - user doesn't want these in chat
           } else if (message.payload.error) {
             setError(message.payload.error);
           }
@@ -216,9 +183,7 @@ export function useBrowserStream({
         if (message.payload.conversationId === conversationId) {
           setIsNavigating(false);
           if (message.payload.success) {
-            appendNavigationMessage(
-              "[User navigated browser back to previous page]",
-            );
+            // Navigation message removed - user doesn't want these in chat
           } else if (message.payload.error) {
             setError(message.payload.error);
           }
@@ -253,7 +218,7 @@ export function useBrowserStream({
         subscribedConversationIdRef.current = null;
       }
     };
-  }, [isActive, conversationId, appendNavigationMessage]);
+  }, [isActive, conversationId]);
 
   const navigate = useCallback(
     (url: string) => {

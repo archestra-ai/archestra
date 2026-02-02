@@ -9,7 +9,6 @@ import { ExternalLink, X } from "lucide-react";
 import { useCallback } from "react";
 import { BrowserPreviewContent } from "@/components/chat/browser-preview-content";
 import { Button } from "@/components/ui/button";
-import { useChatSession } from "@/contexts/global-chat-context";
 
 interface BrowserPanelProps {
   isOpen: boolean;
@@ -22,10 +21,6 @@ export function BrowserPanel({
   onClose,
   conversationId,
 }: BrowserPanelProps) {
-  const chatSession = useChatSession(conversationId);
-  const chatMessages = chatSession?.messages ?? [];
-  const setChatMessages = chatSession?.setMessages;
-
   const handleOpenInNewWindow = useCallback(() => {
     if (!conversationId) return;
 
@@ -51,8 +46,6 @@ export function BrowserPanel({
     <BrowserPreviewContent
       conversationId={conversationId}
       isActive={isOpen}
-      chatMessages={chatMessages}
-      setChatMessages={setChatMessages}
       className="border-t"
       headerActions={
         <>

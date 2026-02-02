@@ -1,6 +1,5 @@
 "use client";
 
-import type { UIMessage } from "@ai-sdk/react";
 import {
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
@@ -35,10 +34,6 @@ import { cn } from "@/lib/utils";
 interface BrowserPreviewContentProps {
   conversationId: string | undefined;
   isActive: boolean;
-  /** Chat messages for syncing browser state */
-  chatMessages?: UIMessage[];
-  /** Setter for chat messages */
-  setChatMessages?: (messages: UIMessage[]) => void;
   /** Extra buttons to render in the header (e.g., open in new window, close) */
   headerActions?: React.ReactNode;
   /** Additional class names for the container */
@@ -48,8 +43,6 @@ interface BrowserPreviewContentProps {
 export function BrowserPreviewContent({
   conversationId,
   isActive,
-  chatMessages,
-  setChatMessages,
   headerActions,
   className,
 }: BrowserPreviewContentProps) {
@@ -75,8 +68,6 @@ export function BrowserPreviewContent({
   } = useBrowserStream({
     conversationId,
     isActive,
-    chatMessages,
-    setChatMessages,
   });
 
   const handleNavigate = useCallback(

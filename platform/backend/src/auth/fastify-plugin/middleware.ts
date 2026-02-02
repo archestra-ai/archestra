@@ -92,6 +92,7 @@ export class Authnz {
       isLlmProxyRoute ||
       url === "/openapi.json" ||
       url === "/health" ||
+      url === "/ready" ||
       url === "/api/features" ||
       url.startsWith(config.mcpGateway.endpoint) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
@@ -105,7 +106,10 @@ export class Authnz {
       // Incoming email webhooks - Microsoft Graph calls these directly
       // Only allow the exact webhook path (with optional query params), not sub-paths like /setup
       url === "/api/webhooks/incoming-email" ||
-      url.startsWith("/api/webhooks/incoming-email?")
+      url.startsWith("/api/webhooks/incoming-email?") ||
+      // ChatOps webhooks - Bot Framework calls these directly
+      // JWT validation is handled by the Bot Framework adapter
+      url.startsWith("/api/webhooks/chatops/")
     ) {
       return true;
     }

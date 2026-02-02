@@ -47,18 +47,6 @@ Automatically switch to cheaper models based on conditions:
 
 Rules apply by priority order with configurable target models.
 
-## Integration
-
-**OpenTelemetry Export**
-Export metrics to Prometheus, Datadog, New Relic
-
-**REST API**
-```bash
-GET /api/costs/statistics?period=7d
-GET /api/costs/limits
-POST /api/costs/optimization-rules
-```
-
 ## Related Documentation
 
 - [Profiles Configuration](platform-profiles)

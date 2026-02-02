@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
+import type { ServerWebSocketMessage } from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS } from "ws";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
 import logger from "@/logging";
 import { ConversationModel, MessageModel } from "@/models";
-import type { ServerWebSocketMessage } from "@/types";
 
 const SCREENSHOT_INTERVAL_MS = 3000; // Stream at ~0.33 FPS (every 3 seconds)
 

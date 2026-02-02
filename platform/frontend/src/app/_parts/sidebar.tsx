@@ -9,13 +9,14 @@ import {
   Cable,
   DollarSign,
   Github,
-  Layers,
   LogIn,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
+  Network,
   Router,
   Settings,
+  Shield,
   Slack,
   Star,
   Wrench,
@@ -26,6 +27,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { SecurityEngineWarning } from "@/components/security-engine-warning";
 import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
@@ -58,7 +60,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   }
   return [
     {
-      title: "Chats",
+      title: "New Chat",
       url: "/chat",
       icon: MessageCircle,
       customIsActive: (pathname: string, searchParams: URLSearchParams) =>
@@ -70,9 +72,14 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       icon: Bot,
     },
     {
-      title: "Profiles",
-      url: "/profiles",
-      icon: Layers,
+      title: "MCP Gateways",
+      url: "/mcp-gateways",
+      icon: Shield,
+    },
+    {
+      title: "LLM Proxies",
+      url: "/llm-proxies",
+      icon: Network,
     },
     {
       title: "Logs",
@@ -197,11 +204,8 @@ const MainSideBarSection = ({
 }) => {
   const allItems = getNavigationItems(isAuthenticated);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  if (permissionMap === null) {
-    return null;
-  }
   const permittedItems = allItems.filter(
-    (item) => permissionMap[item.url] ?? true,
+    (item) => permissionMap?.[item.url] ?? true,
   );
 
   return (
@@ -255,6 +259,7 @@ const MainSideBarSection = ({
 
 const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
   <SidebarFooter>
+    <SecurityEngineWarning />
     <DefaultCredentialsWarning />
     <SignedIn>
       <SidebarGroup className="mt-auto">
@@ -328,7 +333,7 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="flex flex-col gap-2">
-        {isLoadingAppearance ? <div className="h-[20px]" /> : logoToShow}
+        {isLoadingAppearance ? <div className="h-[47px]" /> : logoToShow}
       </SidebarHeader>
       <SidebarContent>
         {isAuthenticated ? (

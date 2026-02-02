@@ -98,7 +98,7 @@ class OllamaChatCompletionInteraction implements InteractionUtils {
     const toolsRequested = new Set<string>();
 
     for (const choice of this.response.choices) {
-      if (choice.message.tool_calls) {
+      if (Array.isArray(choice.message.tool_calls)) {
         for (const toolCall of choice.message.tool_calls) {
           if ("function" in toolCall) {
             toolsRequested.add(toolCall.function.name);
@@ -162,7 +162,7 @@ class OllamaChatCompletionInteraction implements InteractionUtils {
       const { tool_calls: toolCalls } = message;
       const refusal = message.refusal as string;
 
-      if (toolCalls) {
+      if (Array.isArray(toolCalls)) {
         if (typeof content === "string" && content) {
           parts.push({ type: "text", text: content });
         } else if (Array.isArray(content)) {
@@ -175,25 +175,23 @@ class OllamaChatCompletionInteraction implements InteractionUtils {
           }
         }
 
-        if (toolCalls) {
-          for (const toolCall of toolCalls) {
-            if (toolCall.type === "function") {
-              parts.push({
-                type: "dynamic-tool",
-                toolName: toolCall.function.name,
-                toolCallId: toolCall.id,
-                state: "input-available",
-                input: JSON.parse(toolCall.function.arguments),
-              });
-            } else if (toolCall.type === "custom") {
-              parts.push({
-                type: "dynamic-tool",
-                toolName: toolCall.custom.name,
-                toolCallId: toolCall.id,
-                state: "input-available",
-                input: JSON.parse(toolCall.custom.input),
-              });
-            }
+        for (const toolCall of toolCalls) {
+          if (toolCall.type === "function") {
+            parts.push({
+              type: "dynamic-tool",
+              toolName: toolCall.function.name,
+              toolCallId: toolCall.id,
+              state: "input-available",
+              input: JSON.parse(toolCall.function.arguments),
+            });
+          } else if (toolCall.type === "custom") {
+            parts.push({
+              type: "dynamic-tool",
+              toolName: toolCall.custom.name,
+              toolCallId: toolCall.id,
+              state: "input-available",
+              input: JSON.parse(toolCall.custom.input),
+            });
           }
         }
       } else if (refusal) {

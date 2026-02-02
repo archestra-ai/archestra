@@ -16,6 +16,10 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
+import {
+  type KnowledgeGraphProviderType,
+  KnowledgeGraphProviderTypeSchema,
+} from "@/types/knowledge-graph";
 import packageJson from "../../package.json";
 
 /**
@@ -88,10 +92,10 @@ export const getDatabaseUrl = (): string => {
 };
 
 /**
- * Parse port from ARCHESTRA_API_BASE_URL if provided
+ * Parse port from ARCHESTRA_INTERNAL_API_BASE_URL if provided
  */
 const getPortFromUrl = (): number => {
-  const url = process.env.ARCHESTRA_API_BASE_URL;
+  const url = process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
   const defaultPort = 9000;
 
   if (!url) {
@@ -216,6 +220,18 @@ const parseIncomingEmailProvider = (): EmailProviderType | undefined => {
 };
 
 /**
+ * Parse knowledge graph provider from environment variable
+ */
+const parseKnowledgeGraphProvider = ():
+  | KnowledgeGraphProviderType
+  | undefined => {
+  const provider =
+    process.env.ARCHESTRA_KNOWLEDGE_GRAPH_PROVIDER?.toLowerCase();
+  const result = KnowledgeGraphProviderTypeSchema.safeParse(provider);
+  return result.success ? result.data : undefined;
+};
+
+/**
  * Parse body limit from environment variable.
  * Supports numeric bytes (e.g., "52428800") or human-readable format (e.g., "50MB", "100KB").
  */
@@ -254,6 +270,51 @@ export const parseBodyLimit = (
 };
 
 const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
+
+// Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
+const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
+const OTEL_TRACES_PATH = "/v1/traces";
+
+/**
+ * Get OTEL exporter endpoint for traces.
+ * Reads from ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT and intelligently ensures
+ * the URL ends with /v1/traces.
+ *
+ * @param envValue - The environment variable value (for testing)
+ * @returns The full OTEL endpoint URL with /v1/traces suffix
+ */
+export const getOtelExporterOtlpEndpoint = (
+  envValue?: string | undefined,
+): string => {
+  const rawValue =
+    envValue ?? process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT;
+  const value = rawValue?.trim();
+
+  if (!value) {
+    return `${DEFAULT_OTEL_ENDPOINT}${OTEL_TRACES_PATH}`;
+  }
+
+  // Remove trailing slashes for consistent comparison
+  const normalizedUrl = value.replace(/\/+$/, "");
+
+  // If already ends with /v1/traces, return as-is
+  if (normalizedUrl.endsWith(OTEL_TRACES_PATH)) {
+    return normalizedUrl;
+  }
+
+  // Fix common typo: /v1/trace (missing 's') -> /v1/traces
+  if (normalizedUrl.endsWith("/v1/trace")) {
+    return `${normalizedUrl}s`;
+  }
+
+  // If ends with /v1, just append /traces
+  if (normalizedUrl.endsWith("/v1")) {
+    return `${normalizedUrl}/traces`;
+  }
+
+  // Otherwise, append the full /v1/traces path
+  return `${normalizedUrl}${OTEL_TRACES_PATH}`;
+};
 
 export default {
   frontendBaseUrl,
@@ -307,6 +368,37 @@ export default {
       },
     },
   },
+  chatops: {
+    msTeams: {
+      enabled: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED === "true",
+      appId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID || "",
+      appSecret: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET || "",
+      // Optional: Set for single-tenant Azure Bot (leave empty for multi-tenant)
+      tenantId: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID || "",
+      // Graph API credentials for thread history (falls back to Bot credentials if not set)
+      graph: {
+        tenantId:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID ||
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID ||
+          "",
+        clientId:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID ||
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID ||
+          "",
+        clientSecret:
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET ||
+          process.env.ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET ||
+          "",
+      },
+    },
+  },
+  knowledgeGraph: {
+    provider: parseKnowledgeGraphProvider(),
+    lightrag: {
+      apiUrl: process.env.ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_URL || "",
+      apiKey: process.env.ARCHESTRA_KNOWLEDGE_GRAPH_LIGHTRAG_API_KEY,
+    },
+  },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
     trustedOrigins: getTrustedOrigins(),
@@ -327,18 +419,15 @@ export default {
     openai: {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
-      useV2Routes: process.env.ARCHESTRA_OPENAI_USE_V2_ROUTES !== "false",
     },
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
-      useV2Routes: process.env.ARCHESTRA_ANTHROPIC_USE_V2_ROUTES !== "false",
     },
     gemini: {
       baseUrl:
         process.env.ARCHESTRA_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
-      useV2Routes: process.env.ARCHESTRA_GEMINI_USE_V2_ROUTES !== "false",
       vertexAi: {
         enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
         project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
@@ -350,25 +439,37 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    cohere: {
+      enabled: Boolean(process.env.ARCHESTRA_COHERE_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.ai",
+    },
     cerebras: {
       baseUrl:
         process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
-      useV2Routes: process.env.ARCHESTRA_CEREBRAS_USE_V2_ROUTES !== "false",
+    },
+    mistral: {
+      baseUrl:
+        process.env.ARCHESTRA_MISTRAL_BASE_URL || "https://api.mistral.ai/v1",
     },
     vllm: {
       enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
-      useV2Routes: process.env.ARCHESTRA_VLLM_USE_V2_ROUTES !== "false",
     },
     ollama: {
       enabled: Boolean(process.env.ARCHESTRA_OLLAMA_BASE_URL),
       baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
-      useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
     },
     zhipuai: {
       baseUrl:
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
+    },
+    bedrock: {
+      enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
+      /** Prefix for cross-region inference profile models (e.g., "us." or "eu.") */
+      inferenceProfilePrefix:
+        process.env.ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX || "",
     },
   },
   chat: {
@@ -383,9 +484,9 @@ export default {
     },
     cerebras: {
       apiKey: process.env.ARCHESTRA_CHAT_CEREBRAS_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_CEREBRAS_BASE_URL ||
-        "https://api.cerebras.ai/v1",
+    },
+    mistral: {
+      apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",
     },
     vllm: {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
@@ -393,11 +494,14 @@ export default {
     ollama: {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
     },
+    cohere: {
+      apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
+    },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_ZHIPUAI_BASE_URL ||
-        "https://api.z.ai/api/paas/v4",
+    },
+    bedrock: {
+      apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
@@ -435,9 +539,11 @@ export default {
    */
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
+    // The MCP server base image version is automatically updated by release-please during releases.
+    // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.37", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -453,9 +559,7 @@ export default {
   observability: {
     otel: {
       traceExporter: {
-        url:
-          process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
-          "http://localhost:4318/v1/traces",
+        url: getOtelExporterOtlpEndpoint(),
         headers: getOtlpAuthHeaders(),
       } satisfies Partial<OTLPExporterNodeConfigBase>,
     },

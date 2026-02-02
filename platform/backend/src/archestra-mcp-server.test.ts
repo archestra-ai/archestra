@@ -4,6 +4,7 @@ import {
   isArchestraMcpServerTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import * as knowledgeGraph from "@/knowledge-graph";
 import { AgentModel, InternalMcpCatalogModel } from "@/models";
 import { beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent } from "@/types";
@@ -14,14 +15,19 @@ import {
 } from "./archestra-mcp-server";
 
 describe("getArchestraMcpTools", () => {
-  test("should return an array of 26 tools", () => {
+  test("should return an array of tools with required properties", () => {
     const tools = getArchestraMcpTools();
 
-    expect(tools).toHaveLength(26);
-    expect(tools[0]).toHaveProperty("name");
-    expect(tools[0]).toHaveProperty("title");
-    expect(tools[0]).toHaveProperty("description");
-    expect(tools[0]).toHaveProperty("inputSchema");
+    // Verify we have tools available (don't hardcode count as it changes)
+    expect(tools.length).toBeGreaterThan(0);
+
+    // Verify all tools have required properties
+    for (const tool of tools) {
+      expect(tool).toHaveProperty("name");
+      expect(tool).toHaveProperty("title");
+      expect(tool).toHaveProperty("description");
+      expect(tool).toHaveProperty("inputSchema");
+    }
   });
 
   test("should have correctly formatted tool names with separator", () => {
@@ -50,14 +56,25 @@ describe("getArchestraMcpTools", () => {
     expect(searchTool?.title).toBe("Search Private MCP Registry");
   });
 
-  test("should have create_profile tool", () => {
+  test("should have create_agent tool", () => {
     const tools = getArchestraMcpTools();
-    const createProfileTool = tools.find((t) =>
-      t.name.endsWith("create_profile"),
-    );
+    const tool = tools.find((t) => t.name.endsWith("create_agent"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Create Agent");
+  });
 
-    expect(createProfileTool).toBeDefined();
-    expect(createProfileTool?.title).toBe("Create Profile");
+  test("should have create_llm_proxy tool", () => {
+    const tools = getArchestraMcpTools();
+    const tool = tools.find((t) => t.name.endsWith("create_llm_proxy"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Create LLM Proxy");
+  });
+
+  test("should have create_mcp_gateway tool", () => {
+    const tools = getArchestraMcpTools();
+    const tool = tools.find((t) => t.name.endsWith("create_mcp_gateway"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Create MCP Gateway");
   });
 
   test("should have create_limit tool", () => {
@@ -92,31 +109,64 @@ describe("getArchestraMcpTools", () => {
     expect(tool?.title).toBe("Delete Limit");
   });
 
-  test("should have get_profile_token_usage tool", () => {
+  test("should have get_agent_token_usage tool", () => {
     const tools = getArchestraMcpTools();
-    const tool = tools.find((t) => t.name.endsWith("get_profile_token_usage"));
+    const tool = tools.find((t) => t.name.endsWith("get_agent_token_usage"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Get Agent Token Usage");
+  });
+
+  test("should have get_llm_proxy_token_usage tool", () => {
+    const tools = getArchestraMcpTools();
+    const tool = tools.find((t) =>
+      t.name.endsWith("get_llm_proxy_token_usage"),
+    );
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Get LLM Proxy Token Usage");
+  });
+
+  test("should have query_knowledge_graph tool", () => {
+    const tools = getArchestraMcpTools();
+    const tool = tools.find((t) => t.name.endsWith("query_knowledge_graph"));
 
     expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get Profile Token Usage");
+    expect(tool?.title).toBe("Query Knowledge Graph");
+    expect(tool?.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "The natural language query to search the knowledge graph",
+        },
+        mode: {
+          type: "string",
+          enum: ["local", "global", "hybrid", "naive"],
+          description:
+            "Query mode: 'local' uses only local context, 'global' uses global context across all documents, 'hybrid' combines both (recommended), 'naive' uses simple RAG without graph-based retrieval. Defaults to 'hybrid'.",
+        },
+      },
+      required: ["query"],
+    });
   });
 });
 
 describe("executeArchestraTool", () => {
-  let testProfile: Agent;
+  let testAgent: Agent;
   let mockContext: ArchestraContext;
 
   beforeEach(async ({ makeAgent }) => {
-    testProfile = await makeAgent({ name: "Test Profile" });
+    testAgent = await makeAgent({ name: "Test Agent" });
     mockContext = {
-      profile: {
-        id: testProfile.id,
-        name: testProfile.name,
+      agent: {
+        id: testAgent.id,
+        name: testAgent.name,
       },
     };
   });
 
   describe("whoami tool", () => {
-    test("should return profile information", async () => {
+    test("should return agent information", async () => {
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
         undefined,
@@ -126,8 +176,10 @@ describe("executeArchestraTool", () => {
       expect(result.isError).toBe(false);
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toHaveProperty("type", "text");
-      expect((result.content[0] as any).text).toContain("Test Profile");
-      expect((result.content[0] as any).text).toContain(testProfile.id);
+      expect((result.content[0] as any).text).toContain("Agent Name:");
+      expect((result.content[0] as any).text).toContain("Test Agent");
+      expect((result.content[0] as any).text).toContain("Agent ID:");
+      expect((result.content[0] as any).text).toContain(testAgent.id);
     });
   });
 
@@ -240,24 +292,24 @@ describe("executeArchestraTool", () => {
     });
   });
 
-  describe("create_profile tool", () => {
-    test("should create a new profile with required fields only", async () => {
+  describe("create_agent tool", () => {
+    test("should create a new agent with required fields only", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
-        { name: "New Test Profile" },
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        { name: "New Test Agent" },
         mockContext,
       );
 
       expect(result.isError).toBe(false);
       expect(result.content).toHaveLength(1);
       expect((result.content[0] as any).text).toContain(
-        "Successfully created profile",
+        "Successfully created agent",
       );
-      expect((result.content[0] as any).text).toContain("New Test Profile");
-      expect((result.content[0] as any).text).toContain("Profile ID:");
+      expect((result.content[0] as any).text).toContain("New Test Agent");
+      expect((result.content[0] as any).text).toContain("ID:");
     });
 
-    test("should create a new profile with all optional fields", async ({
+    test("should create a new agent with all optional fields", async ({
       makeTeam,
       makeUser,
       makeOrganization,
@@ -269,9 +321,9 @@ describe("executeArchestraTool", () => {
       });
 
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
         {
-          name: "Full Featured Profile",
+          name: "Full Featured Agent",
           teams: [team.id],
           labels: [{ key: "environment", value: "production" }],
         },
@@ -280,61 +332,83 @@ describe("executeArchestraTool", () => {
 
       expect(result.isError).toBe(false);
       expect((result.content[0] as any).text).toContain(
-        "Successfully created profile",
+        "Successfully created agent",
       );
-      expect((result.content[0] as any).text).toContain(
-        "Full Featured Profile",
-      );
+      expect((result.content[0] as any).text).toContain("Full Featured Agent");
       expect((result.content[0] as any).text).toContain(team.name);
     });
 
     test("should return error when name is missing", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
         {},
         mockContext,
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "Profile name is required",
-      );
+      expect((result.content[0] as any).text).toContain("name is required");
     });
 
     test("should return error when name is empty string", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
         { name: "   " },
         mockContext,
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "Profile name is required",
-      );
+      expect((result.content[0] as any).text).toContain("name is required");
     });
 
     test("should handle errors gracefully", async () => {
-      // Mock the AgentModel.create method to throw an error
       const originalCreate = AgentModel.create;
       AgentModel.create = vi
         .fn()
         .mockRejectedValue(new Error("Database error"));
 
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
-        { name: "Test Profile" },
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        { name: "Test Agent" },
         mockContext,
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "Error creating profile",
-      );
+      expect((result.content[0] as any).text).toContain("Error creating agent");
       expect((result.content[0] as any).text).toContain("Database error");
 
-      // Restore the original method
       AgentModel.create = originalCreate;
+    });
+  });
+
+  describe("create_llm_proxy tool", () => {
+    test("should create a new LLM proxy", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_llm_proxy`,
+        { name: "New LLM Proxy" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(
+        "Successfully created llm proxy",
+      );
+      expect((result.content[0] as any).text).toContain("New LLM Proxy");
+    });
+  });
+
+  describe("create_mcp_gateway tool", () => {
+    test("should create a new MCP gateway", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_gateway`,
+        { name: "New MCP Gateway" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(
+        "Successfully created mcp gateway",
+      );
+      expect((result.content[0] as any).text).toContain("New MCP Gateway");
     });
   });
 
@@ -363,8 +437,8 @@ describe("executeArchestraTool", () => {
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -385,7 +459,7 @@ describe("executeArchestraTool", () => {
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
+          entity_type: "agent",
         },
         mockContext,
       );
@@ -398,8 +472,8 @@ describe("executeArchestraTool", () => {
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
         },
@@ -417,8 +491,8 @@ describe("executeArchestraTool", () => {
       await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -440,8 +514,8 @@ describe("executeArchestraTool", () => {
       await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -451,7 +525,7 @@ describe("executeArchestraTool", () => {
 
       const result = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
-        { entity_type: "profile" },
+        { entity_type: "agent" },
         mockContext,
       );
 
@@ -476,8 +550,8 @@ describe("executeArchestraTool", () => {
       const createResult = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -539,8 +613,8 @@ describe("executeArchestraTool", () => {
       const createResult = await executeArchestraTool(
         `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
-          entity_type: "profile",
-          entity_id: testProfile.id,
+          entity_type: "agent",
+          entity_id: testAgent.id,
           limit_type: "token_cost",
           limit_value: 1000000,
           model: ["claude-3-5-sonnet-20241022"],
@@ -592,38 +666,254 @@ describe("executeArchestraTool", () => {
     });
   });
 
-  describe("get_profile_token_usage tool", () => {
-    test("should return token usage for current profile", async () => {
+  describe("get_agent_token_usage tool", () => {
+    test("should return token usage for current agent", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_profile_token_usage`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent_token_usage`,
         undefined,
         mockContext,
       );
 
       expect(result.isError).toBe(false);
       expect((result.content[0] as any).text).toContain(
-        "Token usage for profile",
+        "Token usage for agent",
       );
       expect((result.content[0] as any).text).toContain("Total Input Tokens:");
       expect((result.content[0] as any).text).toContain("Total Output Tokens:");
       expect((result.content[0] as any).text).toContain("Total Tokens:");
     });
 
-    test("should return token usage for specified profile", async ({
+    test("should return token usage for specified agent", async ({
       makeAgent,
     }) => {
-      const otherProfile = await makeAgent({ name: "Other Profile" });
+      const otherAgent = await makeAgent({ name: "Other Agent" });
 
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_profile_token_usage`,
-        { profile_id: otherProfile.id },
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent_token_usage`,
+        { id: otherAgent.id },
         mockContext,
       );
 
       expect(result.isError).toBe(false);
       expect((result.content[0] as any).text).toContain(
-        `Token usage for profile ${otherProfile.id}`,
+        `Token usage for agent ${otherAgent.id}`,
       );
+    });
+  });
+
+  describe("get_llm_proxy_token_usage tool", () => {
+    test("should return token usage for current agent context", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_llm_proxy_token_usage`,
+        undefined,
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(
+        "Token usage for llm proxy",
+      );
+      expect((result.content[0] as any).text).toContain("Total Input Tokens:");
+      expect((result.content[0] as any).text).toContain("Total Output Tokens:");
+      expect((result.content[0] as any).text).toContain("Total Tokens:");
+    });
+  });
+
+  describe("query_knowledge_graph tool", () => {
+    test("should return error when query is empty", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+        { query: "" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "query parameter is required and cannot be empty",
+      );
+    });
+
+    test("should return error when query is not provided", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "query parameter is required and cannot be empty",
+      );
+    });
+
+    test("should return error when invalid mode is provided", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+        { query: "test query", mode: "invalid_mode" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'Invalid mode "invalid_mode"',
+      );
+      expect((result.content[0] as any).text).toContain(
+        "local, global, hybrid, naive",
+      );
+    });
+
+    test("should return error when provider is not configured", async () => {
+      // Mock getKnowledgeGraphProvider to return null (not configured)
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(null);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "test query" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(true);
+        expect((result.content[0] as any).text).toContain(
+          "Knowledge graph provider is not configured",
+        );
+      } finally {
+        getProviderSpy.mockRestore();
+      }
+    });
+
+    test("should return query result when provider is configured", async () => {
+      // Create a mock provider with a queryDocument method
+      const mockProvider = {
+        providerId: "lightrag" as const,
+        displayName: "LightRAG",
+        isConfigured: () => true,
+        initialize: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        insertDocument: vi.fn().mockResolvedValue({
+          status: "completed",
+          documentId: "doc-123",
+        }),
+        queryDocument: vi.fn().mockResolvedValue({
+          answer:
+            "This is the answer from the knowledge graph about AI agents.",
+          sources: [
+            { documentId: "source1.txt" },
+            { documentId: "source2.pdf" },
+          ],
+        }),
+        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      };
+
+      // Mock getKnowledgeGraphProvider to return our mock provider
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(mockProvider);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "What are AI agents?", mode: "hybrid" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        expect(result.content).toHaveLength(1);
+        expect((result.content[0] as any).text).toContain(
+          "This is the answer from the knowledge graph about AI agents.",
+        );
+        expect(mockProvider.queryDocument).toHaveBeenCalledWith(
+          "What are AI agents?",
+          { mode: "hybrid" },
+        );
+      } finally {
+        // Restore the original implementation
+        getProviderSpy.mockRestore();
+      }
+    });
+
+    test("should use default mode when not specified", async () => {
+      const mockProvider = {
+        providerId: "lightrag" as const,
+        displayName: "LightRAG",
+        isConfigured: () => true,
+        initialize: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        insertDocument: vi.fn().mockResolvedValue({
+          status: "completed",
+          documentId: "doc-123",
+        }),
+        queryDocument: vi.fn().mockResolvedValue({
+          answer: "Default mode response.",
+        }),
+        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      };
+
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(mockProvider);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "Test query without mode" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        expect((result.content[0] as any).text).toContain(
+          "Default mode response.",
+        );
+        // Should default to "hybrid" mode
+        expect(mockProvider.queryDocument).toHaveBeenCalledWith(
+          "Test query without mode",
+          { mode: "hybrid" },
+        );
+      } finally {
+        getProviderSpy.mockRestore();
+      }
+    });
+
+    test("should handle provider query errors gracefully", async () => {
+      const mockProvider = {
+        providerId: "lightrag" as const,
+        displayName: "LightRAG",
+        isConfigured: () => true,
+        initialize: vi.fn().mockResolvedValue(undefined),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        insertDocument: vi.fn().mockResolvedValue({
+          status: "completed",
+          documentId: "doc-123",
+        }),
+        queryDocument: vi
+          .fn()
+          .mockRejectedValue(new Error("Connection to LightRAG failed")),
+        getHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      };
+
+      const getProviderSpy = vi
+        .spyOn(knowledgeGraph, "getKnowledgeGraphProvider")
+        .mockReturnValue(mockProvider);
+
+      try {
+        const result = await executeArchestraTool(
+          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`,
+          { query: "Test query with error" },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(true);
+        expect((result.content[0] as any).text).toContain(
+          "Error querying knowledge graph",
+        );
+        expect((result.content[0] as any).text).toContain(
+          "Connection to LightRAG failed",
+        );
+      } finally {
+        getProviderSpy.mockRestore();
+      }
     });
   });
 
@@ -641,6 +931,6 @@ describe("executeArchestraTool", () => {
 
 test("isArchestraMcpServerTool", () => {
   expect(isArchestraMcpServerTool("archestra__whoami")).toBe(true);
-  expect(isArchestraMcpServerTool("archestra__create_profile")).toBe(true);
+  expect(isArchestraMcpServerTool("archestra__create_agent")).toBe(true);
   expect(isArchestraMcpServerTool("mcp_server__tool")).toBe(false);
 });

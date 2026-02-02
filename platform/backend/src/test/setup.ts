@@ -68,8 +68,13 @@ beforeAll(async () => {
     await pgliteClient.exec(migrationSql);
   }
 
-  // Replace the database module's default export with our test database
+  // Set the test database via the internal setter (for getDb() and proxy)
   const dbModule = await import("../database/index.js");
+  dbModule.__setTestDb(
+    testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
+  );
+
+  // Also replace the default export for compatibility
   Object.defineProperty(dbModule, "default", {
     value: testDb,
     writable: true,
@@ -102,25 +107,9 @@ beforeEach(async () => {
     await pgliteClient.exec(truncateSql);
   }
 
-  // Re-insert the default agent that tests expect to exist
-  // This matches what the migrations create (initially 'Default Agent', renamed to 'Default Profile')
-  const seedSql = `
-    INSERT INTO agents (id, name, is_demo, is_default, created_at, updated_at)
-    VALUES (
-      gen_random_uuid(),
-      'Default Profile',
-      false,
-      true,
-      NOW(),
-      NOW()
-    )
-    ON CONFLICT DO NOTHING;
-  `;
-  try {
-    await pgliteClient.exec(seedSql);
-  } catch {
-    // Ignore if default agent already exists or table doesn't have expected structure
-  }
+  // NOTE: We intentionally do NOT seed organization or default agent here.
+  // Tests that need them should use makeOrganization and makeAgent fixtures.
+  // This allows organization tests to test both with and without existing organizations.
 });
 
 /**

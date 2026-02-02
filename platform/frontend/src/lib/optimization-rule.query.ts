@@ -2,6 +2,8 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { handleApiError } from "./utils";
 
 const {
   getOptimizationRules,
@@ -27,6 +29,9 @@ export function useOptimizationRules() {
     queryKey: ["optimization-rules"],
     queryFn: async () => {
       const response = await getOptimizationRules();
+      if (response.error) {
+        handleApiError(response.error);
+      }
       return response.data ?? [];
     },
   });
@@ -38,12 +43,17 @@ export function useCreateOptimizationRule() {
 
   return useMutation({
     mutationFn: async (data: CreateOptimizationRuleInput) => {
-      const response = await createOptimizationRule({
+      const { data: responseData, error } = await createOptimizationRule({
         body: data,
       });
-      return response.data;
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return responseData;
     },
     onSuccess: async () => {
+      toast.success("Optimization rule created");
       // Wait for the query to refetch to avoid showing stale data
       await queryClient.invalidateQueries({
         queryKey: ["optimization-rules"],
@@ -59,13 +69,18 @@ export function useUpdateOptimizationRule() {
   return useMutation({
     mutationFn: async (data: UpdateOptimizationRuleInput) => {
       const { id, ...updates } = data;
-      const response = await updateOptimizationRule({
+      const { data: responseData, error } = await updateOptimizationRule({
         path: { id },
         body: updates,
       });
-      return response.data;
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return responseData;
     },
     onSuccess: async () => {
+      toast.success("Optimization rule updated");
       // Wait for the query to refetch to avoid showing stale data
       await queryClient.invalidateQueries({ queryKey: ["optimization-rules"] });
     },
@@ -78,11 +93,17 @@ export function useDeleteOptimizationRule() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      await deleteOptimizationRule({
+      const { error } = await deleteOptimizationRule({
         path: { id },
       });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return { success: true };
     },
     onSuccess: async () => {
+      toast.success("Optimization rule deleted");
       // Wait for the query to refetch to avoid showing stale data
       await queryClient.invalidateQueries({ queryKey: ["optimization-rules"] });
     },

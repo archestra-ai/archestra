@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import type { ClientWebSocketMessage } from "@shared";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import type * as originalConfigModule from "@/config";
@@ -10,7 +11,6 @@ import {
   expect,
   test,
 } from "@/test";
-import type { WebSocketMessage } from "@/types";
 
 vi.mock("@/config", async (importOriginal) => {
   const actual = await importOriginal<typeof originalConfigModule>();
@@ -33,7 +33,7 @@ const { default: websocketService } = await import("@/websocket");
 const httpServer = createServer();
 
 const service = websocketService as unknown as {
-  handleMessage: (message: WebSocketMessage, ws: WS) => Promise<void>;
+  handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
   clientContexts: Map<
     WS,
     { userId: string; organizationId: string; userIsProfileAdmin: boolean }

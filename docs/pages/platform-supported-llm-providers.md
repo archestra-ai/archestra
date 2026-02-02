@@ -144,6 +144,48 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - Usage of the llama models in the chat ⚠️ Not yet supported ([GitHub Issue #2058](https://github.com/archestra-ai/archestra/issues/2058)) 
 
+## Cohere
+
+[Cohere](https://www.cohere.ai/) provides enterprise-grade LLMs designed for safe, controllable, and efficient AI applications. The platform offers features like safety guardrails, function calling, and both synchronous and streaming APIs.
+
+### Supported Cohere APIs
+
+- **Chat API** (`/chat`) - ✅ Fully supported
+- **Streaming**: ✅ Fully supported
+
+### Cohere Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/cohere/{profile-id}`
+- **Authentication**: Pass your Cohere API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                        | Required | Description                                                                    |
+| ------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_COHERE_BASE_URL`     | No       | Cohere API base URL (default: `https://api.cohere.ai`)                         |
+| `ARCHESTRA_CHAT_COHERE_API_KEY` | No       | Default API key for Cohere (can be overridden per conversation/team/org)       |
+
+### Important Notes
+
+- **API Key format**: Obtain your API key from the [Cohere Dashboard](https://dashboard.cohere.ai/)
+
+## Mistral AI
+
+[Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.
+
+### Supported Mistral APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Mistral Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/mistral/{agent-id}`
+- **Authentication**: Pass your Mistral API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Getting an API Key
+
+You can get an API key from the [Mistral AI Console](https://console.mistral.ai/api-keys).
+
 ## vLLM
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.
@@ -230,3 +272,39 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **API Key format**: Obtain your API key from the [Zhipu AI Platform](https://z.ai/)
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
+
+## Amazon Bedrock
+
+### Supported Bedrock APIs
+
+- **Converse API** (`/converse`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html))
+- **Converse Stream API** (`/converse-stream`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html))
+- **InvokeModel API** (`/invoke`) -  ⚠️ Not yet supported  ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html))
+- **OpenAI-compatible API (Mantle)** -  ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html))
+
+### Bedrock Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/bedrock/{profile-id}`
+- **Authentication**: Pass your [Amazon Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                                     | Required | Description                                                                                     |
+| -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_BEDROCK_BASE_URL`                 | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`)          |
+| `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX` | No       | Region prefix for cross-region inference profiles (e.g., `us` or `eu`)                          |
+| `ARCHESTRA_CHAT_BEDROCK_API_KEY`             | No       | Default API key for Bedrock (can be overridden per conversation/team/org)                       |
+
+#### `ARCHESTRA_BEDROCK_BASE_URL`
+
+This variable is **required** to enable the Bedrock provider. It specifies the regional endpoint for the Bedrock Runtime API. The URL format follows AWS regional endpoints:
+
+```
+https://bedrock-runtime.{region}.amazonaws.com
+```
+
+#### `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX`
+
+Some Bedrock models, such as Anthropic's Claude, require [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html). Set this variable to enable those models. If not set, only models with on-demand inference support will be available.
+
+For more details, see [how inference works in Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-how.html).

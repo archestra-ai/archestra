@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@/test";
 import { extractGroupsFromClaims } from "./sso-team-sync-cache.ee";
 
 describe("extractGroupsFromClaims", () => {

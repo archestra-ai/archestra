@@ -4,6 +4,7 @@ import {
   getAdditionalTrustedOrigins,
   getAdditionalTrustedSsoProviderIds,
   getDatabaseUrl,
+  getOtelExporterOtlpEndpoint,
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseBodyLimit,
@@ -606,6 +607,129 @@ describe("parseBodyLimit", () => {
 
     test("should return default value for space between number and unit", () => {
       expect(parseBodyLimit("50 MB", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    });
+  });
+});
+
+describe("getOtelExporterOtlpEndpoint", () => {
+  describe("default value", () => {
+    test("should return default endpoint when no value provided", () => {
+      const result = getOtelExporterOtlpEndpoint(undefined);
+      expect(result).toBe("http://localhost:4318/v1/traces");
+    });
+
+    test("should return default endpoint when empty string provided", () => {
+      const result = getOtelExporterOtlpEndpoint("");
+      expect(result).toBe("http://localhost:4318/v1/traces");
+    });
+
+    test("should return default endpoint when only whitespace provided", () => {
+      const result = getOtelExporterOtlpEndpoint("   ");
+      expect(result).toBe("http://localhost:4318/v1/traces");
+    });
+  });
+
+  describe("URL already ends with /v1/traces", () => {
+    test("should return URL as-is when it ends with /v1/traces", () => {
+      const result = getOtelExporterOtlpEndpoint(
+        "http://otel-collector:4318/v1/traces",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/traces");
+    });
+
+    test("should normalize trailing slashes and return URL with /v1/traces", () => {
+      const result = getOtelExporterOtlpEndpoint(
+        "http://otel-collector:4318/v1/traces/",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/traces");
+    });
+
+    test("should handle multiple trailing slashes", () => {
+      const result = getOtelExporterOtlpEndpoint(
+        "http://otel-collector:4318/v1/traces///",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/traces");
+    });
+  });
+
+  describe("URL ends with /v1", () => {
+    test("should append /traces when URL ends with /v1", () => {
+      const result = getOtelExporterOtlpEndpoint(
+        "http://otel-collector:4318/v1",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/traces");
+    });
+
+    test("should handle /v1 with trailing slash", () => {
+      const result = getOtelExporterOtlpEndpoint(
+        "http://otel-collector:4318/v1/",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/traces");
+    });
+  });
+
+  describe("URL without /v1/traces suffix", () => {
+    test("should append /v1/traces to base URL", () => {
+      const result = getOtelExporterOtlpEndpoint("http://otel-collector:4318");
+      expect(result).toBe("http://otel-collector:4318/v1/traces");
+    });
+
+    test("should append /v1/traces to URL with trailing slash", () => {
+      const result = getOtelExporterOtlpEndpoint("http://otel-collector:4318/");
+      expect(result).toBe("http://otel-collector:4318/v1/traces");
+    });
+
+    test("should append /v1/traces to URL with custom path", () => {
+      const result = getOtelExporterOtlpEndpoint(
+        "http://otel-collector:4318/custom",
+      );
+      expect(result).toBe("http://otel-collector:4318/custom/v1/traces");
+    });
+
+    test("should handle $(NODE_IP) variable expansion syntax", () => {
+      const result = getOtelExporterOtlpEndpoint("http://$(NODE_IP):4317");
+      expect(result).toBe("http://$(NODE_IP):4317/v1/traces");
+    });
+
+    test("should preserve $(NODE_IP) and append /v1/traces", () => {
+      const result = getOtelExporterOtlpEndpoint(
+        "http://$(NODE_IP):4317/custom/path",
+      );
+      expect(result).toBe("http://$(NODE_IP):4317/custom/path/v1/traces");
+    });
+  });
+
+  describe("HTTPS URLs", () => {
+    test("should work with HTTPS URLs", () => {
+      const result = getOtelExporterOtlpEndpoint("https://otel.example.com");
+      expect(result).toBe("https://otel.example.com/v1/traces");
+    });
+
+    test("should work with HTTPS URLs that already have /v1/traces", () => {
+      const result = getOtelExporterOtlpEndpoint(
+        "https://otel.example.com/v1/traces",
+      );
+      expect(result).toBe("https://otel.example.com/v1/traces");
+    });
+  });
+
+  describe("edge cases", () => {
+    test("should handle URL with port but no path", () => {
+      const result = getOtelExporterOtlpEndpoint("http://localhost:4317");
+      expect(result).toBe("http://localhost:4317/v1/traces");
+    });
+
+    test("should handle URL without port", () => {
+      const result = getOtelExporterOtlpEndpoint("http://otel-collector");
+      expect(result).toBe("http://otel-collector/v1/traces");
+    });
+
+    test("should fix common typo /v1/trace (missing s) to /v1/traces", () => {
+      // URL ending in /v1/trace (missing s) should be normalized to /v1/traces
+      const result = getOtelExporterOtlpEndpoint(
+        "http://otel-collector:4318/v1/trace",
+      );
+      expect(result).toBe("http://otel-collector:4318/v1/traces");
     });
   });
 });

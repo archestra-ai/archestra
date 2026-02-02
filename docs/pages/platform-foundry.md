@@ -30,9 +30,9 @@ I built a simple Foundry agent to help manage GitHub issues. The setup:
 - Created an agent in Microsoft Foundry
 - Added a hosted model (gpt-4.1) and Instructions (System prompt)
 - Opened Tools and connected GitHub via MCP server, so it can read issues from public and private repos and create new ones
-![Screenshot: Foundry agent configuration with GitHub MCP tool and guardrails](/blog/dec-9-2025-02.png)
+![Screenshot: Foundry agent configuration with GitHub MCP tool and guardrails](/docs/platform-foundry-02.png)
 - Assigned Foundry's guardrails enabled: `Risks with controls:  Jailbreak (1), Indirect prompt injections (1)...`
-![Screenshot: Foundry agent configuration with GitHub MCP tool and guardrails](/blog/dec-9-2025-01.png)
+![Screenshot: Foundry agent configuration with GitHub MCP tool and guardrails](/docs/platform-foundry-01.png)
 
 Similarly I could build an agent that is triggered by an incomming email, reads docs and sends email back. This is a typical enterprise use case when agent processes incoming potentially untrusted information and takes action based on their content. 
 
@@ -58,7 +58,7 @@ The agent followed the injected instructions. Despite having Foundry's "Indirect
 2. Created a new unauthorized issue in the archestra repository
 3. Posted sensitive information from a private repository to the issue
 
-![Screenshot: Agent execution showing it following the malicious instructions](/blog/dec-9-2025-03.png)
+![Screenshot: Agent execution showing it following the malicious instructions](/docs/platform-foundry-03.png)
 
 All three risks from the "lethal trifecta" materialized:
 
@@ -86,7 +86,7 @@ Here's how it works:
 
 Archestra sits as a proxy layer between your agent and the MCP servers/LLM. Open your AI Aplication code and change the destination to Archestra
 
-![Screenshot: Archestra proxy configuration](/blog/dec-9-2025-04.png)
+![Screenshot: Archestra proxy configuration](/docs/platform-foundry-04.png)
 
 **Step 2: Define access policies**
 

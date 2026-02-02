@@ -186,4 +186,360 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data.every((tc) => tc.agentId === agent.id)).toBe(true);
     });
   });
+
+  describe("search filtering", () => {
+    test("searches by mcpServerName (case insensitive)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "MyTestServer",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "someTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "OtherServer",
+        method: "tools/call",
+        toolCall: { id: "test-id-2", name: "otherTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      // Search with lowercase
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "mytestserver" },
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].mcpServerName).toBe("MyTestServer");
+    });
+
+    test("searches by tool name (case insensitive)", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server1",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "FileSearchTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server2",
+        method: "tools/call",
+        toolCall: { id: "test-id-2", name: "EmailSender", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      // Search with mixed case
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "filesearch" },
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].toolCall?.name).toBe("FileSearchTool");
+    });
+
+    test("searches by tool arguments", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server1",
+        method: "tools/call",
+        toolCall: {
+          id: "test-id",
+          name: "searchTool",
+          arguments: { query: "important document", maxResults: 10 },
+        },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server2",
+        method: "tools/call",
+        toolCall: {
+          id: "test-id-2",
+          name: "otherTool",
+          arguments: { path: "/some/path" },
+        },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      // Search by argument value
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "important document" },
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].toolCall?.name).toBe("searchTool");
+    });
+
+    test("searches by method field (case insensitive)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server1",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "someTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server2",
+        method: "tools/list",
+        toolCall: null,
+        toolResult: { tools: [{ name: "tool1" }] },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server3",
+        method: "initialize",
+        toolCall: null,
+        toolResult: { capabilities: {} },
+      });
+
+      // Search with mixed case
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "TOOLS/LIST" },
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].method).toBe("tools/list");
+    });
+
+    test("searches by toolResult content (case insensitive)", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server1",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "searchTool", arguments: {} },
+        toolResult: {
+          isError: false,
+          content: "Found UniqueResultContent12345 in the database",
+        },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server2",
+        method: "tools/call",
+        toolCall: { id: "test-id-2", name: "otherTool", arguments: {} },
+        toolResult: { isError: false, content: "Normal result" },
+      });
+
+      // Search by tool result content
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "uniqueresultcontent12345" },
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].toolCall?.name).toBe("searchTool");
+    });
+
+    test("searches by toolResult with structured data", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server1",
+        method: "tools/list",
+        toolCall: null,
+        toolResult: {
+          tools: [
+            { name: "SearchableToolInResult999", description: "A tool" },
+            { name: "AnotherTool", description: "Another tool" },
+          ],
+        },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "server2",
+        method: "tools/list",
+        toolCall: null,
+        toolResult: {
+          tools: [{ name: "RegularTool", description: "Regular tool" }],
+        },
+      });
+
+      // Search for a tool name that appears in the result structure
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "SearchableToolInResult999" },
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].mcpServerName).toBe("server1");
+    });
+
+    test("search returns multiple matches", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "file-server",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "readFile", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "other-server",
+        method: "tools/call",
+        toolCall: { id: "test-id-2", name: "writeFile", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "unrelated",
+        method: "tools/call",
+        toolCall: { id: "test-id-3", name: "sendEmail", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      // Search for "file" - should match server name and tool names
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "file" },
+      );
+
+      expect(toolCalls.data).toHaveLength(2);
+    });
+
+    test("search with no matches returns empty", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "test-server",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "testTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "nonexistent" },
+      );
+
+      expect(toolCalls.data).toHaveLength(0);
+    });
+
+    test("search works with getAllMcpToolCallsForAgentPaginated", async () => {
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "DatabaseServer",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "queryTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "OtherServer",
+        method: "tools/call",
+        toolCall: { id: "test-id-2", name: "otherTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      const toolCalls =
+        await McpToolCallModel.getAllMcpToolCallsForAgentPaginated(
+          agent.id,
+          { limit: 100, offset: 0 },
+          undefined,
+          undefined,
+          { search: "database" },
+        );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].mcpServerName).toBe("DatabaseServer");
+    });
+
+    test("search combined with date filter", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "TargetServer",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "targetTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { search: "target", startDate, endDate },
+      );
+
+      expect(toolCalls.data.length).toBeGreaterThanOrEqual(1);
+      expect(toolCalls.data[0].mcpServerName).toBe("TargetServer");
+    });
+  });
 });

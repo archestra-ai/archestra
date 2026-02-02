@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +20,7 @@ import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useFeatureFlag } from "@/lib/features.hook";
 import {
   useCreateInternalMcpCatalogItem,
-  useInternalMcpCatalogSuspense,
+  useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import { cn } from "@/lib/utils";
 import { ArchestraCatalogTab } from "./archestra-catalog-tab";
@@ -27,10 +28,13 @@ import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
 
+type CatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
 interface CreateCatalogDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (createdItem: CatalogItem) => void;
 }
 
 type TabType = "archestra-catalog" | "remote" | "local";
@@ -42,7 +46,7 @@ export function CreateCatalogDialog({
 }: CreateCatalogDialogProps) {
   const [activeTab, setActiveTab] = useState<TabType>("archestra-catalog");
   const createMutation = useCreateInternalMcpCatalogItem();
-  const { data: catalogItems } = useInternalMcpCatalogSuspense();
+  const { data: catalogItems } = useInternalMcpCatalog();
   const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
   const handleClose = () => {
@@ -52,9 +56,11 @@ export function CreateCatalogDialog({
 
   const onSubmit = async (values: McpCatalogFormValues) => {
     const apiData = transformFormToApiData(values);
-    await createMutation.mutateAsync(apiData);
+    const createdItem = await createMutation.mutateAsync(apiData);
     handleClose();
-    onSuccess?.();
+    if (createdItem) {
+      onSuccess?.(createdItem);
+    }
   };
 
   const footer = (
@@ -123,7 +129,7 @@ export function CreateCatalogDialog({
                       : "text-muted-foreground",
                   )}
                 >
-                  Self-hosted (orchestrated by Archestra in K8S)
+                  Self-hosted (orchestrated by Archestra in K8s)
                   {activeTab === "local" && (
                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                   )}

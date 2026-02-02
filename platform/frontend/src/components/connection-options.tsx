@@ -22,27 +22,45 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePrompts } from "@/lib/prompts.query";
+import { useInternalAgents, useProfiles } from "@/lib/agent.query";
 
 interface ConnectionOptionsProps {
-  agentId?: string;
+  mcpGatewayId?: string;
+  llmProxyId?: string;
   activeTab: ArchitectureTabType;
   onTabChange: (tab: ArchitectureTabType) => void;
 }
 
 export function ConnectionOptions({
-  agentId,
+  mcpGatewayId,
+  llmProxyId,
   activeTab,
   onTabChange,
 }: ConnectionOptionsProps) {
-  const { data: prompts } = usePrompts();
+  const { data: internalAgents } = useInternalAgents();
+  const { data: llmProxies } = useProfiles({
+    filters: { agentTypes: ["profile", "llm_proxy"] },
+  });
   const [selectedA2aAgentId, setSelectedA2aAgentId] = useState<string | null>(
+    null,
+  );
+  const [selectedLlmProxyId, setSelectedLlmProxyId] = useState<string | null>(
     null,
   );
 
   // Get effective agent ID (selected or first available)
-  const effectiveA2aAgentId = selectedA2aAgentId ?? prompts?.[0]?.id ?? null;
-  const selectedA2aAgent = prompts?.find((p) => p.id === effectiveA2aAgentId);
+  const effectiveA2aAgentId =
+    selectedA2aAgentId ?? internalAgents?.[0]?.id ?? null;
+  const selectedA2aAgent = internalAgents?.find(
+    (a) => a.id === effectiveA2aAgentId,
+  );
+
+  // Get effective LLM proxy ID (selected, or passed default, or first available)
+  const effectiveLlmProxyId =
+    selectedLlmProxyId ?? llmProxyId ?? llmProxies?.[0]?.id ?? null;
+  const selectedLlmProxy = llmProxies?.find(
+    (p) => p.id === effectiveLlmProxyId,
+  );
 
   return (
     <div className="space-y-6">
@@ -62,7 +80,7 @@ export function ConnectionOptions({
                 }
               : {
                   backgroundColor: "hsl(var(--muted) / 0.3)",
-                  borderColor: "transparent",
+                  borderColor: "rgba(0, 0, 0, 0.08)",
                 }
           }
         >
@@ -73,7 +91,7 @@ export function ConnectionOptions({
                 activeTab === "proxy" ? { color: "var(--chart-1)" } : undefined
               }
             />
-            <span className="font-medium">LLM Gateway</span>
+            <span className="font-medium">LLM Proxy</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
@@ -114,7 +132,7 @@ export function ConnectionOptions({
                 }
               : {
                   backgroundColor: "hsl(var(--muted) / 0.3)",
-                  borderColor: "transparent",
+                  borderColor: "rgba(0, 0, 0, 0.08)",
                 }
           }
         >
@@ -159,7 +177,7 @@ export function ConnectionOptions({
                 }
               : {
                   backgroundColor: "hsl(var(--muted) / 0.3)",
-                  borderColor: "transparent",
+                  borderColor: "rgba(0, 0, 0, 0.08)",
                 }
           }
         >
@@ -195,15 +213,52 @@ export function ConnectionOptions({
       <div className="relative">
         {activeTab === "proxy" && (
           <div className="animate-in fade-in-0 slide-in-from-left-2 duration-300">
-            <div className="p-4 rounded-lg border bg-card">
-              <ProxyConnectionInstructions />
+            <div className="p-4 rounded-lg border bg-card space-y-6">
+              {/* LLM Proxy Selector */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Select LLM Proxy</Label>
+                <Select
+                  value={effectiveLlmProxyId ?? ""}
+                  onValueChange={setSelectedLlmProxyId}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select an LLM Proxy">
+                      {selectedLlmProxy && (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Network className="h-4 w-4 shrink-0" />
+                          <span className="truncate">
+                            {selectedLlmProxy.name}
+                          </span>
+                        </div>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {llmProxies?.map((proxy) => (
+                      <SelectItem key={proxy.id} value={proxy.id}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Network className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{proxy.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Connection Instructions */}
+              <ProxyConnectionInstructions
+                agentId={effectiveLlmProxyId ?? undefined}
+              />
             </div>
           </div>
         )}
         {activeTab === "mcp" && (
           <div className="animate-in fade-in-0 slide-in-from-right-2 duration-300">
             <div className="p-4 rounded-lg border bg-card">
-              {agentId && <McpConnectionInstructions agentId={agentId} />}
+              {mcpGatewayId && (
+                <McpConnectionInstructions agentId={mcpGatewayId} />
+              )}
             </div>
           </div>
         )}
@@ -220,19 +275,21 @@ export function ConnectionOptions({
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select an agent">
                       {selectedA2aAgent && (
-                        <div className="flex items-center gap-2">
-                          <Bot className="h-4 w-4" />
-                          <span>{selectedA2aAgent.name}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Bot className="h-4 w-4 shrink-0" />
+                          <span className="truncate">
+                            {selectedA2aAgent.name}
+                          </span>
                         </div>
                       )}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {prompts?.map((agent) => (
+                    {internalAgents?.map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
-                        <div className="flex items-center gap-2">
-                          <Bot className="h-4 w-4" />
-                          <span>{agent.name}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Bot className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{agent.name}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -242,7 +299,7 @@ export function ConnectionOptions({
 
               {/* Connection Instructions */}
               {selectedA2aAgent && (
-                <A2AConnectionInstructions prompt={selectedA2aAgent} />
+                <A2AConnectionInstructions agent={selectedA2aAgent} />
               )}
             </div>
           </div>

@@ -6,7 +6,7 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
-import { DEFAULT_TABLE_LIMIT } from "@/lib/utils";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "@/lib/utils";
 import LlmProxyLogsPage from "./page.client";
 
 export const dynamic = "force-dynamic";
@@ -31,18 +31,26 @@ export default async function LlmProxyLogsPageServer() {
   };
   try {
     const headers = await getServerApiHeaders();
+    const [interactionsResponse, agentsResponse] = await Promise.all([
+      archestraApiSdk.getInteractions({
+        headers,
+        query: {
+          limit: DEFAULT_TABLE_LIMIT,
+          offset: 0,
+          sortBy: "createdAt",
+          sortDirection: "desc",
+        },
+      }),
+      archestraApiSdk.getAllAgents({ headers }),
+    ]);
+    if (interactionsResponse.error) {
+      handleApiError(interactionsResponse.error);
+    }
+    if (agentsResponse.error) {
+      handleApiError(agentsResponse.error);
+    }
     initialData = {
-      interactions: (
-        await archestraApiSdk.getInteractions({
-          headers,
-          query: {
-            limit: DEFAULT_TABLE_LIMIT,
-            offset: 0,
-            sortBy: "createdAt",
-            sortDirection: "desc",
-          },
-        })
-      ).data || {
+      interactions: interactionsResponse.data || {
         data: [],
         pagination: {
           currentPage: 1,
@@ -53,10 +61,9 @@ export default async function LlmProxyLogsPageServer() {
           hasPrev: false,
         },
       },
-      agents: (await archestraApiSdk.getAllAgents({ headers })).data || [],
+      agents: agentsResponse.data || [],
     };
   } catch (error) {
-    console.error(error);
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
   return <LlmProxyLogsPage initialData={initialData} />;

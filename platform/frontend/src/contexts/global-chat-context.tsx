@@ -5,6 +5,7 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+  type TokenUsage,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
@@ -40,6 +41,8 @@ interface ChatSession {
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
+  /** Token usage for the current/last response */
+  tokenUsage: TokenUsage | null;
 }
 
 interface ChatContextValue {
@@ -214,6 +217,7 @@ function ChatSessionHook({
   const queryClient = useQueryClient();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
@@ -268,6 +272,13 @@ function ChatSessionHook({
         }, 500);
       }
     },
+    onData: (dataPart) => {
+      // Handle token usage data from the backend stream
+      if (dataPart.type === "data-token-usage") {
+        const usage = dataPart.data as TokenUsage;
+        setTokenUsage(usage);
+      }
+    },
   } as Parameters<typeof useChat>[0]);
 
   // Auto-generate title after first assistant response
@@ -316,6 +327,7 @@ function ChatSessionHook({
       addToolResult,
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
+      tokenUsage,
     };
 
     sessionsRef.current.set(conversationId, session);
@@ -331,6 +343,7 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     pendingCustomServerToolCall,
+    tokenUsage,
     sessionsRef,
     notifySessionUpdate,
   ]);

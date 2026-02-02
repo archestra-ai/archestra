@@ -3,17 +3,13 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
 } from "@shared";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { appearanceKeys } from "@/lib/appearance.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { handleApiError } from "./utils";
 
 /**
  * Query key factory for organization-related queries
@@ -35,7 +31,7 @@ export const organizationKeys = {
  */
 export function useInvitation(invitationId: string) {
   const session = authClient.useSession();
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: organizationKeys.invitation(invitationId),
     queryFn: async () => {
       if (!session) {
@@ -104,7 +100,7 @@ export function useAcceptInvitation() {
  * List all pending invitations for an organization
  */
 export function useInvitationsList(organizationId: string | undefined) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: [...organizationKeys.invitations(), organizationId],
     queryFn: async () => {
       if (!organizationId) return [];
@@ -199,9 +195,10 @@ export function useCreateInvitation(organizationId: string | undefined) {
       });
 
       if (response.error) {
-        throw new Error(
+        toast.error(
           response.error.message || "Failed to generate invitation link",
         );
+        return null;
       }
 
       return response.data;
@@ -209,11 +206,6 @@ export function useCreateInvitation(organizationId: string | undefined) {
     onSuccess: () => {
       toast.success("Invitation link generated", {
         description: "Share this link with the person you want to invite",
-      });
-    },
-    onError: (error) => {
-      toast.error("Error", {
-        description: error.message || "Failed to generate invitation link",
       });
     },
   });
@@ -246,13 +238,24 @@ export function useOrganizationOnboardingStatus(enabled: boolean) {
   return useQuery({
     queryKey: organizationKeys.onboardingStatus(),
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getOnboardingStatus();
+      const { data, error } = await archestraApiSdk.getOnboardingStatus();
 
-      if (!data) {
-        throw new Error("Failed to fetch organization onboarding status");
+      if (error) {
+        handleApiError(error);
+        return {
+          hasProfilesConfigured: false,
+          hasToolsConfigured: false,
+          isComplete: false,
+        };
       }
 
-      return data;
+      return (
+        data ?? {
+          hasProfilesConfigured: false,
+          hasToolsConfigured: false,
+          isComplete: false,
+        }
+      );
     },
     refetchInterval: enabled ? 3000 : false, // Poll every 3 seconds when dialog is open
     enabled, // Only run query when enabled
@@ -271,16 +274,18 @@ export function useUpdateOrganization(
     mutationFn: async (
       data: archestraApiTypes.UpdateOrganizationData["body"],
     ) => {
-      const { data: updatedOrganization } =
+      const { data: updatedOrganization, error } =
         await archestraApiSdk.updateOrganization({ body: data });
 
-      if (!updatedOrganization) {
-        throw new Error(onErrorMessage);
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
       }
 
       return updatedOrganization;
     },
     onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
       // Update organization details cache
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
       // Update appearance cache immediately with the new values
@@ -292,9 +297,6 @@ export function useUpdateOrganization(
       // Invalidate features cache since globalToolPolicy comes from organization record
       queryClient.invalidateQueries({ queryKey: ["features"] });
       toast.success(onSuccessMessage);
-    },
-    onError: (_error) => {
-      toast.error(onErrorMessage);
     },
   });
 }

@@ -1,13 +1,19 @@
 export { default as accountsTable } from "./account";
-export { default as agentsTable } from "./agent";
+export {
+  type AgentHistoryEntry,
+  default as agentsTable,
+} from "./agent";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
+export { default as apiKeyModelsTable } from "./api-key-model";
 export {
   type ChatApiKeyScope,
   default as chatApiKeysTable,
 } from "./chat-api-key";
+export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
+export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";
@@ -26,12 +32,11 @@ export { default as mcpServerUsersTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
+export { default as modelsTable } from "./model";
 export { default as optimizationRulesTable } from "./optimization-rule";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as processedEmailsTable } from "./processed-email";
-export { default as promptsTable } from "./prompt";
-export { default as promptAgentsTable } from "./prompt-agent";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
 export { default as ssoProvidersTable } from "./sso-provider";

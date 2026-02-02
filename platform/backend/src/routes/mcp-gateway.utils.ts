@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -7,6 +6,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
+  AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
@@ -16,14 +16,12 @@ import {
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import { userHasPermission } from "@/auth/utils";
-import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
-  isArchestraPrefixedToken,
   McpToolCallModel,
   TeamModel,
   TeamTokenModel,
@@ -46,56 +44,6 @@ export interface TokenAuthResult {
   isUserToken?: boolean;
   /** User ID for user tokens */
   userId?: string;
-}
-
-/**
- * Session management types
- */
-export interface SessionData {
-  server: Server;
-  transport: StreamableHTTPServerTransport;
-  lastAccess: number;
-  agentId: string;
-  agent?: {
-    id: string;
-    name: string;
-  }; // Cache agent data
-  // Token auth info (only present for archestra_ token auth)
-  tokenAuth?: {
-    tokenId: string;
-    teamId: string | null;
-    isOrganizationToken: boolean;
-  };
-}
-
-/**
- * Active sessions with last access time for cleanup
- * Sessions must persist across requests within the same session
- */
-export const activeSessions = new Map<string, SessionData>();
-
-/**
- * Session timeout (30 minutes)
- */
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
-
-/**
- * Clean up expired sessions periodically
- */
-export function cleanupExpiredSessions(): void {
-  const now = Date.now();
-  const expiredSessionIds: string[] = [];
-
-  for (const [sessionId, sessionData] of activeSessions.entries()) {
-    if (now - sessionData.lastAccess > SESSION_TIMEOUT_MS) {
-      expiredSessionIds.push(sessionId);
-    }
-  }
-
-  for (const sessionId of expiredSessionIds) {
-    logger.info({ sessionId }, "Cleaning up expired session");
-    activeSessions.delete(sessionId);
-  }
 }
 
 /**
@@ -177,20 +125,29 @@ export async function createAgentServer(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
       try {
-        // Check if this is an Archestra tool
+        // Check if this is an Archestra tool or agent delegation tool
         const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-        if (name.startsWith(archestraToolPrefix)) {
+        const isArchestraTool = name.startsWith(archestraToolPrefix);
+        const isAgentTool = name.startsWith(AGENT_TOOL_PREFIX);
+
+        if (isArchestraTool || isAgentTool) {
           logger.info(
             {
               agentId,
               toolName: name,
+              toolType: isAgentTool ? "agent-delegation" : "archestra",
             },
-            "Archestra MCP tool call received",
+            isAgentTool
+              ? "Agent delegation tool call received"
+              : "Archestra MCP tool call received",
           );
 
-          // Handle Archestra tools directly
-          const archestraResponse = await executeArchestraTool(name, args, {
-            profile: { id: agent.id, name: agent.name },
+          // Handle Archestra and agent delegation tools directly
+          const response = await executeArchestraTool(name, args, {
+            agent: { id: agent.id, name: agent.name },
+            agentId: agent.id,
+            organizationId: tokenAuth?.organizationId,
+            tokenAuth,
           });
 
           logger.info(
@@ -198,10 +155,12 @@ export async function createAgentServer(
               agentId,
               toolName: name,
             },
-            "Archestra MCP tool call completed",
+            isAgentTool
+              ? "Agent delegation tool call completed"
+              : "Archestra MCP tool call completed",
           );
 
-          return archestraResponse;
+          return response;
         }
 
         logger.info(
@@ -273,32 +232,22 @@ export async function createAgentServer(
 }
 
 /**
- * Create a fresh transport for a request
- * We use session-based mode as required by the SDK for JSON responses
+ * Create a stateless transport for a request
+ * Each request gets a fresh transport with no session persistence
  */
-export function createTransport(
+export function createStatelessTransport(
   agentId: string,
-  clientSessionId: string | undefined,
   logger: { info: (obj: unknown, msg: string) => void },
 ): StreamableHTTPServerTransport {
-  logger.info({ agentId, clientSessionId }, "Creating new transport instance");
+  logger.info({ agentId }, "Creating stateless transport instance");
 
-  // Create transport with session management
-  // If client provides a session ID, we'll use it; otherwise generate one
+  // Create transport in stateless mode (no session persistence)
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => {
-      const sessionId =
-        clientSessionId || `session-${Date.now()}-${randomUUID()}`;
-      logger.info(
-        { agentId, sessionId, wasClientProvided: !!clientSessionId },
-        "Using session ID",
-      );
-      return sessionId;
-    },
+    sessionIdGenerator: undefined, // Stateless mode - no sessions
     enableJsonResponse: true, // Use JSON responses instead of SSE
   });
 
-  logger.info({ agentId }, "Transport instance created");
+  logger.info({ agentId }, "Stateless transport instance created");
   return transport;
 }
 
@@ -316,6 +265,10 @@ export function extractBearerToken(request: FastifyRequest): string | null {
   return tokenMatch?.[1] ?? null;
 }
 
+/**
+ * Extract profile ID from URL path and token from Authorization header
+ * URL format: /v1/mcp/:profileId
+ */
 export function extractProfileIdAndTokenFromRequest(
   request: FastifyRequest,
 ): { profileId: string; token: string } | null {
@@ -324,24 +277,17 @@ export function extractProfileIdAndTokenFromRequest(
     return null;
   }
 
-  // Check if it's a new archestra_ prefixed token
-  // If it is, we know this is a new format: /mcp/v1/<profile_id>
-  if (isArchestraPrefixedToken(token)) {
-    const profileId = request.url.split("/").at(-1);
-    try {
-      const parsedProfileId = UuidIdSchema.parse(profileId);
-      return parsedProfileId ? { profileId: parsedProfileId, token } : null;
-    } catch {
-      return null;
-    }
-  } else {
-    // Legacy UUID token - profileID and token are the same from Authorization header
-    try {
-      const parsed = UuidIdSchema.parse(token);
-      return { profileId: parsed, token };
-    } catch {
-      return null;
-    }
+  // Extract profile ID from URL path (last segment)
+  const profileId = request.url.split("/").at(-1)?.split("?")[0];
+  if (!profileId) {
+    return null;
+  }
+
+  try {
+    const parsedProfileId = UuidIdSchema.parse(profileId);
+    return parsedProfileId ? { profileId: parsedProfileId, token } : null;
+  } catch {
+    return null;
   }
 }
 
@@ -362,10 +308,10 @@ export async function validateTeamToken(
   // Validate the token itself
   const token = await TeamTokenModel.validateToken(tokenValue);
   if (!token) {
-    logger.debug(
-      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
-      "validateTeamToken: token not found in team_token table",
-    );
+    // logger.debug(
+    //   { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+    //   "validateTeamToken: token not found in team_token table",
+    // );
     return null;
   }
 
@@ -447,11 +393,6 @@ export async function validateUserToken(
     profileTeamIds.includes(teamId),
   );
 
-  logger.debug(
-    { profileId, userId: token.userId, userTeamIds, profileTeamIds, hasAccess },
-    "validateUserToken: checking team access",
-  );
-
   if (!hasAccess) {
     logger.warn(
       { profileId, userId: token.userId, userTeamIds, profileTeamIds },
@@ -488,10 +429,6 @@ export async function validateMCPGatewayToken(
   // Then try user token validation
   const userTokenResult = await validateUserToken(profileId, tokenValue);
   if (userTokenResult) {
-    logger.debug(
-      { profileId, userId: userTokenResult.userId },
-      "validateMCPGatewayToken: validated as user token",
-    );
     return userTokenResult;
   }
 
@@ -500,37 +437,4 @@ export async function validateMCPGatewayToken(
     "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
   );
   return null;
-}
-
-/**
- * Clear all active sessions for a specific agent
- */
-export function clearAgentSessions(agentId: string): void {
-  const sessionsToClear: string[] = [];
-
-  // Find all sessions for this agent
-  for (const [sessionId, sessionData] of activeSessions.entries()) {
-    if (sessionData.agentId === agentId) {
-      sessionsToClear.push(sessionId);
-    }
-  }
-
-  // Delete all matching sessions
-  for (const sessionId of sessionsToClear) {
-    logger.info({ agentId, sessionId }, "Clearing agent session");
-    activeSessions.delete(sessionId);
-  }
-
-  logger.info(
-    { agentId, clearedCount: sessionsToClear.length },
-    "All sessions cleared, now clearing cached MCP client",
-  );
-
-  // Also clear the cached MCP client so it will reconnect with a new session
-  clearChatMcpClient(agentId);
-
-  logger.info(
-    { agentId, clearedCount: sessionsToClear.length },
-    "✅ Cleared agent sessions and client cache - next request will create fresh session",
-  );
 }

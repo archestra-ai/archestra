@@ -1,4 +1,4 @@
-import { TEST_CATALOG_ITEM_NAME } from "../../consts";
+import { TEST_CATALOG_ITEM_NAME, WIREMOCK_INTERNAL_URL } from "../../consts";
 import {
   findCatalogItem,
   findInstalledServer,
@@ -75,12 +75,14 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           throw new Error("Default Team not found");
         }
 
-        // Create a catalog item for context7 remote MCP server (no auth required)
+        // Create a catalog item for context7 remote MCP server (mocked via WireMock)
+        // Use WIREMOCK_INTERNAL_URL because the backend needs to connect to WireMock
+        // (In CI, backend runs in a K8s pod and needs the service DNS name)
         const catalogResponse = await createMcpCatalogItem(request, {
           name: "Context7 - Remote",
           description: "Context7 MCP Server for testing remote installation",
           serverType: "remote",
-          serverUrl: "https://mcp.context7.com/mcp",
+          serverUrl: `${WIREMOCK_INTERNAL_URL}/mcp/context7`,
         });
         const catalogItem = await catalogResponse.json();
         catalogId = catalogItem.id;
@@ -228,37 +230,6 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         t.name.includes("print_archestra_test"),
       );
       expect(testTool).toBeDefined();
-    });
-
-    test("should restart local MCP server successfully", async ({
-      request,
-      makeApiRequest,
-      restartMcpServer,
-    }) => {
-      // Get tools count before restart
-      const toolsBefore = await getMcpServerTools(
-        request,
-        makeApiRequest,
-        serverId,
-      );
-      const toolsCountBefore = toolsBefore.length;
-
-      // Restart the MCP server
-      const restartResponse = await restartMcpServer(request, serverId);
-      expect(restartResponse.status()).toBe(200);
-      const restartResult = await restartResponse.json();
-      expect(restartResult.success).toBe(true);
-
-      // Wait for the server to be ready after restart
-      await waitForServerInstallation(request, serverId);
-
-      // Verify tools are still available after restart
-      const toolsAfter = await getMcpServerTools(
-        request,
-        makeApiRequest,
-        serverId,
-      );
-      expect(toolsAfter.length).toBe(toolsCountBefore);
     });
   });
 

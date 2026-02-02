@@ -275,7 +275,8 @@ describe("K8sDeployment.createContainerEnvFromConfig", () => {
 
     const instance = createK8sDeploymentInstance(environmentValues);
     const result = instance.createContainerEnvFromConfig();
-    expect(result).toEqual(expected);
+    expect(result.envVars).toEqual(expected);
+    expect(result.mountedSecrets).toEqual([]);
   });
 });
 
@@ -1640,6 +1641,740 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(deploymentSpec.spec?.template.spec?.serviceAccountName).toBe(
       "archestra-platform-mcp-k8s-operator",
     );
+  });
+
+  test("generates deploymentSpec with volume and volumeMount for mounted secrets", () => {
+    const mockCatalogItem = {
+      id: "catalog-mounted",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "TLS_CERT",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true, // Should be mounted as file
+          },
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: false, // Should be env var
+          },
+          {
+            key: "PORT",
+            type: "plain_text" as const,
+            value: "3000",
+            promptOnInstallation: false,
+          },
+        ],
+      },
+    };
+
+    const environmentValues: Record<string, string> = {
+      TLS_CERT: "-----BEGIN CERTIFICATE-----...",
+      API_KEY: "secret-api-key",
+    };
+
+    const deployment = createK8sDeploymentInstance(
+      environmentValues,
+      undefined,
+    );
+    // @ts-expect-error - accessing private property for testing
+    deployment.catalogItem = mockCatalogItem;
+
+    const deploymentSpec = deployment.generateDeploymentSpec(
+      "test:latest",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const podSpec = deploymentSpec.spec?.template.spec;
+    const container = podSpec?.containers[0];
+
+    // Verify volumes are created for mounted secrets
+    expect(podSpec?.volumes).toHaveLength(1);
+    expect(podSpec?.volumes?.[0]).toEqual({
+      name: "mounted-secrets",
+      secret: {
+        secretName: "mcp-server-test-server-id-secrets",
+        items: [{ key: "TLS_CERT", path: "TLS_CERT" }],
+      },
+    });
+
+    // Verify volumeMounts
+    expect(container?.volumeMounts).toHaveLength(1);
+    expect(container?.volumeMounts?.[0]).toEqual({
+      name: "mounted-secrets",
+      mountPath: "/secrets/TLS_CERT",
+      subPath: "TLS_CERT",
+      readOnly: true,
+    });
+
+    // Verify TLS_CERT is NOT in env vars (it's mounted)
+    const tlsCertEnv = container?.env?.find((e) => e.name === "TLS_CERT");
+    expect(tlsCertEnv).toBeUndefined();
+
+    // Verify API_KEY is in env vars with secretKeyRef (not mounted)
+    const apiKeyEnv = container?.env?.find((e) => e.name === "API_KEY");
+    expect(apiKeyEnv?.valueFrom?.secretKeyRef).toEqual({
+      name: "mcp-server-test-server-id-secrets",
+      key: "API_KEY",
+    });
+
+    // Verify PORT is a plain value env var
+    const portEnv = container?.env?.find((e) => e.name === "PORT");
+    expect(portEnv?.value).toBe("3000");
+  });
+
+  test("generates deploymentSpec with no volumes when no mounted secrets", () => {
+    const mockCatalogItem = {
+      id: "catalog-no-mounted",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        environment: [
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: false, // Not mounted
+          },
+        ],
+      },
+    };
+
+    const deployment = createK8sDeploymentInstance(
+      { API_KEY: "secret-value" },
+      undefined,
+    );
+    // @ts-expect-error - accessing private property for testing
+    deployment.catalogItem = mockCatalogItem;
+
+    const deploymentSpec = deployment.generateDeploymentSpec(
+      "test:latest",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const podSpec = deploymentSpec.spec?.template.spec;
+
+    // No volumes should be present
+    expect(podSpec?.volumes).toBeUndefined();
+    expect(podSpec?.containers[0]?.volumeMounts).toBeUndefined();
+
+    // API_KEY should be a secretKeyRef env var
+    const apiKeyEnv = podSpec?.containers[0]?.env?.find(
+      (e) => e.name === "API_KEY",
+    );
+    expect(apiKeyEnv?.valueFrom?.secretKeyRef).toEqual({
+      name: "mcp-server-test-server-id-secrets",
+      key: "API_KEY",
+    });
+  });
+
+  test("generates deploymentSpec with multiple mounted secrets sharing one volume", () => {
+    const mockCatalogItem = {
+      id: "catalog-multi",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        environment: [
+          {
+            key: "TLS_CERT",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+          {
+            key: "TLS_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+          {
+            key: "CA_BUNDLE",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+        ],
+      },
+    };
+
+    const environmentValues: Record<string, string> = {
+      TLS_CERT: "-----BEGIN CERTIFICATE-----...",
+      TLS_KEY: "-----BEGIN PRIVATE KEY-----...",
+      CA_BUNDLE: "-----BEGIN CERTIFICATE-----...",
+    };
+
+    const deployment = createK8sDeploymentInstance(
+      environmentValues,
+      undefined,
+    );
+    // @ts-expect-error - accessing private property for testing
+    deployment.catalogItem = mockCatalogItem;
+
+    const deploymentSpec = deployment.generateDeploymentSpec(
+      "test:latest",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const podSpec = deploymentSpec.spec?.template.spec;
+    const container = podSpec?.containers[0];
+
+    // One volume with all mounted secrets
+    expect(podSpec?.volumes).toHaveLength(1);
+    expect(podSpec?.volumes?.[0].secret?.items).toHaveLength(3);
+
+    // Three volumeMounts
+    expect(container?.volumeMounts).toHaveLength(3);
+    expect(container?.volumeMounts?.map((v) => v.mountPath).sort()).toEqual([
+      "/secrets/CA_BUNDLE",
+      "/secrets/TLS_CERT",
+      "/secrets/TLS_KEY",
+    ]);
+
+    // All mounts should be readOnly
+    for (const mount of container?.volumeMounts || []) {
+      expect(mount.readOnly).toBe(true);
+    }
+
+    // No env vars for mounted secrets
+    expect(container?.env).toEqual([]);
+  });
+
+  test("mounted flag is ignored for non-secret types", () => {
+    const mockCatalogItem = {
+      id: "catalog-ignore",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        environment: [
+          {
+            key: "PORT",
+            type: "plain_text" as const,
+            value: "3000",
+            promptOnInstallation: false,
+            mounted: true, // Should be ignored for plain_text
+          },
+        ],
+      },
+    };
+
+    const deployment = createK8sDeploymentInstance({}, undefined);
+    // @ts-expect-error - accessing private property for testing
+    deployment.catalogItem = mockCatalogItem;
+
+    const deploymentSpec = deployment.generateDeploymentSpec(
+      "test:latest",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const podSpec = deploymentSpec.spec?.template.spec;
+
+    // No volumes since plain_text can't be mounted
+    expect(podSpec?.volumes).toBeUndefined();
+
+    // PORT should still be a regular env var
+    const portEnv = podSpec?.containers[0]?.env?.find((e) => e.name === "PORT");
+    expect(portEnv?.value).toBe("3000");
+  });
+
+  test("skips mounted secrets with empty values - no volumes created", () => {
+    const mockCatalogItem = {
+      id: "catalog-empty-mounted",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        environment: [
+          {
+            key: "TLS_CERT",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+          {
+            key: "TLS_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+        ],
+      },
+    };
+
+    // Empty values for both mounted secrets
+    const environmentValues: Record<string, string> = {
+      TLS_CERT: "",
+      TLS_KEY: "   ", // Whitespace only
+    };
+
+    const deployment = createK8sDeploymentInstance(
+      environmentValues,
+      undefined,
+    );
+    // @ts-expect-error - accessing private property for testing
+    deployment.catalogItem = mockCatalogItem;
+
+    const deploymentSpec = deployment.generateDeploymentSpec(
+      "test:latest",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const podSpec = deploymentSpec.spec?.template.spec;
+    const container = podSpec?.containers[0];
+
+    // No volumes should be created for empty secrets
+    expect(podSpec?.volumes).toBeUndefined();
+    expect(container?.volumeMounts).toBeUndefined();
+
+    // No env vars either (mounted secrets skip env var injection)
+    expect(container?.env).toEqual([]);
+  });
+
+  test("only mounts secrets with values, skips empty ones", () => {
+    const mockCatalogItem = {
+      id: "catalog-partial-mounted",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        environment: [
+          {
+            key: "TLS_CERT",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+          {
+            key: "TLS_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+          {
+            key: "CA_BUNDLE",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            mounted: true,
+          },
+        ],
+      },
+    };
+
+    // Only TLS_CERT has a value
+    const environmentValues: Record<string, string> = {
+      TLS_CERT: "-----BEGIN CERTIFICATE-----...",
+      TLS_KEY: "", // Empty - should be skipped
+      CA_BUNDLE: "  ", // Whitespace - should be skipped
+    };
+
+    const deployment = createK8sDeploymentInstance(
+      environmentValues,
+      undefined,
+    );
+    // @ts-expect-error - accessing private property for testing
+    deployment.catalogItem = mockCatalogItem;
+
+    const deploymentSpec = deployment.generateDeploymentSpec(
+      "test:latest",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const podSpec = deploymentSpec.spec?.template.spec;
+    const container = podSpec?.containers[0];
+
+    // Only one volume with one item (TLS_CERT)
+    expect(podSpec?.volumes).toHaveLength(1);
+    expect(podSpec?.volumes?.[0].secret?.items).toHaveLength(1);
+    expect(podSpec?.volumes?.[0].secret?.items?.[0].key).toBe("TLS_CERT");
+
+    // Only one volumeMount for TLS_CERT
+    expect(container?.volumeMounts).toHaveLength(1);
+    expect(container?.volumeMounts?.[0].mountPath).toBe("/secrets/TLS_CERT");
+
+    // No env vars (all are mounted secrets, empty ones skipped entirely)
+    expect(container?.env).toEqual([]);
+  });
+
+  // Advanced K8s Configuration Tests
+  test("generates deploymentSpec with custom replicas from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "replicas-server-id",
+      name: "replicas-server",
+      catalogId: "catalog-replicas",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        replicas: 3,
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    expect(deploymentSpec.spec?.replicas).toBe(3);
+  });
+
+  test("generates deploymentSpec with custom labels from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "labels-server-id",
+      name: "labels-server",
+      catalogId: "catalog-labels",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        labels: {
+          environment: "production",
+          team: "platform",
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Custom labels should be merged with required labels
+    expect(deploymentSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "labels-server-id",
+      "mcp-server-name": "labels-server",
+      environment: "production",
+      team: "platform",
+    });
+
+    // Pod template should also have the merged labels
+    expect(deploymentSpec.spec?.template.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "labels-server-id",
+      "mcp-server-name": "labels-server",
+      environment: "production",
+      team: "platform",
+    });
+  });
+
+  test("generates deploymentSpec with annotations from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "annotations-server-id",
+      name: "annotations-server",
+      catalogId: "catalog-annotations",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        annotations: {
+          "prometheus.io/scrape": "true",
+          "prometheus.io/port": "9090",
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Annotations should be on the pod template
+    expect(deploymentSpec.spec?.template.metadata?.annotations).toEqual({
+      "prometheus.io/scrape": "true",
+      "prometheus.io/port": "9090",
+    });
+  });
+
+  test("generates deploymentSpec with custom resource requests from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "resources-server-id",
+      name: "resources-server",
+      catalogId: "catalog-resources",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        resources: {
+          requests: {
+            memory: "256Mi",
+            cpu: "100m",
+          },
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.resources?.requests).toEqual({
+      memory: "256Mi",
+      cpu: "100m",
+    });
+  });
+
+  test("generates deploymentSpec with resource limits from advancedK8sConfig", () => {
+    const mcpServer: McpServer = {
+      id: "limits-server-id",
+      name: "limits-server",
+      catalogId: "catalog-limits",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        resources: {
+          requests: {
+            memory: "256Mi",
+            cpu: "100m",
+          },
+          limits: {
+            memory: "512Mi",
+            cpu: "500m",
+          },
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.resources?.requests).toEqual({
+      memory: "256Mi",
+      cpu: "100m",
+    });
+    expect(container?.resources?.limits).toEqual({
+      memory: "512Mi",
+      cpu: "500m",
+    });
+  });
+
+  test("generates deploymentSpec with combined advancedK8sConfig settings", () => {
+    const mcpServer: McpServer = {
+      id: "combined-server-id",
+      name: "combined-server",
+      catalogId: "catalog-combined",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        replicas: 2,
+        labels: {
+          environment: "staging",
+        },
+        annotations: {
+          "app.kubernetes.io/managed-by": "archestra",
+        },
+        resources: {
+          requests: {
+            memory: "512Mi",
+            cpu: "200m",
+          },
+          limits: {
+            memory: "1Gi",
+            cpu: "1000m",
+          },
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Check replicas
+    expect(deploymentSpec.spec?.replicas).toBe(2);
+
+    // Check labels are merged
+    expect(deploymentSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "combined-server-id",
+      "mcp-server-name": "combined-server",
+      environment: "staging",
+    });
+
+    // Check annotations on pod template
+    expect(deploymentSpec.spec?.template.metadata?.annotations).toEqual({
+      "app.kubernetes.io/managed-by": "archestra",
+    });
+
+    // Check resources
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.resources?.requests).toEqual({
+      memory: "512Mi",
+      cpu: "200m",
+    });
+    expect(container?.resources?.limits).toEqual({
+      memory: "1Gi",
+      cpu: "1000m",
+    });
+  });
+
+  test("uses default values when advancedK8sConfig is not provided", () => {
+    const mcpServer: McpServer = {
+      id: "default-server-id",
+      name: "default-server",
+      catalogId: "catalog-default",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      // No advancedK8sConfig
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Default replicas
+    expect(deploymentSpec.spec?.replicas).toBe(1);
+
+    // Default labels (only required ones)
+    expect(deploymentSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "default-server-id",
+      "mcp-server-name": "default-server",
+    });
+
+    // No annotations
+    expect(deploymentSpec.spec?.template.metadata?.annotations).toBeUndefined();
+
+    // Default resources
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.resources?.requests).toEqual({
+      memory: "128Mi",
+      cpu: "50m",
+    });
+    expect(container?.resources?.limits).toBeUndefined();
+  });
+
+  test("custom labels do not override required labels", () => {
+    const mcpServer: McpServer = {
+      id: "override-server-id",
+      name: "override-server",
+      catalogId: "catalog-override",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      advancedK8sConfig: {
+        labels: {
+          // Try to override required labels
+          app: "custom-app",
+          "mcp-server-id": "custom-id",
+        },
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Required labels should take precedence
+    expect(deploymentSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "override-server-id",
+      "mcp-server-name": "override-server",
+    });
   });
 });
 

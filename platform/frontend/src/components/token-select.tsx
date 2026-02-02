@@ -47,8 +47,7 @@ export function TokenSelect({
   // Get credentials for this catalogId from the grouped response
   const mcpServers = groupedCredentials?.[catalogId] ?? [];
 
-  // useMcpServersGroupedByCatalog uses useSuspenseQuery, so no loading state needed
-  const isLoading = false;
+  const isLoading = !groupedCredentials;
 
   const staticCredentialOutsideOfGroupedCredentials =
     value &&
@@ -115,7 +114,7 @@ export function TokenSelect({
                   <div className="flex gap-1 flex-wrap text-xs">
                     {server.teamDetails
                       ? server.teamDetails.name
-                      : server.ownerEmail || "Unknown"}
+                      : server.ownerEmail || "Deleted user"}
                   </div>
                 </div>
               </SelectItem>

@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "./ui/skeleton";
 
@@ -28,4 +28,24 @@ export function LoadingSpinner({ className }: { className?: string }) {
       )}
     />
   );
+}
+
+export function LoadingWrapper({
+  isPending,
+  error,
+  loadingFallback = <LoadingSpinner className="top-1/2 left-1/2 absolute" />,
+  errorFallback = null,
+  children,
+}: {
+  isPending: boolean;
+  error?: Error | null;
+  /** Skeleton/loading UI to show while loading */
+  loadingFallback?: ReactNode;
+  /** Error UI to show on error. Falls back to null if not provided. */
+  errorFallback?: ReactNode;
+  children: ReactNode;
+}) {
+  if (isPending) return <>{loadingFallback}</>;
+  if (error) return <>{errorFallback}</>;
+  return <>{children}</>;
 }

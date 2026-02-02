@@ -1,5 +1,5 @@
 import type { SupportedProvider } from "@shared";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
 import type { CreateTokenPrice, TokenPrice } from "@/types";
@@ -26,6 +26,23 @@ class TokenPriceModel {
       .select()
       .from(schema.tokenPricesTable)
       .where(eq(schema.tokenPricesTable.model, model));
+
+    return tokenPrice || null;
+  }
+
+  static async findByProviderAndModelId(
+    provider: SupportedProvider,
+    modelId: string,
+  ): Promise<TokenPrice | null> {
+    const [tokenPrice] = await db
+      .select()
+      .from(schema.tokenPricesTable)
+      .where(
+        and(
+          eq(schema.tokenPricesTable.provider, provider),
+          eq(schema.tokenPricesTable.model, modelId),
+        ),
+      );
 
     return tokenPrice || null;
   }
@@ -86,6 +103,47 @@ class TokenPriceModel {
     return result[0] || null;
   }
 
+  /**
+   * Bulk create token prices if they don't already exist.
+   * Uses batched INSERTs with ON CONFLICT DO NOTHING for efficiency.
+   * All batches are wrapped in a transaction to ensure atomicity.
+   *
+   * @returns The number of rows actually inserted (excludes conflicts)
+   */
+  static async bulkCreateIfNotExists(
+    tokenPrices: CreateTokenPrice[],
+  ): Promise<number> {
+    if (tokenPrices.length === 0) {
+      return 0;
+    }
+
+    // Batch size of 100 rows to stay safely under PostgreSQL parameter limits
+    // Each row has ~4 columns, so 100 rows = ~400 parameters per batch
+    const BATCH_SIZE = 100;
+
+    // Wrap all batches in a transaction to ensure atomicity
+    const totalInserted = await db.transaction(async (tx) => {
+      let inserted = 0;
+
+      for (let i = 0; i < tokenPrices.length; i += BATCH_SIZE) {
+        const batch = tokenPrices.slice(i, i + BATCH_SIZE);
+        const result = await tx
+          .insert(schema.tokenPricesTable)
+          .values(batch)
+          .onConflictDoNothing({
+            target: schema.tokenPricesTable.model,
+          })
+          .returning({ id: schema.tokenPricesTable.id });
+
+        inserted += result.length;
+      }
+
+      return inserted;
+    });
+
+    return totalInserted;
+  }
+
   static async delete(id: string): Promise<boolean> {
     // First check if the token price exists
     const existing = await TokenPriceModel.findById(id);
@@ -98,6 +156,10 @@ class TokenPriceModel {
       .where(eq(schema.tokenPricesTable.id, id));
 
     return true;
+  }
+
+  static async deleteAll(): Promise<void> {
+    await db.delete(schema.tokenPricesTable);
   }
 
   /**

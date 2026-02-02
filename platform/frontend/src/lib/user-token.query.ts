@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { handleApiError } from "./utils";
 
 const { getUserToken, getUserTokenValue, rotateUserToken } = archestraApiSdk;
 
@@ -23,11 +23,12 @@ export function useUserToken() {
   return useQuery({
     queryKey: ["userToken"],
     queryFn: async () => {
-      const response = await getUserToken();
-      if (!response.data) {
-        throw new Error("Failed to fetch personal token");
+      const { data, error } = await getUserToken();
+      if (error) {
+        handleApiError(error);
+        return null;
       }
-      return response.data as UserToken;
+      return data as UserToken;
     },
     retry: false,
   });
@@ -41,9 +42,29 @@ export function useUserTokenValue() {
     queryKey: ["userTokenValue"],
     queryFn: async () => {
       const response = await getUserTokenValue();
+      if (response.error) {
+        handleApiError(response.error);
+      }
       return response.data as { value: string };
     },
     enabled: false, // Only fetch on demand
+  });
+}
+
+/**
+ * Mutation hook to fetch personal token value on demand
+ * Use this in components that need to fetch the token on button click
+ */
+export function useFetchUserTokenValue() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await getUserTokenValue();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data as { value: string };
+    },
   });
 }
 
@@ -55,14 +76,14 @@ export function useRotateUserToken() {
   return useMutation({
     mutationFn: async () => {
       const response = await rotateUserToken();
+      if (response.error) {
+        handleApiError(response.error);
+      }
       return response.data as UserToken & { value: string };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["userToken"] });
       queryClient.invalidateQueries({ queryKey: ["userTokenValue"] });
-    },
-    onError: () => {
-      toast.error("Failed to rotate personal token");
     },
   });
 }

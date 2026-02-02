@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.0.24" # x-release-please-version
+  imageTag: "1.0.37" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -57,11 +57,45 @@ archestra:
 
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable
+  #
+  # Supports Kubernetes environment variable expansion using $(VAR_NAME) syntax.
+  # This allows referencing other environment variables defined in the container.
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/define-interdependent-environment-variables/
+  #
   # Example:
   #   env:
-  #     ARCHESTRA_API_BASE_URL: "https://api.example.com"
+  #     # External URL(s) for connection instructions (supports comma-separated list for multiple URLs)
+  #     ARCHESTRA_API_BASE_URL: "http://archestra.default.svc:9000,https://api.archestra.example.com"
   #     CUSTOM_VAR: "custom-value"
+  #     # Reference another env var (defined via envWithValueFrom below)
+  #     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"
   env: {}
+
+  # Environment variables with valueFrom (for fieldRef, resourceFieldRef, configMapKeyRef)
+  # Use this for Kubernetes downward API or other valueFrom sources
+  # This is required if you want to use $(VAR_NAME) expansion referencing pod/node information
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
+  #
+  # Example - expose node IP for OTEL collector endpoint:
+  #   envWithValueFrom:
+  #     - name: NODE_IP
+  #       valueFrom:
+  #         fieldRef:
+  #           fieldPath: status.hostIP
+  #     - name: POD_NAME
+  #       valueFrom:
+  #         fieldRef:
+  #           fieldPath: metadata.name
+  #     - name: POD_NAMESPACE
+  #       valueFrom:
+  #         fieldRef:
+  #           fieldPath: metadata.namespace
+  #     - name: MEMORY_LIMIT
+  #       valueFrom:
+  #         resourceFieldRef:
+  #           containerName: archestra-platform
+  #           resource: limits.memory
+  envWithValueFrom: []
 
   # Environment variables from Kubernetes Secrets
   # This allows you to inject sensitive data from secrets into the container
@@ -345,8 +379,18 @@ postgresql:
   # External database URL to use instead of deploying a PostgreSQL instance
   # If null, a PostgreSQL instance will be deployed using the Bitnami PostgreSQL chart
   # Accepts both postgres:// and postgresql:// URI schemes
-  # Example: postgres://username:password@host:5432/database
-  # IMPORTANT: When setting external_database_url, you MUST also set enabled=false
+  #
+  # Option 1 - Set URL here (stored in K8s secret automatically):
+  #   external_database_url: postgres://username:password@host:5432/database
+  #
+  # Option 2 - Use pre-existing K8s secret (leave external_database_url as null):
+  #   archestra:
+  #     envFromSecrets:
+  #       - name: ARCHESTRA_DATABASE_URL
+  #         secretName: my-db-secret
+  #         secretKey: database-url
+  #
+  # IMPORTANT: When using external database, you MUST also set enabled=false
   external_database_url: null
 
   # Whether to deploy the bundled PostgreSQL instance

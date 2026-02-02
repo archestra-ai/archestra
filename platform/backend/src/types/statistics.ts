@@ -20,6 +20,7 @@ export const TeamStatisticsSchema = z.object({
 export const AgentStatisticsSchema = z.object({
   agentId: z.string(),
   agentName: z.string(),
+  agentType: z.string(),
   teamName: z.string(),
   requests: z.number(),
   inputTokens: z.number(),
@@ -82,6 +83,7 @@ export const StatisticsAgentTimeSeriesDataSchema =
   BaseTimeSeriesDataSchema.extend({
     agentId: z.string(),
     agentName: z.string(),
+    agentType: z.string(),
     teamName: z.string().nullable(),
   });
 

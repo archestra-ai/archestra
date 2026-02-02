@@ -1,10 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 const {
@@ -15,21 +10,10 @@ const {
   updateInternalMcpCatalogItem,
 } = archestraApiSdk;
 
-/** Non-suspense version */
 export function useInternalMcpCatalog(params?: {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
 }) {
   return useQuery({
-    queryKey: ["mcp-catalog"],
-    queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
-    initialData: params?.initialData,
-  });
-}
-
-export function useInternalMcpCatalogSuspense(params?: {
-  initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
-}) {
-  return useSuspenseQuery({
     queryKey: ["mcp-catalog"],
     queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
     initialData: params?.initialData,
@@ -105,6 +89,26 @@ export function useDeleteInternalMcpCatalogItem() {
   });
 }
 
+export type CatalogTool =
+  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+
+/**
+ * Fetch tools for a catalog item by catalog ID (raw function for use with useQueries).
+ */
+export async function fetchCatalogTools(
+  catalogId: string,
+): Promise<CatalogTool[]> {
+  try {
+    const response = await getInternalMcpCatalogTools({
+      path: { id: catalogId },
+    });
+    return response.data ?? [];
+  } catch (error) {
+    console.error("Failed to fetch catalog tools:", error);
+    return [];
+  }
+}
+
 /**
  * Fetch tools for a catalog item by catalog ID.
  * Used for builtin servers (like Archestra) that don't have a traditional MCP server installation.
@@ -114,15 +118,7 @@ export function useCatalogTools(catalogId: string | null) {
     queryKey: ["mcp-catalog", catalogId, "tools"],
     queryFn: async () => {
       if (!catalogId) return [];
-      try {
-        const response = await getInternalMcpCatalogTools({
-          path: { id: catalogId },
-        });
-        return response.data ?? [];
-      } catch (error) {
-        console.error("Failed to fetch catalog tools:", error);
-        return [];
-      }
+      return fetchCatalogTools(catalogId);
     },
     enabled: !!catalogId,
   });

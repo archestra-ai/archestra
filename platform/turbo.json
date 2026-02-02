@@ -26,6 +26,9 @@
     "check:ci": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts", "**/knip.config.ts", "**/package.json"]
     },
+    "check:commit": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts", "**/knip.config.ts", "**/package.json"]
+    },
     "knip": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "**/knip.config.ts", "**/package.json", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
@@ -37,7 +40,13 @@
     },
     "test:e2e": {
       "cache": false,
-      "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH"]
+      "passThroughEnv": [
+        "CI",
+        "PLAYWRIGHT_BROWSERS_PATH",
+        "E2E_UI_BASE_URL",
+        "E2E_API_BASE_URL",
+        "E2E_WIREMOCK_BASE_URL"
+      ]
     },
     "test:e2e:ui": {
       "cache": false

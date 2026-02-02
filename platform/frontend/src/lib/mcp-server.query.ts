@@ -1,13 +1,9 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { authClient } from "./clients/auth/auth-client";
+import { handleApiError } from "./utils";
 
 const {
   deleteMcpServer,
@@ -15,9 +11,8 @@ const {
   getMcpServerTools,
   installMcpServer,
   getMcpServer,
-  getMcpServerLogs,
-  restartMcpServer,
-  restartAllMcpServerInstallations,
+  reauthenticateMcpServer,
+  reinstallMcpServer,
 } = archestraApiSdk;
 
 export function useMcpServers(params?: {
@@ -25,7 +20,7 @@ export function useMcpServers(params?: {
   hasInstallingServers?: boolean;
   catalogId?: string;
 }) {
-  return useSuspenseQuery({
+  return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
     queryKey: params?.catalogId
       ? ["mcp-servers", { catalogId: params.catalogId }]
@@ -92,11 +87,7 @@ export function useInstallMcpServer() {
         body: data,
       });
       if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Unknown error";
-        toast.error(msg);
+        handleApiError(error);
       }
       return { installedServer, dontShowToast: data.dontShowToast };
     },
@@ -115,6 +106,12 @@ export function useInstallMcpServer() {
       if (installedServer) {
         queryClient.invalidateQueries({
           queryKey: ["mcp-servers", installedServer.id, "tools"],
+        });
+      }
+      // Invalidate catalog tools query so the manage-tools dialog shows discovered tools
+      if (variables.catalogId) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-catalog", variables.catalogId, "tools"],
         });
       }
       // Invalidate all chat MCP tools (new tools may be available)
@@ -151,65 +148,20 @@ export function useDeleteMcpServer() {
   });
 }
 
-export function useRestartMcpServer() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: { id: string; name: string }) => {
-      const response = await restartMcpServer({ path: { id: data.id } });
-      return response.data;
-    },
-    onSuccess: async (_, variables) => {
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-      toast.success(`Successfully restarted ${variables.name}`);
-    },
-    onError: (_error, variables) => {
-      toast.error(`Failed to restart ${variables.name}`);
-    },
-  });
-}
-
-export function useRestartAllMcpServerInstallations() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: { catalogId: string; name: string }) => {
-      const response = await restartAllMcpServerInstallations({
-        path: { catalogId: data.catalogId },
-      });
-      return response.data;
-    },
-    onSuccess: async (result, variables) => {
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-      if (result?.summary) {
-        const { succeeded, failed, total } = result.summary;
-        if (failed === 0) {
-          toast.success(
-            `Successfully restarted all ${succeeded} installation(s) of ${variables.name}`,
-          );
-        } else {
-          toast.warning(
-            `Restarted ${succeeded}/${total} installation(s) of ${variables.name}, ${failed} failed`,
-          );
-        }
-      }
-    },
-    onError: (_error, variables) => {
-      toast.error(`Failed to restart installations of ${variables.name}`);
-    },
-  });
-}
-
 export function useMcpServerTools(mcpServerId: string | null) {
   return useQuery({
     queryKey: ["mcp-servers", mcpServerId, "tools"],
     queryFn: async () => {
       if (!mcpServerId) return [];
-      try {
-        const response = await getMcpServerTools({ path: { id: mcpServerId } });
-        return response.data ?? [];
-      } catch (error) {
+      const { data, error } = await getMcpServerTools({
+        path: { id: mcpServerId },
+      });
+      if (error) {
+        // handleApiError not used to prevent "MCP server not found" error from being shown
         console.error("Failed to fetch MCP server tools:", error);
         return [];
       }
+      return data ?? [];
     },
     enabled: !!mcpServerId,
   });
@@ -258,24 +210,71 @@ export function useMcpServerInstallationStatus(
   });
 }
 
-export function useMcpServerLogs(mcpServerId: string | null) {
-  return useQuery({
-    queryKey: ["mcp-servers", mcpServerId, "logs"],
-    queryFn: async () => {
-      if (!mcpServerId) return null;
-      try {
-        const response = await getMcpServerLogs({
-          path: { id: mcpServerId },
-          query: { lines: 100 },
-        });
-        return response.data ?? null;
-      } catch (error) {
-        console.error("Failed to fetch MCP server logs:", error);
-        throw error;
-      }
+export function useReauthenticateMcpServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: string;
+      secretId: string;
+      name: string;
+    }) => {
+      const response = await reauthenticateMcpServer({
+        path: { id: data.id },
+        body: { secretId: data.secretId },
+      });
+      return response.data;
     },
-    enabled: !!mcpServerId,
-    refetchOnWindowFocus: false,
-    retry: false,
+    onSuccess: async (_, variables) => {
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      toast.success(`Successfully re-authenticated ${variables.name}`);
+    },
+    onError: (_error, variables) => {
+      toast.error(`Failed to re-authenticate ${variables.name}`);
+    },
+  });
+}
+
+/**
+ * Reinstall an MCP server without losing tool assignments and policies.
+ * This is used when a catalog item is edited and requires manual reinstall
+ * (e.g., when new prompted env vars were added).
+ */
+export function useReinstallMcpServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: string;
+      name: string;
+      environmentValues?: Record<string, string>;
+      isByosVault?: boolean;
+      serviceAccount?: string;
+    }) => {
+      const { id, name, ...body } = data;
+      const response = await reinstallMcpServer({
+        path: { id },
+        body,
+      });
+      if (response.error) {
+        handleApiError(response.error);
+        return null;
+      }
+      return { data: response.data, name };
+    },
+    onSuccess: async (_result, variables) => {
+      // Refetch servers to get updated status (will show "pending" initially)
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate tools queries since tools may have been synced
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate catalog tools query
+      if (variables.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-servers", variables.id, "tools"],
+        });
+      }
+      // Note: No success toast here - the progress bar provides feedback
+      // Success toast is shown when polling detects status changed to "success"
+    },
   });
 }

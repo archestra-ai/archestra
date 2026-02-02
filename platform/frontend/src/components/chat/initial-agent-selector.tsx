@@ -16,30 +16,28 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { usePrompts } from "@/lib/prompts.query";
+import { useInternalAgents } from "@/lib/agent.query";
 import { cn } from "@/lib/utils";
 
 interface InitialAgentSelectorProps {
-  currentPromptId: string | null;
-  onPromptChange: (promptId: string | null, agentId: string) => void;
-  defaultAgentId: string;
+  currentAgentId: string | null;
+  onAgentChange: (agentId: string) => void;
 }
 
 export function InitialAgentSelector({
-  currentPromptId,
-  onPromptChange,
-  defaultAgentId,
+  currentAgentId,
+  onAgentChange,
 }: InitialAgentSelectorProps) {
-  const { data: prompts = [] } = usePrompts();
+  const { data: agents = [] } = useInternalAgents();
   const [open, setOpen] = useState(false);
 
-  const currentPrompt = useMemo(
-    () => prompts.find((p) => p.id === currentPromptId),
-    [prompts, currentPromptId],
+  const currentAgent = useMemo(
+    () => agents.find((a) => a.id === currentAgentId) ?? agents[0] ?? null,
+    [agents, currentAgentId],
   );
 
-  const handlePromptSelect = (promptId: string | null, agentId: string) => {
-    onPromptChange(promptId, agentId);
+  const handleAgentSelect = (agentId: string) => {
+    onAgentChange(agentId);
     setOpen(false);
   };
 
@@ -50,11 +48,11 @@ export function InitialAgentSelector({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-8 justify-between"
+          className="h-8 justify-between max-w-[300px] min-w-0"
         >
           <Bot className="h-3 w-3 shrink-0 opacity-70" />
-          <span className="text-xs font-medium">
-            {currentPrompt?.name || "No agent selected"}
+          <span className="text-xs font-medium truncate flex-1 text-left">
+            {currentAgent?.name ?? "Select agent"}
           </span>
           {open ? (
             <ChevronDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
@@ -69,31 +67,17 @@ export function InitialAgentSelector({
           <CommandList>
             <CommandEmpty>No agent found.</CommandEmpty>
             <CommandGroup>
-              <CommandItem
-                value="no-agent-selected"
-                onSelect={() => handlePromptSelect(null, defaultAgentId)}
-              >
-                No agent selected
-                <Check
-                  className={cn(
-                    "ml-auto h-4 w-4",
-                    currentPromptId === null ? "opacity-100" : "opacity-0",
-                  )}
-                />
-              </CommandItem>
-              {prompts.map((prompt) => (
+              {agents.map((agent) => (
                 <CommandItem
-                  key={prompt.id}
-                  value={prompt.name}
-                  onSelect={() => handlePromptSelect(prompt.id, prompt.agentId)}
+                  key={agent.id}
+                  value={agent.name}
+                  onSelect={() => handleAgentSelect(agent.id)}
                 >
-                  {prompt.name}
+                  {agent.name}
                   <Check
                     className={cn(
                       "ml-auto h-4 w-4",
-                      currentPromptId === prompt.id
-                        ? "opacity-100"
-                        : "opacity-0",
+                      currentAgentId === agent.id ? "opacity-100" : "opacity-0",
                     )}
                   />
                 </CommandItem>

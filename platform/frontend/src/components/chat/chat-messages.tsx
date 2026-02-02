@@ -1,7 +1,14 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Conversation,
   ConversationContent,
@@ -25,11 +32,13 @@ import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
+import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
+import { ToolErrorLogsButton } from "./tool-error-logs-button";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -74,6 +83,9 @@ function isToolPart(part: any): part is {
 export function ChatMessages({
   conversationId,
   agentId,
+  agentName,
+  suggestedPrompt,
+  onSuggestedPromptClick,
   messages,
   hideToolCalls = false,
   status,
@@ -162,12 +174,227 @@ export function ChatMessages({
     }
   };
 
+  // Ref for the text position marker
+  const textMarkerRef = useRef<HTMLSpanElement>(null);
+
+  // Calculate arrow dimensions based on actual text position
+  const [arrowDimensions, setArrowDimensions] = useState({
+    width: 400,
+    height: 300,
+    pathD: "M 350 340 Q 300 340 250 340 L 100 340 Q 60 340 60 300 L 60 5",
+    visible: false,
+    left: 248,
+    top: 85,
+  });
+
+  const updateArrowDimensions = useCallback(() => {
+    if (!textMarkerRef.current) return;
+
+    // Get the parent container dimensions (changes when artifact panel opens/closes)
+    const parentContainer = textMarkerRef.current.closest(".flex-1");
+    if (!parentContainer) return;
+
+    const containerRect = parentContainer.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    const viewportHeight = window.innerHeight;
+
+    // Only show arrow if container has sufficient width and viewport has height
+    const isVisible = containerWidth >= 768 && viewportHeight >= 600;
+
+    if (!isVisible) {
+      setArrowDimensions((prev) => ({ ...prev, visible: false }));
+      return;
+    }
+
+    // Get the actual position of the text marker
+    const textRect = textMarkerRef.current.getBoundingClientRect();
+    const textX = textRect.left;
+    const textY = textRect.top;
+
+    // Agent selector position (top left area)
+    const selectorX = 248;
+    const selectorY = 85;
+
+    // Calculate SVG dimensions - arrow should end at text marker position
+    const svgWidth = Math.max(textX - selectorX, 200); // Width from selector to text
+    const svgHeight = Math.max(textY - selectorY, 100); // Height from selector to text
+
+    // Path coordinates (relative to SVG origin)
+    // Arrow tip at top left
+    const _startX = 60;
+    const startY = 5;
+    // End point should be exactly at the text marker position
+    const endX = svgWidth; // No margin - end exactly at text
+    const endY = svgHeight - 10;
+    // Curve control point
+    const curveY = endY - 40;
+
+    setArrowDimensions({
+      width: svgWidth,
+      height: svgHeight,
+      pathD: `M ${endX} ${endY} Q ${endX - 50} ${endY} ${endX - 100} ${endY} L 100 ${endY} Q 60 ${endY} 60 ${curveY} L 60 ${startY}`,
+      visible: isVisible,
+      left: selectorX,
+      top: selectorY,
+    });
+  }, []);
+
+  useEffect(() => {
+    // Initial calculation after mount
+    const timer = setTimeout(updateArrowDimensions, 100);
+
+    // Update on window resize
+    window.addEventListener("resize", updateArrowDimensions);
+
+    // Use ResizeObserver to detect when the parent container changes size
+    // This will trigger when the artifact panel opens/closes or height changes
+    const resizeObserver = new ResizeObserver((entries) => {
+      // Check if height actually changed (not just width)
+      for (const _entry of entries) {
+        updateArrowDimensions();
+      }
+    });
+
+    // Find the main content area that actually resizes when artifact panel toggles
+    // Look for the parent that contains the overflow-y-auto class
+    const parentContainer =
+      textMarkerRef.current?.closest(".overflow-y-auto")?.parentElement
+        ?.parentElement;
+    if (parentContainer) {
+      resizeObserver.observe(parentContainer);
+    }
+
+    // Also observe the direct parent for vertical size changes
+    const directParent = textMarkerRef.current?.closest(".overflow-y-auto");
+    if (directParent) {
+      resizeObserver.observe(directParent);
+    }
+
+    // Also add a small delay and retry to ensure element is found
+    const retryTimer = setTimeout(() => {
+      if (!parentContainer && textMarkerRef.current) {
+        const container =
+          textMarkerRef.current.closest(".overflow-y-auto")?.parentElement
+            ?.parentElement;
+        if (container) {
+          resizeObserver.observe(container);
+        }
+        const direct = textMarkerRef.current.closest(".overflow-y-auto");
+        if (direct) {
+          resizeObserver.observe(direct);
+        }
+      }
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(retryTimer);
+      window.removeEventListener("resize", updateArrowDimensions);
+      resizeObserver.disconnect();
+    };
+  }, [updateArrowDimensions]);
+
+  // Recalculate arrow when agent name changes
+  useEffect(() => {
+    if (agentName) {
+      // Small delay to ensure DOM has updated with new agent name
+      const timer = setTimeout(updateArrowDimensions, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [agentName, updateArrowDimensions]);
+
   if (messages.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
       return null;
     }
 
+    // Unified empty state for both new chat and existing chat with no messages
+    if (agentName) {
+      return (
+        <div className="flex items-center justify-center h-full relative">
+          {/* Custom bent arrow pointing to agent selector - hidden on mobile */}
+          {arrowDimensions.visible && (
+            <svg
+              className="fixed pointer-events-none z-50"
+              width={arrowDimensions.width}
+              height={arrowDimensions.height}
+              style={{
+                top: `${arrowDimensions.top}px`,
+                left: `${arrowDimensions.left}px`,
+              }}
+              aria-hidden="true"
+            >
+              <title>Arrow pointing to agent selector</title>
+              <defs>
+                <marker
+                  id="arrowhead"
+                  markerWidth="10"
+                  markerHeight="7"
+                  refX="9"
+                  refY="3.5"
+                  orient="auto"
+                >
+                  <polygon
+                    points="0 0, 10 3.5, 0 7"
+                    fill="rgb(156, 163, 175)"
+                    strokeWidth="0"
+                    opacity="0.6"
+                  />
+                </marker>
+              </defs>
+              <path
+                d={arrowDimensions.pathD}
+                stroke="rgb(156, 163, 175)"
+                strokeWidth="2"
+                fill="none"
+                strokeDasharray="5,5"
+                markerEnd="url(#arrowhead)"
+                opacity="0.5"
+              />
+            </svg>
+          )}
+
+          <div className="text-center space-y-6 max-w-2xl px-4 relative">
+            <p className="text-lg text-muted-foreground relative">
+              <span
+                ref={textMarkerRef}
+                className="absolute -left-4 top-1/2 -translate-y-1/2 w-0 h-0"
+                aria-hidden="true"
+              />
+              Chat with{" "}
+              <span className="font-medium text-foreground truncate inline-block max-w-sm align-bottom">
+                {agentName}
+              </span>{" "}
+              agent,
+              <br />
+              or{" "}
+              <a
+                href="/agents?create=true"
+                className="text-primary hover:underline"
+              >
+                create a new one
+              </a>
+            </p>
+            {suggestedPrompt && onSuggestedPromptClick && (
+              <button
+                type="button"
+                onClick={onSuggestedPromptClick}
+                className="w-full text-left cursor-pointer hover:opacity-80 transition-opacity"
+              >
+                <Message from="assistant" className="max-w-none justify-center">
+                  <MessageContent className="max-w-none text-left">
+                    <Response>{suggestedPrompt}</Response>
+                  </MessageContent>
+                </Message>
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Fallback for when no agent name is provided
     return (
       <div className="flex-1 flex h-full items-center justify-center text-center text-muted-foreground">
         <p className="text-sm">Start a conversation by sending a message</p>
@@ -353,23 +580,6 @@ export function ChatMessages({
 
                       // Use editable component for user messages
                       if (message.role === "user") {
-                        // Collect all file attachments from this message
-                        const fileAttachments = message.parts
-                          ?.filter((p) => p.type === "file")
-                          .map((p) => {
-                            const filePart = p as {
-                              type: "file";
-                              url: string;
-                              mediaType: string;
-                              filename?: string;
-                            };
-                            return {
-                              url: filePart.url,
-                              mediaType: filePart.mediaType,
-                              filename: filePart.filename,
-                            };
-                          });
-
                         return (
                           <Fragment key={partKey}>
                             <EditableUserMessage
@@ -379,7 +589,9 @@ export function ChatMessages({
                               text={part.text}
                               isEditing={editingPartKey === partKey}
                               editDisabled={isResponseInProgress}
-                              attachments={fileAttachments}
+                              attachments={extractFileAttachments(
+                                message.parts,
+                              )}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveUserMessage}
@@ -417,9 +629,43 @@ export function ChatMessages({
                       );
 
                     case "file": {
-                      // User file attachments are rendered inside EditableUserMessage
+                      // User file attachments are normally rendered inside EditableUserMessage
+                      // But if there's no text part, we need to render them here
                       if (message.role === "user") {
-                        return null;
+                        // If there's a text part, files will be rendered with EditableUserMessage
+                        if (hasTextPart(message.parts)) {
+                          return null;
+                        }
+
+                        // For file-only messages, render on the first file part only
+                        const isFirstFilePart =
+                          message.parts?.findIndex((p) => p.type === "file") ===
+                          i;
+
+                        if (!isFirstFilePart) {
+                          return null;
+                        }
+
+                        const partKey = `${message.id}-${i}`;
+
+                        return (
+                          <Fragment key={partKey}>
+                            <EditableUserMessage
+                              messageId={message.id}
+                              partIndex={i}
+                              partKey={partKey}
+                              text=""
+                              isEditing={editingPartKey === partKey}
+                              editDisabled={isResponseInProgress}
+                              attachments={extractFileAttachments(
+                                message.parts,
+                              )}
+                              onStartEdit={handleStartEdit}
+                              onCancelEdit={handleCancelEdit}
+                              onSave={handleSaveUserMessage}
+                            />
+                          </Fragment>
+                        );
                       }
 
                       // Render file attachments for assistant/system messages
@@ -673,6 +919,11 @@ function MessageTool({
       (!toolResultPart && Boolean(part.output)),
   );
 
+  // Show logs button for failed tool calls
+  const logsButton = errorText ? (
+    <ToolErrorLogsButton toolName={toolName} />
+  ) : null;
+
   return (
     <Tool className={hasContent ? "cursor-pointer" : ""}>
       <ToolHeader
@@ -684,6 +935,7 @@ function MessageTool({
         })}
         errorText={errorText}
         isCollapsible={hasContent}
+        actionButton={logsButton}
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}

@@ -1,0 +1,142 @@
+name: Run E2E Tests
+description: |
+  Runs Playwright e2e tests in a Docker container.
+  This action handles resolving Playwright version, running tests, and detecting flaky tests.
+
+inputs:
+  projects:
+    description: "Playwright project(s) to run (e.g., 'chromium', 'api', 'chromium --project=sso')"
+    required: true
+  shard:
+    description: "Shard configuration (e.g., '--shard=1/3')"
+    required: false
+    default: ""
+  extra_args:
+    description: "Additional Playwright arguments"
+    required: false
+    default: ""
+  working_directory:
+    description: "Working directory for test execution"
+    required: false
+    default: "./platform"
+  e2e_tests_path:
+    description: "Path to e2e-tests directory relative to working directory"
+    required: false
+    default: "e2e-tests"
+  timeout:
+    description: "Test execution timeout in minutes"
+    required: false
+    default: "30"
+  env_file:
+    description: "Optional path to environment file to source before running tests"
+    required: false
+    default: ""
+
+outputs:
+  has_flaky_tests:
+    description: "Whether flaky tests were detected"
+    value: ${{ steps.check-flaky.outputs.has_flaky_tests }}
+  blob_report_path:
+    description: "Path to the blob report directory"
+    value: ${{ steps.paths.outputs.blob_report_path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Playwright version
+      id: playwright
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working_directory }}
+        E2E_TESTS_PATH: ${{ inputs.e2e_tests_path }}
+      run: |
+        VERSION=$(cat "${WORKING_DIRECTORY}/${E2E_TESTS_PATH}/package.json" | jq -r '.devDependencies["@playwright/test"]' | sed 's/^[\^~]//')
+        {
+          echo "PLAYWRIGHT_VERSION<<EOF"
+          echo "$VERSION"
+          echo "EOF"
+        } >> "$GITHUB_ENV"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Set output paths
+      id: paths
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working_directory }}
+        E2E_TESTS_PATH: ${{ inputs.e2e_tests_path }}
+      run: |
+        echo "blob_report_path=${WORKING_DIRECTORY}/${E2E_TESTS_PATH}/blob-report/" >> $GITHUB_OUTPUT
+        echo "output_file=${WORKING_DIRECTORY}/playwright-output.txt" >> $GITHUB_OUTPUT
+
+    - name: Run E2E tests
+      id: e2e
+      shell: bash
+      env:
+        PROJECTS: ${{ inputs.projects }}
+        SHARD: ${{ inputs.shard }}
+        EXTRA_ARGS: ${{ inputs.extra_args }}
+        WORKING_DIRECTORY: ${{ inputs.working_directory }}
+        ENV_FILE: ${{ inputs.env_file }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout }}
+      run: |
+        set -o pipefail
+
+        # Source environment file if provided
+        ENV_ARGS=()
+        if [ -n "${ENV_FILE}" ] && [ -f "${ENV_FILE}" ]; then
+          echo "Loading environment file: ${ENV_FILE}"
+          # Convert env file to Docker -e flags
+          # Read whole line first, then split on first = to handle values containing =
+          while IFS= read -r line || [ -n "$line" ]; do
+            # Skip comments and empty lines
+            [[ "$line" =~ ^#.*$ ]] && continue
+            [[ -z "$line" ]] && continue
+            # Extract key (everything before first =)
+            key="${line%%=*}"
+            # Extract value (everything after first =)
+            value="${line#*=}"
+            # Validate key is alphanumeric with underscores only
+            if [[ ! "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+              echo "⚠️ Warning: Skipping invalid env key: '$key'"
+              continue
+            fi
+            # Add as Docker env var using array to properly handle values
+            ENV_ARGS+=("-e" "${key}=${value}")
+          done < "${ENV_FILE}"
+          echo "Loaded ${#ENV_ARGS[@]} environment variable flags"
+        fi
+
+        # Mount kubeconfig if available (for K8s e2e tests)
+        KUBE_ARGS=()
+        if [ -f "$HOME/.kube/config" ]; then
+          echo "Mounting kubeconfig for K8s access in e2e tests"
+          KUBE_ARGS+=("-v" "$HOME/.kube:/root/.kube:ro")
+          KUBE_ARGS+=("-e" "KUBECONFIG=/root/.kube/config")
+        fi
+
+        docker run --rm \
+          --network host \
+          --ipc=host \
+          -v "$GITHUB_WORKSPACE:/work" \
+          -w "/work/${WORKING_DIRECTORY#./}" \
+          -e CI=true \
+          -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+          "${KUBE_ARGS[@]}" \
+          "${ENV_ARGS[@]}" \
+          "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
+          /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=${PROJECTS} ${SHARD} ${EXTRA_ARGS}" \
+          2>&1 | tee "${WORKING_DIRECTORY}/playwright-output.txt"
+
+    - name: Check for flaky tests
+      id: check-flaky
+      if: success()
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working_directory }}
+      run: |
+        if grep -qE "[0-9]+ flaky" "${WORKING_DIRECTORY}/playwright-output.txt" 2>/dev/null; then
+          echo "⚠️ Flaky tests detected"
+          echo "has_flaky_tests=true" >> $GITHUB_OUTPUT
+        else
+          echo "has_flaky_tests=false" >> $GITHUB_OUTPUT
+        fi

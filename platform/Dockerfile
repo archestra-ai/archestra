@@ -1,9 +1,43 @@
+# Build KinD from source with Go 1.25.6 to fix CVE-2025-61726
+# (KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability)
+FROM alpine:3.23 AS kind-builder
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
+        echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
+        exit 1; \
+    fi
+RUN apk add --no-cache go=1.25.6-r0 git
+RUN git clone --depth 1 --branch v0.31.0 https://github.com/kubernetes-sigs/kind.git /kind && \
+    cd /kind && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
+
 FROM node:24-alpine3.23 AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
+
+# Patch CVE-2026-23745: tar <=7.5.2 has path traversal vulnerability
+# Patch CVE-2026-23950: tar <=7.5.3 has Improper Handling of Unicode Encoding
+# Patch CVE-2026-24842: tar <=7.5.6 has path traversal vulnerability
+# tar is bundled in pnpm's corepack distribution and needs to be patched
+# Patch ALL pnpm versions in corepack cache to ensure comprehensive fix
+RUN corepack prepare pnpm@10.28.2 --activate && \
+    TAR_SHA256="87355a4cb10e7e7cdb4326e3e3c89232eaf5266d0792b998a396ddf6c11502bb" && \
+    PNPM_TAR_PATHS=$(find /root/.cache/node/corepack -path "*/pnpm/*/dist/node_modules/tar" -type d 2>/dev/null) && \
+    [ -n "$PNPM_TAR_PATHS" ] || { echo "WARNING: No tar directories found to patch"; exit 0; } && \
+    for PNPM_TAR_PATH in $PNPM_TAR_PATHS; do \
+        echo "Patching tar in $PNPM_TAR_PATH" && \
+        TMP_DIR=$(mktemp -d) && \
+        wget -qO "$TMP_DIR/tar.tgz" https://registry.npmjs.org/tar/-/tar-7.5.7.tgz && \
+        echo "$TAR_SHA256  $TMP_DIR/tar.tgz" | sha256sum -c - || { echo "ERROR: checksum mismatch"; rm -rf "$TMP_DIR"; exit 1; } && \
+        tar -tzf "$TMP_DIR/tar.tgz" >/dev/null 2>&1 || { echo "ERROR: Downloaded tarball is corrupt"; rm -rf "$TMP_DIR"; exit 1; } && \
+        rm -rf "$PNPM_TAR_PATH"/* && \
+        tar -xzf "$TMP_DIR/tar.tgz" -C "$PNPM_TAR_PATH" --strip-components=1 && \
+        rm -rf "$TMP_DIR"; \
+    done && \
+    echo "Patched tar to 7.5.7 in all pnpm corepack caches"
 
 # Dependencies stage
 FROM base AS deps
@@ -69,18 +103,30 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 ENV ARCHESTRA_VERSION=${VERSION}
-ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
+ENV ARCHESTRA_INTERNAL_API_BASE_URL="http://localhost:9000"
+ENV ARCHESTRA_API_BASE_URL=""
 ENV ARCHESTRA_ANALYTICS="enabled"
-ENV ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
 ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
 ENV ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="false"
 ENV ARCHESTRA_AUTH_DISABLE_INVITATIONS="false"
 ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
+# Cloud database CA bundle for SSL certificate validation
+# This allows sslmode=require to work with AWS RDS and Google Cloud SQL
+ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
+
 RUN apk --no-cache upgrade && \
     # Install PostgreSQL 17, supervisord, and wget (needed for KinD download and health checks)
     apk add --no-cache postgresql17 postgresql17-contrib su-exec wget && \
+    # Download cloud database CA bundles for SSL certificate validation
+    # AWS RDS global CA bundle
+    wget -qO /tmp/aws-rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
+    # Google Cloud SQL global CA bundle
+    wget -qO /tmp/gcloud-sql-ca.pem https://storage.googleapis.com/cloudsql-ca-bundles/global.pem && \
+    # Combine all CA bundles
+    cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
+    rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625
     rm -rf /usr/local/lib/node_modules/npm && \
@@ -93,24 +139,38 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-RUN apk add --no-cache docker-cli && \
-    ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then \
-        KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"; \
-        KIND_SHA256="eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa"; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-        KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"; \
-        KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"; \
-    else \
-        echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
-        exit 1; \
-    fi && \
-    wget -O /usr/local/bin/kind "${KIND_URL}" && \
-    chmod +x /usr/local/bin/kind
+# KinD binary is built from source in kind-builder stage with Go 1.25.6 (CVE-2025-61726 fix)
+RUN apk add --no-cache docker-cli
+COPY --from=kind-builder /kind-binary /usr/local/bin/kind
+RUN chmod +x /usr/local/bin/kind
+# TODO: Once KinD releases a version compiled with Go >= 1.25.6, remove the kind-builder stage
+# at the top of this file and restore the pre-built binary download below for faster builds.
+# Track releases at: https://github.com/kubernetes-sigs/kind/releases
+# RUN ARCH=$(uname -m) && \
+#     if [ "$ARCH" = "x86_64" ]; then \
+#         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"; \
+#         KIND_SHA256="eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa"; \
+#     elif [ "$ARCH" = "aarch64" ]; then \
+#         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"; \
+#         KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"; \
+#     else \
+#         echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
+#         exit 1; \
+#     fi && \
+#     wget -O /usr/local/bin/kind "${KIND_URL}" && \
+#     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
+#     chmod +x /usr/local/bin/kind
 
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482
-RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
+RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main && \
+    # CVE-2026-24049: Path Traversal vulnerability in wheel <= 0.46.1
+    # Supervisor brings in Python/wheel as dependencies, upgrade wheel to fix CVE
+    # Install py3-pip (required for pip command) and upgrade wheel
+    apk add --no-cache py3-pip && \
+    pip install --upgrade "wheel>=0.46.2" --break-system-packages && \
+    # Also remove vendored vulnerable wheel from setuptools (py3-setuptools bundles wheel 0.45.1)
+    rm -rf /usr/lib/python3.12/site-packages/setuptools/_vendor/wheel /usr/lib/python3.12/site-packages/setuptools/_vendor/wheel-*.dist-info
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
@@ -136,7 +196,17 @@ COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public
 COPY --from=builder /app/frontend/.next/standalone ./
+
+# Copy previous version's static assets first (from CI build context)
+# Content-hashed filenames ensure no conflicts between versions
+COPY prev-static-assets/ ./frontend/.next/static/
+
+# Copy current build's assets on top
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
+
+# Keep a clean copy of ONLY this build's assets (not accumulated)
+# CI will extract from this path for the NEXT deployment
+COPY --from=builder /app/frontend/.next/static /static-assets-source/
 
 # Create base supervisord configuration (without postgres)
 #
@@ -185,7 +255,7 @@ priority=20
 # See: https://nextjs.org/docs/app/api-reference/config/next-config-js/output#automatically-copying-traced-files
 # NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
 # All other environment variables (NODE_ENV, etc.) are inherited automatically
-environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="%(ENV_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS="%(ENV_ARCHESTRA_AUTH_DISABLE_INVITATIONS)s"
+environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="%(ENV_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS="%(ENV_ARCHESTRA_AUTH_DISABLE_INVITATIONS)s"
 EOF
 
 # Create postgres program configuration (to be conditionally included)
@@ -268,6 +338,14 @@ fi
 if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     echo "ARCHESTRA_QUICKSTART=true detected"
     echo "Quickstart mode enabled - initializing embedded KinD cluster..."
+
+    # Set default frontend URL for quickstart mode if not already set
+    # This is required to disable secure cookies (NODE_ENV=production enables HTTPS-only cookies by default)
+    # Without this, authentication fails over HTTP connections
+    if [ -z "$ARCHESTRA_FRONTEND_URL" ]; then
+        export ARCHESTRA_FRONTEND_URL="http://localhost:3000"
+        echo "Set ARCHESTRA_FRONTEND_URL to $ARCHESTRA_FRONTEND_URL (required for HTTP connections)"
+    fi
     if [ ! -S /var/run/docker.sock ]; then
         echo "Quickstart mode is on but Docker socket is not mounted"
         echo "Add: -v /var/run/docker.sock:/var/run/docker.sock to your docker run command"
@@ -413,14 +491,15 @@ EOSQL
     fi
 else
     echo "Using external PostgreSQL database"
-    # Extract credentials from DATABASE_URL if needed (postgresql://user:pass@host:port/db)
-    POSTGRES_USER=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
-    POSTGRES_PASSWORD=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
-    POSTGRES_DB=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+    # Note: POSTGRES_USER/PASSWORD/DB extraction removed - not needed for external databases
+    # The application uses EFFECTIVE_DATABASE_URL directly
 fi
 
 # Update supervisord config with actual environment variables
-sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${EFFECTIVE_DATABASE_URL}\"|" /etc/supervisord.conf
+# Escape % as %% for supervisord (it uses % for string interpolation like %(ENV_VAR)s)
+# Then use awk to handle other special characters in DATABASE_URL (like |, &, \)
+ESCAPED_DATABASE_URL=$(echo "$EFFECTIVE_DATABASE_URL" | sed 's/%/%%/g')
+awk -v url="$ESCAPED_DATABASE_URL" '{gsub(/DATABASE_URL="[^"]*"/, "DATABASE_URL=\"" url "\""); print}' /etc/supervisord.conf > /etc/supervisord.conf.tmp && mv /etc/supervisord.conf.tmp /etc/supervisord.conf
 
 # Propagate analytics setting to frontend (enabled by default, set to "disabled" to opt-out)
 if [ -n "$ARCHESTRA_ANALYTICS" ]; then

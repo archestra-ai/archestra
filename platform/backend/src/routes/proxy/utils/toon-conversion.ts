@@ -1,13 +1,8 @@
 import logger from "@/logging";
 import { AgentTeamModel, OrganizationModel, TeamModel } from "@/models";
+import type { ToolCompressionStats } from "@/types";
 
-// Stats we expect to get from the compression from each LLM provider
-// TODO: ideally compression itself should live somewhere here too, but it's far away for now.
-export interface CompressionStats {
-  toonTokensBefore: number | null;
-  toonTokensAfter: number | null;
-  toonCostSavings: number | null;
-}
+export type { ToolCompressionStats };
 
 /**
  * Determine if TOON compression should be applied based on organization/team settings

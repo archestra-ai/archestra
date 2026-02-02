@@ -27,7 +27,7 @@ export function proxy(req: NextRequest) {
 
       // Create the rewritten request with modified headers
       const backendUrl =
-        process.env.ARCHESTRA_API_BASE_URL || "http://localhost:9000";
+        process.env.ARCHESTRA_INTERNAL_API_BASE_URL || "http://localhost:9000";
       const backendRequestUrl = new URL(req.nextUrl.pathname, backendUrl);
       backendRequestUrl.search = req.nextUrl.search;
 

@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { handleApiError } from "./utils";
 
 const {
   getChatConversations,
@@ -18,7 +19,6 @@ const {
   updateConversationEnabledTools,
   deleteConversationEnabledTools,
   getAgentTools,
-  getPromptTools,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -29,13 +29,14 @@ export function useConversation(conversationId?: string) {
       const response = await getChatConversation({
         path: { id: conversationId },
       });
-      // Return null for 400 (invalid UUID) or 404 (not found) - handled gracefully by UI
+      // Return null for any error - handled gracefully by UI
       if (response.error) {
         const status = response.response.status;
-        if (status === 400 || status === 404) {
-          return null;
+        // Only show toast for unexpected errors (not 400/404 which are handled gracefully)
+        if (status !== 400 && status !== 404) {
+          handleApiError(response.error);
         }
-        throw new Error("Failed to fetch conversation");
+        return null;
       }
       return response.data;
     },
@@ -47,15 +48,30 @@ export function useConversation(conversationId?: string) {
   });
 }
 
-export function useConversations() {
+export function useConversations({
+  enabled = true,
+  search,
+}: {
+  enabled?: boolean;
+  search?: string;
+}) {
   return useQuery({
-    queryKey: ["conversations"],
+    queryKey: ["conversations", search],
     queryFn: async () => {
-      const { data, error } = await getChatConversations();
-      if (error) throw new Error("Failed to fetch conversations");
+      if (!enabled) return [];
+      const trimmedSearch = search?.trim();
+
+      const { data, error } = await getChatConversations({
+        query: trimmedSearch ? { search: trimmedSearch } : undefined,
+      });
+
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
       return data;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -67,13 +83,11 @@ export function useCreateConversation() {
   return useMutation({
     mutationFn: async ({
       agentId,
-      promptId,
       selectedModel,
       selectedProvider,
       chatApiKeyId,
     }: {
       agentId: string;
-      promptId?: string;
       selectedModel?: string;
       selectedProvider?: SupportedProvider;
       chatApiKeyId?: string | null;
@@ -81,13 +95,15 @@ export function useCreateConversation() {
       const { data, error } = await createChatConversation({
         body: {
           agentId,
-          promptId,
           selectedModel,
           selectedProvider,
           chatApiKeyId: chatApiKeyId ?? undefined,
         },
       });
-      if (error) throw new Error("Failed to create conversation");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (newConversation) => {
@@ -126,7 +142,10 @@ export function useUpdateConversation() {
         path: { id },
         body: { title, selectedModel, selectedProvider, chatApiKeyId, agentId },
       });
-      if (error) throw new Error("Failed to update conversation");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, variables) => {
@@ -137,11 +156,6 @@ export function useUpdateConversation() {
       if (variables.chatApiKeyId) {
         queryClient.invalidateQueries({ queryKey: ["chat-models"] });
       }
-    },
-    onError: (error) => {
-      toast.error(
-        `Failed to update conversation: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
     },
   });
 }
@@ -154,7 +168,10 @@ export function useDeleteConversation() {
       const { data, error } = await deleteChatConversation({
         path: { id },
       });
-      if (error) throw new Error("Failed to delete conversation");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, deletedId) => {
@@ -180,7 +197,10 @@ export function useGenerateConversationTitle() {
         path: { id },
         body: { regenerate },
       });
-      if (error) throw new Error("Failed to generate conversation title");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, variables) => {
@@ -200,13 +220,28 @@ export function useChatProfileMcpTools(agentId: string | undefined) {
       const { data, error } = await getChatAgentMcpTools({
         path: { agentId },
       });
-      if (error) throw new Error("Failed to fetch MCP tools");
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
       return data;
     },
     enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
   });
+}
+
+/**
+ * Fetch enabled tools for a conversation (non-hook version for use in callbacks)
+ * Returns { hasCustomSelection: boolean, enabledToolIds: string[] } or null on error
+ */
+export async function fetchConversationEnabledTools(conversationId: string) {
+  const { data, error } = await getConversationEnabledTools({
+    path: { id: conversationId },
+  });
+  if (error) return null;
+  return data;
 }
 
 /**
@@ -221,10 +256,13 @@ export function useConversationEnabledTools(
     queryKey: ["conversation", conversationId, "enabled-tools"],
     queryFn: async () => {
       if (!conversationId) return null;
-      const { data, error } = await getConversationEnabledTools({
-        path: { id: conversationId },
-      });
-      if (error) throw new Error("Failed to fetch enabled tools");
+      const data = await fetchConversationEnabledTools(conversationId);
+      if (!data) {
+        handleApiError({
+          error: new Error("Failed to fetch enabled tools"),
+        });
+        return null;
+      }
       return data;
     },
     enabled: !!conversationId,
@@ -252,7 +290,10 @@ export function useUpdateConversationEnabledTools() {
         path: { id: conversationId },
         body: { toolIds },
       });
-      if (error) throw new Error("Failed to update enabled tools");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, variables) => {
@@ -274,7 +315,10 @@ export function useClearConversationEnabledTools() {
       const { data, error } = await deleteConversationEnabledTools({
         path: { id: conversationId },
       });
-      if (error) throw new Error("Failed to clear enabled tools");
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
     onSuccess: (_, conversationId) => {
@@ -298,7 +342,10 @@ export function useProfileToolsWithIds(agentId: string | undefined) {
         path: { agentId },
         query: { excludeLlmProxyOrigin: true },
       });
-      if (error) throw new Error("Failed to fetch profile tools");
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
       return data;
     },
     enabled: !!agentId,
@@ -308,21 +355,28 @@ export function useProfileToolsWithIds(agentId: string | undefined) {
 }
 
 /**
- * Get agent delegation tools for a prompt
- * Returns tools created from prompt agents with real database IDs
+ * Get delegation tools for an internal agent
+ * Returns delegation tools (tools that delegate to other agents) assigned to this agent
  */
-export function usePromptTools(promptId: string | undefined) {
+export function useAgentDelegationTools(agentId: string | undefined) {
   return useQuery({
-    queryKey: ["prompts", promptId, "tools"],
+    queryKey: ["agents", agentId, "delegation-tools"],
     queryFn: async () => {
-      if (!promptId) return [];
-      const { data, error } = await getPromptTools({
-        path: { id: promptId },
+      if (!agentId) return [];
+      const { data, error } = await getAgentTools({
+        path: { agentId },
+        query: { excludeLlmProxyOrigin: true },
       });
-      if (error) throw new Error("Failed to fetch prompt tools");
-      return data;
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      // Filter for delegation tools (tools with name starting with "delegate_to_")
+      return (data ?? []).filter((tool) =>
+        tool.name.startsWith("delegate_to_"),
+      );
     },
-    enabled: !!promptId,
+    enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
   });

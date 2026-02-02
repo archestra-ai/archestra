@@ -4,9 +4,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { modelSyncService } from "@/features/browser-stream/services/model-sync";
+import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
 import { testProviderApiKey } from "@/routes/chat/routes.models";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import {
   assertByosEnabled,
   isByosEnabled,
@@ -132,6 +134,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       let secret: SelectSecret | null = null;
+      let actualApiKeyValue: string | null = null;
 
       // If readonly_vault is enabled
       if (isByosEnabled()) {
@@ -142,9 +145,9 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // first, get secret from vault path and key
         const manager = assertByosEnabled();
         const vaultData = await manager.getSecretFromPath(body.vaultSecretPath);
-        const apiKeyValue = vaultData[body.vaultSecretKey];
+        actualApiKeyValue = vaultData[body.vaultSecretKey];
 
-        if (!apiKeyValue) {
+        if (!actualApiKeyValue) {
           throw new ApiError(
             400,
             `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
@@ -152,7 +155,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         // then test the API key
         try {
-          await testProviderApiKey(body.provider, apiKeyValue);
+          await testProviderApiKey(body.provider, actualApiKeyValue);
         } catch (_error) {
           throw new ApiError(
             400,
@@ -170,9 +173,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       } else if (body.apiKey) {
         // When readonly_vault is disabled
+        actualApiKeyValue = body.apiKey;
         // Test the API key before saving
         try {
-          await testProviderApiKey(body.provider, body.apiKey);
+          await testProviderApiKey(body.provider, actualApiKeyValue);
         } catch (_error) {
           throw new ApiError(
             400,
@@ -181,7 +185,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         secret = await secretManager().createSecret(
-          { apiKey: body.apiKey },
+          { apiKey: actualApiKeyValue },
           getChatApiKeySecretName({
             scope: body.scope,
             teamId: body.teamId ?? null,
@@ -207,6 +211,27 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: body.scope === "personal" ? user.id : null,
         teamId: body.scope === "team" ? body.teamId : null,
       });
+
+      // Sync models for the new API key in background (non-blocking)
+      if (actualApiKeyValue && modelSyncService.hasFetcher(body.provider)) {
+        modelSyncService
+          .syncModelsForApiKey(
+            createdApiKey.id,
+            body.provider,
+            actualApiKeyValue,
+          )
+          .catch((error) => {
+            logger.error(
+              {
+                apiKeyId: createdApiKey.id,
+                provider: body.provider,
+                errorMessage:
+                  error instanceof Error ? error.message : String(error),
+              },
+              "Failed to sync models for new API key",
+            );
+          });
+      }
 
       return reply.send(createdApiKey);
     },

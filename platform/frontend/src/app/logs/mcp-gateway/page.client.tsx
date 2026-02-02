@@ -2,9 +2,10 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
+import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,8 +71,10 @@ function McpToolCallsTable({
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const profileIdFromUrl = searchParams.get("profileId");
+  const searchFromUrl = searchParams.get("search");
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
+  const [searchFilter, setSearchFilter] = useState(searchFromUrl || "");
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: DEFAULT_TABLE_LIMIT,
@@ -108,6 +111,18 @@ function McpToolCallsTable({
     [updateUrlParams],
   );
 
+  // Search filter change handler
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchFilter(value);
+      setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
+      updateUrlParams({
+        search: value || null,
+      });
+    },
+    [updateUrlParams],
+  );
+
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
     startDateFromUrl,
@@ -131,15 +146,11 @@ function McpToolCallsTable({
   const apiSortBy: NonNullable<
     archestraApiTypes.GetMcpToolCallsData["query"]
   >["sortBy"] =
-    sortBy === "agent"
-      ? "agentId"
-      : sortBy === "mcpServerName"
-        ? "mcpServerName"
-        : sortBy === "method"
-          ? "method"
-          : sortBy === "createdAt"
-            ? "createdAt"
-            : undefined;
+    sortBy === "method"
+      ? "method"
+      : sortBy === "createdAt"
+        ? "createdAt"
+        : undefined;
 
   const { data: mcpToolCallsResponse } = useMcpToolCalls({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
@@ -149,6 +160,7 @@ function McpToolCallsTable({
     sortDirection,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
+    search: searchFilter || undefined,
     initialData: initialData?.mcpToolCalls,
   });
 
@@ -206,18 +218,7 @@ function McpToolCallsTable({
         const agent = agents?.find((a) => a.id === row.agentId);
         return agent?.name ?? "Unknown";
       },
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Profile
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
+      header: "MCP Gateway",
       cell: ({ row }) => {
         const agent = agents?.find((a) => a.id === row.original.agentId);
         return (
@@ -227,18 +228,7 @@ function McpToolCallsTable({
     },
     {
       id: "mcpServerName",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            MCP Server
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
+      header: "MCP Server",
       cell: ({ row }) => {
         return (
           <Badge variant="secondary" className="text-xs whitespace-normal">
@@ -314,60 +304,12 @@ function McpToolCallsTable({
         );
       },
     },
-    {
-      id: "result",
-      header: "Result",
-      cell: ({ row }) => {
-        const result = row.original.toolResult;
-        const method = row.original.method || "tools/call";
-
-        // Handle tools/call with standard result structure
-        if (
-          method === "tools/call" &&
-          result &&
-          typeof result === "object" &&
-          "isError" in result
-        ) {
-          const toolResult = result as {
-            isError: boolean;
-            error?: string;
-            content?: unknown;
-          };
-          if (toolResult.isError) {
-            return (
-              <div className="text-xs text-destructive">
-                <TruncatedText
-                  message={toolResult.error || "Unknown error"}
-                  maxLength={60}
-                />
-              </div>
-            );
-          }
-          const contentString =
-            typeof toolResult.content === "string"
-              ? toolResult.content
-              : JSON.stringify(toolResult.content);
-          return (
-            <div className="text-xs">
-              <TruncatedText message={contentString} maxLength={60} />
-            </div>
-          );
-        }
-
-        // For other methods, just stringify the result
-        const resultString =
-          typeof result === "string" ? result : JSON.stringify(result);
-        return (
-          <div className="text-xs">
-            <TruncatedText message={resultString} maxLength={60} />
-          </div>
-        );
-      },
-    },
   ];
 
   const hasFilters =
-    profileFilter !== "all" || dateTimePicker.dateRange !== undefined;
+    profileFilter !== "all" ||
+    dateTimePicker.dateRange !== undefined ||
+    searchFilter !== "";
 
   // Shared date picker component
   const datePickerComponent = (
@@ -388,16 +330,31 @@ function McpToolCallsTable({
     />
   );
 
+  // Shared search input component
+  const searchInputComponent = (
+    <div className="relative w-[250px]">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <DebouncedInput
+        initialValue={searchFromUrl || ""}
+        onChange={handleSearchChange}
+        placeholder="Search tools, servers..."
+        className="pl-9"
+        debounceMs={400}
+      />
+    </div>
+  );
+
   if (!mcpToolCalls || mcpToolCalls.length === 0) {
     return (
       <div className="space-y-4">
         <div className="flex flex-wrap gap-4">
+          {searchInputComponent}
           <SearchableSelect
             value={profileFilter}
             onValueChange={handleProfileFilterChange}
-            placeholder="Filter by Profile"
+            placeholder="Filter by MCP Gateway"
             items={[
-              { value: "all", label: "All Profiles" },
+              { value: "all", label: "All MCP Gateways" },
               ...(agents?.map((agent) => ({
                 value: agent.id,
                 label: agent.name,
@@ -422,12 +379,13 @@ function McpToolCallsTable({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
+        {searchInputComponent}
         <SearchableSelect
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
-          placeholder="Filter by Profile"
+          placeholder="Filter by MCP Gateway"
           items={[
-            { value: "all", label: "All Profiles" },
+            { value: "all", label: "All MCP Gateways" },
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,
@@ -442,6 +400,7 @@ function McpToolCallsTable({
             variant="ghost"
             size="sm"
             onClick={() => {
+              handleSearchChange("");
               handleProfileFilterChange("all");
               dateTimePicker.clearDateRange();
             }}
@@ -470,6 +429,9 @@ function McpToolCallsTable({
         manualSorting
         sorting={sorting}
         onSortingChange={setSorting}
+        onRowClick={(row) => {
+          router.push(`/logs/mcp-gateway/${row.id}`);
+        }}
       />
     </div>
   );

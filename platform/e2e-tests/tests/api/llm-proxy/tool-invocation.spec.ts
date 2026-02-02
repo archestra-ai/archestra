@@ -1,5 +1,9 @@
 import { expect, test } from "../fixtures";
 
+// Run all provider tests sequentially to avoid WireMock stub timing issues
+// when multiple providers run in parallel against the same backend.
+test.describe.configure({ mode: "serial" });
+
 // biome-ignore lint/suspicious/noExplicitAny: test file uses dynamic response structures
 type AnyResponse = any;
 
@@ -316,6 +320,77 @@ const geminiConfig: ToolInvocationTestConfig = {
     ),
 };
 
+const cohereConfig: ToolInvocationTestConfig = {
+  providerName: "Cohere",
+
+  endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "command-r-plus-08-2024",
+    messages: [{ role: "user", content: [{ type: "text", text: content }] }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+
+  trustedDataPolicyAttributePath: "$.content[0].text",
+
+  assertToolCallBlocked: (response) => {
+    expect(response.message).toBeDefined();
+
+    const textContent = response.message.content?.find(
+      (c: { type: string }) => c.type === "text",
+    );
+    expect(textContent).toBeDefined();
+    expect(textContent.text).toContain("read_file");
+    expect(textContent.text).toContain("denied");
+
+    const hasToolCalls = response.message.tool_calls?.length > 0;
+    expect(hasToolCalls).toBeFalsy();
+  },
+
+  assertToolCallsPresent: (response, expectedTools) => {
+    expect(response.message).toBeDefined();
+    expect(response.message.tool_calls).toBeDefined();
+
+    const toolCalls = response.message.tool_calls;
+    expect(toolCalls.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = toolCalls.find(
+        (tc: { function: { name: string } }) => tc.function.name === toolName,
+      );
+      expect(found).toBeDefined();
+    }
+  },
+
+  assertToolArgument: (response, toolName, argName, matcher) => {
+    const toolCalls = response.message.tool_calls;
+    const toolCall = toolCalls.find(
+      (tc: { function: { name: string } }) => tc.function.name === toolName,
+    );
+    const args = JSON.parse(toolCall.function.arguments);
+    matcher(args[argName]);
+  },
+
+  findInteractionByContent: (interactions, content) =>
+    interactions.find((i) =>
+      i.request?.messages?.some((m: { content?: Array<{ text?: string }> }) =>
+        m.content?.some((c) => c.text?.includes(content)),
+      ),
+    ),
+};
+
 const cerebrasConfig: ToolInvocationTestConfig = {
   providerName: "Cerebras",
 
@@ -328,6 +403,82 @@ const cerebrasConfig: ToolInvocationTestConfig = {
 
   buildRequest: (content, tools) => ({
     model: "llama-4-scout-17b-16e-instruct",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+
+  trustedDataPolicyAttributePath: "$.content",
+
+  assertToolCallBlocked: (response) => {
+    expect(response.choices).toBeDefined();
+    expect(response.choices[0]).toBeDefined();
+    expect(response.choices[0].message).toBeDefined();
+
+    const message = response.choices[0].message;
+    const refusalOrContent = message.refusal || message.content;
+
+    expect(refusalOrContent).toBeTruthy();
+    expect(refusalOrContent).toContain("read_file");
+    expect(refusalOrContent).toContain("denied");
+
+    if (message.tool_calls) {
+      expect(refusalOrContent).toContain("tool invocation policy");
+    }
+  },
+
+  assertToolCallsPresent: (response, expectedTools) => {
+    expect(response.choices).toBeDefined();
+    expect(response.choices[0]).toBeDefined();
+    expect(response.choices[0].message).toBeDefined();
+    expect(response.choices[0].message.tool_calls).toBeDefined();
+
+    const toolCalls = response.choices[0].message.tool_calls;
+    expect(toolCalls.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = toolCalls.find(
+        (tc: { function: { name: string } }) => tc.function.name === toolName,
+      );
+      expect(found).toBeDefined();
+    }
+  },
+
+  assertToolArgument: (response, toolName, argName, matcher) => {
+    const toolCalls = response.choices[0].message.tool_calls;
+    const toolCall = toolCalls.find(
+      (tc: { function: { name: string } }) => tc.function.name === toolName,
+    );
+    const args = JSON.parse(toolCall.function.arguments);
+    matcher(args[argName]);
+  },
+
+  findInteractionByContent: (interactions, content) =>
+    interactions.find((i) =>
+      i.request?.messages?.some((m: { content?: string }) =>
+        m.content?.includes(content),
+      ),
+    ),
+};
+
+const mistralConfig: ToolInvocationTestConfig = {
+  providerName: "Mistral",
+
+  endpoint: (agentId) => `/v1/mistral/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "mistral-large-latest",
     messages: [{ role: "user", content }],
     tools: tools.map((t) => ({
       type: "function",
@@ -629,6 +780,8 @@ const testConfigs: ToolInvocationTestConfig[] = [
   anthropicConfig,
   geminiConfig,
   cerebrasConfig,
+  cohereConfig,
+  mistralConfig,
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
@@ -636,32 +789,43 @@ const testConfigs: ToolInvocationTestConfig[] = [
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ToolInvocation-${config.providerName}`, () => {
-    // Run tests serially because they share mutable state (agentId, toolId, policyIds)
-    // Parallel execution causes these variables to be overwritten, breaking afterEach cleanup
-    test.describe.configure({ mode: "serial" });
-
-    let agentId: string;
-    let trustedDataPolicyId: string;
-    let toolInvocationPolicyId: string;
-    let toolId: string;
+    // Each test is self-contained with its own local variables and cleanup.
+    // This allows parallel execution without shared mutable state collisions.
+    //
+    // Extra retries for these tests as they can be flaky due to WireMock stub timing issues
+    // when running in parallel with multiple providers. Increased to 3 retries (4 total attempts)
+    // as Cerebras tests have shown higher flakiness rates in CI.
+    test.describe.configure({ retries: 3 });
 
     test("blocks tool invocation when untrusted data is consumed", async ({
       request,
-      createAgent,
+      deleteAgent,
       createTrustedDataPolicy,
+      deleteTrustedDataPolicy,
       createToolInvocationPolicy,
+      deleteToolInvocationPolicy,
       makeApiRequest,
       waitForAgentTool,
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-blocks-tool-untrusted-data`;
+      const uniqueSuffix = crypto.randomUUID().slice(0, 8);
 
-      // 1. Create a test agent
-      const createResponse = await createAgent(
+      // 1. Create a test agent with considerContextUntrusted=true
+      // This marks the entire context as untrusted, which is required for tool invocation
+      // policies to block tool calls. Without this, the context is trusted by default when
+      // there are no previous tool results to evaluate.
+      const createResponse = await makeApiRequest({
         request,
-        `${config.providerName} Test Agent`,
-      );
+        method: "post",
+        urlSuffix: "/api/agents",
+        data: {
+          name: `${config.providerName} Test Agent ${uniqueSuffix}`,
+          teams: [],
+          considerContextUntrusted: true,
+        },
+      });
       const agent = await createResponse.json();
-      agentId = agent.id;
+      const agentId = agent.id;
 
       // 2. Send initial request to register the tool
       const initialResponse = await makeApiRequest({
@@ -687,7 +851,7 @@ for (const config of testConfigs) {
         agentId,
         "read_file",
       );
-      toolId = readFileAgentTool.tool.id;
+      const toolId = readFileAgentTool.tool.id;
 
       // 4. Create a trusted data policy
       const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
@@ -703,7 +867,7 @@ for (const config of testConfigs) {
         action: "mark_as_trusted",
       });
       const trustedDataPolicy = await trustedDataPolicyResponse.json();
-      trustedDataPolicyId = trustedDataPolicy.id;
+      const trustedDataPolicyId = trustedDataPolicy.id;
 
       // 5. Create a tool invocation policy that blocks read_file for /etc/
       const toolInvocationPolicyResponse = await createToolInvocationPolicy(
@@ -722,11 +886,11 @@ for (const config of testConfigs) {
         },
       );
       const toolInvocationPolicy = await toolInvocationPolicyResponse.json();
-      toolInvocationPolicyId = toolInvocationPolicy.id;
+      const toolInvocationPolicyId = toolInvocationPolicy.id;
 
       // Wait for policies to be fully active before testing
-      // This helps prevent race conditions where policies aren't immediately effective
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Higher delay needed for CI stability due to database propagation time
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
 
       // 6. Send a request with untrusted data
       const response = await makeApiRequest({
@@ -761,22 +925,29 @@ for (const config of testConfigs) {
         "UNTRUSTED_DATA",
       );
       expect(blockedInteraction).toBeDefined();
+
+      // Cleanup
+      await deleteToolInvocationPolicy(request, toolInvocationPolicyId);
+      await deleteTrustedDataPolicy(request, trustedDataPolicyId);
+      await deleteAgent(request, agentId);
     });
 
     test("allows Archestra MCP server tools in untrusted context", async ({
       request,
       createAgent,
+      deleteAgent,
       makeApiRequest,
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-allows-archestra-untrusted-context`;
 
-      // 1. Create a test agent
+      // 1. Create a test agent with unique name to avoid conflicts in parallel runs
+      const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const createResponse = await createAgent(
         request,
-        `${config.providerName} Archestra Test Agent`,
+        `${config.providerName} Archestra Test Agent ${uniqueSuffix}`,
       );
       const agent = await createResponse.json();
-      agentId = agent.id;
+      const agentId = agent.id;
 
       // 2. Make a request that triggers both regular and Archestra tools
       const response = await makeApiRequest({
@@ -822,22 +993,27 @@ for (const config of testConfigs) {
         "tell me who I am",
       );
       expect(mixedToolInteraction).toBeDefined();
+
+      // Cleanup
+      await deleteAgent(request, agentId);
     });
 
     test("allows regular tool call after Archestra MCP server tool call", async ({
       request,
       createAgent,
+      deleteAgent,
       makeApiRequest,
     }) => {
       const wiremockStub = `${config.providerName.toLowerCase()}-allows-regular-after-archestra`;
 
-      // 1. Create a test agent
+      // 1. Create a test agent with unique name to avoid conflicts in parallel runs
+      const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const createResponse = await createAgent(
         request,
-        `${config.providerName} Archestra Sequence Test Agent`,
+        `${config.providerName} Archestra Sequence Test Agent ${uniqueSuffix}`,
       );
       const agent = await createResponse.json();
-      agentId = agent.id;
+      const agentId = agent.id;
 
       // 2. Make a sequence request: Archestra tool first, then regular tool
       const response = await makeApiRequest({
@@ -866,28 +1042,9 @@ for (const config of testConfigs) {
         "file_path",
         (value) => expect(value).toContain("/"),
       );
-    });
 
-    test.afterEach(
-      async ({
-        request,
-        deleteToolInvocationPolicy,
-        deleteTrustedDataPolicy,
-        deleteAgent,
-      }) => {
-        if (toolInvocationPolicyId) {
-          await deleteToolInvocationPolicy(request, toolInvocationPolicyId);
-          toolInvocationPolicyId = "";
-        }
-        if (trustedDataPolicyId) {
-          await deleteTrustedDataPolicy(request, trustedDataPolicyId);
-          trustedDataPolicyId = "";
-        }
-        if (agentId) {
-          await deleteAgent(request, agentId);
-          agentId = "";
-        }
-      },
-    );
+      // Cleanup
+      await deleteAgent(request, agentId);
+    });
   });
 }

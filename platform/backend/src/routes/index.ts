@@ -1,10 +1,9 @@
-import config from "@/config";
-import anthropicProxyRoutesV1 from "./proxy/anthropic";
-import geminiProxyRoutesV1 from "./proxy/gemini";
-import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
+import bedrockProxyRoutesV2 from "./proxy/routesv2/bedrock";
 import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
+import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
+import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
@@ -19,6 +18,7 @@ export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as chatApiKeysRoutes } from "./chat/routes.api-keys";
 export { default as chatRoutes } from "./chat/routes.chat";
 export { default as chatModelsRoutes } from "./chat/routes.models";
+export { default as chatopsRoutes } from "./chatops";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";
@@ -27,7 +27,7 @@ export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";
 export { default as limitsRoutes } from "./limits";
-export { legacyMcpGatewayRoutes, newMcpGatewayRoutes } from "./mcp-gateway";
+export { mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-installation-requests";
 export { default as mcpToolCallRoutes } from "./mcp-tool-call";
@@ -36,32 +36,18 @@ export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
-export { default as promptAgentRoutes } from "./prompt-agents";
-export { default as promptRoutes } from "./prompts";
-// Anthropic proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
-export const anthropicProxyRoutes = config.llm.anthropic.useV2Routes
-  ? anthropicProxyRoutesV2
-  : anthropicProxyRoutesV1;
-// Cerebras proxy routes - V2 only (no legacy V1 implementation)
+// Proxy routes
+export const anthropicProxyRoutes = anthropicProxyRoutesV2;
 export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;
-// Gemini proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
-export const geminiProxyRoutes = config.llm.gemini.useV2Routes
-  ? geminiProxyRoutesV2
-  : geminiProxyRoutesV1;
-// OpenAI proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
-export const openAiProxyRoutes = config.llm.openai.useV2Routes
-  ? openAiProxyRoutesV2
-  : openAiProxyRoutesV1;
-// vLLM proxy routes - V2 only (unified handler, OpenAI-compatible)
-export const vllmProxyRoutes = config.llm.vllm.useV2Routes
-  ? vllmProxyRoutesV2
-  : vllmProxyRoutesV2; // vLLM only has V2 since it was added after the unified handler
-// Ollama proxy routes - V2 only (unified handler, OpenAI-compatible)
-export const ollamaProxyRoutes = config.llm.ollama.useV2Routes
-  ? ollamaProxyRoutesV2
-  : ollamaProxyRoutesV2; // Ollama only has V2 since it was added after the unified handler
-// Zhipu AI proxy routes - V2 only (new provider, no legacy v1)
+export const cohereProxyRoutes = cohereProxyRoutesV2;
+export const geminiProxyRoutes = geminiProxyRoutesV2;
+export const mistralProxyRoutes = mistralProxyRoutesV2;
+export const openAiProxyRoutes = openAiProxyRoutesV2;
+export const vllmProxyRoutes = vllmProxyRoutesV2;
+export const ollamaProxyRoutes = ollamaProxyRoutesV2;
 export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
+// Bedrock proxy routes - V2 only (unified handler, AWS Converse API)
+export const bedrockProxyRoutes = bedrockProxyRoutesV2;
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

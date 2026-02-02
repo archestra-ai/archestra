@@ -1,6 +1,7 @@
 import { archestraCatalogSdk, type archestraCatalogTypes } from "@shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { SelectedCategory } from "@/app/mcp-catalog/_parts/CatalogFilters";
+import { handleApiError } from "./utils";
 
 type SearchResponse =
   archestraCatalogTypes.SearchMcpServerCatalogResponses[200];
@@ -33,10 +34,20 @@ export function useMcpRegistryServersInfinite(
           limit,
           offset: pageParam,
           sortBy: "quality", // Sort by quality score (highest first)
+          worksInArchestra: true,
         },
       });
       if (!response.data) {
-        throw new Error("No data returned from Archestra catalog");
+        handleApiError({
+          error: new Error("No data returned from Archestra catalog"),
+        });
+        return {
+          servers: [],
+          totalCount: 0,
+          limit,
+          offset: pageParam,
+          hasMore: false,
+        };
       }
       return response.data;
     },
@@ -77,7 +88,10 @@ export function useMcpServerCategories() {
     > => {
       const response = await archestraCatalogSdk.getMcpServerCategories();
       if (!response.data) {
-        throw new Error("No categories returned from Archestra catalog");
+        handleApiError({
+          error: new Error("No categories returned from Archestra catalog"),
+        });
+        return [];
       }
       return response.data.categories;
     },

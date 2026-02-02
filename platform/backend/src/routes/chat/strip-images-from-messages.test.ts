@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@/test";
 import {
   __test,
   stripImagesFromMessages,

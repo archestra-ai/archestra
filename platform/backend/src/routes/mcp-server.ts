@@ -2,12 +2,14 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import { autoReinstallServer } from "@/features/browser-stream/services/mcp-reinstall";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  TeamModel,
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -98,7 +100,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ body, user }, reply) => {
+    async ({ body, user, headers }, reply) => {
       let {
         agentIds,
         secretId,
@@ -143,6 +145,46 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             400,
             "Personal MCP server installations are not allowed when Readonly Vault is enabled. Please select a team.",
           );
+        }
+
+        // Validate permissions for team installations
+        // WHY: We want to restrict who can create team-wide MCP server installations:
+        // - Members should NOT be able to create team installations (they lack mcpServer:update)
+        // - Editors can create team installations ONLY for teams they are members of
+        // - Admins (with team:admin) can create team installations for ANY team
+        // This prevents members from installing MCP servers that affect the whole team.
+        if (serverData.teamId) {
+          const { success: hasTeamAdmin } = await hasPermission(
+            { team: ["admin"] },
+            headers,
+          );
+
+          if (!hasTeamAdmin) {
+            // WHY: mcpServer:update distinguishes editors from members
+            // Editors have this permission, members don't
+            const { success: hasMcpServerUpdate } = await hasPermission(
+              { mcpServer: ["update"] },
+              headers,
+            );
+
+            if (!hasMcpServerUpdate) {
+              throw new ApiError(
+                403,
+                "You don't have permission to create team MCP server installations",
+              );
+            }
+
+            const isMember = await TeamModel.isUserInTeam(
+              serverData.teamId,
+              user.id,
+            );
+            if (!isMember) {
+              throw new ApiError(
+                403,
+                "You can only create MCP server installations for teams you are a member of",
+              );
+            }
+          }
         }
 
         // Validate no duplicate installations for this catalog item
@@ -592,6 +634,132 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  /**
+   * Re-authenticate an MCP server by updating its secret
+   * Used when OAuth token refresh fails and user needs to re-authenticate
+   */
+  fastify.patch(
+    "/api/mcp_server/:id/reauthenticate",
+    {
+      schema: {
+        operationId: RouteId.ReauthenticateMcpServer,
+        description:
+          "Update MCP server secret after re-authentication (clears OAuth refresh errors)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          secretId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async ({ params: { id }, body: { secretId }, user, headers }, reply) => {
+      // Get the existing MCP server
+      const mcpServer = await McpServerModel.findById(id, user.id);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Check mcpServer create permission (required for re-authentication)
+      const { success: hasMcpServerCreatePermission } = await hasPermission(
+        { mcpServer: ["create"] },
+        headers,
+      );
+
+      if (!hasMcpServerCreatePermission) {
+        throw new ApiError(
+          403,
+          "You need MCP server create permission to re-authenticate",
+        );
+      }
+
+      // For personal credentials, only owner can re-authenticate
+      if (!mcpServer.teamId) {
+        if (mcpServer.ownerId !== user.id) {
+          throw new ApiError(
+            403,
+            "Only the credential owner can re-authenticate",
+          );
+        }
+      } else {
+        // For team credentials: user must have team:admin OR (mcpServer:update AND team membership)
+        // WHY: This matches the team installation permission requirements - only editors and admins
+        // can manage team credentials, members cannot.
+        // Same rules apply for re-authentication.
+        const { success: isTeamAdmin } = await hasPermission(
+          { team: ["admin"] },
+          headers,
+        );
+
+        if (!isTeamAdmin) {
+          // WHY: mcpServer:update distinguishes editors from members
+          // Editors have this permission, members don't
+          const { success: hasMcpServerUpdate } = await hasPermission(
+            { mcpServer: ["update"] },
+            headers,
+          );
+
+          if (!hasMcpServerUpdate) {
+            throw new ApiError(
+              403,
+              "You don't have permission to re-authenticate team credentials",
+            );
+          }
+
+          // WHY: Even editors can only re-authenticate for their own teams
+          const isMember = await TeamModel.isUserInTeam(
+            mcpServer.teamId,
+            user.id,
+          );
+          if (!isMember) {
+            throw new ApiError(
+              403,
+              "You can only re-authenticate credentials for teams you are a member of",
+            );
+          }
+        }
+      }
+
+      // Delete the old secret if it exists
+      if (mcpServer.secretId) {
+        try {
+          await secretManager().deleteSecret(mcpServer.secretId);
+          logger.info(
+            { mcpServerId: id, oldSecretId: mcpServer.secretId },
+            "Deleted old secret during re-authentication",
+          );
+        } catch (error) {
+          logger.error(
+            { err: error, mcpServerId: id },
+            "Failed to delete old secret during re-authentication",
+          );
+          // Continue with update even if old secret deletion fails
+        }
+      }
+
+      // Update the server with new secret and clear OAuth error fields
+      const updatedServer = await McpServerModel.update(id, {
+        secretId,
+        oauthRefreshError: null,
+        oauthRefreshFailedAt: null,
+      });
+
+      if (!updatedServer) {
+        throw new ApiError(500, "Failed to update MCP server");
+      }
+
+      logger.info(
+        { mcpServerId: id, newSecretId: secretId },
+        "MCP server re-authenticated successfully",
+      );
+
+      return reply.send(updatedServer);
+    },
+  );
+
   fastify.delete(
     "/api/mcp_server/:id",
     {
@@ -742,216 +910,244 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.get(
-    "/api/mcp_server/:id/logs",
+  /**
+   * Reinstall an MCP server without losing tool assignments and policies.
+   *
+   * Unlike delete + install, this endpoint:
+   * 1. Keeps the MCP server record (and its ID)
+   * 2. Updates secrets if new environment values are provided
+   * 3. Restarts the K8s deployment (for local servers)
+   * 4. Syncs tools (updates existing, creates new) instead of deleting
+   * 5. Preserves tool_invocation_policies, trusted_data_policies, and agent_tools
+   */
+  fastify.post(
+    "/api/mcp_server/:id/reinstall",
     {
       schema: {
-        operationId: RouteId.GetMcpServerLogs,
-        description: "Get logs for a specific MCP server deployment",
+        operationId: RouteId.ReinstallMcpServer,
+        description:
+          "Reinstall an MCP server without losing tool assignments and policies",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
         }),
-        querystring: z.object({
-          lines: z.coerce.number().optional().default(100),
-          follow: z.coerce.boolean().optional().default(false),
+        body: z.object({
+          // Environment values for local servers (when new prompted env vars were added)
+          environmentValues: z.record(z.string(), z.string()).optional(),
+          // Whether environmentValues contains vault references in path#key format
+          isByosVault: z.boolean().optional(),
+          // Kubernetes service account override
+          serviceAccount: z.string().optional(),
         }),
-        response: constructResponseSchema(
-          z.object({
-            logs: z.string(),
-            containerName: z.string(),
-            command: z.string(),
-            namespace: z.string(),
-          }),
-        ),
+        response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, query: { lines, follow } }, reply) => {
-      try {
-        // If follow is enabled, stream the logs
-        if (follow) {
-          // Hijack the response to handle streaming
-          reply.hijack();
-          reply.raw.writeHead(200, {
-            "Content-Type": "text/plain; charset=utf-8",
-            "Cache-Control": "no-cache",
-            "Transfer-Encoding": "chunked",
-          });
+    async ({ params: { id }, body, user, headers }, reply) => {
+      const { environmentValues, isByosVault, serviceAccount } = body;
 
-          await McpServerRuntimeManager.streamMcpServerLogs(
-            id,
-            reply.raw,
-            lines,
+      // Get the existing MCP server
+      const mcpServer = await McpServerModel.findById(id, user.id);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Check permissions for reinstall (same logic as re-authenticate)
+      // For personal servers, only owner can reinstall
+      if (!mcpServer.teamId) {
+        if (mcpServer.ownerId !== user.id) {
+          throw new ApiError(
+            403,
+            "Only the server owner can reinstall this MCP server",
+          );
+        }
+      } else {
+        // For team servers: user must have team:admin OR (mcpServer:update AND team membership)
+        // WHY: This matches the team installation permission requirements - only editors and admins
+        // can manage team servers, members cannot.
+        const { success: isTeamAdmin } = await hasPermission(
+          { team: ["admin"] },
+          headers,
+        );
+
+        if (!isTeamAdmin) {
+          // WHY: mcpServer:update distinguishes editors from members
+          // Editors have this permission, members don't
+          const { success: hasMcpServerUpdate } = await hasPermission(
+            { mcpServer: ["update"] },
+            headers,
           );
 
-          return;
+          if (!hasMcpServerUpdate) {
+            throw new ApiError(
+              403,
+              "You don't have permission to reinstall team MCP servers",
+            );
+          }
+
+          // WHY: Even editors can only reinstall servers for their own teams
+          const isMember = await TeamModel.isUserInTeam(
+            mcpServer.teamId,
+            user.id,
+          );
+          if (!isMember) {
+            throw new ApiError(
+              403,
+              "You can only reinstall MCP servers for teams you are a member of",
+            );
+          }
         }
-
-        // Otherwise, return logs as usual
-        const logs = await McpServerRuntimeManager.getMcpServerLogs(id, lines);
-        return reply.send(logs);
-      } catch (error) {
-        fastify.log.error(
-          `Error getting logs for MCP server ${id}: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-
-        // If we've already hijacked, we can't send a normal error response
-        if (follow && reply.raw.headersSent) {
-          reply.raw.end();
-          return;
-        }
-
-        throw new ApiError(
-          404,
-          `Failed to get logs for MCP server ${id}: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
       }
-    },
-  );
 
-  fastify.post(
-    "/api/mcp_server/:id/restart",
-    {
-      schema: {
-        operationId: RouteId.RestartMcpServer,
-        description: "Restart a single MCP server deployment",
-        tags: ["MCP Server"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        response: constructResponseSchema(
-          z.object({
-            success: z.boolean(),
-            message: z.string(),
-          }),
-        ),
-      },
-    },
-    async ({ params: { id } }, reply) => {
-      try {
-        await McpServerRuntimeManager.restartServer(id);
-        return reply.send({
-          success: true,
-          message: `MCP server ${id} restarted successfully`,
-        });
-      } catch (error) {
-        fastify.log.error(
-          `Failed to restart MCP server ${id}: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
+      // Get catalog item
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
 
-        if (error instanceof Error && error.message?.includes("not found")) {
-          throw new ApiError(404, error.message);
-        }
-
-        throw new ApiError(
-          500,
-          `Failed to restart MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-      }
-    },
-  );
-
-  fastify.post(
-    "/api/mcp_catalog/:catalogId/restart-all-installations",
-    {
-      schema: {
-        operationId: RouteId.RestartAllMcpServerInstallations,
-        description:
-          "Restart all MCP server installations for a given catalog item",
-        tags: ["MCP Server"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-        }),
-        response: constructResponseSchema(
-          z.object({
-            success: z.boolean(),
-            message: z.string(),
-            results: z.array(
-              z.object({
-                serverId: z.string(),
-                serverName: z.string(),
-                success: z.boolean(),
-                error: z.string().optional(),
-              }),
-            ),
-            summary: z.object({
-              total: z.number(),
-              succeeded: z.number(),
-              failed: z.number(),
-            }),
-          }),
-        ),
-      },
-    },
-    async ({ params: { catalogId } }, reply) => {
-      // Verify the catalog item exists
-      const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
       if (!catalogItem) {
-        throw new ApiError(404, `Catalog item ${catalogId} not found`);
+        throw new ApiError(404, "Catalog item not found for this server");
       }
 
-      // Find all MCP server installations for this catalog item
-      const servers = await McpServerModel.findByCatalogId(catalogId);
+      // For local servers with new environment values: update/create the secret
+      if (
+        mcpServer.serverType === "local" &&
+        environmentValues &&
+        Object.keys(environmentValues).length > 0
+      ) {
+        // Validate required environment variables
+        if (catalogItem.localConfig?.environment) {
+          const requiredEnvVars = catalogItem.localConfig.environment.filter(
+            (env) => env.promptOnInstallation && env.required,
+          );
 
-      if (servers.length === 0) {
-        return reply.send({
-          success: true,
-          message: "No installations found for this catalog item",
-          results: [],
-          summary: { total: 0, succeeded: 0, failed: 0 },
+          const missingEnvVars = requiredEnvVars.filter((env) => {
+            const value = environmentValues[env.key];
+            if (env.type === "boolean") {
+              return !value;
+            }
+            return !value?.trim();
+          });
+
+          if (missingEnvVars.length > 0) {
+            throw new ApiError(
+              400,
+              `Missing required environment variables: ${missingEnvVars
+                .map((env) => env.key)
+                .join(", ")}`,
+            );
+          }
+        }
+
+        // Update or create secret with new values
+        if (isByosVault) {
+          // BYOS mode: values are vault references
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Readonly Vault is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+            );
+          }
+
+          if (mcpServer.secretId) {
+            await secretManager().updateSecret(
+              mcpServer.secretId,
+              environmentValues,
+            );
+          } else {
+            const secret = await secretManager().createSecret(
+              environmentValues,
+              `${mcpServer.name}-vault-secret`,
+            );
+            await McpServerModel.update(id, { secretId: secret.id });
+          }
+        } else {
+          // Non-BYOS mode: merge new values with existing secret
+          const existingSecrets = mcpServer.secretId
+            ? (await secretManager().getSecret(mcpServer.secretId))?.secret ||
+              {}
+            : {};
+
+          const mergedSecrets = {
+            ...existingSecrets,
+            ...environmentValues,
+          };
+
+          if (mcpServer.secretId) {
+            await secretManager().updateSecret(
+              mcpServer.secretId,
+              mergedSecrets,
+            );
+          } else {
+            const secret = await secretManager().createSecret(
+              mergedSecrets,
+              `mcp-server-${mcpServer.name}-env`,
+            );
+            await McpServerModel.update(id, { secretId: secret.id });
+          }
+        }
+
+        logger.info(
+          { serverId: id, envVarCount: Object.keys(environmentValues).length },
+          "Updated MCP server secrets for reinstall",
+        );
+      }
+
+      // Update service account if provided
+      if (
+        serviceAccount !== undefined &&
+        catalogItem.localConfig?.serviceAccount !== serviceAccount
+      ) {
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          localConfig: {
+            ...catalogItem.localConfig,
+            serviceAccount: serviceAccount || undefined,
+          },
         });
       }
 
-      // Restart each server sequentially
-      const results: Array<{
-        serverId: string;
-        serverName: string;
-        success: boolean;
-        error?: string;
-      }> = [];
+      // Set status to "pending" immediately so UI shows progress bar
+      await McpServerModel.update(id, {
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      });
 
-      for (const server of servers) {
+      // Refetch the server with updated status
+      const updatedServer = await McpServerModel.findById(id);
+      if (!updatedServer) {
+        throw new ApiError(500, "Server not found after update");
+      }
+
+      // Perform the reinstall asynchronously (don't block the response)
+      // Use setImmediate to fully detach from the request lifecycle
+      // This allows the frontend to show the progress bar immediately
+      setImmediate(async () => {
         try {
-          await McpServerRuntimeManager.restartServer(server.id);
-          results.push({
-            serverId: server.id,
-            serverName: server.name,
-            success: true,
+          await autoReinstallServer(updatedServer, catalogItem);
+          // Set status to success when done
+          await McpServerModel.update(id, {
+            localInstallationStatus: "success",
           });
           logger.info(
-            `Restarted MCP server ${server.id} (${server.name}) as part of restart-all for catalog ${catalogId}`,
+            { serverId: id, serverName: mcpServer.name },
+            "MCP server reinstalled successfully",
           );
         } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          results.push({
-            serverId: server.id,
-            serverName: server.name,
-            success: false,
-            error: errorMessage,
+          // Set status to error if reinstall fails
+          await McpServerModel.update(id, {
+            localInstallationStatus: "error",
+            localInstallationError:
+              error instanceof Error ? error.message : "Unknown error",
           });
           logger.error(
-            `Failed to restart MCP server ${server.id} (${server.name}): ${errorMessage}`,
+            { err: error, serverId: id },
+            "Failed to reinstall MCP server",
           );
         }
-      }
-
-      const succeeded = results.filter((r) => r.success).length;
-      const failed = results.filter((r) => !r.success).length;
-
-      return reply.send({
-        success: failed === 0,
-        message:
-          failed === 0
-            ? `Successfully restarted all ${succeeded} installation(s)`
-            : `Restarted ${succeeded} of ${servers.length} installation(s), ${failed} failed`,
-        results,
-        summary: {
-          total: servers.length,
-          succeeded,
-          failed,
-        },
       });
+
+      // Return the server immediately with "pending" status
+      return reply.send(updatedServer);
     },
   );
 };

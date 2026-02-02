@@ -23,7 +23,7 @@ import type {
   LLMStreamAdapter,
   OpenAi,
   StreamAccumulatorState,
-  ToonCompressionResult,
+  ToolCompressionStats,
   UsageView,
 } from "@/types";
 import { estimateMessagesSize } from "@/utils/message-size";
@@ -39,7 +39,6 @@ import {
   isMcpImageBlock,
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
-import type { CompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 // =============================================================================
@@ -75,7 +74,8 @@ type OpenAiToolResultContent = string | OpenAiToolResultContentBlock[];
 // REQUEST ADAPTER
 // =============================================================================
 
-class OpenAIRequestAdapter
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export class OpenAIRequestAdapter
   implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
 {
   readonly provider = "openai" as const;
@@ -180,18 +180,14 @@ class OpenAIRequestAdapter
     Object.assign(this.toolResultUpdates, updates);
   }
 
-  async applyToonCompression(model: string): Promise<ToonCompressionResult> {
+  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
     const { messages: compressedMessages, stats } =
       await convertToolResultsToToon(this.request.messages, model);
     this.request = {
       ...this.request,
       messages: compressedMessages,
     };
-    return {
-      tokensBefore: stats.toonTokensBefore,
-      tokensAfter: stats.toonTokensAfter,
-      costSavings: stats.toonCostSavings,
-    };
+    return stats;
   }
 
   convertToolResultContent(messages: OpenAiMessages): OpenAiMessages {
@@ -517,7 +513,8 @@ class OpenAIRequestAdapter
   }
 }
 
-function convertMcpImageBlocksToOpenAi(
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export function convertMcpImageBlocksToOpenAi(
   content: unknown,
 ): OpenAiToolResultContent | null {
   if (!Array.isArray(content)) {
@@ -601,8 +598,9 @@ function convertMcpImageBlocksToOpenAi(
 /**
  * Strip image blocks from MCP content when model doesn't support images.
  * Keeps text blocks and replaces image blocks with a placeholder message.
+ * Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
  */
-function stripImageBlocksFromContent(content: unknown): string {
+export function stripImageBlocksFromContent(content: unknown): string {
   if (!Array.isArray(content)) {
     return typeof content === "string" ? content : JSON.stringify(content);
   }
@@ -643,7 +641,10 @@ function stripImageBlocksFromContent(content: unknown): string {
 // RESPONSE ADAPTER
 // =============================================================================
 
-class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export class OpenAIResponseAdapter
+  implements LLMResponseAdapter<OpenAiResponse>
+{
   readonly provider = "openai" as const;
   private response: OpenAiResponse;
 
@@ -706,10 +707,11 @@ class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.usage?.prompt_tokens ?? 0,
-      outputTokens: this.response.usage?.completion_tokens ?? 0,
-    };
+    if (!this.response.usage) {
+      return { inputTokens: 0, outputTokens: 0 };
+    }
+    const { input, output } = getUsageTokens(this.response.usage);
+    return { inputTokens: input, outputTokens: output };
   }
 
   getOriginalResponse(): OpenAiResponse {
@@ -741,7 +743,8 @@ class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
 // STREAM ADAPTER
 // =============================================================================
 
-class OpenAIStreamAdapter
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export class OpenAIStreamAdapter
   implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
 {
   readonly provider = "openai" as const;
@@ -970,12 +973,13 @@ class OpenAIStreamAdapter
 // TOON COMPRESSION (copied from utils/adapters/openai.ts)
 // =============================================================================
 
-async function convertToolResultsToToon(
+// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+export async function convertToolResultsToToon(
   messages: OpenAiMessages,
   model: string,
 ): Promise<{
   messages: OpenAiMessages;
-  stats: CompressionStats;
+  stats: ToolCompressionStats;
 }> {
   const tokenizer = getTokenizer("openai");
   let toolResultCount = 0;
@@ -1007,37 +1011,56 @@ async function convertToolResultsToToon(
             { role: "user", content: compressed },
           ]);
 
-          totalTokensBefore += tokensBefore;
-          totalTokensAfter += tokensAfter;
           toolResultCount++;
 
+          // Always count tokens
+          totalTokensBefore += tokensBefore;
+
+          // Only apply compression if it actually saves tokens
+          if (tokensAfter < tokensBefore) {
+            totalTokensAfter += tokensAfter;
+
+            logger.info(
+              {
+                toolCallId: message.tool_call_id,
+                beforeLength: noncompressed.length,
+                afterLength: compressed.length,
+                tokensBefore,
+                tokensAfter,
+                toonPreview: compressed.substring(0, 150),
+                provider: "openai",
+              },
+              "convertToolResultsToToon: compressed",
+            );
+            logger.debug(
+              {
+                toolCallId: message.tool_call_id,
+                before: noncompressed,
+                after: compressed,
+                provider: "openai",
+                supposedToBeJson: parsed,
+              },
+              "convertToolResultsToToon: before/after",
+            );
+
+            return {
+              ...message,
+              content: compressed,
+            };
+          }
+
+          // Compression not applied - count non-compressed tokens to track total tokens anyway
+          totalTokensAfter += tokensBefore;
           logger.info(
             {
               toolCallId: message.tool_call_id,
-              beforeLength: noncompressed.length,
-              afterLength: compressed.length,
               tokensBefore,
               tokensAfter,
-              toonPreview: compressed.substring(0, 150),
               provider: "openai",
             },
-            "convertToolResultsToToon: compressed",
+            "Skipping TOON compression - compressed output has more tokens",
           );
-          logger.debug(
-            {
-              toolCallId: message.tool_call_id,
-              before: noncompressed,
-              after: compressed,
-              provider: "openai",
-              supposedToBeJson: parsed,
-            },
-            "convertToolResultsToToon: before/after",
-          );
-
-          return {
-            ...message,
-            content: compressed,
-          };
+          return message;
         } catch {
           logger.info(
             {
@@ -1062,25 +1085,26 @@ async function convertToolResultsToToon(
     "convertToolResultsToToon completed",
   );
 
-  let toonCostSavings: number | null = null;
-  if (toolResultCount > 0) {
-    const tokensSaved = totalTokensBefore - totalTokensAfter;
-    if (tokensSaved > 0) {
-      const tokenPrice = await TokenPriceModel.findByModel(model);
-      if (tokenPrice) {
-        const inputPricePerToken =
-          Number(tokenPrice.pricePerMillionInput) / 1000000;
-        toonCostSavings = tokensSaved * inputPricePerToken;
-      }
+  // Calculate cost savings (always a number, 0 if no savings)
+  let toonCostSavings = 0;
+  const tokensSaved = totalTokensBefore - totalTokensAfter;
+  if (tokensSaved > 0) {
+    const tokenPrice = await TokenPriceModel.findByModel(model);
+    if (tokenPrice) {
+      const inputPricePerToken =
+        Number(tokenPrice.pricePerMillionInput) / 1000000;
+      toonCostSavings = tokensSaved * inputPricePerToken;
     }
   }
 
   return {
     messages: result,
     stats: {
-      toonTokensBefore: toolResultCount > 0 ? totalTokensBefore : null,
-      toonTokensAfter: toolResultCount > 0 ? totalTokensAfter : null,
-      toonCostSavings,
+      tokensBefore: totalTokensBefore,
+      tokensAfter: totalTokensAfter,
+      costSavings: toonCostSavings,
+      wasEffective: totalTokensAfter < totalTokensBefore,
+      hadToolResults: toolResultCount > 0,
     },
   };
 }
@@ -1088,6 +1112,17 @@ async function convertToolResultsToToon(
 // =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
+
+// =============================================================================
+// USAGE TOKEN HELPERS
+// =============================================================================
+
+export function getUsageTokens(usage: OpenAi.Types.Usage) {
+  return {
+    input: usage.prompt_tokens,
+    output: usage.completion_tokens,
+  };
+}
 
 export const openaiAdapterFactory: LLMProvider<
   OpenAiRequest,

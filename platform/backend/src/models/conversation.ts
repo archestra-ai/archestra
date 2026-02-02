@@ -1,8 +1,18 @@
 import {
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
-  TOOL_TODO_WRITE_FULL_NAME,
+  ARCHESTRA_MCP_SERVER_NAME,
+  DEFAULT_ARCHESTRA_TOOL_NAMES,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { and, desc, eq, getTableColumns } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  getTableColumns,
+  ilike,
+  isNotNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { PersistedBrowserState } from "@/features/browser-stream/services/browser-stream.state.types";
 import type {
@@ -24,31 +34,27 @@ class ConversationModel {
     // Get all tools assigned to the agent (profile tools)
     const agentTools = await ToolModel.getToolsByAgent(data.agentId);
 
-    // Get prompt-specific agent delegation tools if a prompt is selected
-    let promptTools: Awaited<
-      ReturnType<typeof ToolModel.getAgentDelegationToolsByPrompt>
-    > = [];
-    if (data.promptId) {
-      promptTools = await ToolModel.getAgentDelegationToolsByPrompt(
-        data.promptId,
-      );
-    }
+    // Get agent delegation tools
+    const delegationTools = await ToolModel.getDelegationToolsByAgent(
+      data.agentId,
+    );
+    const delegationToolIds = delegationTools.map((d) => d.tool);
 
-    // Combine profile tools and prompt-specific tools
-    const allTools = [...agentTools, ...promptTools];
+    // Combine profile tools and delegation tools
+    const allTools = [...agentTools, ...delegationToolIds];
 
-    // Filter out Archestra tools (those starting with "archestra__"), but keep todo_write and artifact_write enabled
+    // Filter out Archestra tools, but keep default Archestra tools enabled
     // Agent delegation tools (agent__*) should be enabled by default
     const nonArchestraToolIds = allTools
       .filter(
         (tool) =>
-          !tool.name.startsWith("archestra__") ||
-          tool.name === TOOL_TODO_WRITE_FULL_NAME ||
-          tool.name === TOOL_ARTIFACT_WRITE_FULL_NAME,
+          !tool.name.startsWith(
+            `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
+          ) || DEFAULT_ARCHESTRA_TOOL_NAMES.includes(tool.name),
       )
       .map((tool) => tool.id);
 
-    // Set enabled tools to non-Archestra tools plus todo_write and artifact_write
+    // Set enabled tools to non-Archestra tools plus default Archestra tools
     // This creates a custom tool selection with most Archestra tools disabled
     await ConversationEnabledToolModel.setEnabledTools(
       conversation.id,
@@ -64,64 +70,197 @@ class ConversationModel {
     return conversationWithAgent;
   }
 
+  /**
+   * Escape special characters in LIKE patterns.
+   * % and _ have special meaning in SQL LIKE patterns and need to be escaped.
+   */
+  private static escapeLikePattern(value: string): string {
+    return value.replace(/[%_\\]/g, "\\$&");
+  }
+
+  /**
+   * Maximum number of conversations to return in search results.
+   * Prevents unbounded result sets for common search terms.
+   */
+  private static readonly SEARCH_RESULT_LIMIT = 50;
+
+  /**
+   * Maximum number of messages to load per conversation for preview snippets.
+   * Prevents memory issues with conversations that have hundreds of messages.
+   */
+  private static readonly MESSAGES_PER_CONVERSATION_LIMIT = 10;
+
+  /**
+   * Get all conversations for a user without messages.
+   * Messages are fetched separately via findById when a conversation is opened.
+   * This significantly improves performance for the conversations list.
+   *
+   * When searching, a limited number of messages ARE included to enable preview snippets.
+   * Search results are also limited to prevent unbounded result sets.
+   *
+   * Note: Title search uses the conversations_title_trgm_idx index (created in 0116).
+   * Message content search uses the messages_content_trgm_idx index (created in 0117).
+   *
+   * @param searchQuery - Optional search string to filter conversations by title or message content
+   */
   static async findAll(
     userId: string,
     organizationId: string,
+    searchQuery?: string,
   ): Promise<Conversation[]> {
-    const rows = await db
-      .select({
-        conversation: getTableColumns(schema.conversationsTable),
-        message: getTableColumns(schema.messagesTable),
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-        },
-      })
-      .from(schema.conversationsTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
-      )
-      .leftJoin(
-        schema.messagesTable,
-        eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
-      )
-      .where(
+    const trimmedSearch = searchQuery?.trim();
+
+    // Build WHERE conditions
+    const conditions = [
+      eq(schema.conversationsTable.userId, userId),
+      eq(schema.conversationsTable.organizationId, organizationId),
+    ];
+
+    // Add search filter if provided
+    if (trimmedSearch) {
+      // Escape LIKE special characters (%, _, \) to prevent unexpected pattern matching
+      const escapedSearch = ConversationModel.escapeLikePattern(trimmedSearch);
+      const searchPattern = `%${escapedSearch}%`;
+
+      // 1. Conversation title (text column) - uses conversations_title_trgm_idx
+      // 2. Message content (JSONB cast to text) - uses messages_content_trgm_idx
+      const searchConditions = or(
+        // Search in title (handles null titles gracefully)
         and(
-          eq(schema.conversationsTable.userId, userId),
-          eq(schema.conversationsTable.organizationId, organizationId),
+          isNotNull(schema.conversationsTable.title),
+          ilike(schema.conversationsTable.title, searchPattern),
         ),
-      )
-      .orderBy(
-        desc(schema.conversationsTable.updatedAt),
-        schema.messagesTable.createdAt,
+        // Search through messages JSONB content
+        // Uses EXISTS for early termination
+        sql`EXISTS (
+          SELECT 1 FROM ${schema.messagesTable}
+          WHERE ${schema.messagesTable.conversationId} = ${schema.conversationsTable.id}
+          AND ${schema.messagesTable.content}::text ILIKE ${searchPattern}
+        )`,
       );
 
-    // Group messages by conversation
-    const conversationMap = new Map<string, Conversation>();
-
-    for (const row of rows) {
-      const conversationId = row.conversation.id;
-
-      if (!conversationMap.has(conversationId)) {
-        conversationMap.set(conversationId, {
-          ...row.conversation,
-          agent: row.agent,
-          messages: [],
-        });
-      }
-
-      const conversation = conversationMap.get(conversationId);
-      if (conversation && row?.message?.content) {
-        // Merge database UUID into message content (overrides AI SDK's temporary ID)
-        conversation.messages.push({
-          ...row.message.content,
-          id: row.message.id,
-        });
+      if (searchConditions) {
+        conditions.push(searchConditions);
       }
     }
 
-    return Array.from(conversationMap.values());
+    // Include messages only during search for preview snippets
+    if (trimmedSearch) {
+      // Escape search pattern for message subquery
+      const escapedSearch = ConversationModel.escapeLikePattern(trimmedSearch);
+      const searchPattern = `%${escapedSearch}%`;
+
+      // Use a lateral join to limit messages per conversation for preview
+      // This prevents loading hundreds of messages for conversations with long histories
+      const rows = await db
+        .select({
+          conversation: getTableColumns(schema.conversationsTable),
+          message: getTableColumns(schema.messagesTable),
+          agent: {
+            id: schema.agentsTable.id,
+            name: schema.agentsTable.name,
+            systemPrompt: schema.agentsTable.systemPrompt,
+            userPrompt: schema.agentsTable.userPrompt,
+            agentType: schema.agentsTable.agentType,
+          },
+        })
+        .from(schema.conversationsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+        )
+        .leftJoin(
+          schema.messagesTable,
+          and(
+            eq(
+              schema.conversationsTable.id,
+              schema.messagesTable.conversationId,
+            ),
+            // Only include messages that match the search pattern (for relevance)
+            // or the first few messages (for context)
+            sql`(
+              ${schema.messagesTable.content}::text ILIKE ${searchPattern}
+              OR ${schema.messagesTable.id} IN (
+                SELECT m.id FROM ${schema.messagesTable} m
+                WHERE m.conversation_id = ${schema.conversationsTable.id}
+                ORDER BY m.created_at
+                LIMIT ${ConversationModel.MESSAGES_PER_CONVERSATION_LIMIT}
+              )
+            )`,
+          ),
+        )
+        .where(and(...conditions))
+        .orderBy(
+          desc(schema.conversationsTable.updatedAt),
+          schema.messagesTable.createdAt,
+        )
+        .limit(
+          ConversationModel.SEARCH_RESULT_LIMIT *
+            ConversationModel.MESSAGES_PER_CONVERSATION_LIMIT,
+        );
+
+      // Group messages by conversation
+      const conversationMap = new Map<string, Conversation>();
+
+      for (const row of rows) {
+        const conversationId = row.conversation.id;
+
+        if (!conversationMap.has(conversationId)) {
+          // Stop adding new conversations if we've reached the limit
+          if (conversationMap.size >= ConversationModel.SEARCH_RESULT_LIMIT) {
+            continue;
+          }
+          conversationMap.set(conversationId, {
+            ...row.conversation,
+            agent: row.agent,
+            messages: [],
+          });
+        }
+
+        const conversation = conversationMap.get(conversationId);
+        if (conversation && row?.message?.content) {
+          // Limit messages per conversation for preview
+          if (
+            conversation.messages.length <
+            ConversationModel.MESSAGES_PER_CONVERSATION_LIMIT
+          ) {
+            // Merge database UUID into message content
+            conversation.messages.push({
+              ...row.message.content,
+              id: row.message.id,
+            });
+          }
+        }
+      }
+
+      return Array.from(conversationMap.values());
+    } else {
+      // Non-search case: exclude messages for performance
+      const rows = await db
+        .select({
+          conversation: getTableColumns(schema.conversationsTable),
+          agent: {
+            id: schema.agentsTable.id,
+            name: schema.agentsTable.name,
+            systemPrompt: schema.agentsTable.systemPrompt,
+            userPrompt: schema.agentsTable.userPrompt,
+            agentType: schema.agentsTable.agentType,
+          },
+        })
+        .from(schema.conversationsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+        )
+        .where(and(...conditions))
+        .orderBy(desc(schema.conversationsTable.updatedAt));
+
+      return rows.map((row) => ({
+        ...row.conversation,
+        agent: row.agent,
+        messages: [], // Messages fetched separately via findById
+      }));
+    }
   }
 
   static async findById({
@@ -140,6 +279,9 @@ class ConversationModel {
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
+          systemPrompt: schema.agentsTable.systemPrompt,
+          userPrompt: schema.agentsTable.userPrompt,
+          agentType: schema.agentsTable.agentType,
         },
       })
       .from(schema.conversationsTable)

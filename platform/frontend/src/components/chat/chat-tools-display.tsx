@@ -2,6 +2,7 @@
 
 import {
   ARCHESTRA_MCP_SERVER_NAME,
+  isAgentTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { Loader2, Plus, X } from "lucide-react";
@@ -29,7 +30,6 @@ import { Button } from "../ui/button";
 
 interface ChatToolsDisplayProps {
   agentId: string;
-  promptId?: string | null;
   /** Required for enable/disable functionality. Optional for read-only display. */
   conversationId?: string;
   className?: string;
@@ -47,7 +47,6 @@ interface ChatToolsDisplayProps {
  */
 export function ChatToolsDisplay({
   agentId,
-  promptId,
   conversationId,
   className,
   readOnly = false,
@@ -67,12 +66,12 @@ export function ChatToolsDisplay({
   // Load pending actions from localStorage on mount and when context changes
   useEffect(() => {
     if (!conversationId) {
-      const actions = getPendingActions(agentId, promptId ?? null);
+      const actions = getPendingActions(agentId);
       setLocalPendingActions(actions);
     } else {
       setLocalPendingActions([]);
     }
-  }, [agentId, promptId, conversationId]);
+  }, [agentId, conversationId]);
 
   // Handle click outside to close tooltips
   useEffect(() => {
@@ -158,13 +157,15 @@ export function ChatToolsDisplay({
   // Create enabled tool IDs set for quick lookup
   const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
-  // Use only profile tools (agent tools are displayed separately in the header)
+  // Use only profile tools (agent tools are displayed separately in AgentToolsDisplay)
   type ToolItem = {
     id: string;
     name: string;
     description: string | null;
   };
-  const allTools: ToolItem[] = profileTools;
+  const allTools: ToolItem[] = profileTools.filter(
+    (tool) => !isAgentTool(tool.name),
+  );
 
   // Group ALL tools by MCP server name (don't filter by enabled status)
   const groupedTools: Record<string, ToolItem[]> = {};
@@ -193,7 +194,7 @@ export function ChatToolsDisplay({
     if (!conversationId) {
       // Store in localStorage and update local state
       const action: PendingToolAction = { type: "enable", toolId };
-      addPendingAction(action, agentId, promptId ?? null);
+      addPendingAction(action, agentId);
       setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
@@ -210,7 +211,7 @@ export function ChatToolsDisplay({
     if (!conversationId) {
       // Store in localStorage and update local state
       const action: PendingToolAction = { type: "disable", toolId };
-      addPendingAction(action, agentId, promptId ?? null);
+      addPendingAction(action, agentId);
       setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
@@ -229,7 +230,7 @@ export function ChatToolsDisplay({
     if (!conversationId) {
       // Store in localStorage and update local state
       const action: PendingToolAction = { type: "disableAll", toolIds };
-      addPendingAction(action, agentId, promptId ?? null);
+      addPendingAction(action, agentId);
       setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
@@ -248,7 +249,7 @@ export function ChatToolsDisplay({
     if (!conversationId) {
       // Store in localStorage and update local state
       const action: PendingToolAction = { type: "enableAll", toolIds };
-      addPendingAction(action, agentId, promptId ?? null);
+      addPendingAction(action, agentId);
       setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
@@ -330,11 +331,12 @@ export function ChatToolsDisplay({
     });
 
     // Split into enabled and disabled using the consistent enabledToolIdsSet
+    // In readOnly mode, treat all tools as "enabled" for display purposes
     const enabledTools: ToolItem[] = [];
     const disabledTools: ToolItem[] = [];
 
     for (const tool of allServerTools) {
-      if (enabledToolIdsSet.has(tool.id)) {
+      if (readOnly || enabledToolIdsSet.has(tool.id)) {
         enabledTools.push(tool);
       } else {
         disabledTools.push(tool);
@@ -360,7 +362,9 @@ export function ChatToolsDisplay({
               {serverName}
             </span>
             <span className="text-muted-foreground text-xs">
-              ({enabledTools.length}/{totalToolsCount})
+              {readOnly
+                ? `(${totalToolsCount})`
+                : `(${enabledTools.length}/${totalToolsCount})`}
             </span>
           </PromptInputButton>
         </TooltipTrigger>

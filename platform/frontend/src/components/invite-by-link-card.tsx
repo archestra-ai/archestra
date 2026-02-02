@@ -1,18 +1,11 @@
 "use client";
 
-import {
-  ADMIN_ROLE_NAME,
-  type AnyRoleName,
-  E2eTestId,
-  EDITOR_ROLE_NAME,
-  MEMBER_ROLE_NAME,
-} from "@shared";
+import { type AnyRoleName, E2eTestId, MEMBER_ROLE_NAME } from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
-import { Suspense, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
-import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,15 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { RoleSelect } from "@/components/ui/role-select";
 import { useCreateInvitation } from "@/lib/organization.query";
-import { useRoles } from "@/lib/role.query";
 
 interface InviteByLinkCardProps {
   organizationId?: string;
@@ -49,7 +35,6 @@ function InviteByLinkCardContent({
   const [isCopied, setIsCopied] = useState(false);
 
   const createMutation = useCreateInvitation(organizationId);
-  const { data: roles } = useRoles();
 
   // Validate email format
   const isValidEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -116,30 +101,14 @@ function InviteByLinkCardContent({
 
             <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
-              <Select
+              <RoleSelect
+                id="role"
                 value={role}
-                onValueChange={(value: AnyRoleName) => setRole(value)}
+                onValueChange={(value) => setRole(value as AnyRoleName)}
                 disabled={createMutation.isPending}
-              >
-                <SelectTrigger
-                  id="role"
-                  data-testid={E2eTestId.InviteRoleSelect}
-                >
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
-                  <SelectItem value={EDITOR_ROLE_NAME}>Editor</SelectItem>
-                  <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
-                  {roles
-                    ?.filter((r) => !r.predefined)
-                    .map((r) => (
-                      <SelectItem key={r.id} value={r.name}>
-                        {r.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select a role"
+                data-testid={E2eTestId.InviteRoleSelect}
+              />
               <p className="text-xs text-muted-foreground">
                 The role this person will have in your organization
               </p>
@@ -227,7 +196,9 @@ export function InviteByLinkCard({
                   className="text-sm text-muted-foreground mb-4"
                   data-testid={E2eTestId.InvitationErrorMessage}
                 >
-                  {error?.message || "Failed to create invitation"}
+                  {error instanceof Error
+                    ? error.message
+                    : "Failed to create invitation"}
                 </p>
                 <Button onClick={resetErrorBoundary} variant="outline">
                   Try Again
@@ -236,12 +207,10 @@ export function InviteByLinkCard({
             </Card>
           )}
         >
-          <Suspense fallback={<LoadingSpinner />}>
-            <InviteByLinkCardContent
-              organizationId={organizationId}
-              onInvitationCreated={onInvitationCreated}
-            />
-          </Suspense>
+          <InviteByLinkCardContent
+            organizationId={organizationId}
+            onInvitationCreated={onInvitationCreated}
+          />
         </ErrorBoundary>
       )}
     </QueryErrorResetBoundary>

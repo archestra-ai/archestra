@@ -126,7 +126,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgent]: {
     profile: ["read"],
   },
-  [RouteId.GetDefaultAgent]: {
+  [RouteId.GetDefaultMcpGateway]: {
+    profile: ["read"],
+  },
+  [RouteId.GetDefaultLlmProxy]: {
     profile: ["read"],
   },
   [RouteId.CreateAgent]: {
@@ -308,20 +311,17 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetMcpServerTools]: {
     mcpServer: ["read"],
   },
-  [RouteId.GetMcpServerLogs]: {
-    mcpServer: ["read"],
-  },
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
-  [RouteId.RestartMcpServer]: {
+  [RouteId.ReauthenticateMcpServer]: {
     mcpServer: ["update"],
   },
-  [RouteId.RestartAllMcpServerInstallations]: {
-    mcpServer: ["admin"],
+  [RouteId.ReinstallMcpServer]: {
+    mcpServer: ["update"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],
@@ -461,6 +461,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatModels]: {
     conversation: ["read"],
   },
+  [RouteId.SyncChatModels]: {
+    chatSettings: ["update"],
+  },
   [RouteId.UpdateChatMessage]: {
     conversation: ["update"],
   },
@@ -490,6 +493,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteChatApiKey]: {
     chatSettings: ["delete"],
+  },
+  [RouteId.GetModelsWithApiKeys]: {
+    chatSettings: ["read"],
   },
   [RouteId.GetPrompts]: {
     prompt: ["read"],
@@ -538,6 +544,19 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteAgentPrompt]: {
     profile: ["update"],
     prompt: ["read"],
+  },
+  // Agent Delegation Routes (internal agents only)
+  [RouteId.GetAgentDelegations]: {
+    profile: ["read"],
+  },
+  [RouteId.SyncAgentDelegations]: {
+    profile: ["update"],
+  },
+  [RouteId.DeleteAgentDelegation]: {
+    profile: ["update"],
+  },
+  [RouteId.GetAllDelegationConnections]: {
+    profile: ["read"],
   },
   [RouteId.GetLimits]: {
     limit: ["read"],
@@ -670,7 +689,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteIncomingEmailSubscription]: {
     organization: ["update"],
   },
-  [RouteId.GetPromptEmailAddress]: {}, // Any authenticated user can view prompt email addresses
+  [RouteId.GetAgentEmailAddress]: {}, // Any authenticated user can view agent email addresses
+
+  // ChatOps Routes (admin-only for management)
+  [RouteId.GetChatOpsStatus]: {
+    organization: ["read"],
+  },
+  [RouteId.ListChatOpsBindings]: {
+    organization: ["read"],
+  },
+  [RouteId.DeleteChatOpsBinding]: {
+    organization: ["update"],
+  },
 };
 
 /**
@@ -682,7 +712,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
     conversation: ["read"],
   },
 
-  "/profiles": {
+  "/mcp-gateways": {
+    profile: ["read"],
+  },
+  "/llm-proxies": {
+    profile: ["read"],
+  },
+  "/agents": {
     profile: ["read"],
   },
 

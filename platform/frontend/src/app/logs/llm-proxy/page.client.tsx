@@ -1,10 +1,11 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Layers, MessageSquare, User } from "lucide-react";
+import { Layers, MessageSquare, Search, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { DebouncedInput } from "@/components/debounced-input";
 import { Savings } from "@/components/savings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import {
   useInteractionSessions,
@@ -227,36 +233,40 @@ function SessionRow({
       <TableCell className="font-mono text-xs py-3">
         {session.requestCount.toLocaleString()}
       </TableCell>
-      <TableCell className="py-3">
-        <div className="flex flex-wrap gap-1">
-          {session.models.map((model) => (
-            <Badge
-              key={model}
-              variant="secondary"
-              className="text-xs whitespace-nowrap"
-            >
-              {model}
-            </Badge>
-          ))}
-        </div>
+      <TableCell className="py-3 max-w-[200px]">
+        <TooltipProvider>
+          <div className="flex flex-wrap gap-1">
+            {session.models.map((model) => (
+              <Tooltip key={model}>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs max-w-[180px] cursor-default"
+                  >
+                    <span className="truncate">{model}</span>
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-mono text-xs">{model}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </TooltipProvider>
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
-        <div className="flex flex-col gap-0.5">
-          <span>
-            {session.totalInputTokens.toLocaleString()} /{" "}
-            {session.totalOutputTokens.toLocaleString()}
-          </span>
-          {session.totalCost && session.totalBaselineCost && (
-            <TooltipProvider>
-              <Savings
-                cost={session.totalCost}
-                baselineCost={session.totalBaselineCost}
-                format="percent"
-                tooltip="hover"
-              />
-            </TooltipProvider>
-          )}
-        </div>
+        {session.totalCost && session.totalBaselineCost && (
+          <TooltipProvider>
+            <Savings
+              cost={session.totalCost}
+              baselineCost={session.totalBaselineCost}
+              toonCostSavings={session.totalToonCostSavings}
+              format="percent"
+              tooltip="hover"
+              variant="session"
+            />
+          </TooltipProvider>
+        )}
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
         <div className="flex flex-col gap-0.5">
@@ -277,14 +287,20 @@ function SessionRow({
       </TableCell>
       <TableCell className="py-3">
         <div className="flex flex-wrap gap-1">
-          <Badge variant="secondary" className="text-xs">
-            <Layers className="h-3 w-3 mr-1" />
-            {agent?.name ?? session.profileName ?? "Unknown"}
+          <Badge variant="secondary" className="text-xs max-w-[200px]">
+            <Layers className="h-3 w-3 mr-1 shrink-0" />
+            <span className="truncate">
+              {agent?.name ?? session.profileName ?? "Unknown"}
+            </span>
           </Badge>
           {session.userNames.map((userName) => (
-            <Badge key={userName} variant="outline" className="text-xs">
-              <User className="h-3 w-3 mr-1" />
-              {userName}
+            <Badge
+              key={userName}
+              variant="outline"
+              className="text-xs max-w-[150px]"
+            >
+              <User className="h-3 w-3 mr-1 shrink-0" />
+              <span className="truncate">{userName}</span>
             </Badge>
           ))}
         </div>
@@ -329,12 +345,14 @@ function SessionsTable({
   const userIdFromUrl = searchParams.get("userId");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
+  const searchFromUrl = searchParams.get("search");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const [userFilter, setUserFilter] = useState(userIdFromUrl || "all");
+  const [searchFilter, setSearchFilter] = useState(searchFromUrl || "");
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -400,6 +418,17 @@ function SessionsTable({
     [updateUrlParams],
   );
 
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchFilter(value);
+      updateUrlParams({
+        search: value || null,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateUrlParams],
+  );
+
   const { data: sessionsResponse } = useInteractionSessions({
     limit: pageSize,
     offset: pageIndex * pageSize,
@@ -407,6 +436,7 @@ function SessionsTable({
     userId: userFilter !== "all" ? userFilter : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
+    search: searchFilter || undefined,
   });
 
   const { data: agents } = useProfiles({
@@ -421,11 +451,23 @@ function SessionsTable({
   const hasFilters =
     profileFilter !== "all" ||
     userFilter !== "all" ||
-    dateTimePicker.dateRange !== undefined;
+    dateTimePicker.dateRange !== undefined ||
+    searchFilter !== "";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
+        <div className="relative w-[250px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <DebouncedInput
+            initialValue={searchFromUrl || ""}
+            onChange={handleSearchChange}
+            placeholder="Search sessions..."
+            className="pl-9"
+            debounceMs={400}
+          />
+        </div>
+
         <SearchableSelect
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
@@ -475,6 +517,7 @@ function SessionsTable({
             variant="ghost"
             size="sm"
             onClick={() => {
+              handleSearchChange("");
               handleProfileFilterChange("all");
               handleUserFilterChange("all");
               dateTimePicker.clearDateRange();
@@ -502,7 +545,7 @@ function SessionsTable({
                 </TableHead>
                 <TableHead className="w-[200px]">Models</TableHead>
                 <TableHead className="w-[140px] whitespace-nowrap">
-                  Tokens / Savings
+                  Cost
                 </TableHead>
                 <TableHead className="w-[160px]">Time</TableHead>
                 <TableHead className="min-w-[100px]">Details</TableHead>

@@ -1,7 +1,13 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { type ChatErrorResponse, RouteId, SupportedProviders } from "@shared";
+import {
+  type ChatErrorResponse,
+  RouteId,
+  SupportedProviders,
+  type TokenUsage,
+} from "@shared";
 import {
   convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   generateText,
   stepCountIs,
   streamText,
@@ -11,12 +17,18 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import {
+  createDirectLLMModel,
   createLLMModelForAgent,
   detectProviderFromModel,
+  FAST_MODELS,
+  isApiKeyRequired,
+  resolveProviderApiKey,
 } from "@/clients/llm-client";
 import config from "@/config";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
+import { extractAndIngestDocuments } from "@/knowledge-graph/chat-document-extractor";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -24,21 +36,17 @@ import {
   ConversationEnabledToolModel,
   ConversationModel,
   MessageModel,
-  PromptModel,
   TeamModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
-import {
-  getSecretValueForLlmProviderApiKey,
-  secretManager,
-} from "@/secrets-manager";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
   InsertConversationSchema,
+  isSupportedChatProvider,
   SelectConversationSchema,
   type SupportedChatProvider,
   UpdateConversationSchema,
@@ -89,6 +97,8 @@ async function getSmartDefaultModel(
             return { model: "gemini-2.5-pro", provider: "gemini" };
           case "openai":
             return { model: "gpt-4o", provider: "openai" };
+          case "cohere":
+            return { model: "command-r-08-2024", provider: "cohere" };
         }
       }
     }
@@ -103,6 +113,9 @@ async function getSmartDefaultModel(
   }
   if (config.chat.gemini.apiKey) {
     return { model: "gemini-2.5-pro", provider: "gemini" };
+  }
+  if (config.chat.cohere?.apiKey) {
+    return { model: "command-r-08-2024", provider: "cohere" };
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key
@@ -142,6 +155,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { body: { id: conversationId, messages }, user, organizationId, headers },
       reply,
     ) => {
+      // Extract and ingest documents to knowledge graph (fire and forget)
+      // This runs asynchronously to avoid blocking the chat response
+      extractAndIngestDocuments(messages).catch((error) => {
+        logger.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[Chat] Background document ingestion failed",
+        );
+      });
+
       const { success: userIsProfileAdmin } = await hasPermission(
         { profile: ["admin"] },
         headers,
@@ -158,16 +180,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Use prompt ID as external agent ID if available, otherwise use header value
-      // This allows prompt names to be displayed in LLM proxy logs
+      // Use agent ID as external agent ID if available, otherwise use header value
+      // This allows agent names to be displayed in LLM proxy logs
       const headerExternalAgentId = getExternalAgentId(headers);
-      const externalAgentId = conversation.promptId ?? headerExternalAgentId;
+      const externalAgentId = conversation.agentId ?? headerExternalAgentId;
 
-      // Fetch enabled tool IDs, custom selection status, and agent prompts in parallel
-      const [enabledToolIds, hasCustomSelection, prompt] = await Promise.all([
+      // Fetch enabled tool IDs and custom selection status in parallel
+      const [enabledToolIds, hasCustomSelection] = await Promise.all([
         ConversationEnabledToolModel.findByConversation(conversationId),
         ConversationEnabledToolModel.hasCustomSelection(conversationId),
-        PromptModel.findById(conversation.promptId),
       ]);
 
       // Fetch MCP tools with enabled tool filtering
@@ -180,25 +201,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userIsProfileAdmin,
         enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
         conversationId: conversation.id,
-        promptId: conversation.promptId ?? undefined,
         organizationId,
         // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
         sessionId: conversation.id,
-        // Pass promptId as initial delegation chain (will be extended by delegated agents)
-        delegationChain: conversation.promptId ?? undefined,
+        // Pass agentId as initial delegation chain (will be extended by delegated agents)
+        delegationChain: conversation.agentId,
       });
 
-      // Build system prompt from prompts' systemPrompt and userPrompt fields
+      // Build system prompt from agent's systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
       const systemPromptParts: string[] = [];
       const userPromptParts: string[] = [];
 
-      // Collect system and user prompts from all assigned prompts
-      if (prompt?.systemPrompt) {
-        systemPromptParts.push(prompt.systemPrompt);
+      // Collect system and user prompts from the agent
+      if (conversation.agent.systemPrompt) {
+        systemPromptParts.push(conversation.agent.systemPrompt);
       }
-      if (prompt?.userPrompt) {
-        userPromptParts.push(prompt.userPrompt);
+      if (conversation.agent.userPrompt) {
+        userPromptParts.push(conversation.agent.userPrompt);
       }
 
       // Combine all prompts into system prompt (system prompts first, then user prompts)
@@ -210,9 +230,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use stored provider if available, otherwise detect from model name for backward compatibility
       // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
       // so we can safely use detectProviderFromModel for them.
-      const provider =
-        (conversation.selectedProvider as SupportedChatProvider | null) ??
-        detectProviderFromModel(conversation.selectedModel);
+      const provider = isSupportedChatProvider(conversation.selectedProvider)
+        ? conversation.selectedProvider
+        : detectProviderFromModel(conversation.selectedModel);
 
       logger.info(
         {
@@ -226,7 +246,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: conversation.selectedModel,
           provider,
           providerSource: conversation.selectedProvider ? "stored" : "detected",
-          promptId: prompt?.id,
           hasSystemPromptParts: systemPromptParts.length > 0,
           hasUserPromptParts: userPromptParts.length > 0,
           systemPromptProvided: !!systemPrompt,
@@ -282,118 +301,171 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         streamTextConfig.system = systemPrompt;
       }
 
-      const result = streamText(streamTextConfig);
+      // For Gemini image generation models, enable image output via responseModalities
+      // Known image-capable model patterns:
+      // - gemini-2.0-flash-exp-image-generation
+      // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
+      // - Any model with "image-generation" in the name
+      const modelLower = conversation.selectedModel.toLowerCase();
+      const isGeminiImageModel =
+        provider === "gemini" &&
+        (modelLower.includes("image-generation") ||
+          modelLower.includes("native-audio-dialog") ||
+          modelLower === "gemini-2.5-flash-image");
+      if (isGeminiImageModel) {
+        streamTextConfig.providerOptions = {
+          google: {
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        };
+      }
 
-      // Convert to UI message stream response (Response object)
-      const response = result.toUIMessageStreamResponse({
+      // Create stream with token usage data support
+      const response = createUIMessageStreamResponse({
         headers: {
           // Prevent compression middleware from buffering the stream
           // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
           "Content-Encoding": "none",
         },
-        originalMessages: messages as UIMessage[],
-        onError: (error) => {
-          logger.error(
-            { error, conversationId, agentId: conversation.agentId },
-            "Chat stream error occurred",
-          );
+        stream: createUIMessageStream({
+          execute: async ({ writer }) => {
+            const result = streamText(streamTextConfig);
 
-          // Map provider error to user-friendly ChatErrorResponse
-          const mappedError: ChatErrorResponse = mapProviderError(
-            error,
-            provider,
-          );
+            // Merge the stream text result into the UI message stream
+            writer.merge(
+              result.toUIMessageStream({
+                originalMessages: messages as UIMessage[],
+                onError: (error) => {
+                  logger.error(
+                    { error, conversationId, agentId: conversation.agentId },
+                    "Chat stream error occurred",
+                  );
 
-          logger.info(
-            {
-              mappedError,
-              originalErrorType:
-                error instanceof Error ? error.name : typeof error,
-              willBeSentToFrontend: true,
-            },
-            "Returning mapped error to frontend via stream",
-          );
+                  // Map provider error to user-friendly ChatErrorResponse
+                  const mappedError: ChatErrorResponse = mapProviderError(
+                    error,
+                    provider,
+                  );
 
-          // mapProviderError safely serializes raw errors, but add defensive try-catch
-          try {
-            return JSON.stringify(mappedError);
-          } catch (stringifyError) {
-            logger.error(
-              { stringifyError, errorCode: mappedError.code },
-              "Failed to stringify mapped error, returning minimal error",
+                  logger.info(
+                    {
+                      mappedError,
+                      originalErrorType:
+                        error instanceof Error ? error.name : typeof error,
+                      willBeSentToFrontend: true,
+                    },
+                    "Returning mapped error to frontend via stream",
+                  );
+
+                  // mapProviderError safely serializes raw errors, but add defensive try-catch
+                  try {
+                    return JSON.stringify(mappedError);
+                  } catch (stringifyError) {
+                    logger.error(
+                      { stringifyError, errorCode: mappedError.code },
+                      "Failed to stringify mapped error, returning minimal error",
+                    );
+                    // Return a minimal error response without the raw error
+                    return JSON.stringify({
+                      code: mappedError.code,
+                      message: mappedError.message,
+                      isRetryable: mappedError.isRetryable,
+                    });
+                  }
+                },
+                onFinish: async ({ messages: finalMessages }) => {
+                  if (!conversationId) return;
+
+                  // Get existing messages count to know how many are new
+                  const existingMessages =
+                    await MessageModel.findByConversation(conversationId);
+                  const existingCount = existingMessages.length;
+
+                  // Only save new messages (avoid re-saving existing ones)
+                  const newMessages = finalMessages.slice(existingCount);
+
+                  if (newMessages.length > 0) {
+                    // Check if last message has empty parts and strip it if so
+                    let messagesToSave = newMessages;
+                    if (
+                      newMessages.length > 0 &&
+                      newMessages[newMessages.length - 1].parts.length === 0
+                    ) {
+                      messagesToSave = newMessages.slice(0, -1);
+                    }
+
+                    if (messagesToSave.length > 0) {
+                      let messagesToStore = messagesToSave as UiMessage[];
+
+                      if (config.features.browserStreamingEnabled) {
+                        // Strip base64 images and large browser tool results before storing
+                        const beforeSize = estimateMessagesSize(messagesToSave);
+                        messagesToStore = stripImagesFromMessages(
+                          messagesToSave as UiMessage[],
+                        );
+                        const afterSize = estimateMessagesSize(messagesToStore);
+
+                        logger.info(
+                          {
+                            messageCount: messagesToSave.length,
+                            beforeSizeKB: Math.round(beforeSize.length / 1024),
+                            afterSizeKB: Math.round(afterSize.length / 1024),
+                            savedKB: Math.round(
+                              (beforeSize.length - afterSize.length) / 1024,
+                            ),
+                            sizeEstimateReliable:
+                              !beforeSize.isEstimated && !afterSize.isEstimated,
+                          },
+                          "[Chat] Stripped messages before saving to DB",
+                        );
+                      }
+
+                      // Append only new messages with timestamps
+                      const now = Date.now();
+                      const messageData = messagesToStore.map((msg, index) => ({
+                        conversationId,
+                        role: msg.role ?? "assistant",
+                        content: msg, // Store entire UIMessage (with images stripped)
+                        createdAt: new Date(now + index), // Preserve order
+                      }));
+
+                      await MessageModel.bulkCreate(messageData);
+
+                      logger.info(
+                        `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (total: ${existingCount + messagesToSave.length})`,
+                      );
+                    }
+                  }
+                },
+              }),
             );
-            // Return a minimal error response without the raw error
-            return JSON.stringify({
-              code: mappedError.code,
-              message: mappedError.message,
-              isRetryable: mappedError.isRetryable,
-            });
-          }
-        },
-        onFinish: async ({ messages: finalMessages }) => {
-          if (!conversationId) return;
 
-          // Get existing messages count to know how many are new
-          const existingMessages =
-            await MessageModel.findByConversation(conversationId);
-          const existingCount = existingMessages.length;
+            // Wait for the stream to complete and get usage data
+            const usage = await result.usage;
 
-          // Only save new messages (avoid re-saving existing ones)
-          const newMessages = finalMessages.slice(existingCount);
-
-          if (newMessages.length > 0) {
-            // Check if last message has empty parts and strip it if so
-            let messagesToSave = newMessages;
-            if (
-              newMessages.length > 0 &&
-              newMessages[newMessages.length - 1].parts.length === 0
-            ) {
-              messagesToSave = newMessages.slice(0, -1);
-            }
-
-            if (messagesToSave.length > 0) {
-              let messagesToStore = messagesToSave as UiMessage[];
-
-              if (config.features.browserStreamingEnabled) {
-                // Strip base64 images and large browser tool results before storing
-                const beforeSize = estimateMessagesSize(messagesToSave);
-                messagesToStore = stripImagesFromMessages(
-                  messagesToSave as UiMessage[],
-                );
-                const afterSize = estimateMessagesSize(messagesToStore);
-
-                logger.info(
-                  {
-                    messageCount: messagesToSave.length,
-                    beforeSizeKB: Math.round(beforeSize.length / 1024),
-                    afterSizeKB: Math.round(afterSize.length / 1024),
-                    savedKB: Math.round(
-                      (beforeSize.length - afterSize.length) / 1024,
-                    ),
-                    sizeEstimateReliable:
-                      !beforeSize.isEstimated && !afterSize.isEstimated,
-                  },
-                  "[Chat] Stripped messages before saving to DB",
-                );
-              }
-
-              // Append only new messages with timestamps
-              const now = Date.now();
-              const messageData = messagesToStore.map((msg, index) => ({
-                conversationId,
-                role: msg.role ?? "assistant",
-                content: msg, // Store entire UIMessage (with images stripped)
-                createdAt: new Date(now + index), // Preserve order
-              }));
-
-              await MessageModel.bulkCreate(messageData);
-
+            // Write token usage data to the stream as a custom data part
+            if (usage) {
               logger.info(
-                `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (total: ${existingCount + messagesToSave.length})`,
+                {
+                  conversationId,
+                  usage,
+                },
+                "Chat stream finished with usage data",
               );
+
+              // Send usage data as a custom data part
+              // The type must be 'data-<name>' format for the AI SDK to recognize it
+              writer.write({
+                type: "data-token-usage",
+                data: {
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  totalTokens: usage.totalTokens,
+                } satisfies TokenUsage,
+              });
             }
-          }
-        },
+          },
+        }),
       });
 
       // Log response headers for debugging
@@ -426,16 +498,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversations,
         description:
-          "List all conversations for current user with agent details",
+          "List all conversations for current user with agent details. Optionally filter by search query.",
         tags: ["Chat"],
+        querystring: z.object({
+          search: z.string().optional(),
+        }),
         response: constructResponseSchema(z.array(SelectConversationSchema)),
       },
     },
     async (request, reply) => {
+      const { search } = request.query;
       return reply.send(
         await ConversationModel.findAll(
           request.user.id,
           request.organizationId,
+          search,
         ),
       );
     },
@@ -531,7 +608,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         body: InsertConversationSchema.pick({
           agentId: true,
-          promptId: true,
           title: true,
           selectedModel: true,
           selectedProvider: true,
@@ -539,7 +615,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         })
           .required({ agentId: true })
           .partial({
-            promptId: true,
             title: true,
             selectedModel: true,
             selectedProvider: true,
@@ -550,14 +625,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        body: {
-          agentId,
-          promptId,
-          title,
-          selectedModel,
-          selectedProvider,
-          chatApiKeyId,
-        },
+        body: { agentId, title, selectedModel, selectedProvider, chatApiKeyId },
         user,
         organizationId,
         headers,
@@ -617,13 +685,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Creating conversation with model",
       );
 
-      // Create conversation with agent and optional prompt
+      // Create conversation with agent
       return reply.send(
         await ConversationModel.create({
           userId: user.id,
           organizationId,
           agentId,
-          promptId,
           title,
           selectedModel: modelToUse,
           selectedProvider: providerToUse,
@@ -771,34 +838,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Extract first user message and first assistant message text
-      const messages = conversation.messages || [];
-      let firstUserMessage = "";
-      let firstAssistantMessage = "";
-
-      for (const msg of messages) {
-        // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
-        const msgContent = msg as any;
-        if (!firstUserMessage && msgContent.role === "user") {
-          // Extract text from parts
-          for (const part of msgContent.parts || []) {
-            if (part.type === "text" && part.text) {
-              firstUserMessage = part.text;
-              break;
-            }
-          }
-        }
-        if (!firstAssistantMessage && msgContent.role === "assistant") {
-          // Extract text from parts (skip tool calls)
-          for (const part of msgContent.parts || []) {
-            if (part.type === "text" && part.text) {
-              firstAssistantMessage = part.text;
-              break;
-            }
-          }
-        }
-        if (firstUserMessage && firstAssistantMessage) break;
-      }
+      // Extract first user and assistant messages
+      const { firstUserMessage, firstAssistantMessage } = extractFirstMessages(
+        conversation.messages || [],
+      );
 
       // Need at least user message to generate title
       if (!firstUserMessage) {
@@ -809,94 +852,59 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Resolve API key using scope-based priority: personal -> team -> org_wide -> env var
-      let anthropicApiKey: string | undefined;
+      // Use the conversation's selected provider for title generation
+      // This ensures the title is generated using the same provider as the chat
+      // Fall back to detecting from model name for backward compatibility
+      const provider = isSupportedChatProvider(conversation.selectedProvider)
+        ? conversation.selectedProvider
+        : detectProviderFromModel(conversation.selectedModel);
 
-      // Get user's team IDs for resolution
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-
-      // Use resolveApiKey which handles priority: conversation key -> personal -> team -> org_wide
-      const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
-        organizationId: organizationId,
+      // Resolve API key using the centralized function (handles all providers)
+      const { apiKey } = await resolveProviderApiKey({
+        organizationId,
         userId: user.id,
-        userTeamIds: userTeamIds,
-        provider: "anthropic",
+        provider,
         conversationId: id,
       });
 
-      if (resolvedKey?.secretId) {
-        const secret = await secretManager().getSecret(resolvedKey.secretId);
-        // Support both old format (anthropicApiKey) and new format (apiKey)
-        const secretValue =
-          secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
-        if (secretValue) {
-          anthropicApiKey = secretValue as string;
-        }
-      }
-
-      // Fall back to environment variable
-      if (!anthropicApiKey) {
-        anthropicApiKey = config.chat.anthropic.apiKey;
-      }
-
-      if (!anthropicApiKey) {
+      if (isApiKeyRequired(provider, apiKey)) {
         throw new ApiError(
           400,
           "LLM Provider API key not configured. Please configure it in Chat Settings.",
         );
       }
 
-      // Create Anthropic client (direct, not through LLM proxy - this is a meta operation)
-      const anthropic = createAnthropic({
-        apiKey: anthropicApiKey,
+      // Generate title using the extracted function
+      const generatedTitle = await generateConversationTitle({
+        provider,
+        apiKey,
+        firstUserMessage,
+        firstAssistantMessage,
       });
 
-      // Build prompt for title generation
-      const contextMessages = firstAssistantMessage
-        ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
-        : `User: ${firstUserMessage}`;
-
-      const titlePrompt = `Generate a short, concise title (3-6 words) for a chat conversation that includes the following messages:
-
-${contextMessages}
-
-The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
-
-      try {
-        // Generate title using a fast model
-        const result = await generateText({
-          model: anthropic("claude-3-5-haiku-20241022"),
-          prompt: titlePrompt,
-        });
-
-        const generatedTitle = result.text.trim();
-
-        logger.info(
-          { conversationId: id, generatedTitle },
-          "Generated conversation title",
-        );
-
-        // Update conversation with generated title
-        const updatedConversation = await ConversationModel.update(
-          id,
-          user.id,
-          organizationId,
-          { title: generatedTitle },
-        );
-
-        if (!updatedConversation) {
-          throw new ApiError(500, "Failed to update conversation with title");
-        }
-
-        return reply.send(updatedConversation);
-      } catch (error) {
-        logger.error(
-          { conversationId: id, error },
-          "Failed to generate conversation title",
-        );
+      if (!generatedTitle) {
         // Return the conversation without title update on error
         return reply.send(conversation);
       }
+
+      logger.info(
+        { conversationId: id, generatedTitle },
+        "Generated conversation title",
+      );
+
+      // Update conversation with generated title
+      const updatedConversation = await ConversationModel.update(
+        id,
+        user.id,
+        organizationId,
+        { title: generatedTitle },
+      );
+
+      if (!updatedConversation) {
+        throw new ApiError(500, "Failed to update conversation with title");
+      }
+
+      return reply.send(updatedConversation);
     },
   );
 
@@ -1086,6 +1094,128 @@ The title should capture the main topic or theme of the conversation. Respond wi
     },
   );
 };
+
+// ============================================================================
+// Title Generation Functions (extracted for testability)
+// ============================================================================
+
+/**
+ * Message structure from AI SDK UIMessage
+ */
+interface MessagePart {
+  type: string;
+  text?: string;
+}
+
+interface Message {
+  role: string;
+  parts?: MessagePart[];
+}
+
+/**
+ * Result of extracting first messages from a conversation
+ */
+export interface ExtractedMessages {
+  firstUserMessage: string;
+  firstAssistantMessage: string;
+}
+
+/**
+ * Extracts the first user message and first assistant message text from conversation messages.
+ * Used for generating conversation titles.
+ */
+export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
+  let firstUserMessage = "";
+  let firstAssistantMessage = "";
+
+  for (const msg of messages) {
+    const msgContent = msg as Message;
+    if (!firstUserMessage && msgContent.role === "user") {
+      // Extract text from parts
+      for (const part of msgContent.parts || []) {
+        if (part.type === "text" && part.text) {
+          firstUserMessage = part.text;
+          break;
+        }
+      }
+    }
+    if (!firstAssistantMessage && msgContent.role === "assistant") {
+      // Extract text from parts (skip tool calls)
+      for (const part of msgContent.parts || []) {
+        if (part.type === "text" && part.text) {
+          firstAssistantMessage = part.text;
+          break;
+        }
+      }
+    }
+    if (firstUserMessage && firstAssistantMessage) break;
+  }
+
+  return { firstUserMessage, firstAssistantMessage };
+}
+
+/**
+ * Builds the prompt for title generation based on extracted messages.
+ */
+export function buildTitlePrompt(
+  firstUserMessage: string,
+  firstAssistantMessage: string,
+): string {
+  const contextMessages = firstAssistantMessage
+    ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
+    : `User: ${firstUserMessage}`;
+
+  return `Generate a short, concise title (3-6 words) for a chat conversation that includes the following messages:
+
+${contextMessages}
+
+The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
+}
+
+/**
+ * Parameters for generating a conversation title
+ */
+export interface GenerateTitleParams {
+  provider: SupportedChatProvider;
+  apiKey: string | undefined;
+  firstUserMessage: string;
+  firstAssistantMessage: string;
+}
+
+/**
+ * Generates a conversation title using the specified provider.
+ * Returns the generated title or null if generation fails.
+ */
+export async function generateConversationTitle(
+  params: GenerateTitleParams,
+): Promise<string | null> {
+  const { provider, apiKey, firstUserMessage, firstAssistantMessage } = params;
+
+  // Create model for title generation (direct call, not through LLM Proxy)
+  const model = createDirectLLMModel({
+    provider,
+    apiKey,
+    modelName: FAST_MODELS[provider],
+  });
+
+  const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
+
+  try {
+    const result = await generateText({
+      model,
+      prompt: titlePrompt,
+    });
+
+    return result.text.trim();
+  } catch (error) {
+    logger.error({ error, provider }, "Failed to generate conversation title");
+    return null;
+  }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
 
 /**
  * Validates that a chat API key exists, belongs to the organization,

@@ -1,0 +1,49 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mistral/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "mistral-blocks-tool-untrusted-data"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-mistral-blocks-tool",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "mistral-large-latest",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": null,
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "read_file",
+                  "arguments": "{\"path\": \"/etc/passwd\"}"
+                }
+              }
+            ]
+          },
+          "finish_reason": "tool_calls",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 50,
+        "completion_tokens": 10,
+        "total_tokens": 60
+      }
+    }
+  }
+}

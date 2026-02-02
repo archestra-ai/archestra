@@ -1,7 +1,11 @@
 import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
-import type { LocalConfigSchema } from "@shared";
+import {
+  type LocalConfigSchema,
+  MCP_ORCHESTRATOR_DEFAULTS,
+  TimeInMs,
+} from "@shared";
 import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
@@ -12,6 +16,15 @@ import type { K8sDeploymentState, K8sDeploymentStatusSummary } from "./schemas";
 const {
   orchestrator: { mcpServerBaseImage },
 } = config;
+
+/**
+ * Result of processing container environment configuration.
+ * Contains both environment variables and mounted secrets information.
+ */
+interface ContainerEnvResult {
+  envVars: k8s.V1EnvVar[];
+  mountedSecrets: Array<{ key: string }>;
+}
 
 /**
  * Cached nodeSelector from the archestra-platform pod.
@@ -159,7 +172,7 @@ export default class K8sDeployment {
   private k8sAppsApi: k8s.AppsV1Api;
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
-  private namespace: string;
+  private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
   private state: K8sDeploymentState = "not_created";
   private errorMessage: string | null = null;
@@ -188,11 +201,22 @@ export default class K8sDeployment {
     this.k8sAppsApi = k8sAppsApi;
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
-    this.namespace = namespace;
+    this.defaultNamespace = namespace;
     this.catalogItem = catalogItem;
     this.userConfigValues = userConfigValues;
     this.environmentValues = environmentValues;
     this.deploymentName = K8sDeployment.constructDeploymentName(mcpServer);
+  }
+
+  /**
+   * Returns the effective namespace for this deployment.
+   * Uses the namespace from advancedK8sConfig if specified, otherwise falls back to the default.
+   */
+  private get namespace(): string {
+    return (
+      this.catalogItem?.localConfig?.advancedK8sConfig?.namespace ||
+      this.defaultNamespace
+    );
   }
 
   /**
@@ -262,14 +286,22 @@ export default class K8sDeployment {
   }
 
   /**
-   * Get catalog item for this MCP server
+   * Get catalog item for this MCP server.
+   * Caches the result in this.catalogItem for subsequent calls.
    */
   private async getCatalogItem(): Promise<InternalMcpCatalog | null> {
+    if (this.catalogItem) {
+      return this.catalogItem;
+    }
+
     if (!this.mcpServer.catalogId) {
       return null;
     }
 
-    return await InternalMcpCatalogModel.findById(this.mcpServer.catalogId);
+    this.catalogItem = await InternalMcpCatalogModel.findById(
+      this.mcpServer.catalogId,
+    );
+    return this.catalogItem;
   }
 
   /**
@@ -482,12 +514,45 @@ export default class K8sDeployment {
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
   ): k8s.V1Deployment {
+    const advancedConfig = localConfig.advancedK8sConfig;
+
     // Labels common to Deployment, RS, and Pods
+    // Merge custom labels from advanced config with required labels
+    // Required labels are spread last to prevent custom labels from overriding them
     const labels = K8sDeployment.sanitizeMetadataLabels({
+      ...(advancedConfig?.labels || {}),
       app: "mcp-server",
       "mcp-server-id": this.mcpServer.id,
       "mcp-server-name": this.mcpServer.name,
     });
+
+    // Get environment variables and mounted secrets
+    const { envVars, mountedSecrets } = this.createContainerEnvFromConfig();
+    const k8sSecretName = K8sDeployment.constructK8sSecretName(
+      this.mcpServer.id,
+    );
+
+    // Build volume mounts for mounted secrets (read-only files at /secrets/<key>)
+    const volumeMounts: k8s.V1VolumeMount[] = mountedSecrets.map(({ key }) => ({
+      name: "mounted-secrets",
+      mountPath: `/secrets/${key}`,
+      subPath: key,
+      readOnly: true,
+    }));
+
+    // Build volumes for mounted secrets (single volume with all secret keys)
+    const volumes: k8s.V1Volume[] =
+      mountedSecrets.length > 0
+        ? [
+            {
+              name: "mounted-secrets",
+              secret: {
+                secretName: k8sSecretName,
+                items: mountedSecrets.map(({ key }) => ({ key, path: key })),
+              },
+            },
+          ]
+        : [];
 
     const podSpec: k8s.V1PodSpec = {
       // Fast shutdown for stateless MCP servers (default is 30s)
@@ -502,6 +567,8 @@ export default class K8sDeployment {
       ...(nodeSelector && Object.keys(nodeSelector).length > 0
         ? { nodeSelector }
         : {}),
+      // Add volumes for mounted secrets
+      ...(volumes.length > 0 ? { volumes } : {}),
       containers: [
         {
           name: "mcp-server",
@@ -512,7 +579,7 @@ export default class K8sDeployment {
             dockerImage.includes("/") || dockerImage.includes(".")
               ? undefined // Let K8s decide (defaults to Always for :latest, IfNotPresent for others)
               : ("Never" as k8s.V1Container["imagePullPolicy"]), // For local images like "gaggimate-mcp:latest" without registry
-          env: this.createContainerEnvFromConfig(),
+          env: envVars,
           ...(localConfig.command
             ? {
                 command: [localConfig.command],
@@ -547,16 +614,42 @@ export default class K8sDeployment {
                 },
               ]
             : undefined,
-          // Set resource requests for the container
+          // Add volume mounts for mounted secrets
+          ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
+          // Set resource requests/limits for the container (with defaults)
           resources: {
             requests: {
-              memory: "128Mi",
-              cpu: "50m",
+              memory:
+                advancedConfig?.resources?.requests?.memory ||
+                MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
+              cpu:
+                advancedConfig?.resources?.requests?.cpu ||
+                MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
             },
+            ...(advancedConfig?.resources?.limits
+              ? {
+                  limits: {
+                    ...(advancedConfig.resources.limits.memory
+                      ? { memory: advancedConfig.resources.limits.memory }
+                      : {}),
+                    ...(advancedConfig.resources.limits.cpu
+                      ? { cpu: advancedConfig.resources.limits.cpu }
+                      : {}),
+                  },
+                }
+              : {}),
           },
         },
       ],
       restartPolicy: "Always",
+    };
+
+    // Build pod template metadata with optional annotations
+    const podTemplateMetadata: k8s.V1ObjectMeta = {
+      labels,
+      ...(advancedConfig?.annotations
+        ? { annotations: advancedConfig.annotations }
+        : {}),
     };
 
     return {
@@ -567,14 +660,13 @@ export default class K8sDeployment {
         labels,
       },
       spec: {
-        replicas: 1,
+        replicas:
+          advancedConfig?.replicas ?? MCP_ORCHESTRATOR_DEFAULTS.replicas,
         selector: {
           matchLabels: labels,
         },
         template: {
-          metadata: {
-            labels,
-          },
+          metadata: podTemplateMetadata,
           spec: podSpec,
         },
       },
@@ -632,13 +724,17 @@ export default class K8sDeployment {
    * will use valueFrom.secretKeyRef to reference the Kubernetes Secret instead of
    * including the value directly in the pod spec.
    *
+   * For secrets marked with "mounted: true", they will be skipped from env vars
+   * and instead returned in mountedSecrets array for volume mounting.
+   *
    * For Docker Desktop Kubernetes environments, localhost URLs are automatically
    * rewritten to host.docker.internal to allow pods to access services on the host.
    */
-  createContainerEnvFromConfig(): k8s.V1EnvVar[] {
+  createContainerEnvFromConfig(): ContainerEnvResult {
     const env: k8s.V1EnvVar[] = [];
     const envMap = new Map<string, string>();
     const secretEnvVars = new Set<string>();
+    const mountedSecretKeys = new Set<string>();
 
     // Process all environment variables from catalog
     if (this.catalogItem?.localConfig?.environment) {
@@ -646,6 +742,10 @@ export default class K8sDeployment {
         // Track secret-type env vars
         if (envDef.type === "secret") {
           secretEnvVars.add(envDef.key);
+          // Track mounted secrets (only applicable to secret type)
+          if (envDef.mounted) {
+            mountedSecretKeys.add(envDef.key);
+          }
         }
 
         // Add env var value to envMap based on prompting behavior
@@ -695,8 +795,19 @@ export default class K8sDeployment {
       });
     }
 
+    // Track mounted secrets for volume mounting
+    const mountedSecrets: Array<{ key: string }> = [];
+
     // Convert map to k8s env vars, using conditional logic for secrets
     envMap.forEach((value, key) => {
+      // If this is a mounted secret, skip env var injection - will be volume mounted
+      if (mountedSecretKeys.has(key)) {
+        if (value && value.trim() !== "") {
+          mountedSecrets.push({ key });
+        }
+        return;
+      }
+
       // If this env var is marked as "secret" type, use valueFrom.secretKeyRef
       if (secretEnvVars.has(key)) {
         // Skip secret-type env vars with empty values (no K8s Secret will be created)
@@ -745,7 +856,7 @@ export default class K8sDeployment {
       }
     });
 
-    return env;
+    return { envVars: env, mountedSecrets };
   }
 
   /**
@@ -980,6 +1091,294 @@ export default class K8sDeployment {
   }
 
   /**
+   * Check if a running pod exists for this deployment
+   */
+  async hasRunningPod(): Promise<boolean> {
+    const pod = await this.findPodForDeployment();
+    return !!pod;
+  }
+
+  /**
+   * Helper to find any pod for this deployment (not just running)
+   */
+  private async findAnyPodForDeployment(): Promise<k8s.V1Pod | undefined> {
+    try {
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const pods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+        labelSelector: `mcp-server-id=${sanitizedId}`,
+      });
+
+      // Return the first pod regardless of status
+      return pods.items[0];
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to list pods for ${this.deploymentName}`,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * Get Kubernetes events related to the deployment and its pods
+   */
+  async getDeploymentEvents(): Promise<string> {
+    try {
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+
+      // Get events from the namespace, filtering to those related to our deployment or pods
+      const events = await this.k8sApi.listNamespacedEvent({
+        namespace: this.namespace,
+      });
+
+      // Filter events related to our deployment or pods
+      const relevantEvents = events.items.filter((event) => {
+        const involvedName = event.involvedObject?.name || "";
+        // Match deployment name or pods with our label
+        return (
+          involvedName.startsWith(this.deploymentName) ||
+          involvedName.includes(sanitizedId)
+        );
+      });
+
+      if (relevantEvents.length === 0) {
+        return "No events found for this deployment";
+      }
+
+      // Sort by last timestamp (most recent first)
+      relevantEvents.sort((a, b) => {
+        const aTime =
+          a.lastTimestamp || a.eventTime || a.metadata?.creationTimestamp;
+        const bTime =
+          b.lastTimestamp || b.eventTime || b.metadata?.creationTimestamp;
+        if (!aTime || !bTime) return 0;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      });
+
+      // Format events for display
+      const formattedEvents = relevantEvents.map((event) => {
+        const timestamp =
+          event.lastTimestamp ||
+          event.eventTime ||
+          event.metadata?.creationTimestamp;
+        const timeStr = timestamp
+          ? new Date(timestamp).toISOString()
+          : "unknown";
+        const type = event.type || "Normal";
+        const reason = event.reason || "Unknown";
+        const message = event.message || "";
+        const obj = event.involvedObject?.name || "unknown";
+        const count = event.count || 1;
+
+        return `[${timeStr}] ${type} ${reason} (${obj}${count > 1 ? ` x${count}` : ""}): ${message}`;
+      });
+
+      return formattedEvents.join("\n");
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to get events for deployment ${this.deploymentName}`,
+      );
+      return "Failed to retrieve deployment events";
+    }
+  }
+
+  /**
+   * Check K8s events for deployment failure indicators.
+   * Returns failure info if critical errors are found.
+   */
+  private async checkEventsForFailure(): Promise<{
+    hasFailure: boolean;
+    message: string | null;
+  }> {
+    try {
+      const events = await this.k8sApi.listNamespacedEvent({
+        namespace: this.namespace,
+      });
+
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+
+      // Filter recent events (last 2 minutes) related to our deployment
+      const twoMinutesAgo = Date.now() - TimeInMs.Minute * 2;
+      const relevantEvents = events.items.filter((event) => {
+        const involvedName = event.involvedObject?.name || "";
+        const eventTime =
+          event.lastTimestamp ||
+          event.eventTime ||
+          event.metadata?.creationTimestamp;
+        const eventTimestamp = eventTime ? new Date(eventTime).getTime() : 0;
+
+        return (
+          eventTimestamp > twoMinutesAgo &&
+          (involvedName.startsWith(this.deploymentName) ||
+            involvedName.includes(sanitizedId))
+        );
+      });
+
+      // Known failure patterns in events
+      const failurePatterns = [
+        {
+          pattern: /error looking up service account/i,
+          reason: "Invalid ServiceAccount",
+        },
+        {
+          pattern: /serviceaccount.*not found/i,
+          reason: "ServiceAccount not found",
+        },
+        {
+          pattern: /forbidden.*serviceaccount/i,
+          reason: "ServiceAccount forbidden",
+        },
+        { pattern: /exceeded quota/i, reason: "Resource quota exceeded" },
+        {
+          pattern: /Unable to attach or mount volumes/i,
+          reason: "Volume mount failed",
+        },
+        {
+          pattern: /FailedScheduling.*node\(s\)/i,
+          reason: "No matching nodes",
+        },
+      ];
+
+      for (const event of relevantEvents) {
+        if (event.type === "Warning" && event.message) {
+          for (const { pattern, reason } of failurePatterns) {
+            if (pattern.test(event.message)) {
+              return {
+                hasFailure: true,
+                message: `${reason}: ${event.message}`,
+              };
+            }
+          }
+        }
+      }
+
+      return { hasFailure: false, message: null };
+    } catch (error) {
+      logger.warn({ err: error }, "Failed to check events for failure");
+      return { hasFailure: false, message: null };
+    }
+  }
+
+  /**
+   * Check pod conditions for scheduling/initialization failures.
+   */
+  private checkPodConditionsForFailure(pod: k8s.V1Pod): {
+    hasFailure: boolean;
+    message: string | null;
+  } {
+    const conditions = pod.status?.conditions || [];
+
+    for (const condition of conditions) {
+      // Check for scheduling failures
+      if (
+        condition.type === "PodScheduled" &&
+        condition.status === "False" &&
+        condition.message
+      ) {
+        return {
+          hasFailure: true,
+          message: `Pod scheduling failed: ${condition.message}`,
+        };
+      }
+    }
+
+    return { hasFailure: false, message: null };
+  }
+
+  /**
+   * Get pod status information for display
+   */
+  private getPodStatusInfo(pod: k8s.V1Pod): string {
+    const phase = pod.status?.phase || "Unknown";
+    const conditions = pod.status?.conditions || [];
+    const containerStatuses = pod.status?.containerStatuses || [];
+
+    const lines: string[] = [];
+    lines.push(`Pod Phase: ${phase}`);
+
+    // Add container statuses
+    for (const containerStatus of containerStatuses) {
+      const name = containerStatus.name;
+      const ready = containerStatus.ready ? "Ready" : "Not Ready";
+      const restartCount = containerStatus.restartCount || 0;
+
+      let stateInfo = "";
+      if (containerStatus.state?.waiting) {
+        stateInfo = `Waiting: ${containerStatus.state.waiting.reason || "Unknown"}`;
+        if (containerStatus.state.waiting.message) {
+          stateInfo += ` - ${containerStatus.state.waiting.message}`;
+        }
+      } else if (containerStatus.state?.running) {
+        stateInfo = "Running";
+      } else if (containerStatus.state?.terminated) {
+        stateInfo = `Terminated: ${containerStatus.state.terminated.reason || "Unknown"}`;
+      }
+
+      lines.push(
+        `Container '${name}': ${ready}, Restarts: ${restartCount}, State: ${stateInfo}`,
+      );
+    }
+
+    // Add relevant conditions
+    for (const condition of conditions) {
+      if (condition.status === "False" && condition.message) {
+        lines.push(`Condition ${condition.type}: ${condition.message}`);
+      }
+    }
+
+    return lines.join("\n");
+  }
+
+  /**
+   * Write K8s events to the stream as a fallback when pod logs aren't available
+   */
+  private async streamEventsAsFallback(
+    responseStream: NodeJS.WritableStream,
+  ): Promise<void> {
+    try {
+      // Check if any pod exists (even non-running)
+      const anyPod = await this.findAnyPodForDeployment();
+
+      let output = "=== MCP Server Status ===\n\n";
+
+      if (anyPod) {
+        // Show pod status info
+        output += "--- Pod Status ---\n";
+        output += this.getPodStatusInfo(anyPod);
+        output += "\n\n";
+      } else {
+        output += "No pod found for this deployment.\n\n";
+      }
+
+      // Get and show events
+      output += "--- Kubernetes Events ---\n";
+      const events = await this.getDeploymentEvents();
+      output += events;
+      output += "\n";
+
+      // Write to stream
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        responseStream.write(output);
+        // End the stream since we're not following logs
+        responseStream.end();
+      }
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to stream events fallback for ${this.deploymentName}`,
+      );
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        responseStream.write(
+          `Error fetching deployment status: ${error instanceof Error ? error.message : "Unknown error"}\n`,
+        );
+        responseStream.end();
+      }
+    }
+  }
+
+  /**
    * Check if this MCP server needs an HTTP port
    */
   private async needsHttpPort(): Promise<boolean> {
@@ -1113,7 +1512,46 @@ export default class K8sDeployment {
           labelSelector: `mcp-server-id=${sanitizedId}`,
         });
 
+        // Check for failure events (every 5th iteration to reduce API calls)
+        // Start checking after first 10 seconds (iteration 5)
+        if (i >= 5 && i % 5 === 0) {
+          const eventCheck = await this.checkEventsForFailure();
+          if (eventCheck.hasFailure) {
+            this.state = "failed";
+            this.errorMessage = eventCheck.message || "Deployment failed";
+            throw new Error(
+              `Deployment ${this.deploymentName} failed: ${eventCheck.message}`,
+            );
+          }
+        }
+
         for (const pod of pods.items) {
+          // Check pending pods without containerStatuses for condition failures
+          if (
+            pod.status?.phase === "Pending" &&
+            (!pod.status?.containerStatuses ||
+              pod.status.containerStatuses.length === 0)
+          ) {
+            const conditionCheck = this.checkPodConditionsForFailure(pod);
+            if (conditionCheck.hasFailure) {
+              // Check how long pod has been pending
+              const creationTime = pod.metadata?.creationTimestamp;
+              const pendingDuration = creationTime
+                ? Date.now() - new Date(creationTime).getTime()
+                : 0;
+
+              // If pending for > 20 seconds with a condition failure, fail fast
+              if (pendingDuration > TimeInMs.Second * 20) {
+                this.state = "failed";
+                this.errorMessage =
+                  conditionCheck.message || "Pod scheduling failed";
+                throw new Error(
+                  `Deployment ${this.deploymentName} failed: ${conditionCheck.message}`,
+                );
+              }
+            }
+          }
+
           // Check for failure states in container statuses
           if (pod.status?.containerStatuses) {
             for (const containerStatus of pod.status.containerStatuses) {
@@ -1123,9 +1561,11 @@ export default class K8sDeployment {
                   "CrashLoopBackOff",
                   "ImagePullBackOff",
                   "ErrImagePull",
+                  "ErrImageNeverPull",
                   "CreateContainerConfigError",
                   "CreateContainerError",
                   "RunContainerError",
+                  "InvalidImageName",
                 ];
                 if (failureStates.includes(waitingReason)) {
                   const message =
@@ -1228,16 +1668,23 @@ export default class K8sDeployment {
   }
 
   /**
-   * Stream logs from the pod with follow enabled
+   * Stream logs from the pod with follow enabled.
+   * If no running pod is found, falls back to showing K8s events.
+   * @param responseStream - The stream to write logs to
+   * @param lines - Number of initial lines to fetch
+   * @param abortSignal - Optional abort signal to cancel the stream
    */
   async streamLogs(
     responseStream: NodeJS.WritableStream,
     lines: number = 100,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     try {
       const pod = await this.findPodForDeployment();
       if (!pod || !pod.metadata?.name) {
-        throw new Error("No running pod found for deployment");
+        // No running pod - try to show events instead
+        await this.streamEventsAsFallback(responseStream);
+        return;
       }
 
       // Create a PassThrough stream to handle the log data
@@ -1284,12 +1731,6 @@ export default class K8sDeployment {
         }
       });
 
-      responseStream.on("close", () => {
-        if (logStream.destroy) {
-          logStream.destroy();
-        }
-      });
-
       // Use the Log client to stream logs with follow=true
       const req = await this.k8sLog.log(
         this.namespace,
@@ -1304,11 +1745,45 @@ export default class K8sDeployment {
         },
       );
 
+      // Track abort handler for cleanup
+      let abortHandler: (() => void) | null = null;
+
+      // Handle abort signal
+      if (abortSignal) {
+        abortHandler = () => {
+          if (req) {
+            req.abort();
+          }
+          logStream.destroy();
+          if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+            responseStream.end();
+          }
+        };
+
+        if (abortSignal.aborted) {
+          abortHandler();
+          return;
+        }
+
+        abortSignal.addEventListener("abort", abortHandler, { once: true });
+      }
+
+      // Cleanup function to remove abort listener
+      const cleanupAbortListener = () => {
+        if (abortSignal && abortHandler) {
+          abortSignal.removeEventListener("abort", abortHandler);
+        }
+      };
+
       // Handle cleanup when response stream closes
       responseStream.on("close", () => {
         if (req) {
           req.abort();
         }
+        if (logStream.destroy) {
+          logStream.destroy();
+        }
+        cleanupAbortListener();
       });
     } catch (error: unknown) {
       logger.error(

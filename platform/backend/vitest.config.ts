@@ -11,6 +11,7 @@ export default defineConfig({
         __dirname,
         "../shared/access-control.ts",
       ),
+      "@shared/types": path.resolve(__dirname, "../shared/types.ts"),
       "@shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },

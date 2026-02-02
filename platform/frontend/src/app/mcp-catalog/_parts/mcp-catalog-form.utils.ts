@@ -31,6 +31,19 @@ export function transformFormToApiData(
           .filter((arg) => arg.length > 0)
       : [];
 
+    // Build advanced K8s config if any fields are set
+    const advancedK8sConfig = values.localConfig.advancedK8sConfig;
+    const hasAdvancedConfig =
+      advancedK8sConfig &&
+      (advancedK8sConfig.replicas ||
+        advancedK8sConfig.namespace ||
+        advancedK8sConfig.annotations ||
+        advancedK8sConfig.labels ||
+        advancedK8sConfig.resourceRequestsMemory ||
+        advancedK8sConfig.resourceRequestsCpu ||
+        advancedK8sConfig.resourceLimitsMemory ||
+        advancedK8sConfig.resourceLimitsCpu);
+
     data.localConfig = {
       command: values.localConfig.command || undefined,
       arguments: argumentsArray.length > 0 ? argumentsArray : undefined,
@@ -42,6 +55,24 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
+      // Include advanced K8s config if any fields are set
+      ...(hasAdvancedConfig
+        ? {
+            advancedK8sConfig: {
+              replicas: advancedK8sConfig.replicas
+                ? Number(advancedK8sConfig.replicas)
+                : undefined,
+              namespace: advancedK8sConfig.namespace || undefined,
+              annotations: advancedK8sConfig.annotations
+                ? parseJsonSafe(advancedK8sConfig.annotations)
+                : undefined,
+              labels: advancedK8sConfig.labels
+                ? parseJsonSafe(advancedK8sConfig.labels)
+                : undefined,
+              resources: buildResources(advancedK8sConfig),
+            },
+          }
+        : {}),
     };
 
     // BYOS: Include local config vault path and key if set
@@ -198,6 +229,16 @@ export function transformCatalogItemToFormValues(
         httpPort?: string;
         httpPath?: string;
         serviceAccount?: string;
+        advancedK8sConfig?: {
+          replicas?: string;
+          namespace?: string;
+          annotations?: string;
+          labels?: string;
+          resourceRequestsMemory?: string;
+          resourceRequestsCpu?: string;
+          resourceLimitsMemory?: string;
+          resourceLimitsCpu?: string;
+        };
       }
     | undefined;
   if (item.localConfig) {
@@ -231,6 +272,28 @@ export function transformCatalogItemToFormValues(
         return envVar;
       }) || [];
 
+    // Extract advanced K8s config if present
+    const advancedK8sConfig = config.advancedK8sConfig
+      ? {
+          replicas: config.advancedK8sConfig.replicas?.toString() || undefined,
+          namespace: config.advancedK8sConfig.namespace || undefined,
+          annotations: config.advancedK8sConfig.annotations
+            ? JSON.stringify(config.advancedK8sConfig.annotations, null, 2)
+            : undefined,
+          labels: config.advancedK8sConfig.labels
+            ? JSON.stringify(config.advancedK8sConfig.labels, null, 2)
+            : undefined,
+          resourceRequestsMemory:
+            config.advancedK8sConfig.resources?.requests?.memory || undefined,
+          resourceRequestsCpu:
+            config.advancedK8sConfig.resources?.requests?.cpu || undefined,
+          resourceLimitsMemory:
+            config.advancedK8sConfig.resources?.limits?.memory || undefined,
+          resourceLimitsCpu:
+            config.advancedK8sConfig.resources?.limits?.cpu || undefined,
+        }
+      : undefined;
+
     localConfig = {
       command: item.localConfig.command || "",
       arguments: argumentsString,
@@ -240,6 +303,7 @@ export function transformCatalogItemToFormValues(
       httpPort: config.httpPort?.toString() || undefined,
       httpPath: config.httpPath || undefined,
       serviceAccount: config.serviceAccount || undefined,
+      advancedK8sConfig,
     };
   }
 
@@ -288,4 +352,80 @@ export function stripEnvVarQuotes(value: string): string {
   }
 
   return value;
+}
+
+/**
+ * Safely parse a JSON string, returning undefined if parsing fails.
+ */
+export function parseJsonSafe(
+  jsonString: string,
+): Record<string, string> | undefined {
+  if (!jsonString || !jsonString.trim()) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(jsonString);
+    // Ensure it's a plain object with string values
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+    ) {
+      return parsed as Record<string, string>;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Build resources object from advanced K8s config form values.
+ */
+export function buildResources(advancedConfig: {
+  resourceRequestsMemory?: string;
+  resourceRequestsCpu?: string;
+  resourceLimitsMemory?: string;
+  resourceLimitsCpu?: string;
+}):
+  | {
+      requests?: { memory?: string; cpu?: string };
+      limits?: { memory?: string; cpu?: string };
+    }
+  | undefined {
+  const hasRequests =
+    advancedConfig.resourceRequestsMemory || advancedConfig.resourceRequestsCpu;
+  const hasLimits =
+    advancedConfig.resourceLimitsMemory || advancedConfig.resourceLimitsCpu;
+
+  if (!hasRequests && !hasLimits) {
+    return undefined;
+  }
+
+  return {
+    ...(hasRequests
+      ? {
+          requests: {
+            ...(advancedConfig.resourceRequestsMemory
+              ? { memory: advancedConfig.resourceRequestsMemory }
+              : {}),
+            ...(advancedConfig.resourceRequestsCpu
+              ? { cpu: advancedConfig.resourceRequestsCpu }
+              : {}),
+          },
+        }
+      : {}),
+    ...(hasLimits
+      ? {
+          limits: {
+            ...(advancedConfig.resourceLimitsMemory
+              ? { memory: advancedConfig.resourceLimitsMemory }
+              : {}),
+            ...(advancedConfig.resourceLimitsCpu
+              ? { cpu: advancedConfig.resourceLimitsCpu }
+              : {}),
+          },
+        }
+      : {}),
+  };
 }

@@ -1,17 +1,27 @@
 "use client";
 
-import { Bot } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { isAgentTool } from "@shared";
+import { Bot, Wrench } from "lucide-react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ExpandableText } from "@/components/ui/expandable-text";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { useAgentDelegations } from "@/lib/agent-tools.query";
 import {
+  useChatProfileMcpTools,
   useConversationEnabledTools,
-  usePromptTools,
+  useProfileToolsWithIds,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
 import {
@@ -20,33 +30,80 @@ import {
   getPendingActions,
   type PendingToolAction,
 } from "@/lib/pending-tool-state";
-import { usePrompts } from "@/lib/prompts.query";
 import { cn } from "@/lib/utils";
+
+// Component to display tools for a specific agent
+function AgentToolsList({ agentId }: { agentId: string }) {
+  const { data: tools = [], isLoading } = useChatProfileMcpTools(agentId);
+
+  if (isLoading) {
+    return <p className="text-xs text-muted-foreground">Loading tools...</p>;
+  }
+
+  if (tools.length === 0) {
+    return <p className="text-xs text-muted-foreground">No tools available</p>;
+  }
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-muted-foreground mb-2">
+        Available tools ({tools.length}):
+      </p>
+      <div className="flex flex-wrap gap-1 max-h-[200px] overflow-y-auto">
+        {tools.map((tool) => (
+          <span
+            key={tool.name}
+            className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded"
+          >
+            <Wrench className="h-3 w-3 opacity-70" />
+            {tool.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface AgentToolsDisplayProps {
   agentId: string;
-  promptId: string | null;
   conversationId?: string;
   addAgentsButton: ReactNode;
 }
 
 /**
- * Display agent delegation tools with ability to toggle them.
- * When no conversation exists, pending actions are stored in localStorage
- * and applied when the conversation is created via first message.
+ * Display agent delegations (agents this agent can delegate to).
+ * Uses database-backed enabled tools state (same as ChatToolsDisplay for MCP tools).
+ * Supports enable/disable toggle persisted via conversation_enabled_tools API.
  */
 export function AgentToolsDisplay({
   agentId,
-  promptId,
   conversationId,
   addAgentsButton,
 }: AgentToolsDisplayProps) {
-  // Always fetch prompt tools - they exist regardless of conversation
-  const { data: promptTools = [], isLoading } = usePromptTools(
-    promptId ?? undefined,
+  // Fetch delegated agents for display info (name, description)
+  const { data: delegatedAgents = [], isLoading: isLoadingAgents } =
+    useAgentDelegations(agentId);
+
+  // Fetch all profile tools to get delegation tool IDs
+  const { data: profileTools = [], isLoading: isLoadingTools } =
+    useProfileToolsWithIds(agentId);
+
+  // Filter for delegation tools only (tools with name starting with agent__)
+  const delegationTools = useMemo(
+    () => profileTools.filter((tool) => isAgentTool(tool.name)),
+    [profileTools],
   );
 
-  const { data: allPrompts = [] } = usePrompts();
+  // Create a map from target agent ID to tool ID for quick lookup
+  const targetAgentToToolId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const tool of delegationTools) {
+      if (tool.delegateToAgentId) {
+        map.set(tool.delegateToAgentId, tool.id);
+      }
+    }
+    return map;
+  }, [delegationTools]);
 
   // Local pending actions for display (synced with localStorage)
   const [localPendingActions, setLocalPendingActions] = useState<
@@ -56,54 +113,36 @@ export function AgentToolsDisplay({
   // Load pending actions from localStorage on mount and when context changes
   useEffect(() => {
     if (!conversationId) {
-      const actions = getPendingActions(agentId, promptId);
+      const actions = getPendingActions(agentId);
       setLocalPendingActions(actions);
     } else {
       setLocalPendingActions([]);
     }
-  }, [agentId, promptId, conversationId]);
+  }, [agentId, conversationId]);
 
   // Fetch enabled tools for the conversation
   const { data: enabledToolsData } =
     useConversationEnabledTools(conversationId);
+  const enabledToolIds = enabledToolsData?.enabledToolIds ?? [];
+  const hasCustomSelection = enabledToolsData?.hasCustomSelection ?? false;
 
   // Mutation for updating enabled tools
   const updateEnabledTools = useUpdateConversationEnabledTools();
 
-  // Derived values
-  const enabledToolIds = enabledToolsData?.enabledToolIds ?? [];
-  const hasCustomSelection = enabledToolsData?.hasCustomSelection ?? false;
-
-  // Map promptTools to their display names
-  const agentToolsWithNames = useMemo(() => {
-    return promptTools.map((tool) => {
-      const promptName = tool.name.replace(/^agent__/, "");
-      const matchingPrompt = allPrompts.find(
-        (p) => p.name.toLowerCase().replace(/\s+/g, "_") === promptName,
-      );
-      return {
-        ...tool,
-        displayName: matchingPrompt?.name ?? promptName.replace(/_/g, " "),
-      };
-    });
-  }, [promptTools, allPrompts]);
-
-  // Default: all agent tools are enabled (matches backend behavior)
-  const defaultEnabledAgentToolIds = useMemo(
-    () => promptTools.map((t) => t.id),
-    [promptTools],
+  // Default enabled tools: all delegation tools are enabled by default
+  const defaultEnabledToolIds = useMemo(
+    () => delegationTools.map((t) => t.id),
+    [delegationTools],
   );
 
-  // Compute current enabled tool IDs:
-  // - If conversation exists with custom selection, use it
-  // - If no conversation, apply pending actions to defaults
+  // Compute current enabled tools (same pattern as ChatToolsDisplay)
   const currentEnabledToolIds = useMemo(() => {
     if (conversationId && hasCustomSelection) {
       return enabledToolIds;
     }
 
-    // Start with defaults (all agent tools enabled)
-    const baseIds = defaultEnabledAgentToolIds;
+    // Start with defaults (all delegation tools enabled)
+    const baseIds = defaultEnabledToolIds;
 
     // If no conversation, apply pending actions for display
     if (!conversationId && localPendingActions.length > 0) {
@@ -115,87 +154,122 @@ export function AgentToolsDisplay({
     conversationId,
     hasCustomSelection,
     enabledToolIds,
-    defaultEnabledAgentToolIds,
+    defaultEnabledToolIds,
     localPendingActions,
   ]);
 
-  // Check if a tool is enabled
-  const isToolEnabled = (toolId: string) => {
-    return currentEnabledToolIds.includes(toolId);
-  };
+  const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
-  // Handle toggle - works for both initial and conversation states
-  const handleToggle = (toolId: string) => {
-    const isCurrentlyEnabled = isToolEnabled(toolId);
+  // Check if a delegation is enabled (by target agent ID)
+  const isEnabled = useCallback(
+    (targetAgentId: string) => {
+      const toolId = targetAgentToToolId.get(targetAgentId);
+      if (!toolId) return true; // Default to enabled if tool not found
+      return enabledToolIdsSet.has(toolId);
+    },
+    [targetAgentToToolId, enabledToolIdsSet],
+  );
 
-    if (!conversationId) {
-      // No conversation yet - store in localStorage
-      const action: PendingToolAction = isCurrentlyEnabled
-        ? { type: "disable", toolId }
-        : { type: "enable", toolId };
-      addPendingAction(action, agentId, promptId);
-      setLocalPendingActions((prev) => [...prev, action]);
-      return;
-    }
+  // Handle toggling a delegation (by target agent ID)
+  const handleToggle = useCallback(
+    (targetAgentId: string) => {
+      const toolId = targetAgentToToolId.get(targetAgentId);
+      if (!toolId) return;
 
-    // Has conversation - update directly
-    let newEnabledToolIds: string[];
-    if (isCurrentlyEnabled) {
-      newEnabledToolIds = enabledToolIds.filter((id) => id !== toolId);
-    } else {
-      newEnabledToolIds = [...enabledToolIds, toolId];
-    }
+      const currentlyEnabled = enabledToolIdsSet.has(toolId);
 
-    updateEnabledTools.mutate({
+      if (!conversationId) {
+        // Store in localStorage and update local state
+        const action: PendingToolAction = currentlyEnabled
+          ? { type: "disable", toolId }
+          : { type: "enable", toolId };
+        addPendingAction(action, agentId);
+        setLocalPendingActions((prev) => [...prev, action]);
+        return;
+      }
+
+      // Update via API
+      const newEnabledToolIds = currentlyEnabled
+        ? currentEnabledToolIds.filter((id) => id !== toolId)
+        : [...currentEnabledToolIds, toolId];
+
+      updateEnabledTools.mutateAsync({
+        conversationId,
+        toolIds: newEnabledToolIds,
+      });
+    },
+    [
+      targetAgentToToolId,
+      enabledToolIdsSet,
       conversationId,
-      toolIds: newEnabledToolIds,
-    });
-  };
+      agentId,
+      currentEnabledToolIds,
+      updateEnabledTools,
+    ],
+  );
 
-  if (isLoading || agentToolsWithNames.length === 0) {
+  const isLoading = isLoadingAgents || isLoadingTools;
+
+  if (isLoading || delegatedAgents.length === 0) {
     return null;
   }
 
   return (
-    <TooltipProvider>
-      <div className="flex flex-wrap items-center gap-2">
-        {agentToolsWithNames.map((tool) => {
-          const isEnabled = isToolEnabled(tool.id);
+    <div className="flex flex-wrap items-center gap-2">
+      {delegatedAgents.map((delegatedAgent) => {
+        const enabled = isEnabled(delegatedAgent.id);
 
-          return (
-            <Tooltip key={tool.id}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
+        return (
+          <HoverCard key={delegatedAgent.id} openDelay={200} closeDelay={100}>
+            <HoverCardTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-7 px-2 gap-1.5 text-xs",
+                  !enabled && "opacity-60",
+                )}
+              >
+                <span
                   className={cn(
-                    "h-8 px-2 gap-1.5 text-xs",
-                    !isEnabled && "opacity-60",
+                    "h-2 w-2 rounded-full",
+                    enabled ? "bg-green-500" : "bg-red-500",
                   )}
-                  onClick={() => handleToggle(tool.id)}
-                >
-                  <span
-                    className={cn(
-                      "h-2 w-2 rounded-full",
-                      isEnabled ? "bg-green-500" : "bg-red-500",
-                    )}
+                />
+                <Bot className="h-3 w-3" />
+                <span>{delegatedAgent.name}</span>
+              </Button>
+            </HoverCardTrigger>
+            <HoverCardContent className="w-80" align="start">
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold">{delegatedAgent.name}</h4>
+                {delegatedAgent.description && (
+                  <ExpandableText
+                    text={delegatedAgent.description}
+                    maxLines={2}
+                    className="text-xs text-muted-foreground"
                   />
-                  <Bot className="h-3 w-3" />
-                  <span>{tool.displayName}</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  {isEnabled
-                    ? `Click to disable ${tool.displayName}`
-                    : `Click to enable ${tool.displayName}`}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          );
-        })}
-        {addAgentsButton}
-      </div>
-    </TooltipProvider>
+                )}
+                <label
+                  htmlFor={`chat-subagent-toggle-${delegatedAgent.id}`}
+                  className="flex items-center gap-3 cursor-pointer"
+                >
+                  <Checkbox
+                    id={`chat-subagent-toggle-${delegatedAgent.id}`}
+                    checked={enabled}
+                    onCheckedChange={() => handleToggle(delegatedAgent.id)}
+                  />
+                  <span className="text-sm font-medium">
+                    {enabled ? "Enabled" : "Enable"}
+                  </span>
+                </label>
+                <AgentToolsList agentId={delegatedAgent.id} />
+              </div>
+            </HoverCardContent>
+          </HoverCard>
+        );
+      })}
+      {addAgentsButton}
+    </div>
   );
 }

@@ -42,7 +42,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAutoConfigurePolicies } from "@/lib/agent-tools.query";
-import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useBulkCallPolicyMutation,
   useBulkResultPolicyMutation,
@@ -115,7 +115,7 @@ export function AssignedToolsTable({
   const { data: resultPolicies } = useToolResultPolicies(
     initialData?.toolResultPolicies,
   );
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalogSuspense({
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
     initialData: initialData?.internalMcpCatalog,
   });
 
@@ -328,6 +328,7 @@ export function AssignedToolsTable({
 
     try {
       const result = await autoConfigureMutation.mutateAsync(toolIds);
+      if (!result) return;
 
       const successCount = result.results.filter(
         (r: { success: boolean }) => r.success,
@@ -520,12 +521,12 @@ export function AssignedToolsTable({
       },
       {
         id: "assignmentCount",
-        header: "Profiles",
+        header: "Assignments",
         cell: ({ row }) => {
           const count = row.original.assignmentCount;
           return (
             <Badge variant="outline" className="text-xs">
-              {count} {count === 1 ? "profile" : "profiles"}
+              {count} {count === 1 ? "assignment" : "assignments"}
             </Badge>
           );
         },
@@ -568,7 +569,7 @@ export function AssignedToolsTable({
 
           const currentAction = getCallPolicyActionFromPolicies(
             row.original.id,
-            invocationPolicies,
+            invocationPolicies ?? { byProfileToolId: {} },
           );
 
           return (
@@ -631,7 +632,7 @@ export function AssignedToolsTable({
 
           const resultAction = getResultPolicyActionFromPolicies(
             row.original.id,
-            resultPolicies,
+            resultPolicies ?? { byProfileToolId: {} },
           );
 
           const actionLabel =

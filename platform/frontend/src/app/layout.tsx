@@ -24,6 +24,7 @@ import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
+import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { Toaster } from "@/components/ui/sonner";
@@ -154,7 +155,7 @@ export default function RootLayout({
                     <WebsocketInitializer />
                     <SidebarProvider>
                       <AppSidebar />
-                      <main className="h-screen w-full flex flex-col bg-background min-w-0">
+                      <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
                         <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
                           <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
                         </header>
@@ -169,6 +170,7 @@ export default function RootLayout({
                       </main>
                       <Toaster />
                       <OnboardingDialogWrapper />
+                      <ConversationSearchProvider />
                     </SidebarProvider>
                   </WithAuthCheck>
                 </PostHogProviderWrapper>

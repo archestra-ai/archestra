@@ -114,10 +114,10 @@ class UserModel {
     userId: string,
     organizationId: string,
   ): Promise<Permissions> {
-    logger.debug(
-      { userId, organizationId },
-      "UserModel.getUserPermissions: fetching permissions",
-    );
+    // logger.debug(
+    //   { userId, organizationId },
+    //   "UserModel.getUserPermissions: fetching permissions",
+    // );
     // Get user's member record to find their role
     const memberRecord = await MemberModel.getByUserId(userId, organizationId);
 
@@ -133,10 +133,10 @@ class UserModel {
       memberRecord.role,
       organizationId,
     );
-    logger.debug(
-      { userId, organizationId, role: memberRecord.role },
-      "UserModel.getUserPermissions: completed",
-    );
+    // logger.debug(
+    //   { userId, organizationId, role: memberRecord.role },
+    //   "UserModel.getUserPermissions: completed",
+    // );
     return permissions;
   }
 

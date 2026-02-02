@@ -6,6 +6,7 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
+import { handleApiError } from "@/lib/utils";
 import McpRegistryClient from "./page.client";
 
 export const dynamic = "force-dynamic";
@@ -21,13 +22,21 @@ export default async function McpRegistryPage() {
 
   try {
     const headers = await getServerApiHeaders();
+    const [catalogResponse, serversResponse] = await Promise.all([
+      archestraApiSdk.getInternalMcpCatalog({ headers }),
+      archestraApiSdk.getMcpServers({ headers }),
+    ]);
+    if (catalogResponse.error) {
+      handleApiError(catalogResponse.error);
+    }
+    if (serversResponse.error) {
+      handleApiError(serversResponse.error);
+    }
     initialData = {
-      catalog:
-        (await archestraApiSdk.getInternalMcpCatalog({ headers })).data || [],
-      servers: (await archestraApiSdk.getMcpServers({ headers })).data || [],
+      catalog: catalogResponse.data || [],
+      servers: serversResponse.data || [],
     };
   } catch (error) {
-    console.error(error);
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
 

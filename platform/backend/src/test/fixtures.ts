@@ -8,6 +8,7 @@ import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
+  ChatApiKeyModel,
   InternalMcpCatalogModel,
   SessionModel,
   TeamModel,
@@ -20,6 +21,7 @@ import type {
   AgentTool,
   InsertAccount,
   InsertAgent,
+  InsertChatApiKey,
   InsertConversation,
   InsertInteraction,
   InsertInternalMcpCatalog,
@@ -53,6 +55,7 @@ interface TestFixtures {
   makeTeam: typeof makeTeam;
   makeTeamMember: typeof makeTeamMember;
   makeAgent: typeof makeAgent;
+  makeInternalAgent: typeof makeInternalAgent;
   makeTool: typeof makeTool;
   makeAgentTool: typeof makeAgentTool;
   makeToolPolicy: typeof makeToolPolicy;
@@ -68,6 +71,7 @@ interface TestFixtures {
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
+  makeChatApiKey: typeof makeChatApiKey;
   makeSsoProvider: typeof makeSsoProvider;
   seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
 }
@@ -169,16 +173,39 @@ async function makeTeamMember(
 }
 
 /**
- * Creates a test agent using the Agent model
+ * Creates a test agent using the Agent model.
+ * Auto-creates an organization if not provided.
  */
 async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
+  // Auto-create organization if not provided
+  let organizationId = overrides.organizationId;
+  if (!organizationId) {
+    const org = await makeOrganization();
+    organizationId = org.id;
+  }
+
   const defaults: InsertAgent = {
     name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
+    organizationId,
     teams: [],
     labels: [],
   };
   return await AgentModel.create({
     ...defaults,
+    ...overrides,
+  });
+}
+
+/**
+ * Creates an internal test agent (with prompts/chat capabilities).
+ */
+async function makeInternalAgent(
+  overrides: Partial<InsertAgent> = {},
+): Promise<Agent> {
+  return await makeAgent({
+    agentType: "agent",
+    systemPrompt: "You are a test agent",
+    userPrompt: "{{message}}",
     ...overrides,
   });
 }
@@ -336,7 +363,7 @@ async function makeMember(
  */
 async function makeMcpServer(
   overrides: Partial<
-    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId">
+    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "teamId">
   > = {},
 ) {
   // Create a catalog if catalogId is not provided
@@ -622,6 +649,29 @@ async function makeSecret(
 }
 
 /**
+ * Creates a test chat API key in the database.
+ * Used for testing features that require LLM API keys (e.g., auto-policy configuration).
+ */
+async function makeChatApiKey(
+  organizationId: string,
+  secretId: string,
+  overrides: Partial<
+    Pick<InsertChatApiKey, "name" | "provider" | "scope" | "userId" | "teamId">
+  > = {},
+) {
+  return await ChatApiKeyModel.create({
+    organizationId,
+    secretId,
+    name:
+      overrides.name ?? `Test API Key ${crypto.randomUUID().substring(0, 8)}`,
+    provider: overrides.provider ?? "anthropic",
+    scope: overrides.scope ?? "org_wide",
+    userId: overrides.userId ?? null,
+    teamId: overrides.teamId ?? null,
+  });
+}
+
+/**
  * Creates a test SSO provider in the database.
  * Bypasses Better Auth API for test simplicity.
  */
@@ -717,6 +767,9 @@ export const test = baseTest.extend<TestFixtures>({
   makeAgent: async ({}, use) => {
     await use(makeAgent);
   },
+  makeInternalAgent: async ({}, use) => {
+    await use(makeInternalAgent);
+  },
   makeTool: async ({}, use) => {
     await use(makeTool);
   },
@@ -761,6 +814,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSecret: async ({}, use) => {
     await use(makeSecret);
+  },
+  makeChatApiKey: async ({}, use) => {
+    await use(makeChatApiKey);
   },
   makeSsoProvider: async ({}, use) => {
     await use(makeSsoProvider);

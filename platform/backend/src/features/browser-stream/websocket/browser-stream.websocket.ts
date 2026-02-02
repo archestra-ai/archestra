@@ -27,9 +27,6 @@ export class BrowserStreamSocketClientContext {
     WebSocket,
     BrowserStreamSubscription
   >();
-  // Track which agent is subscribed to by which WebSocket (agentId -> WebSocket)
-  // This ensures only one subscription per agent at a time to prevent tab flickering
-  private agentSubscriptions = new Map<string, WebSocket>();
   private sendToClient: BrowserStreamClientContextParams["sendToClient"];
   private screenshotIntervalMs = SCREENSHOT_INTERVAL_MS;
 
@@ -164,7 +161,6 @@ export class BrowserStreamSocketClientContext {
     for (const ws of this.browserSubscriptions.keys()) {
       this.unsubscribeBrowserStream(ws);
     }
-    this.agentSubscriptions.clear();
   }
 
   stop(): void {
@@ -183,11 +179,6 @@ export class BrowserStreamSocketClientContext {
     if (subscription) {
       clearInterval(subscription.intervalId);
       this.browserSubscriptions.delete(ws);
-      // Clean up agent subscription tracking
-      const currentAgentWs = this.agentSubscriptions.get(subscription.agentId);
-      if (currentAgentWs === ws) {
-        this.agentSubscriptions.delete(subscription.agentId);
-      }
       logger.info(
         {
           conversationId: subscription.conversationId,
@@ -235,22 +226,33 @@ export class BrowserStreamSocketClientContext {
       return;
     }
 
-    // Unsubscribe any OTHER WebSocket that's subscribed to this agent's browser
-    // This prevents multiple subscriptions competing for the same browser tabs,
-    // which causes flickering when different conversations select different tabs
-    const existingAgentWs = this.agentSubscriptions.get(agentId);
-    if (existingAgentWs && existingAgentWs !== ws) {
-      const existingSubscription =
-        this.browserSubscriptions.get(existingAgentWs);
+    // Unsubscribe any OTHER WebSocket that's subscribed to a DIFFERENT conversation for this agent
+    // This prevents multiple conversations competing for the same browser (tab switching/flickering)
+    // Same conversation can have multiple viewers (e.g., side panel + new tab) - those are fine
+    const subscriptionsToUnsubscribe: WebSocket[] = [];
+    for (const [
+      existingWs,
+      existingSub,
+    ] of this.browserSubscriptions.entries()) {
+      if (
+        existingSub.agentId === agentId &&
+        existingSub.conversationId !== conversationId &&
+        existingWs !== ws
+      ) {
+        subscriptionsToUnsubscribe.push(existingWs);
+      }
+    }
+    for (const existingWs of subscriptionsToUnsubscribe) {
+      const existingSub = this.browserSubscriptions.get(existingWs);
       logger.info(
         {
           agentId,
-          oldConversationId: existingSubscription?.conversationId,
+          oldConversationId: existingSub?.conversationId,
           newConversationId: conversationId,
         },
-        "Unsubscribing previous browser stream for agent (new subscription taking over)",
+        "Unsubscribing previous browser stream for agent (new conversation taking over)",
       );
-      this.unsubscribeBrowserStream(existingAgentWs);
+      this.unsubscribeBrowserStream(existingWs);
     }
 
     logger.info(
@@ -308,8 +310,6 @@ export class BrowserStreamSocketClientContext {
       intervalId,
       isSending: false,
     });
-    // Track which WebSocket is subscribed to this agent
-    this.agentSubscriptions.set(agentId, ws);
 
     void sendTick();
   }

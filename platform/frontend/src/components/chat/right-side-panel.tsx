@@ -157,7 +157,7 @@ export function RightSidePanel({
         <div
           className="flex-shrink-0"
           style={{
-            height: isArtifactOpen ? "50%" : "100%",
+            height: "50%",
           }}
         >
           <BrowserPanel

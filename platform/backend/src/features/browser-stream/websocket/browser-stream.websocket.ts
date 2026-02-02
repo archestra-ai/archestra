@@ -3,6 +3,7 @@ import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS } from "ws";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
+import { browserStateManager } from "@/features/browser-stream/services/browser-stream.state-manager";
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
 
@@ -122,6 +123,10 @@ export class BrowserStreamSocketClientContext {
 
       case "browser_navigate_back":
         await this.handleBrowserNavigateBack(ws, conversationId);
+        return true;
+
+      case "browser_navigate_forward":
+        await this.handleBrowserNavigateForward(ws, conversationId);
         return true;
 
       case "browser_click":
@@ -456,6 +461,59 @@ export class BrowserStreamSocketClientContext {
     }
   }
 
+  async handleBrowserNavigateForward(
+    ws: WebSocket,
+    conversationId: string,
+  ): Promise<void> {
+    const subscription = this.browserSubscriptions.get(ws);
+    if (!subscription || subscription.conversationId !== conversationId) {
+      this.sendToClient(ws, {
+        type: "browser_navigate_forward_result",
+        payload: {
+          conversationId,
+          success: false,
+          error: "Not subscribed to this conversation's browser stream",
+        },
+      });
+      return;
+    }
+
+    try {
+      const result = await browserStreamFeature.navigateForward(
+        subscription.agentId,
+        conversationId,
+        subscription.userContext,
+      );
+
+      this.sendToClient(ws, {
+        type: "browser_navigate_forward_result",
+        payload: {
+          conversationId,
+          success: result.success,
+          error: result.error,
+        },
+      });
+
+      if (result.success) {
+        await this.sendImmediateScreenshot(ws, conversationId);
+      }
+    } catch (error) {
+      logger.error(
+        { error, conversationId },
+        "Browser navigate forward failed",
+      );
+      this.sendToClient(ws, {
+        type: "browser_navigate_forward_result",
+        payload: {
+          conversationId,
+          success: false,
+          error:
+            error instanceof Error ? error.message : "Navigate forward failed",
+        },
+      });
+    }
+  }
+
   async handleBrowserClick(
     ws: WebSocket,
     conversationId: string,
@@ -675,6 +733,26 @@ export class BrowserStreamSocketClientContext {
       );
 
       if (result.screenshot) {
+        // Get navigation state for back/forward buttons
+        let canGoBack = false;
+        let canGoForward = false;
+
+        const stateResult = await browserStateManager.getOrLoad({
+          agentId,
+          userId: userContext.userId,
+          conversationId,
+        });
+
+        if (stateResult.tag === "Ok" && stateResult.value) {
+          const state = stateResult.value;
+          const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
+          if (activeTab) {
+            canGoBack = activeTab.historyCursor > 0;
+            canGoForward =
+              activeTab.historyCursor < activeTab.history.length - 1;
+          }
+        }
+
         this.sendToClient(ws, {
           type: "browser_screenshot",
           payload: {
@@ -683,6 +761,8 @@ export class BrowserStreamSocketClientContext {
             url: result.url,
             viewportWidth: result.viewportWidth,
             viewportHeight: result.viewportHeight,
+            canGoBack,
+            canGoForward,
           },
         });
       } else {

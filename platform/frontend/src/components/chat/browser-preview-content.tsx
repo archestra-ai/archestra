@@ -6,6 +6,7 @@ import {
 } from "@shared";
 import {
   ArrowLeft,
+  ArrowRight,
   ChevronDown,
   ChevronUp,
   Globe,
@@ -59,8 +60,11 @@ export function BrowserPreviewContent({
     isNavigating,
     isInteracting,
     error,
+    canGoBack,
+    canGoForward,
     navigate,
     navigateBack,
+    navigateForward,
     click,
     type,
     pressKey,
@@ -294,10 +298,19 @@ export function BrowserPreviewContent({
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={navigateBack}
-            disabled={isNavigating || !isConnected}
-            title="Go back"
+            disabled={isNavigating || !isConnected || !canGoBack}
           >
             <ArrowLeft className="h-3 w-3" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={navigateForward}
+            disabled={isNavigating || !isConnected || !canGoForward}
+          >
+            <ArrowRight className="h-3 w-3" />
           </Button>
           <Input
             type="text"

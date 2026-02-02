@@ -69,6 +69,8 @@ test.describe("MCP Install", () => {
       .getByRole("textbox", { name: "Search servers by name..." })
       .fill("context7");
     await adminPage.waitForLoadState("networkidle");
+    // Timeout needed so filter is applied on UI
+    await adminPage.waitForTimeout(3_000);
 
     // wait for the server to be visible and add to registry
     await adminPage

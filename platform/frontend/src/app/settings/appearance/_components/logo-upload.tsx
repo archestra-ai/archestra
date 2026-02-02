@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { toast } from "sonner";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useUpdateOrganization } from "@/lib/organization.query";
 
@@ -33,13 +34,13 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
 
       // Validate file type
       if (file.type !== "image/png") {
-        alert("Please upload a PNG file");
+        toast.error("Please upload a PNG file");
         return;
       }
 
       // Validate file size (2MB)
       if (file.size > 2 * 1024 * 1024) {
-        alert("File size must be less than 2MB");
+        toast.error("File size must be less than 2MB");
         return;
       }
 

@@ -205,9 +205,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await manageToolsButton.click();
 
   // Wait for dialog to open
-  await page
-    .getByRole("dialog")
-    .waitFor({ state: "visible", timeout: 30_000 });
+  await page.getByRole("dialog").waitFor({ state: "visible", timeout: 30_000 });
   await page.waitForLoadState("networkidle");
 
   // The new McpAssignmentsDialog shows profile pills - click on "Default MCP Gateway" to open popover

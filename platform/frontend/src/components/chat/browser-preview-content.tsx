@@ -147,9 +147,14 @@ export function BrowserPreviewContent({
   );
 
   return (
-    <div className={cn("flex flex-col bg-background h-full", className)}>
+    <div
+      className={cn(
+        "flex flex-col bg-background h-full overflow-hidden",
+        className,
+      )}
+    >
       {/* Header */}
-      <div className="flex flex-col gap-2 p-2 bg-muted/50 border-b">
+      <div className="flex flex-col px-2 py-3 bg-muted/50 border-b">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Globe className="h-4 w-4 text-muted-foreground" />
@@ -282,9 +287,9 @@ export function BrowserPreviewContent({
             {headerActions}
           </div>
         </div>
-
+        <div className="border-b pb-3 w-[120%] -translate-x-[10%] translate-y-[-1px]" />
         {/* URL input */}
-        <form onSubmit={handleNavigate} className="flex gap-2">
+        <form onSubmit={handleNavigate} className="flex gap-2 mt-2">
           <Button
             type="button"
             variant="outline"

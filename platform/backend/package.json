@@ -32,6 +32,7 @@
     "@ai-sdk/anthropic": "^3.0.9",
     "@ai-sdk/cerebras": "^2.0.5",
     "@ai-sdk/google": "^3.0.6",
+    "@ai-sdk/groq": "^2.0.21",
     "@ai-sdk/openai": "^3.0.7",
     "@anthropic-ai/sdk": "^0.71.2",
     "@anthropic-ai/tokenizer": "^0.0.4",

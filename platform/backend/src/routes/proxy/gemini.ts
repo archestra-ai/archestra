@@ -17,6 +17,7 @@ import type {
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableGenAI,
@@ -169,23 +170,25 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     // Create GoogleGenAI client - supports both Vertex AI (ADC) and API key modes
     const { "x-goog-api-key": geminiApiKey } = headers;
     let genAIClient: GoogleGenAI;
-    try {
-      genAIClient = createGoogleGenAIClient(geminiApiKey, "[GeminiProxy]");
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to initialize Gemini client";
-      logger.error(
-        { error },
-        "[GeminiProxy] Failed to create GoogleGenAI client",
-      );
-      return reply.status(400).send({
-        error: {
-          message,
-          type: "invalid_request_error",
-        },
-      });
+
+    if (config.benchmark.mockMode) {
+      // Use mock client in benchmark/test mode
+      const { MockGoogleGenAIClient } = await import("./mock-gemini-client");
+      genAIClient = new MockGoogleGenAIClient() as unknown as GoogleGenAI;
+    } else {
+      try {
+        genAIClient = createGoogleGenAIClient(geminiApiKey, "[GeminiProxy]");
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to initialize Gemini client";
+        logger.error(
+          { error },
+          "[GeminiProxy] Failed to create GoogleGenAI client",
+        );
+        throw new ApiError(400, message);
+      }
     }
 
     const genAI = getObservableGenAI(

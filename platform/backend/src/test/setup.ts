@@ -27,6 +27,9 @@ process.env.ARCHESTRA_SENTRY_ENVIRONMENT = "test";
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
 
+// Set dummy database URL for tests (actual DB is PGlite in-memory)
+process.env.ARCHESTRA_DATABASE_URL = "postgres://postgres:postgres@localhost:5432/archestra";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Module-level variables to persist across tests within a file

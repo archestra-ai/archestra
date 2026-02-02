@@ -62,6 +62,8 @@ export const ollamaProxyRoutes = config.llm.ollama.useV2Routes
   : ollamaProxyRoutesV2; // Ollama only has V2 since it was added after the unified handler
 // Zhipu AI proxy routes - V2 only (new provider, no legacy v1)
 export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
+// Groq proxy routes - V1 only
+export { default as groqProxyRoutes } from "./proxy/groq";
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

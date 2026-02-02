@@ -88,7 +88,10 @@ async function getSmartDefaultModel(
           case "gemini":
             return { model: "gemini-2.5-pro", provider: "gemini" };
           case "openai":
+          case "openai":
             return { model: "gpt-4o", provider: "openai" };
+          case "groq":
+            return { model: "llama-3.3-70b-versatile", provider: "groq" };
         }
       }
     }
@@ -103,6 +106,9 @@ async function getSmartDefaultModel(
   }
   if (config.chat.gemini.apiKey) {
     return { model: "gemini-2.5-pro", provider: "gemini" };
+  }
+  if (config.chat.groq.apiKey) {
+    return "llama-3.3-70b-versatile";
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key

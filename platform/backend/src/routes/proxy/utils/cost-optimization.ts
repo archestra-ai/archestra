@@ -24,6 +24,7 @@ type ProviderMessages = {
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
+  groq: OpenAi.Types.ChatCompletionsRequest["messages"]; // Groq uses OpenAI format
 };
 
 /**

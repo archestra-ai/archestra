@@ -256,6 +256,24 @@ export const createFastifyInstance = () =>
         });
       }
 
+      // Handle Fastify validation errors (Zod)
+      if ("validation" in error) {
+        const statusCode = 400;
+        const message = error.message || "Validation error";
+
+        this.log.info(
+          { error: message, statusCode, validation: (error as any).validation },
+          "HTTP 400 validation error occurred",
+        );
+
+        return reply.status(statusCode).send({
+          error: {
+            message,
+            type: "api_validation_error",
+          },
+        });
+      }
+
       // Handle standard Error objects
       const message = error.message || "Internal server error";
       const statusCode = 500;

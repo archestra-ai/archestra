@@ -9,7 +9,7 @@ import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { modelSyncService } from "@/features/browser-stream/services/model-sync";
+import { modelSyncService } from "@/services/model-sync";
 import logger from "@/logging";
 import {
   AgentModel,

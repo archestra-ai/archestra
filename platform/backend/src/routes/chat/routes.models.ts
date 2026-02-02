@@ -7,8 +7,8 @@ import {
 } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
-import { modelSyncService } from "@/features/browser-stream/services/model-sync";
-import { systemKeyManager } from "@/features/browser-stream/services/system-key-manager";
+import { modelSyncService } from "@/services/model-sync";
+import { systemKeyManager } from "@/services/system-key-manager";
 import logger from "@/logging";
 import {
   ApiKeyModelModel,

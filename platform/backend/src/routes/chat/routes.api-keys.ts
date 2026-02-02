@@ -5,7 +5,7 @@ import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { modelSyncService } from "@/features/browser-stream/services/model-sync";
+import { modelSyncService } from "@/services/model-sync";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
 import { testProviderApiKey } from "@/routes/chat/routes.models";

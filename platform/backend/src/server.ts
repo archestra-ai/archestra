@@ -46,7 +46,7 @@ import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
-import { systemKeyManager } from "@/features/browser-stream/services/system-key-manager";
+import { systemKeyManager } from "@/services/system-key-manager";
 import {
   cleanupKnowledgeGraphProvider,
   initializeKnowledgeGraphProvider,

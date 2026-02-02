@@ -4,7 +4,7 @@ import { z } from "zod";
 import {
   autoReinstallServer,
   requiresNewUserInputForReinstall,
-} from "@/features/browser-stream/services/mcp-reinstall";
+} from "@/services/mcp-reinstall";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";

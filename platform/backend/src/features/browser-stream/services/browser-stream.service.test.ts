@@ -75,8 +75,12 @@ describe("BrowserStreamService URL handling", () => {
       userContext,
     );
 
-    // Verify getCurrentUrl was called with correct args
-    expect(getCurrentUrlSpy).toHaveBeenCalledWith(agentId, userContext);
+    // Verify getCurrentUrl was called with correct args (including conversationId for per-conversation browser)
+    expect(getCurrentUrlSpy).toHaveBeenCalledWith(
+      agentId,
+      userContext,
+      conversationId,
+    );
 
     // Verify the URL in result is from getCurrentUrl, not from screenshot response
     expect(result.url).toBe("https://correct-page.example.com/path");

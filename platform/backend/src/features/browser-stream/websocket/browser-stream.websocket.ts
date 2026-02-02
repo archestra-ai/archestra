@@ -28,6 +28,9 @@ export class BrowserStreamSocketClientContext {
     WebSocket,
     BrowserStreamSubscription
   >();
+  // Track which agent is subscribed to by which WebSocket (agentId -> WebSocket)
+  // This ensures only one subscription per agent at a time to prevent tab flickering
+  private agentSubscriptions = new Map<string, WebSocket>();
   private sendToClient: BrowserStreamClientContextParams["sendToClient"];
   private screenshotIntervalMs = SCREENSHOT_INTERVAL_MS;
 
@@ -162,6 +165,7 @@ export class BrowserStreamSocketClientContext {
     for (const ws of this.browserSubscriptions.keys()) {
       this.unsubscribeBrowserStream(ws);
     }
+    this.agentSubscriptions.clear();
   }
 
   stop(): void {
@@ -180,8 +184,16 @@ export class BrowserStreamSocketClientContext {
     if (subscription) {
       clearInterval(subscription.intervalId);
       this.browserSubscriptions.delete(ws);
+      // Clean up agent subscription tracking
+      const currentAgentWs = this.agentSubscriptions.get(subscription.agentId);
+      if (currentAgentWs === ws) {
+        this.agentSubscriptions.delete(subscription.agentId);
+      }
       logger.info(
-        { conversationId: subscription.conversationId },
+        {
+          conversationId: subscription.conversationId,
+          agentId: subscription.agentId,
+        },
         "Browser stream client unsubscribed",
       );
     }
@@ -196,7 +208,7 @@ export class BrowserStreamSocketClientContext {
       userIsProfileAdmin: boolean;
     },
   ): Promise<void> {
-    // Unsubscribe from any existing stream first
+    // Unsubscribe from any existing stream first (for this WebSocket)
     this.unsubscribeBrowserStream(ws);
 
     // Get agentId from conversation with user/org scoping
@@ -222,6 +234,24 @@ export class BrowserStreamSocketClientContext {
         },
       });
       return;
+    }
+
+    // Unsubscribe any OTHER WebSocket that's subscribed to this agent's browser
+    // This prevents multiple subscriptions competing for the same browser tabs,
+    // which causes flickering when different conversations select different tabs
+    const existingAgentWs = this.agentSubscriptions.get(agentId);
+    if (existingAgentWs && existingAgentWs !== ws) {
+      const existingSubscription =
+        this.browserSubscriptions.get(existingAgentWs);
+      logger.info(
+        {
+          agentId,
+          oldConversationId: existingSubscription?.conversationId,
+          newConversationId: conversationId,
+        },
+        "Unsubscribing previous browser stream for agent (new subscription taking over)",
+      );
+      this.unsubscribeBrowserStream(existingAgentWs);
     }
 
     logger.info(
@@ -279,6 +309,8 @@ export class BrowserStreamSocketClientContext {
       intervalId,
       isSending: false,
     });
+    // Track which WebSocket is subscribed to this agent
+    this.agentSubscriptions.set(agentId, ws);
 
     void sendTick();
   }

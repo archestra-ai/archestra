@@ -372,6 +372,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       return { success: false, error: "Failed to connect to MCP Gateway" };
@@ -1178,6 +1179,7 @@ export class BrowserStreamService {
   private async resizeBrowser(
     agentId: string,
     userContext: BrowserUserContext,
+    conversationId?: string,
     width: number = DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
     height: number = DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   ): Promise<void> {
@@ -1194,6 +1196,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       return;
@@ -1253,6 +1256,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
@@ -1260,7 +1264,7 @@ export class BrowserStreamService {
 
     // Resize browser to ensure proper viewport dimensions before navigation
     // This ensures the page loads with the correct viewport from the start
-    await this.resizeBrowser(agentId, userContext);
+    await this.resizeBrowser(agentId, userContext, conversationId);
 
     logger.info({ agentId, toolName, url }, "Navigating browser via MCP");
 
@@ -1274,7 +1278,8 @@ export class BrowserStreamService {
       throw new ApiError(500, errorText || "Navigation failed");
     }
 
-    const resolvedUrl = (await this.getCurrentUrl(agentId, userContext)) ?? url;
+    const resolvedUrl =
+      (await this.getCurrentUrl(agentId, userContext, conversationId)) ?? url;
 
     // Update history in state
     const loadResult = await browserStateManager.getOrLoad({
@@ -1354,6 +1359,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
@@ -1499,6 +1505,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       await browserStateManager.clear({
@@ -1876,7 +1883,8 @@ export class BrowserStreamService {
       return;
     }
 
-    const resolvedUrl = (await this.getCurrentUrl(agentId, userContext)) ?? url;
+    const resolvedUrl =
+      (await this.getCurrentUrl(agentId, userContext, conversationId)) ?? url;
 
     // Apply navigation to update history
     const navigateResult = applyNavigate({
@@ -2032,6 +2040,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
 
     if (!client) {
@@ -2039,7 +2048,7 @@ export class BrowserStreamService {
     }
 
     // Always use fixed viewport dimensions for consistent page rendering
-    await this.resizeBrowser(agentId, userContext);
+    await this.resizeBrowser(agentId, userContext, conversationId);
 
     logScreenshotInfo(
       { agentId, conversationId, toolName },
@@ -2087,7 +2096,7 @@ export class BrowserStreamService {
 
     // Get URL reliably using browser_evaluate instead of extracting from screenshot response
     // This ensures the URL matches the page content shown in the screenshot
-    const url = await this.getCurrentUrl(agentId, userContext);
+    const url = await this.getCurrentUrl(agentId, userContext, conversationId);
 
     return {
       screenshot,
@@ -2390,6 +2399,7 @@ export class BrowserStreamService {
   async getCurrentUrl(
     agentId: string,
     userContext: BrowserUserContext,
+    conversationId?: string,
   ): Promise<string | undefined> {
     const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
@@ -2400,6 +2410,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       return undefined;
@@ -2463,13 +2474,14 @@ export class BrowserStreamService {
 
     // Ensure viewport matches screenshot dimensions for accurate coordinate clicks
     if (x !== undefined && y !== undefined) {
-      await this.resizeBrowser(agentId, userContext);
+      await this.resizeBrowser(agentId, userContext, conversationId);
     }
 
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
@@ -2586,6 +2598,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
@@ -2692,6 +2705,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
@@ -2747,6 +2761,7 @@ export class BrowserStreamService {
       agentId,
       userContext.userId,
       userContext.userIsProfileAdmin,
+      conversationId, // Per-conversation browser instance
     );
     if (!client) {
       throw new ApiError(500, "Failed to connect to MCP Gateway");

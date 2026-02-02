@@ -355,7 +355,7 @@ export function BrowserPreviewContent({
               ref={imageRef}
               src={screenshot}
               alt="Browser screenshot"
-              className="block w-full h-full object-contain"
+              className="block w-full h-full object-contain object-top"
             />
             {/* Clickable overlay */}
             {/* biome-ignore lint/a11y/useSemanticElements: Need div for absolute positioning overlay */}

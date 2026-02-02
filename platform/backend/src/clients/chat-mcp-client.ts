@@ -89,9 +89,18 @@ const toolCache = new LRUCacheManager<Record<string, Tool>>({
 });
 
 /**
- * Generate cache key from agentId and userId
+ * Generate cache key from agentId, userId, and optionally conversationId
+ * When conversationId is provided (for browser operations), each conversation
+ * gets its own MCP client, which means its own browser instance in Playwright.
  */
-function getCacheKey(agentId: string, userId: string): string {
+function getCacheKey(
+  agentId: string,
+  userId: string,
+  conversationId?: string,
+): string {
+  if (conversationId) {
+    return `${agentId}:${userId}:${conversationId}`;
+  }
   return `${agentId}:${userId}`;
 }
 
@@ -327,14 +336,18 @@ export function clearChatMcpClient(agentId: string): void {
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
  * @param userIsProfileAdmin - Whether the user is a profile admin
+ * @param conversationId - Optional conversation ID for browser-specific operations.
+ *                         When provided, creates a separate MCP client per conversation,
+ *                         which gives each conversation its own browser instance.
  * @returns MCP Client connected to the gateway, or null if connection fails
  */
 export async function getChatMcpClient(
   agentId: string,
   userId: string,
   userIsProfileAdmin: boolean,
+  conversationId?: string,
 ): Promise<Client | null> {
-  const cacheKey = getCacheKey(agentId, userId);
+  const cacheKey = getCacheKey(agentId, userId, conversationId);
 
   // Check cache first
   const cachedClient = clientCache.get(cacheKey);

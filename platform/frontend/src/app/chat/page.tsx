@@ -1,16 +1,9 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import {
-  Bot,
-  Edit,
-  Eye,
-  EyeOff,
-  FileText,
-  Globe,
-  PanelRightClose,
-  Plus,
-} from "lucide-react";
+
+import { Bot, Edit, FileText, Globe, Plus, Wrench } from "lucide-react";
+
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -78,6 +71,13 @@ import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
+const LocalStorageKeys = {
+  hideToolCalls: "archestra-chat-hide-tool-calls",
+  artifactOpen: "archestra-chat-artifact-open",
+  browserOpen: "archestra-chat-browser-open",
+  selectedChatModel: "archestra-chat-selected-chat-model",
+} as const;
+
 export default function ChatPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -95,7 +95,7 @@ export default function ChatPage() {
   const [hideToolCalls, setHideToolCalls] = useState(() => {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
-      return localStorage.getItem("archestra-chat-hide-tool-calls") === "true";
+      return localStorage.getItem(LocalStorageKeys.hideToolCalls) === "true";
     }
     return false;
   });
@@ -120,8 +120,13 @@ export default function ChatPage() {
     internalMcpCatalog: ["create"],
   });
 
-  // State for browser panel
-  const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(false);
+  // State for browser panel - initialize from localStorage
+  const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(LocalStorageKeys.browserOpen) === "true";
+    }
+    return false;
+  });
 
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =
@@ -180,7 +185,9 @@ export default function ChatPage() {
       if (allModels.length === 0) return;
 
       // Try to restore from localStorage
-      const savedModelId = localStorage.getItem("selected-chat-model");
+      const savedModelId = localStorage.getItem(
+        LocalStorageKeys.selectedChatModel,
+      );
       if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
         setInitialModel(savedModelId);
         return;
@@ -202,7 +209,7 @@ export default function ChatPage() {
   // Save model to localStorage when changed
   const handleInitialModelChange = useCallback((modelId: string) => {
     setInitialModel(modelId);
-    localStorage.setItem("selected-chat-model", modelId);
+    localStorage.setItem(LocalStorageKeys.selectedChatModel, modelId);
   }, []);
 
   // Handle provider change from API key selector - auto-select a model from new provider
@@ -400,17 +407,32 @@ export default function ChatPage() {
     : (initialAgentId ?? undefined);
 
   // Check if Playwright MCP is available for browser panel
-  const { hasPlaywrightMcp } = useHasPlaywrightMcpTools(browserToolsAgentId);
+  const { hasPlaywrightMcp, isLoading: isLoadingPlaywrightMcp } =
+    useHasPlaywrightMcpTools(browserToolsAgentId);
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
 
   // Close browser panel when switching to a profile without Playwright tools
   useEffect(() => {
-    if (!hasPlaywrightMcp && isBrowserPanelOpen) {
+    // Only close if we have an agentId and tools have finished loading
+    // When agentId is undefined, the query is disabled and isLoading is false,
+    // so we must also check that browserToolsAgentId exists
+    if (
+      browserToolsAgentId &&
+      !isLoadingPlaywrightMcp &&
+      !hasPlaywrightMcp &&
+      isBrowserPanelOpen
+    ) {
       setIsBrowserPanelOpen(false);
+      localStorage.setItem(LocalStorageKeys.browserOpen, "false");
     }
-  }, [hasPlaywrightMcp, isBrowserPanelOpen]);
+  }, [
+    browserToolsAgentId,
+    hasPlaywrightMcp,
+    isBrowserPanelOpen,
+    isLoadingPlaywrightMcp,
+  ]);
 
   // Clear MCP Gateway sessions when opening a NEW conversation
   useEffect(() => {
@@ -453,7 +475,7 @@ export default function ChatPage() {
   const toggleHideToolCalls = useCallback(() => {
     const newValue = !hideToolCalls;
     setHideToolCalls(newValue);
-    localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
+    localStorage.setItem(LocalStorageKeys.hideToolCalls, String(newValue));
   }, [hideToolCalls]);
 
   // Persist artifact panel state
@@ -748,6 +770,19 @@ export default function ChatPage() {
     });
   };
 
+  // Persist browser panel state
+  const toggleBrowserPanel = useCallback(() => {
+    const newValue = !isBrowserPanelOpen;
+    setIsBrowserPanelOpen(newValue);
+    localStorage.setItem(LocalStorageKeys.browserOpen, String(newValue));
+  }, [isBrowserPanelOpen]);
+
+  // Close browser panel handler (also persists to localStorage)
+  const closeBrowserPanel = useCallback(() => {
+    setIsBrowserPanelOpen(false);
+    localStorage.setItem(LocalStorageKeys.browserOpen, "false");
+  }, []);
+
   // Handle initial agent change (when no conversation exists)
   const handleInitialAgentChange = useCallback((agentId: string) => {
     setInitialAgentId(agentId);
@@ -1024,50 +1059,42 @@ export default function ChatPage() {
                   )}
                 </div>
               </div>
-              {/* Right side - controls stay fixed in first row */}
+              {/* Right side - show/hide controls */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {hasPlaywrightMcp && isBrowserStreamingEnabled && (
-                  <Button
-                    variant={isBrowserPanelOpen ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
-                    className="text-xs"
-                  >
-                    <Globe className="h-3 w-3 mr-1" />
-                    Browser
-                  </Button>
-                )}
+                <span className="text-xs text-muted-foreground">Show:</span>
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleArtifactPanel}
-                  className="text-xs"
-                >
-                  {isArtifactOpen ? (
-                    <PanelRightClose className="h-3 w-3 mr-1" />
-                  ) : (
-                    <FileText className="h-3 w-3 mr-1" />
-                  )}
-                  {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
-                </Button>
-                <Button
-                  variant="ghost"
+                  variant={!hideToolCalls ? "secondary" : "ghost"}
                   size="sm"
                   onClick={toggleHideToolCalls}
                   className="text-xs"
                 >
-                  {hideToolCalls ? (
-                    <>
-                      <Eye className="h-3 w-3 mr-1" />
-                      Show tool calls
-                    </>
-                  ) : (
-                    <>
-                      <EyeOff className="h-3 w-3 mr-1" />
-                      Hide tool calls
-                    </>
-                  )}
+                  <Wrench className="h-3 w-3 mr-1" />
+                  Tool calls
                 </Button>
+                <div className="w-px h-4 bg-border" />
+                <Button
+                  variant={isArtifactOpen ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={toggleArtifactPanel}
+                  className="text-xs"
+                >
+                  <FileText className="h-3 w-3 mr-1" />
+                  Artifact
+                </Button>
+                {hasPlaywrightMcp && isBrowserStreamingEnabled && (
+                  <>
+                    <div className="w-px h-4 bg-border" />
+                    <Button
+                      variant={isBrowserPanelOpen ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={toggleBrowserPanel}
+                      className="text-xs"
+                    >
+                      <Globe className="h-3 w-3 mr-1" />
+                      Browser
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1255,7 +1282,7 @@ export default function ChatPage() {
         isBrowserOpen={
           isBrowserPanelOpen && isBrowserStreamingEnabled && hasPlaywrightMcp
         }
-        onBrowserClose={() => setIsBrowserPanelOpen(false)}
+        onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
       />
 

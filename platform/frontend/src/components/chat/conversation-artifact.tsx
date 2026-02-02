@@ -334,10 +334,10 @@ export function ConversationArtifactPanel({
       )}
 
       {/* Panel header */}
-      <div className="border-b px-4 py-2 flex items-center justify-between">
+      <div className="border-b px-2 pr-1 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-medium text-sm">Conversation Artifact</h3>
+          <h3 className="font-medium text-xs">Conversation Artifact</h3>
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -372,7 +372,7 @@ export function ConversationArtifactPanel({
 
       {/* Panel content */}
       <div className="flex-1 overflow-y-auto">
-        <div ref={contentRef} className="px-6 py-4 max-w-none">
+        <div ref={contentRef} className="px-6 py-4 max-w-none h-full">
           {artifact ? (
             <div className="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-2 [&_li]:my-1 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-2 [&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:border [&_table]:border-border [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-2 [&_th]:border [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:bg-muted [&_th]:font-semibold [&_thead]:bg-muted">
               <ReactMarkdown
@@ -386,7 +386,7 @@ export function ConversationArtifactPanel({
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <FileText className="h-12 w-12 mb-4" />
               <p className="text-lg font-medium">No artifact yet</p>
-              <p className="text-sm mt-2">
+              <p className="text-sm mt-2 text-center">
                 The agent hasn't created an artifact in this conversation
               </p>
             </div>

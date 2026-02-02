@@ -157,7 +157,8 @@ export function useMcpServerTools(mcpServerId: string | null) {
         path: { id: mcpServerId },
       });
       if (error) {
-        handleApiError(error);
+        // handleApiError not used to prevent "MCP server not found" error from being shown
+        console.error("Failed to fetch MCP server tools:", error);
         return [];
       }
       return data ?? [];

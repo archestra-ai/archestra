@@ -681,7 +681,7 @@ export function McpServerCard({
 
       <ManageUsersDialog
         catalogId={item.id}
-        isOpen={isManageUsersDialogOpen && !isInstalling}
+        isOpen={isManageUsersDialogOpen}
         onClose={() => setIsManageUsersDialogOpen(false)}
         label={item.label || item.name}
       />

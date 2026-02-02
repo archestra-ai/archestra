@@ -202,64 +202,76 @@ export function SelectMcpServerCredentialTypeAndTeams({
           value={credentialType}
           onValueChange={handleCredentialTypeChange}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <RadioGroupItem
               value={CredentialType.Personal}
               id="r1"
               disabled={isPersonalDisabled}
               data-testid={E2eTestId.SelectCredentialTypePersonal}
+              className="mt-0.5"
             />
-            <Label
-              htmlFor="r1"
-              className={cn(
-                "flex items-baseline gap-2",
-                isPersonalDisabled && "opacity-50",
-              )}
-            >
-              Personal
-              {isPersonalDisabled && (
-                <span className="text-xs text-muted-foreground">
-                  {isReinstall && existingTeamId
-                    ? "(cannot change from team to personal during reinstall)"
-                    : byosEnabled
-                      ? "(not available when Readonly Vault is enabled)"
-                      : "(already created for this MCP server)"}
-                </span>
-              )}
-            </Label>
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="r1"
+                className={cn(
+                  "flex items-baseline gap-2",
+                  isPersonalDisabled && "opacity-50",
+                )}
+              >
+                Personal
+                {isPersonalDisabled && (
+                  <span className="text-xs text-muted-foreground">
+                    {isReinstall && existingTeamId
+                      ? "(cannot change from team to personal during reinstall)"
+                      : byosEnabled
+                        ? "(not available when Readonly Vault is enabled)"
+                        : "(already created for this MCP server)"}
+                  </span>
+                )}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Only you can use this server installation
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <RadioGroupItem
               value={CredentialType.Team}
               id="r2"
               disabled={isTeamDisabled}
               data-testid={E2eTestId.SelectCredentialTypeTeam}
+              className="mt-0.5"
             />
-            <Label
-              htmlFor="r2"
-              className={cn(
-                "flex items-baseline gap-2",
-                isTeamDisabled && "opacity-50",
-              )}
-            >
-              Team{" "}
-              {isTeamDisabled && (
-                <span className="text-xs text-muted-foreground">
-                  {/* WHY: Show different messages based on why team option is disabled:
-                      1. Reinstalling personal server - can't change to team
-                      2. No permission - members can't create team installations
-                      3. No teams - user isn't a member of any team
-                      4. All teams used - all user's teams already have this server */}
-                  {isReinstall && !existingTeamId
-                    ? "(cannot change from personal to team during reinstall)"
-                    : !hasMcpServerUpdate
-                      ? "(you don't have permission to create team installations)"
-                      : teams?.length === 0
-                        ? "(you are not a member of any team)"
-                        : "(all your teams already have this server installed)"}
-                </span>
-              )}
-            </Label>
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="r2"
+                className={cn(
+                  "flex items-baseline gap-2",
+                  isTeamDisabled && "opacity-50",
+                )}
+              >
+                Team{" "}
+                {isTeamDisabled && (
+                  <span className="text-xs text-muted-foreground">
+                    {/* WHY: Show different messages based on why team option is disabled:
+                        1. Reinstalling personal server - can't change to team
+                        2. No permission - members can't create team installations
+                        3. No teams - user isn't a member of any team
+                        4. All teams used - all user's teams already have this server */}
+                    {isReinstall && !existingTeamId
+                      ? "(cannot change from personal to team during reinstall)"
+                      : !hasMcpServerUpdate
+                        ? "(you don't have permission to create team installations)"
+                        : teams?.length === 0
+                          ? "(you are not a member of any team)"
+                          : "(all your teams already have this server installed)"}
+                  </span>
+                )}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                All members of the selected team can use this server
+              </p>
+            </div>
           </div>
         </RadioGroup>
       </div>

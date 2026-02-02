@@ -1,7 +1,11 @@
 import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
-import { type LocalConfigSchema, MCP_ORCHESTRATOR_DEFAULTS } from "@shared";
+import {
+  type LocalConfigSchema,
+  MCP_ORCHESTRATOR_DEFAULTS,
+  TimeInMs,
+} from "@shared";
 import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
@@ -1181,6 +1185,109 @@ export default class K8sDeployment {
   }
 
   /**
+   * Check K8s events for deployment failure indicators.
+   * Returns failure info if critical errors are found.
+   */
+  private async checkEventsForFailure(): Promise<{
+    hasFailure: boolean;
+    message: string | null;
+  }> {
+    try {
+      const events = await this.k8sApi.listNamespacedEvent({
+        namespace: this.namespace,
+      });
+
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+
+      // Filter recent events (last 2 minutes) related to our deployment
+      const twoMinutesAgo = Date.now() - TimeInMs.Minute * 2;
+      const relevantEvents = events.items.filter((event) => {
+        const involvedName = event.involvedObject?.name || "";
+        const eventTime =
+          event.lastTimestamp ||
+          event.eventTime ||
+          event.metadata?.creationTimestamp;
+        const eventTimestamp = eventTime ? new Date(eventTime).getTime() : 0;
+
+        return (
+          eventTimestamp > twoMinutesAgo &&
+          (involvedName.startsWith(this.deploymentName) ||
+            involvedName.includes(sanitizedId))
+        );
+      });
+
+      // Known failure patterns in events
+      const failurePatterns = [
+        {
+          pattern: /error looking up service account/i,
+          reason: "Invalid ServiceAccount",
+        },
+        {
+          pattern: /serviceaccount.*not found/i,
+          reason: "ServiceAccount not found",
+        },
+        {
+          pattern: /forbidden.*serviceaccount/i,
+          reason: "ServiceAccount forbidden",
+        },
+        { pattern: /exceeded quota/i, reason: "Resource quota exceeded" },
+        {
+          pattern: /Unable to attach or mount volumes/i,
+          reason: "Volume mount failed",
+        },
+        {
+          pattern: /FailedScheduling.*node\(s\)/i,
+          reason: "No matching nodes",
+        },
+      ];
+
+      for (const event of relevantEvents) {
+        if (event.type === "Warning" && event.message) {
+          for (const { pattern, reason } of failurePatterns) {
+            if (pattern.test(event.message)) {
+              return {
+                hasFailure: true,
+                message: `${reason}: ${event.message}`,
+              };
+            }
+          }
+        }
+      }
+
+      return { hasFailure: false, message: null };
+    } catch (error) {
+      logger.warn({ err: error }, "Failed to check events for failure");
+      return { hasFailure: false, message: null };
+    }
+  }
+
+  /**
+   * Check pod conditions for scheduling/initialization failures.
+   */
+  private checkPodConditionsForFailure(pod: k8s.V1Pod): {
+    hasFailure: boolean;
+    message: string | null;
+  } {
+    const conditions = pod.status?.conditions || [];
+
+    for (const condition of conditions) {
+      // Check for scheduling failures
+      if (
+        condition.type === "PodScheduled" &&
+        condition.status === "False" &&
+        condition.message
+      ) {
+        return {
+          hasFailure: true,
+          message: `Pod scheduling failed: ${condition.message}`,
+        };
+      }
+    }
+
+    return { hasFailure: false, message: null };
+  }
+
+  /**
    * Get pod status information for display
    */
   private getPodStatusInfo(pod: k8s.V1Pod): string {
@@ -1405,7 +1512,46 @@ export default class K8sDeployment {
           labelSelector: `mcp-server-id=${sanitizedId}`,
         });
 
+        // Check for failure events (every 5th iteration to reduce API calls)
+        // Start checking after first 10 seconds (iteration 5)
+        if (i >= 5 && i % 5 === 0) {
+          const eventCheck = await this.checkEventsForFailure();
+          if (eventCheck.hasFailure) {
+            this.state = "failed";
+            this.errorMessage = eventCheck.message || "Deployment failed";
+            throw new Error(
+              `Deployment ${this.deploymentName} failed: ${eventCheck.message}`,
+            );
+          }
+        }
+
         for (const pod of pods.items) {
+          // Check pending pods without containerStatuses for condition failures
+          if (
+            pod.status?.phase === "Pending" &&
+            (!pod.status?.containerStatuses ||
+              pod.status.containerStatuses.length === 0)
+          ) {
+            const conditionCheck = this.checkPodConditionsForFailure(pod);
+            if (conditionCheck.hasFailure) {
+              // Check how long pod has been pending
+              const creationTime = pod.metadata?.creationTimestamp;
+              const pendingDuration = creationTime
+                ? Date.now() - new Date(creationTime).getTime()
+                : 0;
+
+              // If pending for > 20 seconds with a condition failure, fail fast
+              if (pendingDuration > TimeInMs.Second * 20) {
+                this.state = "failed";
+                this.errorMessage =
+                  conditionCheck.message || "Pod scheduling failed";
+                throw new Error(
+                  `Deployment ${this.deploymentName} failed: ${conditionCheck.message}`,
+                );
+              }
+            }
+          }
+
           // Check for failure states in container statuses
           if (pod.status?.containerStatuses) {
             for (const containerStatus of pod.status.containerStatuses) {

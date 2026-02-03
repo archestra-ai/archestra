@@ -2,15 +2,7 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 
-import {
-  Bot,
-  Edit,
-  FileText,
-  Globe,
-  Loader2,
-  Plus,
-  Wrench,
-} from "lucide-react";
+import { Bot, Edit, FileText, Globe, Plus, Wrench } from "lucide-react";
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -418,10 +410,9 @@ export default function ChatPage() {
     ? (conversation?.agentId ?? conversation?.agent?.id)
     : (initialAgentId ?? undefined);
 
-  // Check if Playwright MCP is available for browser panel and get auto-install function
+  // Check if Playwright MCP is available for browser panel and get install function
   const {
     hasPlaywrightMcp,
-    isLoading: isLoadingPlaywrightMcp,
     isInstalling: isInstallingBrowser,
     installBrowser,
   } = useHasPlaywrightMcpTools(browserToolsAgentId);
@@ -765,29 +756,12 @@ export default function ChatPage() {
     });
   };
 
-  // Persist browser panel state, auto-install browser preview if needed
-  const toggleBrowserPanel = useCallback(async () => {
-    // If opening and browser tools not available, auto-install first
-    if (!isBrowserPanelOpen && !hasPlaywrightMcp && !isLoadingPlaywrightMcp) {
-      try {
-        await installBrowser();
-        // After install, tools will be refetched and hasPlaywrightMcp will become true
-      } catch {
-        // Error already handled by mutation, just return
-        return;
-      }
-    }
-
-    // Just toggle the panel state - conversation will be created when user sends first message
+  // Persist browser panel state - just opens panel, installation happens inside if needed
+  const toggleBrowserPanel = useCallback(() => {
     const newValue = !isBrowserPanelOpen;
     setIsBrowserPanelOpen(newValue);
     localStorage.setItem(LocalStorageKeys.browserOpen, String(newValue));
-  }, [
-    isBrowserPanelOpen,
-    hasPlaywrightMcp,
-    isLoadingPlaywrightMcp,
-    installBrowser,
-  ]);
+  }, [isBrowserPanelOpen]);
 
   // Close browser panel handler (also persists to localStorage)
   const closeBrowserPanel = useCallback(() => {
@@ -1150,15 +1124,10 @@ export default function ChatPage() {
                       variant={isBrowserPanelOpen ? "secondary" : "ghost"}
                       size="sm"
                       onClick={toggleBrowserPanel}
-                      disabled={isInstallingBrowser}
                       className="text-xs"
                     >
-                      {isInstallingBrowser ? (
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                      ) : (
-                        <Globe className="h-3 w-3 mr-1" />
-                      )}
-                      {isInstallingBrowser ? "Setting up..." : "Browser"}
+                      <Globe className="h-3 w-3 mr-1" />
+                      Browser
                     </Button>
                   </>
                 )}
@@ -1350,6 +1319,8 @@ export default function ChatPage() {
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
         isInstallingBrowser={isInstallingBrowser}
+        hasPlaywrightMcp={hasPlaywrightMcp}
+        onInstallBrowser={installBrowser}
         onCreateConversationWithUrl={handleCreateConversationWithUrl}
         isCreatingConversation={createConversationMutation.isPending}
         initialNavigateUrl={pendingBrowserUrl}

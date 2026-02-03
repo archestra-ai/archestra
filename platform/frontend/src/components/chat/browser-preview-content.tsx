@@ -41,7 +41,11 @@ interface BrowserPreviewContentProps {
   /** Additional class names for the container */
   className?: string;
   /** When true, shows "Installing browser" message instead of normal content */
-  isInstalling?: boolean;
+  isInstallingBrowser?: boolean;
+  /** Whether Playwright MCP tools are available */
+  hasPlaywrightMcp?: boolean;
+  /** Called to install browser (Playwright MCP) */
+  onInstallBrowser?: () => Promise<unknown>;
   /** When true, this is a popup that follows the active conversation */
   isPopup?: boolean;
   /** Called when user enters a URL without a conversation - should create conversation and navigate */
@@ -59,7 +63,9 @@ export function BrowserPreviewContent({
   isActive,
   headerActions,
   className,
-  isInstalling = false,
+  isInstallingBrowser = false,
+  hasPlaywrightMcp = false,
+  onInstallBrowser,
   isPopup = false,
   onCreateConversationWithUrl,
   isCreatingConversation = false,
@@ -441,19 +447,34 @@ export function BrowserPreviewContent({
         )}
         {!isConnecting && !screenshot && (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-2">
-              {isInstalling ? (
+            <div className="text-center space-y-4">
+              {!hasPlaywrightMcp ? (
+                // Not installed - show install button
                 <>
-                  <Loader2 className="h-12 w-12 text-muted-foreground mx-auto animate-spin" />
-                  <p className="text-sm text-muted-foreground">
-                    Installing browser...
+                  <Button
+                    onClick={() => onInstallBrowser?.()}
+                    disabled={isInstallingBrowser}
+                    className="mt-10"
+                  >
+                    {isInstallingBrowser ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Installing
+                      </>
+                    ) : (
+                      "Install Browser"
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Required only before first usage of the Browser Preview
                   </p>
                 </>
               ) : (
+                // Installed - show normal empty state
                 <>
-                  <Globe className="h-12 w-12 text-muted-foreground mx-auto" />
+                  <Globe className="h-10 w-10 xs text-muted-foreground mx-auto mt-14" />
                   <p className="text-sm text-muted-foreground">
-                    Enter a URL above to start browsing
+                    Ready to browse
                   </p>
                 </>
               )}

@@ -6,6 +6,7 @@ import {
   type SupportedProvider,
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { handleApiError } from "./utils";
 
@@ -23,6 +24,7 @@ const {
   deleteConversationEnabledTools,
   getAgentTools,
   installMcpServer,
+  getMcpServer,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -408,14 +410,17 @@ export function useGlobalChatTools() {
 }
 
 /**
- * Auto-install browser preview (Playwright) for the current user.
+ * Install browser preview (Playwright) for the current user with polling for completion.
  * Creates a personal Playwright server if one doesn't exist.
- * Uses the existing InstallMcpServer endpoint which is idempotent for personal installations.
+ * Polls for installation status since local servers are deployed asynchronously to K8s.
  */
-export function useAutoInstallBrowserPreview() {
+export function useBrowserInstallation() {
+  const [installingServerId, setInstallingServerId] = useState<string | null>(
+    null,
+  );
   const queryClient = useQueryClient();
 
-  return useMutation({
+  const installMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await installMcpServer({
         body: {
@@ -429,33 +434,80 @@ export function useAutoInstallBrowserPreview() {
       }
       return data;
     },
-    onSuccess: () => {
-      // Invalidate chat MCP tools queries to pick up new Playwright tools
-      queryClient.invalidateQueries({
-        queryKey: ["chat", "agents"],
-      });
-      // Invalidate global tools query to show Playwright tools in ChatToolsDisplay
-      queryClient.invalidateQueries({
-        queryKey: ["chat", "global-tools"],
-      });
+    onSuccess: (data) => {
+      if (data?.id) {
+        setInstallingServerId(data.id);
+      }
     },
   });
+
+  // Poll for installation status
+  const statusQuery = useQuery({
+    queryKey: ["browser-installation-status", installingServerId],
+    queryFn: async () => {
+      if (!installingServerId) return null;
+      const response = await getMcpServer({
+        path: { id: installingServerId },
+      });
+      return response.data?.localInstallationStatus ?? null;
+    },
+    refetchInterval: (query) => {
+      const status = query.state.data;
+      return status === "pending" || status === "discovering-tools"
+        ? 2000
+        : false;
+    },
+    enabled: !!installingServerId,
+  });
+
+  // When installation completes, invalidate queries
+  useEffect(() => {
+    if (statusQuery.data === "success") {
+      setInstallingServerId(null);
+      queryClient.invalidateQueries({ queryKey: ["chat", "global-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+      toast.success("Browser installed successfully");
+    }
+    if (statusQuery.data === "error") {
+      setInstallingServerId(null);
+      toast.error("Failed to install browser");
+    }
+  }, [statusQuery.data, queryClient]);
+
+  return {
+    isInstalling:
+      installMutation.isPending ||
+      (!!installingServerId &&
+        statusQuery.data !== "success" &&
+        statusQuery.data !== "error"),
+    installBrowser: installMutation.mutateAsync,
+    installationStatus: statusQuery.data,
+  };
 }
 
 export function useHasPlaywrightMcpTools(agentId: string | undefined) {
   const toolsQuery = useChatProfileMcpTools(agentId);
-  const autoInstall = useAutoInstallBrowserPreview();
+  const globalToolsQuery = useGlobalChatTools();
+  const browserInstall = useBrowserInstallation();
 
   const hasPlaywrightMcp =
-    toolsQuery.data?.some((tool) => {
+    // Check profile tools
+    (toolsQuery.data?.some((tool) => {
       const toolName = tool.name;
       return typeof toolName === "string" && isBrowserMcpTool(toolName);
-    }) ?? false;
+    }) ??
+      false) ||
+    // Also check global tools (Playwright is globally available)
+    (globalToolsQuery.data?.some((tool) => {
+      const toolName = tool.name;
+      return typeof toolName === "string" && isBrowserMcpTool(toolName);
+    }) ??
+      false);
 
   return {
     hasPlaywrightMcp,
-    isLoading: toolsQuery.isLoading,
-    isInstalling: autoInstall.isPending,
-    installBrowser: autoInstall.mutateAsync,
+    isLoading: toolsQuery.isLoading || globalToolsQuery.isLoading,
+    isInstalling: browserInstall.isInstalling,
+    installBrowser: browserInstall.installBrowser,
   };
 }

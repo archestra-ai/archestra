@@ -308,6 +308,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ValidateDeploymentYaml]: {
     internalMcpCatalog: ["read"],
   },
+  [RouteId.ResetDeploymentYaml]: {
+    internalMcpCatalog: ["update"],
+  },
   [RouteId.GetMcpServers]: {
     mcpServer: ["read"],
   },

@@ -476,6 +476,9 @@ export function parseAndMergeYaml(
  *
  * @param yamlString - The existing YAML string (may have user customizations)
  * @param environment - Current environment variables from localConfig
+ * @param previouslyManagedKeys - Keys that were previously managed by localConfig.environment.
+ *   Any key in this set but not in the new environment will be removed from YAML.
+ *   If not provided, all existing env vars not in the new environment are preserved.
  * @returns Updated YAML string with merged environment variables
  */
 export function mergeEnvironmentIntoYaml(
@@ -486,6 +489,7 @@ export function mergeEnvironmentIntoYaml(
     promptOnInstallation: boolean;
     mounted?: boolean;
   }>,
+  previouslyManagedKeys?: Set<string>,
 ): string {
   try {
     // Extract comments from the beginning of the YAML
@@ -524,6 +528,14 @@ export function mergeEnvironmentIntoYaml(
 
     const container = containers[0];
 
+    // Get existing env vars from the YAML to preserve unmanaged ones
+    const existingEnv =
+      (container.env as Array<{
+        name: string;
+        value?: string;
+        valueFrom?: unknown;
+      }>) || [];
+
     // Build new env section from localConfig.environment
     const newEnvSection: Array<{
       name: string;
@@ -534,7 +546,11 @@ export function mergeEnvironmentIntoYaml(
     // Track mounted secrets for volume configuration
     const mountedSecrets: Array<{ key: string }> = [];
 
+    // Track keys managed by localConfig.environment
+    const managedKeys = new Set<string>();
+
     for (const envVar of environment) {
+      managedKeys.add(envVar.key);
       if (envVar.type === "secret") {
         if (envVar.mounted) {
           // Mounted secrets are handled via volumes, not env vars
@@ -557,6 +573,21 @@ export function mergeEnvironmentIntoYaml(
           name: envVar.key,
           value: placeholder("env", envVar.key),
         });
+      }
+    }
+
+    // Preserve existing env vars that are not managed by localConfig.environment
+    // BUT remove env vars that were previously managed and are now removed
+    for (const existingVar of existingEnv) {
+      if (!managedKeys.has(existingVar.name)) {
+        // If we know what was previously managed, only preserve truly unmanaged vars
+        // (i.e., user-added custom env vars that were never in localConfig.environment)
+        const wasManaged =
+          previouslyManagedKeys?.has(existingVar.name) ?? false;
+        if (!wasManaged) {
+          newEnvSection.push(existingVar as (typeof newEnvSection)[number]);
+        }
+        // If wasManaged is true, this env var was removed from localConfig - don't preserve it
       }
     }
 

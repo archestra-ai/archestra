@@ -445,13 +445,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (isLocalServer) {
         const existingYaml =
           restBody.deploymentSpecYaml || originalCatalogItem.deploymentSpecYaml;
-        const environment = restBody.localConfig?.environment;
+        const environment = restBody.localConfig?.environment ?? [];
 
-        if (existingYaml && environment) {
+        if (existingYaml) {
+          // Build set of previously managed keys to detect removed env vars
+          const previouslyManagedKeys = new Set<string>(
+            (originalCatalogItem.localConfig?.environment ?? []).map(
+              (env) => env.key,
+            ),
+          );
+
           // Merge current environment into the existing YAML
           restBody.deploymentSpecYaml = mergeEnvironmentIntoYaml(
             existingYaml,
             environment,
+            previouslyManagedKeys,
           );
         }
       }
@@ -695,6 +703,55 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body: { yaml } }, reply) => {
       const result = validateDeploymentYaml(yaml);
       return reply.send(result);
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/reset-deployment-yaml",
+    {
+      schema: {
+        operationId: RouteId.ResetDeploymentYaml,
+        description:
+          "Reset the deployment YAML to default by clearing the custom YAML",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeploymentYamlPreviewSchema),
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      const catalogItem = await InternalMcpCatalogModel.findById(id);
+
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      if (catalogItem.serverType !== "local") {
+        throw new ApiError(
+          400,
+          "Deployment YAML reset is only available for local MCP servers",
+        );
+      }
+
+      // Clear the custom deployment YAML
+      await InternalMcpCatalogModel.update(id, { deploymentSpecYaml: null });
+
+      // Generate and return a fresh default YAML template
+      const yamlTemplate = generateDeploymentYamlTemplate({
+        serverId: "{server_id}",
+        serverName: catalogItem.name,
+        namespace: config.orchestrator.kubernetes.namespace,
+        dockerImage:
+          catalogItem.localConfig?.dockerImage ||
+          config.orchestrator.mcpServerBaseImage,
+        command: catalogItem.localConfig?.command,
+        arguments: catalogItem.localConfig?.arguments,
+        environment: catalogItem.localConfig?.environment,
+        serviceAccount: catalogItem.localConfig?.serviceAccount,
+      });
+
+      return reply.send({ yaml: yamlTemplate });
     },
   );
 };

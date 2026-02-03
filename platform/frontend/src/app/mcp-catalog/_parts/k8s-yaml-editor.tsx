@@ -6,7 +6,7 @@ import { Editor } from "@/components/editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
-  useGetDeploymentYamlPreview,
+  useResetDeploymentYaml,
   useValidateDeploymentYaml,
 } from "@/lib/internal-mcp-catalog.query";
 
@@ -35,9 +35,8 @@ export function K8sYamlEditor({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
 
-  // Fetch default YAML template for reset functionality
-  const { data: yamlPreview, isLoading: isLoadingPreview } =
-    useGetDeploymentYamlPreview(catalogId && isSaved ? catalogId : null);
+  // Mutation to reset deployment YAML to default
+  const resetYaml = useResetDeploymentYaml();
 
   // Validation mutation
   const validateYaml = useValidateDeploymentYaml();
@@ -74,10 +73,15 @@ export function K8sYamlEditor({
   );
 
   const handleResetToDefault = useCallback(() => {
-    if (yamlPreview?.yaml) {
-      onChange(yamlPreview.yaml);
-    }
-  }, [yamlPreview, onChange]);
+    if (!catalogId) return;
+    resetYaml.mutate(catalogId, {
+      onSuccess: (data) => {
+        if (data?.yaml) {
+          onChange(data.yaml);
+        }
+      },
+    });
+  }, [catalogId, resetYaml, onChange]);
 
   // Show placeholder when not saved yet
   if (!isSaved) {
@@ -148,7 +152,7 @@ export function K8sYamlEditor({
           variant="outline"
           size="sm"
           onClick={handleResetToDefault}
-          disabled={isLoadingPreview || !yamlPreview?.yaml}
+          disabled={!catalogId || resetYaml.isPending}
         >
           <RefreshCw className="h-3 w-3 mr-1" />
           Reset to Default

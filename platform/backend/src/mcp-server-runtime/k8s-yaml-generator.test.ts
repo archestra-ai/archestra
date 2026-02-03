@@ -168,9 +168,9 @@ spec:
       expect(result).toContain("secretName: ${archestra.secret_name}");
     });
 
-    test("removes env vars that no longer exist in localConfig", () => {
+    test("preserves env vars in YAML that are not in localConfig", () => {
       const environment: EnvironmentVariable[] = [
-        // EXISTING_VAR is removed, only NEW_VAR remains
+        // Only NEW_VAR is in localConfig, EXISTING_VAR is not
         { key: "NEW_VAR", type: "plain_text", promptOnInstallation: false },
       ];
 
@@ -179,17 +179,17 @@ spec:
         environment,
       );
 
-      // Should NOT contain the removed env var
-      expect(result).not.toContain("name: EXISTING_VAR");
+      // Should preserve EXISTING_VAR from the original YAML (not managed by localConfig)
+      expect(result).toContain("name: EXISTING_VAR");
 
-      // Should contain the new env var
+      // Should contain the new env var from localConfig
       expect(result).toContain("name: NEW_VAR");
 
       // Should preserve customizations
       expect(result).toContain("custom-label: my-custom-value");
     });
 
-    test("handles empty environment array", () => {
+    test("handles empty environment array by preserving existing env vars", () => {
       const environment: EnvironmentVariable[] = [];
 
       const result = mergeEnvironmentIntoYaml(
@@ -197,10 +197,9 @@ spec:
         environment,
       );
 
-      // Should not have env section or it should be empty
-      // The YAML should still be valid
+      // Should preserve EXISTING_VAR from the original YAML
       expect(result).toContain("custom-label: my-custom-value");
-      expect(result).not.toContain("name: EXISTING_VAR");
+      expect(result).toContain("name: EXISTING_VAR");
     });
 
     test("handles YAML without existing env section", () => {
@@ -330,6 +329,111 @@ spec:
       expect(result).toContain("name: EXISTING_VAR");
       expect(result).toContain("secretKeyRef");
       expect(result).not.toContain("value: ${env.EXISTING_VAR}");
+    });
+
+    test("removes env vars that were previously managed but are now deleted", () => {
+      // YAML has two env vars: EXISTING_VAR and CUSTOM_VAR
+      const yamlWithTwoEnvVars = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: \${archestra.deployment_name}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      containers:
+        - name: mcp-server
+          image: \${archestra.docker_image}
+          env:
+            - name: EXISTING_VAR
+              value: \${env.EXISTING_VAR}
+            - name: CUSTOM_VAR
+              value: custom-value
+      restartPolicy: Always
+`;
+
+      // New environment only has EXISTING_VAR (CUSTOM_VAR was removed from localConfig)
+      const newEnvironment: EnvironmentVariable[] = [
+        {
+          key: "EXISTING_VAR",
+          type: "plain_text",
+          promptOnInstallation: false,
+        },
+      ];
+
+      // Previously, both EXISTING_VAR and CUSTOM_VAR were managed by localConfig
+      const previouslyManagedKeys = new Set(["EXISTING_VAR", "CUSTOM_VAR"]);
+
+      const result = mergeEnvironmentIntoYaml(
+        yamlWithTwoEnvVars,
+        newEnvironment,
+        previouslyManagedKeys,
+      );
+
+      // EXISTING_VAR should still be present
+      expect(result).toContain("name: EXISTING_VAR");
+
+      // CUSTOM_VAR should be removed because it was previously managed but now deleted
+      expect(result).not.toContain("CUSTOM_VAR");
+    });
+
+    test("preserves user-added env vars that were never managed by localConfig", () => {
+      // YAML has EXISTING_VAR (managed) and USER_ADDED_VAR (never managed)
+      const yamlWithUserAddedEnv = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: \${archestra.deployment_name}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      containers:
+        - name: mcp-server
+          image: \${archestra.docker_image}
+          env:
+            - name: EXISTING_VAR
+              value: \${env.EXISTING_VAR}
+            - name: USER_ADDED_VAR
+              value: user-custom-value
+      restartPolicy: Always
+`;
+
+      // New environment only has EXISTING_VAR
+      const newEnvironment: EnvironmentVariable[] = [
+        {
+          key: "EXISTING_VAR",
+          type: "plain_text",
+          promptOnInstallation: false,
+        },
+      ];
+
+      // Previously, only EXISTING_VAR was managed (USER_ADDED_VAR was added by user in YAML)
+      const previouslyManagedKeys = new Set(["EXISTING_VAR"]);
+
+      const result = mergeEnvironmentIntoYaml(
+        yamlWithUserAddedEnv,
+        newEnvironment,
+        previouslyManagedKeys,
+      );
+
+      // EXISTING_VAR should still be present
+      expect(result).toContain("name: EXISTING_VAR");
+
+      // USER_ADDED_VAR should be preserved because it was never managed by localConfig
+      expect(result).toContain("name: USER_ADDED_VAR");
+      expect(result).toContain("value: user-custom-value");
     });
 
     test("returns original YAML if parsing fails", () => {

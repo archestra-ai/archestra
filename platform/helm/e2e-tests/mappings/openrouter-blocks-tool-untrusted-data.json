@@ -1,10 +1,10 @@
 {
   "request": {
     "method": "POST",
-    "urlPath": "/zhipuai/api/paas/v4/chat/completions",
+    "urlPath": "/openrouter/api/v1/chat/completions",
     "headers": {
       "Authorization": {
-        "contains": "zhipuai-blocks-tool-untrusted-data"
+        "contains": "openrouter-blocks-tool-untrusted-data"
       }
     }
   },
@@ -14,10 +14,10 @@
       "Content-Type": "application/json"
     },
     "jsonBody": {
-      "id": "20260114011737450622882b094144",
+      "id": "gen-test-123",
       "object": "chat.completion",
-      "created": 1768324666,
-      "model": "glm-4.5-flash",
+      "created": 1234567890,
+      "model": "anthropic/claude-3-haiku",
       "choices": [
         {
           "index": 0,
@@ -35,7 +35,8 @@
               }
             ]
           },
-          "finish_reason": "tool_calls"
+          "finish_reason": "tool_calls",
+          "logprobs": null
         }
       ],
       "usage": {

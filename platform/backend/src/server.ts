@@ -66,6 +66,7 @@ import {
   Mistral,
   Ollama,
   OpenAi,
+  OpenRouter,
   Vllm,
   Zhipuai,
 } from "@/types";
@@ -153,6 +154,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(OpenRouter.API.ChatCompletionRequestSchema, {
+    id: "OpenRouterChatCompletionRequest",
+  });
+  z.globalRegistry.add(OpenRouter.API.ChatCompletionResponseSchema, {
+    id: "OpenRouterChatCompletionResponse",
   });
 }
 
@@ -560,12 +567,16 @@ const start = async () => {
     // Sync system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)
     const defaultOrg = await OrganizationModel.getFirst();
     if (defaultOrg) {
-      systemKeyManager.syncSystemKeys(defaultOrg.id).catch((error) => {
-        logger.error(
-          { error: error instanceof Error ? error.message : String(error) },
-          "Failed to sync system API keys on startup",
-        );
-      });
+      try {
+        systemKeyManager.syncSystemKeys(defaultOrg.id).catch((error) => {
+          logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            "Failed to sync system API keys on startup",
+          );
+        });
+      } catch (e) {
+         logger.error("Failed to initiate system key sync");
+      }
     }
 
     // Start cache manager's background cleanup interval
@@ -586,14 +597,35 @@ const start = async () => {
 
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
-    await initializeEmailProvider();
+    try {
+      await initializeEmailProvider();
+    } catch (error) {
+           logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to initialize email provider",
+        );
+    }
 
     // Initialize chatops providers (MS Teams, Slack, etc.)
-    await chatOpsManager.initialize();
+     try {
+       await chatOpsManager.initialize();
+     } catch (error) {
+       logger.error(
+         { error: error instanceof Error ? error.message : String(error) },
+         "Failed to initialize chatops manager",
+       );
+     }
 
     // Initialize knowledge graph provider (if configured)
     // This enables automatic document ingestion from chat uploads
-    await initializeKnowledgeGraphProvider();
+     try {
+       await initializeKnowledgeGraphProvider();
+     } catch (error) {
+       logger.error(
+         { error: error instanceof Error ? error.message : String(error) },
+         "Failed to initialize knowledge graph provider",
+       );
+     }
 
     // Background job to renew email subscriptions before they expire
     const emailRenewalIntervalId = setInterval(() => {

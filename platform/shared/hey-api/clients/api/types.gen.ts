@@ -3082,6 +3082,153 @@ export type ZhipuaiChatCompletionResponseInput = {
     }>;
 };
 
+export type OpenRouterChatCompletionRequestInput = {
+    model: string;
+    /**
+     * https://openrouter.ai/docs/requests
+     */
+    messages: Array<{
+        role: 'system';
+        content: string;
+        name?: string;
+    } | {
+        role: 'user';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://openrouter.ai/docs/requests
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        name?: string;
+    } | {
+        role: 'assistant';
+        content?: string | unknown;
+        name?: string;
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://openrouter.ai/docs/responses
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        }>;
+        function_call?: {
+            arguments: string;
+            name: string;
+        };
+    } | {
+        role: 'tool';
+        content: string;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string;
+        name: string;
+    }>;
+    tools?: Array<{
+        type: 'function';
+        /**
+         * https://openrouter.ai/docs/requests
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * https://openrouter.ai/docs/requests
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    }>;
+    /**
+     * https://openrouter.ai/docs/requests
+     */
+    tool_choice?: 'auto' | 'none' | 'required' | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    };
+    stream?: boolean;
+    temperature?: number | unknown;
+    top_p?: number | unknown;
+    max_tokens?: number | unknown;
+    stop?: string | Array<string>;
+    response_format?: {
+        type: 'text' | 'json_object';
+    };
+    user?: string;
+    seed?: number;
+    frequency_penalty?: number;
+    presence_penalty?: number;
+    logit_bias?: {
+        [key: string]: number;
+    };
+};
+
+export type OpenRouterChatCompletionResponseInput = {
+    id: string;
+    choices: Array<{
+        finish_reason?: 'stop' | 'length' | 'tool_calls' | 'function_call' | 'content_filter' | unknown;
+        index: number;
+        logprobs?: unknown;
+        /**
+         * https://openrouter.ai/docs/responses
+         */
+        message: {
+            content: string | unknown;
+            role: 'assistant';
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://openrouter.ai/docs/responses
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            }>;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: string;
+    system_fingerprint?: string | unknown;
+    /**
+     * https://openrouter.ai/docs/responses
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+    };
+};
+
 export type OpenAiChatCompletionRequest = {
     model: string;
     /**
@@ -6158,6 +6305,153 @@ export type ZhipuaiChatCompletionResponse = {
         refer: string;
         publish_date: string;
     }>;
+};
+
+export type OpenRouterChatCompletionRequest = {
+    model: string;
+    /**
+     * https://openrouter.ai/docs/requests
+     */
+    messages: Array<{
+        role: 'system';
+        content: string;
+        name?: string;
+    } | {
+        role: 'user';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://openrouter.ai/docs/requests
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        name?: string;
+    } | {
+        role: 'assistant';
+        content?: string | unknown;
+        name?: string;
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://openrouter.ai/docs/responses
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        }>;
+        function_call?: {
+            arguments: string;
+            name: string;
+        };
+    } | {
+        role: 'tool';
+        content: string;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string;
+        name: string;
+    }>;
+    tools?: Array<{
+        type: 'function';
+        /**
+         * https://openrouter.ai/docs/requests
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * https://openrouter.ai/docs/requests
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    }>;
+    /**
+     * https://openrouter.ai/docs/requests
+     */
+    tool_choice?: 'auto' | 'none' | 'required' | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    };
+    stream?: boolean;
+    temperature?: number | unknown;
+    top_p?: number | unknown;
+    max_tokens?: number | unknown;
+    stop?: string | Array<string>;
+    response_format?: {
+        type: 'text' | 'json_object';
+    };
+    user?: string;
+    seed?: number;
+    frequency_penalty?: number;
+    presence_penalty?: number;
+    logit_bias?: {
+        [key: string]: number;
+    };
+};
+
+export type OpenRouterChatCompletionResponse = {
+    id: string;
+    choices: Array<{
+        finish_reason?: 'stop' | 'length' | 'tool_calls' | 'function_call' | 'content_filter' | unknown;
+        index: number;
+        logprobs?: unknown;
+        /**
+         * https://openrouter.ai/docs/responses
+         */
+        message: {
+            content: string | unknown;
+            role: 'assistant';
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://openrouter.ai/docs/responses
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            }>;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: string;
+    system_fingerprint?: string | unknown;
+    /**
+     * https://openrouter.ai/docs/responses
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+    };
 };
 
 export type GetHealthData = {
@@ -11945,7 +12239,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -11966,7 +12260,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -12045,7 +12339,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -12062,7 +12356,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -12134,7 +12428,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -12307,7 +12601,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -12408,7 +12702,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -12425,7 +12719,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
     };
     url: '/api/chat/models';
 };
@@ -12496,7 +12790,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         createdAt?: string;
         capabilities?: {
             contextLength: number | null;
@@ -12661,7 +12955,7 @@ export type GetModelsWithApiKeysResponses = {
     200: Array<{
         id: string;
         externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         modelId: string;
         description: string | null;
         contextLength: number | null;
@@ -12845,7 +13139,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -12871,7 +13165,7 @@ export type CreateChatConversationData = {
         agentId: string;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -12950,7 +13244,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -13130,7 +13424,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -13155,7 +13449,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -13238,7 +13532,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -13427,7 +13721,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -13532,7 +13826,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -16476,6 +16770,30 @@ export type GetInteractionsResponses = {
             createdAt: string;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            request: OpenRouterChatCompletionRequest;
+            processedRequest?: OpenRouterChatCompletionRequest | null;
+            response: OpenRouterChatCompletionResponse;
+            type: 'openrouter:chatCompletions';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason: string | null;
+            createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -17449,6 +17767,30 @@ export type GetInteractionResponses = {
         processedRequest?: ZhipuaiChatCompletionRequest | null;
         response: ZhipuaiChatCompletionResponse;
         type: 'zhipuai:chatCompletions';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason: string | null;
+        createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        request: OpenRouterChatCompletionRequest;
+        processedRequest?: OpenRouterChatCompletionRequest | null;
+        response: OpenRouterChatCompletionResponse;
+        type: 'openrouter:chatCompletions';
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
@@ -22435,6 +22777,188 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
+export type OpenRouterChatCompletionsWithDefaultAgentData = {
+    body?: OpenRouterChatCompletionRequestInput;
+    headers: {
+        'user-agent'?: string;
+        /**
+         * Bearer token
+         */
+        authorization: string;
+        /**
+         * OpenRouter requirement
+         */
+        'http-referer'?: string;
+        /**
+         * OpenRouter requirement
+         */
+        'x-title'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openrouter/chat/completions';
+};
+
+export type OpenRouterChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type OpenRouterChatCompletionsWithDefaultAgentError = OpenRouterChatCompletionsWithDefaultAgentErrors[keyof OpenRouterChatCompletionsWithDefaultAgentErrors];
+
+export type OpenRouterChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenRouterChatCompletionResponse;
+};
+
+export type OpenRouterChatCompletionsWithDefaultAgentResponse = OpenRouterChatCompletionsWithDefaultAgentResponses[keyof OpenRouterChatCompletionsWithDefaultAgentResponses];
+
+export type OpenRouterChatCompletionsWithAgentData = {
+    body?: OpenRouterChatCompletionRequestInput;
+    headers: {
+        'user-agent'?: string;
+        /**
+         * Bearer token
+         */
+        authorization: string;
+        /**
+         * OpenRouter requirement
+         */
+        'http-referer'?: string;
+        /**
+         * OpenRouter requirement
+         */
+        'x-title'?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openrouter/{agentId}/chat/completions';
+};
+
+export type OpenRouterChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type OpenRouterChatCompletionsWithAgentError = OpenRouterChatCompletionsWithAgentErrors[keyof OpenRouterChatCompletionsWithAgentErrors];
+
+export type OpenRouterChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenRouterChatCompletionResponse;
+};
+
+export type OpenRouterChatCompletionsWithAgentResponse = OpenRouterChatCompletionsWithAgentResponses[keyof OpenRouterChatCompletionsWithAgentResponses];
+
 export type GetOptimizationRulesData = {
     body?: never;
     path?: never;
@@ -22514,7 +23038,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -22534,7 +23058,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -22617,7 +23141,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -22716,7 +23240,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -22801,7 +23325,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -25479,7 +26003,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -25492,7 +26016,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -25567,7 +26091,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -25731,7 +26255,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -25744,7 +26268,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -25821,7 +26345,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'vllm' | 'ollama' | 'zhipuai' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

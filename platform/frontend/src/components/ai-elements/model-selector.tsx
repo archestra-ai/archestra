@@ -169,16 +169,23 @@ export const ModelSelectorLogo = ({
   provider,
   className,
   ...props
-}: ModelSelectorLogoProps) => (
-  <img
-    {...props}
-    alt={`${provider} logo`}
-    className={cn("size-3 dark:invert", className)}
-    height={12}
-    src={`https://models.dev/logos/${provider}.svg`}
-    width={12}
-  />
-);
+}: ModelSelectorLogoProps) => {
+  const isLocalIcon = provider === "openrouter";
+  const src = isLocalIcon
+    ? `/icons/${provider}.png`
+    : `https://models.dev/logos/${provider}.svg`;
+
+  return (
+    <img
+      {...props}
+      alt={`${provider} logo`}
+      className={cn("size-3", !isLocalIcon && "dark:invert", className)}
+      height={12}
+      src={src}
+      width={12}
+    />
+  );
+};
 
 export type ModelSelectorLogoGroupProps = ComponentProps<"div">;
 

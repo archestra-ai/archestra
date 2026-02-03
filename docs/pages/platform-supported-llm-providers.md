@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: Archestra Platform
 order: 3
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-01-14
+lastUpdated: 2026-02-03
 ---
 
 <!--
@@ -185,6 +185,31 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 ### Getting an API Key
 
 You can get an API key from the [Mistral AI Console](https://console.mistral.ai/api-keys).
+
+## OpenRouter
+
+[OpenRouter](https://openrouter.ai/) is a unified interface for various LLM providers, offering best-in-class pricing and model availability through a standardized OpenAI-compatible API.
+
+### Supported OpenRouter APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### OpenRouter Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/openrouter/{profile-id}`
+- **Authentication**: Pass your OpenRouter API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                        | Required | Description                                                                      |
+| ------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `ARCHESTRA_OPENROUTER_BASE_URL` | No       | OpenRouter API base URL (default: `https://openrouter.ai/api/v1`) |
+| `ARCHESTRA_CHAT_OPENROUTER_API_KEY` | No       | Default API key for OpenRouter (can be overridden per conversation/team/org)      |
+
+### Important Notes
+
+- **OpenAI-compatible**: OpenRouter works as a drop-in replacement for OpenAI endpoints.
+- **Model format**: Use the full model ID (e.g., `openai/gpt-4o`, `anthropic/claude-3-opus`) when specifying models.
 
 ## vLLM
 

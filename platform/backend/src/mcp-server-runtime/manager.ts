@@ -97,6 +97,27 @@ export class McpServerRuntimeManager {
     this.k8sConfig = new k8s.KubeConfig();
 
     // Normalize kubeconfig input: treat empty string as undefined
+    const loadKubeconfigFromCurrentCluster =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    const namespace = config.orchestrator.kubernetes.namespace;
+
+    // Check for E2E Mock mode
+    if (process.env.ARCHESTRA_MOCK_K8S === "true") {
+      logger.warn("🛠️ ARCHESTRA_MOCK_K8S is enabled. Initializing mock Kubernetes runtime.");
+      this.k8sApi = new Proxy({}, { get: () => () => Promise.resolve({ items: [] }) }) as any;
+      this.k8sAppsApi = new Proxy({}, { 
+        get: () => () => Promise.resolve({
+          metadata: { name: "mock-deployment" },
+          status: { availableReplicas: 1, readyReplicas: 1, replicas: 1 }
+        }) 
+      }) as any;
+      this.k8sAttach = {} as any;
+      this.k8sLog = {} as any;
+      this.namespace = namespace || "default";
+      this.status = "initializing";
+      return;
+    }
+
     const kubeconfigPath =
       kubeconfig && kubeconfig.trim().length > 0
         ? kubeconfig.trim()
@@ -114,6 +135,12 @@ export class McpServerRuntimeManager {
       } else {
         this.k8sConfig.loadFromDefault();
         logger.info("No kubeconfig provided — using default kubeconfig");
+      }
+      
+      if (config.orchestrator.kubernetes.skipTlsVerify) {
+        for (const cluster of this.k8sConfig.clusters) {
+          (cluster as any).skipTLSVerify = true;
+        }
       }
 
       this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
@@ -227,6 +254,10 @@ export class McpServerRuntimeManager {
     }
 
     try {
+      if (process.env.ARCHESTRA_MOCK_K8S === "true") {
+        logger.info("Skipping real K8s connection verification in mock mode");
+        return;
+      }
       logger.info(`Verifying K8s connection to namespace: ${this.namespace}`);
 
       // Try to list pods in the namespace to verify K8s API connectivity

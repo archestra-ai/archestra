@@ -8,6 +8,7 @@ import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
 import zhipuaiProxyRoutesV2 from "./proxy/routesv2/zhipuai";
+import openRouterProxyRoutesV2 from "./proxy/routesv2/openrouter";
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -46,6 +47,7 @@ export const openAiProxyRoutes = openAiProxyRoutesV2;
 export const vllmProxyRoutes = vllmProxyRoutesV2;
 export const ollamaProxyRoutes = ollamaProxyRoutesV2;
 export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
+export const openRouterProxyRoutes = openRouterProxyRoutesV2;
 // Bedrock proxy routes - V2 only (unified handler, AWS Converse API)
 export const bedrockProxyRoutes = bedrockProxyRoutesV2;
 export { default as secretsRoutes } from "./secrets";

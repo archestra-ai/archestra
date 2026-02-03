@@ -14,6 +14,7 @@ export const SupportedProvidersSchema = z.enum([
   "vllm",
   "ollama",
   "zhipuai",
+  "openrouter",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -27,6 +28,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "vllm:chatCompletions",
   "ollama:chatCompletions",
   "zhipuai:chatCompletions",
+  "openrouter:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -46,6 +48,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   vllm: "vLLM",
   ollama: "Ollama",
   zhipuai: "Zhipu AI",
+  openrouter: "OpenRouter",
 };
 
 /**
@@ -101,6 +104,10 @@ export const MODEL_MARKER_PATTERNS: Record<
   zhipuai: {
     fastest: ["glm-4-flash", "glm-flash"],
     best: ["glm-4-plus", "glm-4"],
+  },
+  openrouter: {
+    fastest: ["gpt-3.5-turbo", "flash"],
+    best: ["gpt-4-turbo", "gpt-4o", "claude-3-opus", "claude-3.5-sonnet"],
   },
   bedrock: {
     fastest: ["nova-lite", "nova-micro", "haiku"],

@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "GET",
-    "urlPathPattern": "/zhipuai/v4/models.*",
+    "urlPathPattern": "/zhipuai/api/paas/v4/models.*",
     "headers": {
       "Authorization": {
         "matches": "Bearer .*"

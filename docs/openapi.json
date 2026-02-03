@@ -10188,6 +10188,630 @@
           "object"
         ]
       },
+      "OpenRouterChatCompletionRequestInput": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "system"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content"
+                  ],
+                  "description": "https://openrouter.ai/docs/requests"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "user"
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "description": "https://openrouter.ai/docs/requests"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "image_url"
+                                    ]
+                                  },
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ],
+                                    "description": "https://openrouter.ai/docs/requests"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "image_url"
+                                ],
+                                "description": "https://openrouter.ai/docs/requests"
+                              }
+                            ],
+                            "description": "https://openrouter.ai/docs/requests"
+                          }
+                        }
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content"
+                  ],
+                  "description": "https://openrouter.ai/docs/requests"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "assistant"
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "tool_calls": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function"
+                                ]
+                              },
+                              "function": {
+                                "type": "object",
+                                "properties": {
+                                  "arguments": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "arguments",
+                                  "name"
+                                ],
+                                "description": "https://openrouter.ai/docs/responses"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "function"
+                            ],
+                            "description": "https://openrouter.ai/docs/responses"
+                          }
+                        ],
+                        "description": "https://openrouter.ai/docs/responses"
+                      }
+                    },
+                    "function_call": {
+                      "type": "object",
+                      "properties": {
+                        "arguments": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "arguments",
+                        "name"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "role"
+                  ],
+                  "description": "https://openrouter.ai/docs/requests"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "tool"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "tool_call_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content",
+                    "tool_call_id"
+                  ],
+                  "description": "https://openrouter.ai/docs/requests"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "function"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content",
+                    "name"
+                  ],
+                  "description": "https://openrouter.ai/docs/requests"
+                }
+              ],
+              "description": "https://openrouter.ai/docs/requests"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "function"
+                      ]
+                    },
+                    "function": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "parameters": {
+                          "description": "\n    https://openrouter.ai/docs/requests\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "strict": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "description": "https://openrouter.ai/docs/requests"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "function"
+                  ],
+                  "description": "https://openrouter.ai/docs/requests"
+                }
+              ],
+              "description": "\n  A function tool that can be used to generate a response.\n\n  https://openrouter.ai/docs/requests\n  "
+            }
+          },
+          "tool_choice": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "none",
+                  "required"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "function"
+                    ]
+                  },
+                  "function": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "function"
+                ],
+                "description": "\n  Specifies a tool the model should use. Use to force the model to call a specific function.\n\n  https://openrouter.ai/docs/requests\n  "
+              }
+            ],
+            "description": "https://openrouter.ai/docs/requests"
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stop": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "response_format": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "json_object"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "user": {
+            "type": "string"
+          },
+          "seed": {
+            "type": "number"
+          },
+          "frequency_penalty": {
+            "type": "number"
+          },
+          "presence_penalty": {
+            "type": "number"
+          },
+          "logit_bias": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ]
+      },
+      "OpenRouterChatCompletionResponseInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "finish_reason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "function_call",
+                        "content_filter"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "index": {
+                  "type": "number"
+                },
+                "logprobs": {
+                  "anyOf": [
+                    {},
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "assistant"
+                      ]
+                    },
+                    "tool_calls": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function"
+                                ]
+                              },
+                              "function": {
+                                "type": "object",
+                                "properties": {
+                                  "arguments": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "arguments",
+                                  "name"
+                                ],
+                                "description": "https://openrouter.ai/docs/responses"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "function"
+                            ],
+                            "description": "https://openrouter.ai/docs/responses"
+                          }
+                        ],
+                        "description": "https://openrouter.ai/docs/responses"
+                      }
+                    },
+                    "function_call": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "arguments": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "arguments",
+                            "name"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "description": "https://openrouter.ai/docs/responses"
+                }
+              },
+              "required": [
+                "index",
+                "message"
+              ],
+              "description": "https://openrouter.ai/docs/responses"
+            }
+          },
+          "created": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string"
+          },
+          "system_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "completion_tokens": {
+                "type": "number"
+              },
+              "prompt_tokens": {
+                "type": "number"
+              },
+              "total_tokens": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "completion_tokens",
+              "prompt_tokens",
+              "total_tokens"
+            ],
+            "description": "https://openrouter.ai/docs/responses"
+          }
+        },
+        "required": [
+          "id",
+          "choices",
+          "created",
+          "model",
+          "object"
+        ]
+      },
       "OpenAiChatCompletionRequest": {
         "type": "object",
         "properties": {
@@ -20787,6 +21411,654 @@
               ],
               "additionalProperties": false
             }
+          }
+        },
+        "required": [
+          "id",
+          "choices",
+          "created",
+          "model",
+          "object"
+        ],
+        "additionalProperties": false
+      },
+      "OpenRouterChatCompletionRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "system"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://openrouter.ai/docs/requests"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "user"
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://openrouter.ai/docs/requests"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "image_url"
+                                    ]
+                                  },
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://openrouter.ai/docs/requests"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "image_url"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://openrouter.ai/docs/requests"
+                              }
+                            ],
+                            "description": "https://openrouter.ai/docs/requests"
+                          }
+                        }
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://openrouter.ai/docs/requests"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "assistant"
+                      ]
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "tool_calls": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function"
+                                ]
+                              },
+                              "function": {
+                                "type": "object",
+                                "properties": {
+                                  "arguments": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "arguments",
+                                  "name"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://openrouter.ai/docs/responses"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "function"
+                            ],
+                            "additionalProperties": false,
+                            "description": "https://openrouter.ai/docs/responses"
+                          }
+                        ],
+                        "description": "https://openrouter.ai/docs/responses"
+                      }
+                    },
+                    "function_call": {
+                      "type": "object",
+                      "properties": {
+                        "arguments": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "arguments",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "role"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://openrouter.ai/docs/requests"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "tool"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "tool_call_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content",
+                    "tool_call_id"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://openrouter.ai/docs/requests"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "function"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content",
+                    "name"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://openrouter.ai/docs/requests"
+                }
+              ],
+              "description": "https://openrouter.ai/docs/requests"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "function"
+                      ]
+                    },
+                    "function": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "parameters": {
+                          "description": "\n    https://openrouter.ai/docs/requests\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "strict": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://openrouter.ai/docs/requests"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "function"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://openrouter.ai/docs/requests"
+                }
+              ],
+              "description": "\n  A function tool that can be used to generate a response.\n\n  https://openrouter.ai/docs/requests\n  "
+            }
+          },
+          "tool_choice": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "none",
+                  "required"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "function"
+                    ]
+                  },
+                  "function": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "function"
+                ],
+                "additionalProperties": false,
+                "description": "\n  Specifies a tool the model should use. Use to force the model to call a specific function.\n\n  https://openrouter.ai/docs/requests\n  "
+              }
+            ],
+            "description": "https://openrouter.ai/docs/requests"
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stop": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "response_format": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "json_object"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "user": {
+            "type": "string"
+          },
+          "seed": {
+            "type": "number"
+          },
+          "frequency_penalty": {
+            "type": "number"
+          },
+          "presence_penalty": {
+            "type": "number"
+          },
+          "logit_bias": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "additionalProperties": false
+      },
+      "OpenRouterChatCompletionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "finish_reason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "function_call",
+                        "content_filter"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "index": {
+                  "type": "number"
+                },
+                "logprobs": {
+                  "anyOf": [
+                    {},
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "assistant"
+                      ]
+                    },
+                    "tool_calls": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function"
+                                ]
+                              },
+                              "function": {
+                                "type": "object",
+                                "properties": {
+                                  "arguments": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "arguments",
+                                  "name"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://openrouter.ai/docs/responses"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "function"
+                            ],
+                            "additionalProperties": false,
+                            "description": "https://openrouter.ai/docs/responses"
+                          }
+                        ],
+                        "description": "https://openrouter.ai/docs/responses"
+                      }
+                    },
+                    "function_call": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "arguments": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "arguments",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "role"
+                  ],
+                  "additionalProperties": false,
+                  "description": "https://openrouter.ai/docs/responses"
+                }
+              },
+              "required": [
+                "index",
+                "message"
+              ],
+              "additionalProperties": false,
+              "description": "https://openrouter.ai/docs/responses"
+            }
+          },
+          "created": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string"
+          },
+          "system_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "completion_tokens": {
+                "type": "number"
+              },
+              "prompt_tokens": {
+                "type": "number"
+              },
+              "total_tokens": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "completion_tokens",
+              "prompt_tokens",
+              "total_tokens"
+            ],
+            "additionalProperties": false,
+            "description": "https://openrouter.ai/docs/responses"
           }
         },
         "required": [
@@ -41784,7 +43056,8 @@
                           "openai",
                           "vllm",
                           "ollama",
-                          "zhipuai"
+                          "zhipuai",
+                          "openrouter"
                         ]
                       },
                       "secretId": {
@@ -42105,7 +43378,8 @@
                       "openai",
                       "vllm",
                       "ollama",
-                      "zhipuai"
+                      "zhipuai",
+                      "openrouter"
                     ]
                   },
                   "apiKey": {
@@ -42173,7 +43447,8 @@
                         "openai",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "secretId": {
@@ -42462,7 +43737,8 @@
                 "openai",
                 "vllm",
                 "ollama",
-                "zhipuai"
+                "zhipuai",
+                "openrouter"
               ]
             },
             "in": "query",
@@ -42503,7 +43779,8 @@
                           "openai",
                           "vllm",
                           "ollama",
-                          "zhipuai"
+                          "zhipuai",
+                          "openrouter"
                         ]
                       },
                       "secretId": {
@@ -42847,7 +44124,8 @@
                         "openai",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "secretId": {
@@ -43229,7 +44507,8 @@
                         "openai",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "secretId": {
@@ -43768,7 +45047,8 @@
                 "openai",
                 "vllm",
                 "ollama",
-                "zhipuai"
+                "zhipuai",
+                "openrouter"
               ]
             },
             "in": "query",
@@ -43804,7 +45084,8 @@
                           "openai",
                           "vllm",
                           "ollama",
-                          "zhipuai"
+                          "zhipuai",
+                          "openrouter"
                         ]
                       },
                       "createdAt": {
@@ -44370,7 +45651,8 @@
                           "mistral",
                           "vllm",
                           "ollama",
-                          "zhipuai"
+                          "zhipuai",
+                          "openrouter"
                         ]
                       },
                       "modelId": {
@@ -45095,7 +46377,8 @@
                           "openai",
                           "vllm",
                           "ollama",
-                          "zhipuai"
+                          "zhipuai",
+                          "openrouter"
                         ]
                       },
                       "hasCustomToolSelection": {
@@ -45458,7 +46741,8 @@
                       "openai",
                       "vllm",
                       "ollama",
-                      "zhipuai"
+                      "zhipuai",
+                      "openrouter"
                     ]
                   },
                   "chatApiKeyId": {
@@ -45526,7 +46810,8 @@
                         "openai",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -45922,7 +47207,8 @@
                         "openai",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -46279,7 +47565,8 @@
                       "openai",
                       "vllm",
                       "ollama",
-                      "zhipuai"
+                      "zhipuai",
+                      "openrouter"
                     ]
                   },
                   "chatApiKeyId": {
@@ -46364,7 +47651,8 @@
                         "openai",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -47290,7 +48578,8 @@
                         "openai",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -47714,7 +49003,8 @@
                         "openai",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "hasCustomToolSelection": {
@@ -58378,6 +59668,143 @@
                               "createdAt"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "profileId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "externalAgentId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "request": {
+                                "$ref": "#/components/schemas/OpenRouterChatCompletionRequest"
+                              },
+                              "processedRequest": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/OpenRouterChatCompletionRequest"
+                                  }
+                                ]
+                              },
+                              "response": {
+                                "$ref": "#/components/schemas/OpenRouterChatCompletionResponse"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "openrouter:chatCompletions"
+                                ]
+                              },
+                              "model": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "outputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "baselineCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonTokensBefore": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonTokensAfter": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonCostSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "profileId",
+                              "externalAgentId",
+                              "userId",
+                              "sessionId",
+                              "sessionSource",
+                              "request",
+                              "response",
+                              "type",
+                              "model",
+                              "baselineModel",
+                              "inputTokens",
+                              "outputTokens",
+                              "baselineCost",
+                              "cost",
+                              "toonTokensBefore",
+                              "toonTokensAfter",
+                              "toonCostSavings",
+                              "toonSkipReason",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       }
@@ -62630,6 +64057,143 @@
                           "type": "string",
                           "enum": [
                             "zhipuai:chatCompletions"
+                          ]
+                        },
+                        "model": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "inputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "outputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "baselineCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonTokensBefore": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonTokensAfter": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonCostSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "profileId",
+                        "externalAgentId",
+                        "userId",
+                        "sessionId",
+                        "sessionSource",
+                        "request",
+                        "response",
+                        "type",
+                        "model",
+                        "baselineModel",
+                        "inputTokens",
+                        "outputTokens",
+                        "baselineCost",
+                        "cost",
+                        "toonTokensBefore",
+                        "toonTokensAfter",
+                        "toonCostSavings",
+                        "toonSkipReason",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "profileId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "externalAgentId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "request": {
+                          "$ref": "#/components/schemas/OpenRouterChatCompletionRequest"
+                        },
+                        "processedRequest": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/OpenRouterChatCompletionRequest"
+                            }
+                          ]
+                        },
+                        "response": {
+                          "$ref": "#/components/schemas/OpenRouterChatCompletionResponse"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "openrouter:chatCompletions"
                           ]
                         },
                         "model": {
@@ -80653,6 +82217,570 @@
         }
       }
     },
+    "/v1/openrouter/chat/completions": {
+      "post": {
+        "operationId": "openRouterChatCompletionsWithDefaultAgent",
+        "tags": [
+          "llm-proxy"
+        ],
+        "description": "Create a chat completion with OpenRouter (uses default agent)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenRouterChatCompletionRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "http-referer",
+            "required": false,
+            "description": "OpenRouter requirement"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-title",
+            "required": false,
+            "description": "OpenRouter requirement"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenRouterChatCompletionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openrouter/{agentId}/chat/completions": {
+      "post": {
+        "operationId": "openRouterChatCompletionsWithAgent",
+        "tags": [
+          "llm-proxy"
+        ],
+        "description": "Create a chat completion with OpenRouter for a specific agent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenRouterChatCompletionRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "http-referer",
+            "required": false,
+            "description": "OpenRouter requirement"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-title",
+            "required": false,
+            "description": "OpenRouter requirement"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenRouterChatCompletionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/optimization-rules": {
       "get": {
         "operationId": "getOptimizationRules",
@@ -80731,7 +82859,8 @@
                           "mistral",
                           "vllm",
                           "ollama",
-                          "zhipuai"
+                          "zhipuai",
+                          "openrouter"
                         ]
                       },
                       "targetModel": {
@@ -81049,7 +83178,8 @@
                       "mistral",
                       "vllm",
                       "ollama",
-                      "zhipuai"
+                      "zhipuai",
+                      "openrouter"
                     ]
                   },
                   "targetModel": {
@@ -81142,7 +83272,8 @@
                         "mistral",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "targetModel": {
@@ -81461,7 +83592,8 @@
                       "mistral",
                       "vllm",
                       "ollama",
-                      "zhipuai"
+                      "zhipuai",
+                      "openrouter"
                     ]
                   },
                   "targetModel": {
@@ -81558,7 +83690,8 @@
                         "mistral",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "targetModel": {
@@ -90938,7 +93071,8 @@
                           "mistral",
                           "vllm",
                           "ollama",
-                          "zhipuai"
+                          "zhipuai",
+                          "openrouter"
                         ]
                       },
                       "model": {
@@ -91211,7 +93345,8 @@
                       "mistral",
                       "vllm",
                       "ollama",
-                      "zhipuai"
+                      "zhipuai",
+                      "openrouter"
                     ]
                   },
                   "model": {
@@ -91261,7 +93396,8 @@
                         "mistral",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "model": {
@@ -91554,7 +93690,8 @@
                         "mistral",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "model": {
@@ -91826,7 +93963,8 @@
                       "mistral",
                       "vllm",
                       "ollama",
-                      "zhipuai"
+                      "zhipuai",
+                      "openrouter"
                     ]
                   },
                   "model": {
@@ -91881,7 +94019,8 @@
                         "mistral",
                         "vllm",
                         "ollama",
-                        "zhipuai"
+                        "zhipuai",
+                        "openrouter"
                       ]
                     },
                     "model": {

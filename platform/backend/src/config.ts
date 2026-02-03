@@ -464,6 +464,11 @@ export default {
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
     },
+    openrouter: {
+      baseUrl:
+        process.env.ARCHESTRA_OPENROUTER_BASE_URL ||
+        "https://openrouter.ai/api/v1",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -499,6 +504,9 @@ export default {
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
+    },
+    openrouter: {
+      apiKey: process.env.ARCHESTRA_CHAT_OPENROUTER_API_KEY || "",
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
@@ -551,6 +559,8 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
+      skipTlsVerify:
+        process.env.ARCHESTRA_ORCHESTRATOR_SKIP_TLS_VERIFY === "true",
     },
   },
   vault: {

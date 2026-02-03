@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/bedrock/foundation-models",
+    "queryParameters": {
+      "byOutputModality": {
+        "equalTo": "TEXT"
+      },
+      "byInputModality": {
+        "equalTo": "TEXT"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "modelSummaries": [
+        {
+          "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
+          "modelName": "Claude 3 Sonnet",
+          "providerName": "Anthropic",
+          "inferenceTypesSupported": ["ON_DEMAND", "INFERENCE_PROFILE"],
+          "inputModalities": ["TEXT", "IMAGE"],
+          "outputModalities": ["TEXT"]
+        }
+      ]
+    }
+  }
+}

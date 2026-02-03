@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp/internal-dev-test-server",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.method == 'tools/list')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "transformers": ["response-template"],
+    "body": "{\"jsonrpc\": \"2.0\", \"id\": {{jsonPath request.body '$.id'}}, \"result\": {\"tools\": [{\"name\": \"print_archestra_test\", \"description\": \"A test tool for local deployments\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"input\": {\"type\": \"string\"}}, \"required\": [\"input\"]}}]}}"
+  }
+}

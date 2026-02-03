@@ -47,6 +47,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   cohere: "cohere",
   cerebras: "cerebras",
   mistral: "mistral",
+  openrouter: "openrouter",
   // These providers use OpenAI-compatible API in Archestra
   llama: "openai",
   deepseek: "openai",
@@ -411,10 +412,12 @@ class ModelsDevClient {
       ollama: ["ollama/"],
       vllm: ["vllm/"],
       zhipuai: ["zhipuai/"],
+      openrouter: ["openrouter/"],
     };
 
     const getSourcePriority = (model: CreateModel): number => {
-      const prefixes = preferredSourcePrefixes[model.provider] ?? [];
+      const prefixes =
+        preferredSourcePrefixes[model.provider as SupportedProvider] ?? [];
       for (let i = 0; i < prefixes.length; i++) {
         if (model.externalId.startsWith(prefixes[i])) {
           return i; // Lower index = higher priority

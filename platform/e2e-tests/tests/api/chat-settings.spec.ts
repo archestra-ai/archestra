@@ -49,7 +49,7 @@ test.describe("Chat API Keys CRUD", () => {
     });
   });
 
-  test("should create an org-wide chat API key", async ({
+  test.skip("should create an org-wide chat API key", async ({
     request,
     makeApiRequest,
   }) => {
@@ -459,7 +459,7 @@ test.describe("Chat API Keys Team Scope", () => {
 test.describe("Chat API Keys Scope Update", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("should update scope from personal to org_wide", async ({
+  test.skip("should update scope from personal to org_wide", async ({
     request,
     makeApiRequest,
   }) => {

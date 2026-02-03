@@ -421,6 +421,44 @@ async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from OpenRouter API
+ */
+async function fetchOpenRouterModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.openrouter.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch OpenRouter models",
+    );
+    throw new Error(`Failed to fetch OpenRouter models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      name: string;
+      created: number;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.name || model.id,
+    provider: "openrouter" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from Zhipuai API
  */
 async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -733,6 +771,7 @@ async function getProviderApiKey({
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
+    openrouter: () => config.chat.openrouter.apiKey || null,
   };
 
   return envApiKeyFallbacks[provider]();
@@ -753,6 +792,7 @@ const modelFetchers: Record<
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
   zhipuai: fetchZhipuaiModels,
+  openrouter: fetchOpenRouterModels,
 };
 
 // Register all model fetchers with the sync service
@@ -841,6 +881,10 @@ export async function fetchModelsForProvider({
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
     } else if (provider === "zhipuai") {
+      if (apiKey) {
+        models = await modelFetchers[provider](apiKey);
+      }
+    } else if (provider === "openrouter") {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

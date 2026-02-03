@@ -139,6 +139,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
   },
+  openrouter: {
+    name: "OpenRouter",
+    icon: "/icons/openrouter.png",
+    placeholder: "sk-or-v1-...",
+    enabled: true,
+    consoleUrl: "https://openrouter.ai/keys",
+    consoleName: "OpenRouter Keys",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

@@ -60,7 +60,9 @@ class ZhipuaiClient {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(this.apiKey && { Authorization: `Bearer ${this.apiKey}` }),
+        ...(this.apiKey && { 
+          Authorization: this.apiKey.startsWith("Bearer ") ? this.apiKey : `Bearer ${this.apiKey}` 
+        }),
       },
       body: JSON.stringify({
         ...request,

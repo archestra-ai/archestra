@@ -1,6 +1,7 @@
+import { sql } from "drizzle-orm";
 import { pathToFileURL } from "node:url";
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
-import db, { schema } from "@/database";
+import db, { schema, initializeDatabase } from "@/database";
 import { seedDefaultUserAndOrg } from "@/database/seed";
 import logger from "@/logging";
 import { AgentModel, OrganizationModel, TeamModel } from "@/models";
@@ -15,13 +16,22 @@ import {
 const CREATE_TOOLS_AND_INTERACTIONS = false;
 
 async function seedMockData() {
+  await initializeDatabase();
   logger.info("\n🌱 Starting mock data seed...\n");
 
   // Step 0: Clean existing mock data (in correct order due to foreign keys)
   logger.info("Cleaning existing data...");
+  
+  // Disable FK checks to allow arbitrary deletion order
+  await db.execute(sql`SET session_replication_role = 'replica';`);
+  
   for (const table of Object.values(schema)) {
     await db.delete(table);
   }
+  
+  // Re-enable FK checks
+  await db.execute(sql`SET session_replication_role = 'origin';`);
+  
   logger.info("✅ Cleaned existing data");
 
   // Step 1: Create additional users

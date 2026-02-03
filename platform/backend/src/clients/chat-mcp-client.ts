@@ -680,42 +680,6 @@ export async function getChatMcpTools({
             const toolArguments = isRecord(args) ? args : undefined;
 
             try {
-              // For browser tools, ensure the correct conversation tab is selected first
-              // Only if browser streaming feature is enabled
-              // Lazily loaded to avoid circular dependency (browser-stream.feature.ts imports from chat-mcp-client.ts)
-              const { browserStreamFeature } = await import(
-                "@/features/browser-stream/services/browser-stream.feature"
-              );
-
-              if (
-                conversationId &&
-                isBrowserMcpTool(mcpTool.name) &&
-                browserStreamFeature.isEnabled()
-              ) {
-                logger.info(
-                  { agentId, userId, conversationId, toolName: mcpTool.name },
-                  "Selecting conversation browser tab before executing browser tool",
-                );
-
-                const tabResult = await browserStreamFeature.selectOrCreateTab(
-                  agentId,
-                  conversationId,
-                  { userId, organizationId, userIsProfileAdmin },
-                );
-
-                if (!tabResult.success) {
-                  logger.warn(
-                    {
-                      agentId,
-                      conversationId,
-                      toolName: mcpTool.name,
-                      error: tabResult.error,
-                    },
-                    "Failed to select conversation tab for browser tool, continuing anyway",
-                  );
-                }
-              }
-
               // Check if this is an Archestra tool - handle directly without DB lookup
               if (isArchestraMcpServerTool(mcpTool.name)) {
                 const archestraResponse = await executeArchestraTool(
@@ -763,94 +727,17 @@ export async function getChatMcpTools({
                   .join("\n");
               }
 
-              // Execute non-Archestra tools via mcpClient
-              // This allows passing userId securely without risk of header spoofing
-              const toolCall = {
-                id: randomUUID(),
-                name: mcpTool.name,
-                arguments: toolArguments ?? {},
-              };
-              logger.info({ toolCall, userId }, "Executing MCP tool call");
-              const result = await mcpClient.executeToolCall(
-                toolCall,
+              // Execute non-Archestra tools via shared helper with browser sync
+              return await executeMcpTool({
+                toolName: mcpTool.name,
+                toolArguments,
                 agentId,
-                {
-                  tokenId: mcpGwToken.tokenId,
-                  teamId: mcpGwToken.teamId,
-                  isOrganizationToken: mcpGwToken.isOrganizationToken,
-                  organizationId,
-                  userId, // Pass userId for user-owned server priority
-                },
-              );
-
-              // Check if MCP tool returned an error first
-              // When isError is true, throw to signal AI SDK that tool execution failed
-              // This allows AI SDK to create a tool-error part and continue the conversation
-              if (result.isError) {
-                // Extract error message from content (where MCP server puts the error details)
-                // Content can be an array (from MCP server response) or null (from internal errors)
-                const extractedError = Array.isArray(result.content)
-                  ? result.content
-                      .map((item: { type: string; text?: string }) =>
-                        item.type === "text" && item.text
-                          ? item.text
-                          : JSON.stringify(item),
-                      )
-                      .join("\n")
-                  : null;
-                const errorMessage =
-                  extractedError || result.error || "Tool execution failed";
-                throw new Error(errorMessage);
-              }
-
-              if (conversationId && mcpTool.name.includes("browser_tabs")) {
-                const { browserStreamFeature } = await import(
-                  "@/features/browser-stream/services/browser-stream.feature"
-                );
-                if (browserStreamFeature.isEnabled()) {
-                  await browserStreamFeature.syncTabMappingFromTabsToolCall({
-                    agentId,
-                    conversationId,
-                    userContext: { userId, organizationId, userIsProfileAdmin },
-                    toolArguments,
-                    toolResultContent: result.content,
-                    tabsToolName: mcpTool.name,
-                  });
-                }
-              }
-
-              // Sync navigation history when browser_navigate tool is used
-              // Note: Use endsWith to avoid matching browser_navigate_back/forward
-              if (conversationId && mcpTool.name.endsWith("browser_navigate")) {
-                const navigateUrl = toolArguments?.url;
-                if (typeof navigateUrl === "string" && navigateUrl) {
-                  const { browserStreamFeature } = await import(
-                    "@/features/browser-stream/services/browser-stream.feature"
-                  );
-                  if (browserStreamFeature.isEnabled()) {
-                    await browserStreamFeature.syncNavigationFromToolCall({
-                      agentId,
-                      conversationId,
-                      userContext: {
-                        userId,
-                        organizationId,
-                        userIsProfileAdmin,
-                      },
-                      url: navigateUrl,
-                    });
-                  }
-                }
-              }
-
-              // Convert MCP content to string for AI SDK
-              return (result.content as Array<{ type: string; text?: string }>)
-                .map((item: { type: string; text?: string }) => {
-                  if (item.type === "text" && item.text) {
-                    return item.text;
-                  }
-                  return JSON.stringify(item);
-                })
-                .join("\n");
+                userId,
+                organizationId,
+                userIsProfileAdmin,
+                conversationId,
+                mcpGwToken,
+              });
             } catch (error) {
               logger.error(
                 {
@@ -1022,6 +909,154 @@ export async function getChatMcpTools({
 }
 
 /**
+ * Context for MCP tool execution with browser sync support.
+ */
+interface ToolExecutionContext {
+  toolName: string;
+  toolArguments: Record<string, unknown> | undefined;
+  agentId: string;
+  userId: string;
+  organizationId: string;
+  userIsProfileAdmin: boolean;
+  conversationId?: string;
+  mcpGwToken: {
+    tokenId: string;
+    teamId: string | null;
+    isOrganizationToken: boolean;
+  } | null;
+}
+
+/**
+ * Shared helper for executing MCP tools with browser state synchronization.
+ * Handles:
+ * - Browser tab selection for browser tools
+ * - MCP tool execution via mcpClient
+ * - Browser state sync (tabs and navigation)
+ * - Content conversion to string format
+ *
+ * @returns The tool result as a string
+ * @throws Error if tool execution fails
+ */
+async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
+  const {
+    toolName,
+    toolArguments,
+    agentId,
+    userId,
+    organizationId,
+    userIsProfileAdmin,
+    conversationId,
+    mcpGwToken,
+  } = ctx;
+
+  // For browser tools, ensure the correct conversation tab is selected first
+  const { browserStreamFeature } = await import(
+    "@/features/browser-stream/services/browser-stream.feature"
+  );
+
+  if (
+    conversationId &&
+    isBrowserMcpTool(toolName) &&
+    browserStreamFeature.isEnabled()
+  ) {
+    logger.debug(
+      { agentId, userId, conversationId, toolName },
+      "Selecting conversation browser tab before executing browser tool",
+    );
+
+    const tabResult = await browserStreamFeature.selectOrCreateTab(
+      agentId,
+      conversationId,
+      { userId, organizationId, userIsProfileAdmin },
+    );
+
+    if (!tabResult.success) {
+      logger.warn(
+        { agentId, conversationId, toolName, error: tabResult.error },
+        "Failed to select conversation tab for browser tool, continuing anyway",
+      );
+    }
+  }
+
+  // Execute via mcpClient
+  const toolCall = {
+    id: randomUUID(),
+    name: toolName,
+    arguments: toolArguments ?? {},
+  };
+
+  const result = await mcpClient.executeToolCall(
+    toolCall,
+    agentId,
+    mcpGwToken
+      ? {
+          tokenId: mcpGwToken.tokenId,
+          teamId: mcpGwToken.teamId,
+          isOrganizationToken: mcpGwToken.isOrganizationToken,
+          organizationId,
+          userId,
+        }
+      : undefined,
+  );
+
+  // Check if MCP tool returned an error
+  if (result.isError) {
+    const extractedError = Array.isArray(result.content)
+      ? result.content
+          .map((item: { type: string; text?: string }) =>
+            item.type === "text" && item.text
+              ? item.text
+              : JSON.stringify(item),
+          )
+          .join("\n")
+      : null;
+    const errorMessage =
+      extractedError || result.error || "Tool execution failed";
+    throw new Error(errorMessage);
+  }
+
+  // Sync browser state if needed
+  if (conversationId && toolName.includes("browser_tabs")) {
+    if (browserStreamFeature.isEnabled()) {
+      await browserStreamFeature.syncTabMappingFromTabsToolCall({
+        agentId,
+        conversationId,
+        userContext: { userId, organizationId, userIsProfileAdmin },
+        toolArguments,
+        toolResultContent: result.content,
+        tabsToolName: toolName,
+      });
+    }
+  }
+
+  // Sync navigation history when browser_navigate tool is used
+  // Note: Use endsWith to avoid matching browser_navigate_back/forward
+  if (conversationId && toolName.endsWith("browser_navigate")) {
+    const navigateUrl = toolArguments?.url;
+    if (typeof navigateUrl === "string" && navigateUrl) {
+      if (browserStreamFeature.isEnabled()) {
+        await browserStreamFeature.syncNavigationFromToolCall({
+          agentId,
+          conversationId,
+          userContext: { userId, organizationId, userIsProfileAdmin },
+          url: navigateUrl,
+        });
+      }
+    }
+  }
+
+  // Convert MCP content to string for AI SDK
+  return (result.content as Array<{ type: string; text?: string }>)
+    .map((item: { type: string; text?: string }) => {
+      if (item.type === "text" && item.text) {
+        return item.text;
+      }
+      return JSON.stringify(item);
+    })
+    .join("\n");
+}
+
+/**
  * Add tools from globally available catalogs (e.g., Playwright browser preview).
  * These catalogs are marked as `isGloballyAvailable` and their tools are available
  * for all agents without explicit assignment. Each user gets their own isolated server.
@@ -1137,133 +1172,17 @@ async function addGlobalCatalogTools({
             const toolArguments = isRecord(args) ? args : undefined;
 
             try {
-              // For browser tools, ensure the correct conversation tab is selected first
-              const { browserStreamFeature } = await import(
-                "@/features/browser-stream/services/browser-stream.feature"
-              );
-
-              if (
-                conversationId &&
-                isBrowserMcpTool(catalogTool.name) &&
-                browserStreamFeature.isEnabled()
-              ) {
-                logger.info(
-                  {
-                    agentId,
-                    userId,
-                    conversationId,
-                    toolName: catalogTool.name,
-                  },
-                  "Selecting conversation browser tab before executing global browser tool",
-                );
-
-                const tabResult = await browserStreamFeature.selectOrCreateTab(
-                  agentId,
-                  conversationId,
-                  { userId, organizationId, userIsProfileAdmin },
-                );
-
-                if (!tabResult.success) {
-                  logger.warn(
-                    {
-                      agentId,
-                      conversationId,
-                      toolName: catalogTool.name,
-                      error: tabResult.error,
-                    },
-                    "Failed to select conversation tab for global browser tool, continuing anyway",
-                  );
-                }
-              }
-
-              // Execute via mcpClient with user's personal server
-              // The useDynamicTeamCredential routing will find user's server
-              const toolCall = {
-                id: randomUUID(),
-                name: catalogTool.name,
-                arguments: toolArguments ?? {},
-              };
-
-              const result = await mcpClient.executeToolCall(
-                toolCall,
+              // Execute via shared helper with browser sync
+              return await executeMcpTool({
+                toolName: catalogTool.name,
+                toolArguments,
                 agentId,
-                mcpGwToken
-                  ? {
-                      tokenId: mcpGwToken.tokenId,
-                      teamId: mcpGwToken.teamId,
-                      isOrganizationToken: mcpGwToken.isOrganizationToken,
-                      userId, // Pass userId to route to user's personal server
-                    }
-                  : undefined,
-              );
-
-              // Check if MCP tool returned an error
-              if (result.isError) {
-                const extractedError = Array.isArray(result.content)
-                  ? result.content
-                      .map((item: { type: string; text?: string }) =>
-                        item.type === "text" && item.text
-                          ? item.text
-                          : JSON.stringify(item),
-                      )
-                      .join("\n")
-                  : null;
-                const errorMessage =
-                  extractedError || result.error || "Tool execution failed";
-                throw new Error(errorMessage);
-              }
-
-              // Sync browser state if needed
-              if (conversationId && catalogTool.name.includes("browser_tabs")) {
-                const { browserStreamFeature } = await import(
-                  "@/features/browser-stream/services/browser-stream.feature"
-                );
-                if (browserStreamFeature.isEnabled()) {
-                  await browserStreamFeature.syncTabMappingFromTabsToolCall({
-                    agentId,
-                    conversationId,
-                    userContext: { userId, organizationId, userIsProfileAdmin },
-                    toolArguments,
-                    toolResultContent: result.content,
-                    tabsToolName: catalogTool.name,
-                  });
-                }
-              }
-
-              // Note: Use endsWith to avoid matching browser_navigate_back/forward
-              if (
-                conversationId &&
-                catalogTool.name.endsWith("browser_navigate")
-              ) {
-                const navigateUrl = toolArguments?.url;
-                if (typeof navigateUrl === "string" && navigateUrl) {
-                  const { browserStreamFeature } = await import(
-                    "@/features/browser-stream/services/browser-stream.feature"
-                  );
-                  if (browserStreamFeature.isEnabled()) {
-                    await browserStreamFeature.syncNavigationFromToolCall({
-                      agentId,
-                      conversationId,
-                      userContext: {
-                        userId,
-                        organizationId,
-                        userIsProfileAdmin,
-                      },
-                      url: navigateUrl,
-                    });
-                  }
-                }
-              }
-
-              // Convert MCP content to string for AI SDK
-              return (result.content as Array<{ type: string; text?: string }>)
-                .map((item: { type: string; text?: string }) => {
-                  if (item.type === "text" && item.text) {
-                    return item.text;
-                  }
-                  return JSON.stringify(item);
-                })
-                .join("\n");
+                userId,
+                organizationId,
+                userIsProfileAdmin,
+                conversationId,
+                mcpGwToken,
+              });
             } catch (error) {
               logger.error(
                 {

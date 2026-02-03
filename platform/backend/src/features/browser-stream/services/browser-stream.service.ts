@@ -1,4 +1,5 @@
 import {
+  DEFAULT_BROWSER_PREVIEW_URL,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
   isBrowserMcpTool,
@@ -43,11 +44,6 @@ import {
   type ConversationStateKey,
   toConversationStateKey,
 } from "./browser-stream.state-manager";
-
-/**
- * Default URL to show when browser preview is opened for a new conversation
- */
-const DEFAULT_BROWSER_PREVIEW_URL = "https://archestra.ai";
 
 /**
  * User context required for MCP client authentication
@@ -464,7 +460,18 @@ export class BrowserStreamService {
     );
     const existingLock = this.tabSelectionLocks.get(lockKey);
     if (existingLock) {
-      return existingLock;
+      // Wait for the existing operation to complete
+      // If it fails, we'll retry with a fresh attempt
+      try {
+        return await existingLock;
+      } catch (error) {
+        // The original request failed, but the lock should be cleaned up by now
+        // Fall through to retry with a fresh attempt
+        logger.warn(
+          { agentId, conversationId, error },
+          "Concurrent tab selection failed, retrying",
+        );
+      }
     }
 
     const task = this.selectOrCreateTabInternal(
@@ -1215,10 +1222,25 @@ export class BrowserStreamService {
       { agentId, conversationId, storedUrl, currentUrl },
       "[BrowserTabs] Restoring URL after restart",
     );
-    await client.callTool({
-      name: navigateTool,
-      arguments: { url: storedUrl },
-    });
+
+    try {
+      await client.callTool({
+        name: navigateTool,
+        arguments: { url: storedUrl },
+      });
+    } catch (error) {
+      // URL restoration is non-critical - log and continue
+      // The tab is still usable, just won't have the previous URL restored
+      logger.warn(
+        {
+          agentId,
+          conversationId,
+          storedUrl,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[BrowserTabs] Failed to restore URL after restart",
+      );
+    }
   }
 
   private async syncActiveTabUrlFromBrowser(params: {
@@ -1250,7 +1272,7 @@ export class BrowserStreamService {
         conversationId,
         state: navigateResult.value,
       });
-      logger.info(
+      logger.debug(
         { agentId, conversationId, currentUrl },
         "[BrowserTabs] Synced active tab URL from browser",
       );
@@ -1376,7 +1398,7 @@ export class BrowserStreamService {
     }
 
     try {
-      logger.info({ agentId, width, height }, "Resizing browser viewport");
+      logger.debug({ agentId, width, height }, "Resizing browser viewport");
 
       const result = await client.callTool({
         name: resizeTool,
@@ -1405,7 +1427,7 @@ export class BrowserStreamService {
     url: string,
     userContext: BrowserUserContext,
   ): Promise<NavigateResult> {
-    logger.info(
+    logger.debug(
       { agentId, conversationId, url },
       "[BrowserNavigate] Starting navigation",
     );
@@ -1426,7 +1448,7 @@ export class BrowserStreamService {
       );
     }
 
-    logger.info(
+    logger.debug(
       { agentId, conversationId, tabIndex: tabResult.tabIndex },
       "[BrowserNavigate] Tab selected/created",
     );
@@ -1462,7 +1484,7 @@ export class BrowserStreamService {
     // This ensures the page loads with the correct viewport from the start
     await this.resizeBrowser(agentId, conversationId, userContext);
 
-    logger.info(
+    logger.debug(
       { agentId, conversationId, toolName, url },
       "[BrowserNavigate] Calling MCP navigate tool",
     );
@@ -1481,7 +1503,7 @@ export class BrowserStreamService {
       throw new ApiError(500, errorText || "Navigation failed");
     }
 
-    logger.info(
+    logger.debug(
       { agentId, conversationId, url },
       "[BrowserNavigate] MCP navigate tool succeeded",
     );
@@ -1545,7 +1567,7 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<NavigateResult> {
-    logger.info(
+    logger.debug(
       { agentId, conversationId },
       "[BrowserNavigateBack] Starting back navigation",
     );
@@ -1635,7 +1657,7 @@ export class BrowserStreamService {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
 
-    logger.info(
+    logger.debug(
       { agentId, conversationId, toolName: navigateTool, url: targetUrl },
       "[BrowserNavigateBack] Navigating to target URL from history",
     );
@@ -1699,7 +1721,7 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<NavigateResult> {
-    logger.info(
+    logger.debug(
       { agentId, conversationId },
       "[BrowserNavigateForward] Starting forward navigation",
     );
@@ -1785,7 +1807,7 @@ export class BrowserStreamService {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
 
-    logger.info(
+    logger.debug(
       { agentId, conversationId, toolName: navigateTool, url: targetUrl },
       "[BrowserNavigateForward] Navigating to target URL from history",
     );
@@ -3101,7 +3123,7 @@ export class BrowserStreamService {
           );
         }
 
-        logger.info(
+        logger.debug(
           { agentId, conversationId, x: safeX, y: safeY },
           "Clicking at coordinates via browser_run_code (Playwright mouse.click)",
         );
@@ -3154,7 +3176,7 @@ export class BrowserStreamService {
         );
       }
 
-      logger.info(
+      logger.debug(
         { agentId, conversationId, element },
         "Clicking element via MCP",
       );
@@ -3220,7 +3242,7 @@ export class BrowserStreamService {
         userContext.userId,
       );
       if (runCodeTool) {
-        logger.info(
+        logger.debug(
           { agentId, conversationId, textLength: text.length },
           "Typing text into focused element via browser_run_code",
         );
@@ -3253,7 +3275,7 @@ export class BrowserStreamService {
       throw new ApiError(400, "No browser type tool available for this agent");
     }
 
-    logger.info(
+    logger.debug(
       { agentId, conversationId, textLength: text.length, element },
       "Typing text via browser_type MCP tool",
     );
@@ -3321,7 +3343,7 @@ export class BrowserStreamService {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
 
-    logger.info({ agentId, conversationId, key }, "Pressing key via MCP");
+    logger.debug({ agentId, conversationId, key }, "Pressing key via MCP");
 
     const result = await client.callTool({
       name: toolName,
@@ -3378,7 +3400,7 @@ export class BrowserStreamService {
       throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
 
-    logger.info(
+    logger.debug(
       { agentId, conversationId },
       "Getting browser snapshot via MCP",
     );

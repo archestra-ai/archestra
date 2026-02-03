@@ -147,6 +147,11 @@ export function useBrowserStream({
 
     // Store active conversation for popups to follow
     setActiveBrowserConversation(conversationId);
+
+    // Cleanup: clear localStorage when panel closes or conversation changes
+    return () => {
+      clearActiveBrowserConversation();
+    };
   }, [isPopup, isActive, conversationId]);
 
   // Subscribe to browser stream via existing WebSocket

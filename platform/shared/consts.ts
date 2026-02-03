@@ -263,3 +263,8 @@ export const DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT = 800;
  * Used when calculating popup window dimensions.
  */
 export const BROWSER_PREVIEW_HEADER_HEIGHT = 77;
+
+/**
+ * Default URL to show when browser preview is opened for a new conversation.
+ */
+export const DEFAULT_BROWSER_PREVIEW_URL = "https://archestra.ai";

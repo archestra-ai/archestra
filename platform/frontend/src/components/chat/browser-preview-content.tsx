@@ -396,6 +396,13 @@ export function BrowserPreviewContent({
                     Installing browser...
                   </p>
                 </>
+              ) : !conversationId ? (
+                <>
+                  <Globe className="h-12 w-12 text-muted-foreground mx-auto" />
+                  <p className="text-sm text-muted-foreground">
+                    Send a message to start browsing
+                  </p>
+                </>
               ) : (
                 <>
                   <Globe className="h-12 w-12 text-muted-foreground mx-auto" />

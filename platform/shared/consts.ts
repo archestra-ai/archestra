@@ -115,14 +115,6 @@ export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
 export const ARCHESTRA_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000001";
 
 /**
- * Fixed UUID for the Playwright browser preview MCP catalog entry.
- * This ID is constant to ensure consistent catalog lookup across server restarts.
- * Must be a valid UUID format (version 4, variant 8/9/a/b) for Zod validation.
- */
-export const PLAYWRIGHT_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000002";
-export const PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
-
-/**
  * Prefix for agent delegation tools
  * Format: agent__{slugified_agent_name}
  * These are NOT archestra tools - they are dynamically generated per prompt
@@ -247,6 +239,18 @@ export const DOMAIN_VALIDATION_REGEX =
  * Maximum domain length per DNS specification (RFC 1035).
  */
 export const MAX_DOMAIN_LENGTH = 253;
+
+// =============================================================================
+// Browser Preview Feature
+// =============================================================================
+
+/**
+ * Fixed UUID for the Playwright browser preview MCP catalog entry.
+ * This ID is constant to ensure consistent catalog lookup across server restarts.
+ * Must be a valid UUID format (version 4, variant 8/9/a/b) for Zod validation.
+ */
+export const PLAYWRIGHT_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000002";
+export const PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
 
 /**
  * Default browser viewport dimensions used by Playwright MCP in browser preview feature.

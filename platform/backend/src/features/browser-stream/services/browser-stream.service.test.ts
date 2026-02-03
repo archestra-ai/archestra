@@ -482,6 +482,14 @@ describe("BrowserStreamService URL handling", () => {
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
 
+    // Also mock findToolName to avoid database call from findNavigateTool
+    vi.spyOn(
+      browserService as unknown as {
+        findToolName: () => Promise<string | null>;
+      },
+      "findToolName",
+    ).mockResolvedValue("browser_navigate");
+
     let listCallCount = 0;
     const callTool = vi.fn(
       async (request: { arguments?: Record<string, unknown> }) => {
@@ -546,6 +554,14 @@ describe("BrowserStreamService URL handling", () => {
       },
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
+
+    // Also mock findToolName to avoid database call from findNavigateTool
+    vi.spyOn(
+      browserService as unknown as {
+        findToolName: () => Promise<string | null>;
+      },
+      "findToolName",
+    ).mockResolvedValue("browser_navigate");
 
     let listCallCount = 0;
     const callTool = vi.fn(
@@ -612,6 +628,14 @@ describe("BrowserStreamService URL handling", () => {
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
 
+    // Also mock findToolName to avoid database call from findNavigateTool
+    vi.spyOn(
+      browserService as unknown as {
+        findToolName: () => Promise<string | null>;
+      },
+      "findToolName",
+    ).mockResolvedValue("browser_navigate");
+
     vi.spyOn(browserStateManager, "getOrLoad").mockResolvedValue(Ok(null));
 
     let listCallCount = 0;
@@ -672,6 +696,15 @@ describe("BrowserStreamService URL handling", () => {
       },
       "findTabsTool",
     ).mockResolvedValue("browser_tabs");
+
+    // Also mock findToolName to avoid database call from findNavigateTool
+    vi.spyOn(
+      browserService as unknown as {
+        findToolName: () => Promise<string | null>;
+      },
+      "findToolName",
+    ).mockResolvedValue("browser_navigate");
+
     vi.spyOn(browserStateManager, "getOrLoad").mockResolvedValue(Ok(null));
     vi.spyOn(browserStateManager, "set").mockImplementation(async (params) =>
       Ok(params.state),

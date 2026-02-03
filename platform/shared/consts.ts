@@ -266,5 +266,6 @@ export const BROWSER_PREVIEW_HEADER_HEIGHT = 77;
 
 /**
  * Default URL to show when browser preview is opened for a new conversation.
+ * Using about:blank ensures no automatic navigation happens until user requests it.
  */
-export const DEFAULT_BROWSER_PREVIEW_URL = "https://archestra.ai";
+export const DEFAULT_BROWSER_PREVIEW_URL = "about:blank";

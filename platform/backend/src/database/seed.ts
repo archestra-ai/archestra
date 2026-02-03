@@ -201,6 +201,8 @@ async function seedPlaywrightCatalog(): Promise<void> {
       localConfig: {
         dockerImage: "mcr.microsoft.com/playwright/mcp",
         transportType: "stdio",
+        // Reduce logging verbosity from Playwright MCP server
+        arguments: ["--console-level", "error"],
       },
     })
     .onConflictDoNothing();

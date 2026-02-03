@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { isBrowserMcpTool } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
@@ -1063,7 +1064,9 @@ class McpClient {
   }
 
   /**
-   * Persist tool call to database with error handling
+   * Persist tool call to database with error handling.
+   * Skips browser tools to prevent DB bloat from frequent screenshot calls.
+   * Truncates large tool results to prevent excessive storage.
    */
   private async persistToolCall(
     agentId: string,
@@ -1071,6 +1074,11 @@ class McpClient {
     toolCall: CommonToolCall,
     toolResult: CommonToolResult,
   ): Promise<void> {
+    // Skip browser tool logging to prevent DB bloat
+    if (isBrowserMcpTool(toolCall.name)) {
+      return;
+    }
+
     try {
       const savedToolCall = await McpToolCallModel.create({
         agentId,

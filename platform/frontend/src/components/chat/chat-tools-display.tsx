@@ -2,6 +2,7 @@
 
 import {
   ARCHESTRA_MCP_SERVER_NAME,
+  DEFAULT_ARCHESTRA_TOOL_NAMES,
   isAgentTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
@@ -127,8 +128,7 @@ export function ChatToolsDisplay({
       .filter(
         (tool) =>
           !tool.name.startsWith("archestra__") ||
-          tool.name === "archestra__todo_write" ||
-          tool.name === "archestra__artifact_write",
+          DEFAULT_ARCHESTRA_TOOL_NAMES.includes(tool.name),
       )
       .map((t) => t.id);
 

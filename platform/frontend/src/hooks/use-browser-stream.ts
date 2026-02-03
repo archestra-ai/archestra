@@ -173,18 +173,6 @@ export function useBrowserStream({
       },
     );
 
-    const unsubZoom = websocketService.subscribe(
-      "browser_set_zoom_result",
-      (message) => {
-        if (message.payload.conversationId === conversationId) {
-          setIsInteracting(false);
-          if (!message.payload.success && message.payload.error) {
-            setError(message.payload.error);
-          }
-        }
-      },
-    );
-
     const unsubNavigateBack = websocketService.subscribe(
       "browser_navigate_back_result",
       (message) => {
@@ -229,7 +217,6 @@ export function useBrowserStream({
       unsubClick();
       unsubType();
       unsubPressKey();
-      unsubZoom();
       unsubNavigateBack();
       unsubNavigateForward();
 

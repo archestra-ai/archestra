@@ -2,7 +2,9 @@ import {
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
   isBrowserMcpTool,
+  TimeInMs,
 } from "@shared";
+import { LRUCacheManager } from "@/cache-manager";
 import { getChatMcpClient } from "@/clients/chat-mcp-client";
 import logger from "@/logging";
 import { ConversationModel, ToolModel } from "@/models";
@@ -131,6 +133,15 @@ const logScreenshotInfo = (context: LogContext, message: string): void => {
 // This avoids race conditions and prevents destroying tabs for other conversations.
 
 /**
+ * Cache for agent tools to avoid repeated database queries during browser streaming.
+ * Uses LRU eviction with 30-second TTL. Shared across all BrowserStreamService instances.
+ */
+const toolsCache = new LRUCacheManager<{ name: string }[]>({
+  maxSize: 100,
+  defaultTtl: 30 * TimeInMs.Second,
+});
+
+/**
  * Service for browser streaming via Playwright MCP
  * Calls Playwright MCP tools directly through the MCP Gateway
  */
@@ -141,11 +152,29 @@ export class BrowserStreamService {
     Promise<TabResult>
   >();
 
+  /**
+   * Get tools for an agent with caching to reduce database queries.
+   * Tools are cached for 30 seconds with LRU eviction.
+   */
+  private async getToolsForAgent(agentId: string): Promise<{ name: string }[]> {
+    const cached = toolsCache.get(agentId);
+    if (cached) {
+      return cached;
+    }
+
+    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+    const toolNames = tools.map((t) => ({ name: t.name as string }));
+
+    toolsCache.set(agentId, toolNames);
+
+    return toolNames;
+  }
+
   private async findToolName(
     agentId: string,
     matches: (toolName: string) => boolean,
   ): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+    const tools = await this.getToolsForAgent(agentId);
 
     for (const tool of tools) {
       const toolName = tool.name;
@@ -161,7 +190,7 @@ export class BrowserStreamService {
    * Check if Playwright MCP browser tools are available for an agent
    */
   async checkAvailability(agentId: string): Promise<AvailabilityResult> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+    const tools = await this.getToolsForAgent(agentId);
     const browserToolNames = tools.flatMap((tool) => {
       const toolName = tool.name;
       if (typeof toolName !== "string") return [];
@@ -1735,12 +1764,16 @@ export class BrowserStreamService {
       return { success: true };
     } catch (error) {
       logger.error({ error, agentId, conversationId }, "Failed to close tab");
+      // Clear state anyway to prevent stale data, but report failure
       await browserStateManager.clear({
         agentId,
         userId: userContext.userId,
         conversationId,
       });
-      return { success: true };
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to close tab",
+      };
     }
   }
 
@@ -2721,15 +2754,30 @@ export class BrowserStreamService {
       // Use browser_run_code for native Playwright mouse click
       const runCodeTool = await this.findRunCodeTool(agentId);
       if (runCodeTool) {
+        // Validate coordinates to prevent code injection and ensure reasonable bounds
+        const safeX = Math.round(x);
+        const safeY = Math.round(y);
+        if (
+          !Number.isFinite(safeX) ||
+          !Number.isFinite(safeY) ||
+          safeX < 0 ||
+          safeY < 0 ||
+          safeX > 10000 ||
+          safeY > 10000
+        ) {
+          throw new ApiError(
+            400,
+            `Invalid click coordinates: x=${x}, y=${y}. Must be finite numbers between 0 and 10000.`,
+          );
+        }
+
         logger.info(
-          { agentId, conversationId, x, y },
+          { agentId, conversationId, x: safeX, y: safeY },
           "Clicking at coordinates via browser_run_code (Playwright mouse.click)",
         );
 
         // Native Playwright mouse click - async function with page argument
-        const code = `async (page) => { await page.mouse.click(${Math.round(
-          x,
-        )}, ${Math.round(y)}); }`;
+        const code = `async (page) => { await page.mouse.click(${safeX}, ${safeY}); }`;
 
         try {
           const result = await client.callTool({
@@ -2842,13 +2890,10 @@ export class BrowserStreamService {
           "Typing text into focused element via browser_run_code",
         );
 
-        // Escape text for JavaScript string
-        const escapedText = text
-          .replace(/\\/g, "\\\\")
-          .replace(/`/g, "\\`")
-          .replace(/\$/g, "\\$");
+        // Use JSON.stringify for safe escaping of all special characters
+        const safeText = JSON.stringify(text);
         // Native Playwright keyboard type - async function with page argument
-        const playwrightCode = `async (page) => { await page.keyboard.type(\`${escapedText}\`); }`;
+        const playwrightCode = `async (page) => { await page.keyboard.type(${safeText}); }`;
 
         const result = await client.callTool({
           name: runCodeTool,

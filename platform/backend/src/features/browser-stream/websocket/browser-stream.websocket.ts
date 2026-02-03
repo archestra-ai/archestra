@@ -15,6 +15,12 @@ const SCREENSHOT_INTERVAL_MS = 2_000; // Stream at ~0.5 FPS (every 2 seconds)
  */
 const ORPHAN_CLEANUP_DEBOUNCE_MS = 60_000;
 
+/**
+ * Maximum number of entries in the lastOrphanCleanupTime map.
+ * When exceeded, oldest entries are removed.
+ */
+const MAX_CLEANUP_TIME_ENTRIES = 100;
+
 export type BrowserStreamSubscription = {
   conversationId: string;
   agentId: string;
@@ -344,6 +350,18 @@ export class BrowserStreamSocketClientContext {
     if (now - lastCleanup < ORPHAN_CLEANUP_DEBOUNCE_MS) {
       // Skip - cleaned up recently
       return;
+    }
+
+    // Limit map size to prevent unbounded growth
+    if (this.lastOrphanCleanupTime.size >= MAX_CLEANUP_TIME_ENTRIES) {
+      // Remove oldest entries (first entries in map iteration order)
+      const entriesToRemove = Math.ceil(MAX_CLEANUP_TIME_ENTRIES / 4);
+      let removed = 0;
+      for (const key of this.lastOrphanCleanupTime.keys()) {
+        if (removed >= entriesToRemove) break;
+        this.lastOrphanCleanupTime.delete(key);
+        removed++;
+      }
     }
 
     this.lastOrphanCleanupTime.set(agentId, now);

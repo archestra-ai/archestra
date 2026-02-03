@@ -176,6 +176,10 @@ export class BrowserStreamSocketClientContext {
     return this.browserSubscriptions.has(ws);
   }
 
+  getSubscription(ws: WebSocket): BrowserStreamSubscription | undefined {
+    return this.browserSubscriptions.get(ws);
+  }
+
   clearSubscriptions(): void {
     for (const ws of this.browserSubscriptions.keys()) {
       this.unsubscribeBrowserStream(ws);

@@ -47,9 +47,17 @@ const service = websocketService as unknown as {
   ) => Promise<WebSocketClientContext | null>;
   handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
   clientContexts: Map<WS, WebSocketClientContext>;
-  browserSubscriptions: Map<WS, { intervalId: NodeJS.Timeout }>;
+  browserSubscriptions: {
+    clear: () => void;
+    has: (ws: WS) => boolean;
+    get: (ws: WS) => { intervalId: NodeJS.Timeout } | undefined;
+  };
   mcpLogsSubscriptions: Map<WS, McpLogsSubscription>;
+  initBrowserStreamContextForTesting: () => void;
 };
+
+// Initialize browser stream context once for all tests (config mock is already applied)
+service.initBrowserStreamContextForTesting();
 
 describe("websocket authentication", () => {
   beforeEach(() => {

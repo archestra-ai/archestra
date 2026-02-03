@@ -41,6 +41,32 @@ class WebSocketService {
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
   private browserStreamContext: BrowserStreamSocketClientContext | null = null;
 
+  /**
+   * Proxy object for browser subscriptions - exposes Map-like interface for testing.
+   * Delegates to browserStreamContext when enabled, otherwise uses empty Map behavior.
+   */
+  get browserSubscriptions() {
+    const context = this.browserStreamContext;
+    return {
+      clear: () => context?.clearSubscriptions(),
+      has: (ws: WebSocket) => context?.hasSubscription(ws) ?? false,
+      get: (ws: WebSocket) => context?.getSubscription(ws),
+    };
+  }
+
+  /**
+   * Initialize browser stream context for testing without starting the full WebSocket server.
+   * Only call this in test environments.
+   */
+  initBrowserStreamContextForTesting(): void {
+    if (BrowserStreamSocketClientContext.isBrowserStreamEnabled()) {
+      this.browserStreamContext = new BrowserStreamSocketClientContext({
+        wss: null,
+        sendToClient: (ws, message) => this.sendToClient(ws, message),
+      });
+    }
+  }
+
   // Browser messages are handled by browserStreamContext - see handleMessage()
   private messageHandlers: Partial<
     Record<ClientWebSocketMessageType, MessageHandler>

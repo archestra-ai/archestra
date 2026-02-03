@@ -168,8 +168,8 @@ export function useResetDeploymentYaml() {
       return response.data;
     },
     onSuccess: (_data, catalogId) => {
-      // Invalidate the catalog item query to refresh the form
-      queryClient.invalidateQueries({ queryKey: ["mcp-catalog", catalogId] });
+      // Invalidate the main catalog query to refresh the form data
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       // Invalidate the preview query
       queryClient.invalidateQueries({
         queryKey: ["mcp-catalog", catalogId, "deployment-yaml-preview"],

@@ -211,13 +211,9 @@ export default class K8sDeployment {
 
   /**
    * Returns the effective namespace for this deployment.
-   * Uses the namespace from advancedK8sConfig if specified, otherwise falls back to the default.
    */
   private get namespace(): string {
-    return (
-      this.catalogItem?.localConfig?.advancedK8sConfig?.namespace ||
-      this.defaultNamespace
-    );
+    return this.defaultNamespace;
   }
 
   /**
@@ -499,6 +495,18 @@ export default class K8sDeployment {
   }
 
   /**
+   * Returns the system-managed labels that must always be present on deployments.
+   * These labels are used for identification and cannot be overridden by user configuration.
+   */
+  private getSystemLabels(): Record<string, string> {
+    return K8sDeployment.sanitizeMetadataLabels({
+      app: "mcp-server",
+      "mcp-server-id": this.mcpServer.id,
+      "mcp-server-name": this.mcpServer.name,
+    });
+  }
+
+  /**
    * Generate the deployment specification for this MCP server
    *
    * @param dockerImage - The Docker image to use for the container
@@ -515,8 +523,6 @@ export default class K8sDeployment {
     httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
   ): k8s.V1Deployment {
-    const advancedConfig = localConfig.advancedK8sConfig;
-
     // Check if YAML override is provided
     if (this.catalogItem?.deploymentSpecYaml) {
       const yamlDeployment = this.generateDeploymentFromYaml(
@@ -537,15 +543,7 @@ export default class K8sDeployment {
       );
     }
 
-    // Labels common to Deployment, RS, and Pods
-    // Merge custom labels from advanced config with required labels
-    // Required labels are spread last to prevent custom labels from overriding them
-    const labels = K8sDeployment.sanitizeMetadataLabels({
-      ...(advancedConfig?.labels || {}),
-      app: "mcp-server",
-      "mcp-server-id": this.mcpServer.id,
-      "mcp-server-name": this.mcpServer.name,
-    });
+    const labels = this.getSystemLabels();
 
     // Get environment variables and mounted secrets
     const { envVars, mountedSecrets } = this.createContainerEnvFromConfig();
@@ -640,37 +638,18 @@ export default class K8sDeployment {
           // Set resource requests/limits for the container (with defaults)
           resources: {
             requests: {
-              memory:
-                advancedConfig?.resources?.requests?.memory ||
-                MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
-              cpu:
-                advancedConfig?.resources?.requests?.cpu ||
-                MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
+              memory: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
+              cpu: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
             },
-            ...(advancedConfig?.resources?.limits
-              ? {
-                  limits: {
-                    ...(advancedConfig.resources.limits.memory
-                      ? { memory: advancedConfig.resources.limits.memory }
-                      : {}),
-                    ...(advancedConfig.resources.limits.cpu
-                      ? { cpu: advancedConfig.resources.limits.cpu }
-                      : {}),
-                  },
-                }
-              : {}),
           },
         },
       ],
       restartPolicy: "Always",
     };
 
-    // Build pod template metadata with optional annotations
+    // Build pod template metadata
     const podTemplateMetadata: k8s.V1ObjectMeta = {
       labels,
-      ...(advancedConfig?.annotations
-        ? { annotations: advancedConfig.annotations }
-        : {}),
     };
 
     return {
@@ -681,8 +660,7 @@ export default class K8sDeployment {
         labels,
       },
       spec: {
-        replicas:
-          advancedConfig?.replicas ?? MCP_ORCHESTRATOR_DEFAULTS.replicas,
+        replicas: MCP_ORCHESTRATOR_DEFAULTS.replicas,
         selector: {
           matchLabels: labels,
         },

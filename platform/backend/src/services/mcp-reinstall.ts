@@ -18,6 +18,10 @@ import type { InternalMcpCatalog, McpServer } from "@/types";
  *
  * Note: We compare old vs new config to allow auto-reinstall when auth-related
  * settings haven't changed. This enables auto-reinstall for name/URL changes.
+ *
+ * Note 2:
+ * We don't check if the deployment spec YAML changed (advanced yaml config),
+ * because it's impossible to set a prompted env var and do not allow to change name of the mcp server.
  */
 export function requiresNewUserInputForReinstall(
   oldCatalogItem: InternalMcpCatalog,

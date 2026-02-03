@@ -63,8 +63,6 @@ const ARCHESTRA_PLACEHOLDERS = [
  * Protected fields that cannot be modified by user YAML.
  * These are always overwritten at deployment time.
  */
-const PROTECTED_LABEL_KEYS = ["mcp-server-id", "app"];
-
 /**
  * Generates a deployment YAML template with placeholders for environment variables.
  *
@@ -186,15 +184,25 @@ function addYamlComments(yamlString: string): string {
   // Add header comment
   result.push("# Kubernetes Deployment Spec for MCP Server");
   result.push("#");
-  result.push("# You can customize this YAML. Environment variables are managed");
-  result.push("# automatically - add/remove them in the Environment Variables section above.");
+  result.push(
+    "# You can customize this YAML. Environment variables are managed",
+  );
+  result.push(
+    "# automatically - add/remove them in the Environment Variables section above.",
+  );
   result.push("#");
   result.push("# Placeholders (replaced at deployment time):");
-  result.push("#   ${env.KEY}       - Value of plain text environment variable");
-  result.push("#   ${secret.KEY}    - Reference to K8s Secret (for sensitive values)");
+  result.push(
+    "#   ${env.KEY}       - Value of plain text environment variable",
+  );
+  result.push(
+    "#   ${secret.KEY}    - Reference to K8s Secret (for sensitive values)",
+  );
   result.push("#   ${archestra.*}   - System values injected by Archestra:");
   result.push("#       deployment_name, server_id, server_name, namespace,");
-  result.push("#       docker_image, secret_name, command, arguments, service_account");
+  result.push(
+    "#       docker_image, secret_name, command, arguments, service_account",
+  );
   result.push("#");
   result.push("# Protected fields (always overwritten at deployment):");
   result.push("#   - metadata.labels: mcp-server-id, app");
@@ -340,111 +348,6 @@ function validatePlaceholders(yamlString: string): string[] {
   }
 
   return warnings;
-}
-
-/**
- * Parses a deployment YAML and extracts values for advancedK8sConfig fields.
- * This is used when editing an existing YAML to populate form fields.
- *
- * @param yamlString - The YAML string to parse
- * @returns Extracted configuration values
- */
-export function parseDeploymentYamlToConfig(yamlString: string): {
-  replicas?: number;
-  namespace?: string;
-  annotations?: Record<string, string>;
-  labels?: Record<string, string>;
-  resources?: {
-    requests?: { memory?: string; cpu?: string };
-    limits?: { memory?: string; cpu?: string };
-  };
-} | null {
-  try {
-    const parsed = yaml.load(yamlString) as Record<string, unknown>;
-
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
-    const result: {
-      replicas?: number;
-      namespace?: string;
-      annotations?: Record<string, string>;
-      labels?: Record<string, string>;
-      resources?: {
-        requests?: { memory?: string; cpu?: string };
-        limits?: { memory?: string; cpu?: string };
-      };
-    } = {};
-
-    // Extract replicas
-    const spec = parsed.spec as Record<string, unknown> | undefined;
-    if (spec?.replicas && typeof spec.replicas === "number") {
-      result.replicas = spec.replicas;
-    }
-
-    // Extract namespace from metadata
-    const metadata = parsed.metadata as Record<string, unknown> | undefined;
-    if (metadata?.namespace && typeof metadata.namespace === "string") {
-      result.namespace = metadata.namespace;
-    }
-
-    // Extract annotations from template metadata
-    const template = spec?.template as Record<string, unknown> | undefined;
-    const templateMetadata = template?.metadata as
-      | Record<string, unknown>
-      | undefined;
-    if (
-      templateMetadata?.annotations &&
-      typeof templateMetadata.annotations === "object"
-    ) {
-      result.annotations = templateMetadata.annotations as Record<
-        string,
-        string
-      >;
-    }
-
-    // Extract custom labels (excluding protected ones)
-    if (
-      templateMetadata?.labels &&
-      typeof templateMetadata.labels === "object"
-    ) {
-      const allLabels = templateMetadata.labels as Record<string, string>;
-      const customLabels: Record<string, string> = {};
-
-      for (const [key, value] of Object.entries(allLabels)) {
-        if (
-          !PROTECTED_LABEL_KEYS.includes(key) &&
-          !value.includes("${archestra.")
-        ) {
-          customLabels[key] = value;
-        }
-      }
-
-      if (Object.keys(customLabels).length > 0) {
-        result.labels = customLabels;
-      }
-    }
-
-    // Extract resources from container
-    const podSpec = template?.spec as Record<string, unknown> | undefined;
-    const containers = podSpec?.containers as
-      | Array<Record<string, unknown>>
-      | undefined;
-    if (containers && containers.length > 0) {
-      const container = containers[0];
-      if (container.resources && typeof container.resources === "object") {
-        result.resources = container.resources as {
-          requests?: { memory?: string; cpu?: string };
-          limits?: { memory?: string; cpu?: string };
-        };
-      }
-    }
-
-    return result;
-  } catch {
-    return null;
-  }
 }
 
 /**

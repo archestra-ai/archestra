@@ -452,6 +452,7 @@ export class BrowserStreamService {
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    initialUrl?: string,
   ): Promise<TabResult> {
     const lockKey = toConversationStateKey(
       agentId,
@@ -478,6 +479,7 @@ export class BrowserStreamService {
       agentId,
       conversationId,
       userContext,
+      initialUrl,
     );
     this.tabSelectionLocks.set(lockKey, task);
 
@@ -494,6 +496,7 @@ export class BrowserStreamService {
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    initialUrl?: string,
   ): Promise<TabResult> {
     const tabsTool = await this.findTabsTool(agentId, userContext.userId);
     if (!tabsTool) {
@@ -914,27 +917,25 @@ export class BrowserStreamService {
           });
           this.invalidateTabsListCache({ agentId, userContext, tabsTool });
 
-          // Navigate to default URL for new conversations
+          // Navigate to initial URL (or default) for new conversations
+          const targetUrl = initialUrl || DEFAULT_BROWSER_PREVIEW_URL;
           const navigateTool = await this.findNavigateTool(
             agentId,
             userContext.userId,
           );
           if (navigateTool) {
             logTabSyncInfo(
-              { agentId, conversationId, url: DEFAULT_BROWSER_PREVIEW_URL },
-              "[BrowserTabs] Navigating to default URL for new conversation",
+              { agentId, conversationId, url: targetUrl },
+              "[BrowserTabs] Navigating to initial URL for new conversation",
             );
             await client.callTool({
               name: navigateTool,
-              arguments: { url: DEFAULT_BROWSER_PREVIEW_URL },
+              arguments: { url: targetUrl },
             });
           }
 
           const tabId = generateTabId();
-          const initialState = createInitialState(
-            tabId,
-            DEFAULT_BROWSER_PREVIEW_URL,
-          );
+          const initialState = createInitialState(tabId, targetUrl);
           const stateWithIndex: BrowserState = {
             ...initialState,
             tabs: initialState.tabs.map((t) =>
@@ -970,7 +971,7 @@ export class BrowserStreamService {
         userContext,
         client,
         tabsTool,
-        null, // No URL to restore
+        initialUrl || null, // Use initial URL if provided
       );
     } catch (error) {
       const errorMessage =

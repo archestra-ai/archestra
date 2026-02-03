@@ -117,6 +117,10 @@ export default function ChatPage() {
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
+  // Store pending URL for browser navigation after conversation is created
+  const [pendingBrowserUrl, setPendingBrowserUrl] = useState<
+    string | undefined
+  >(undefined);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -791,6 +795,56 @@ export default function ChatPage() {
     localStorage.setItem(LocalStorageKeys.browserOpen, "false");
   }, []);
 
+  // Handle creating conversation from browser URL input (when no conversation exists)
+  const handleCreateConversationWithUrl = useCallback(
+    (url: string) => {
+      if (!initialAgentId || createConversationMutation.isPending) {
+        return;
+      }
+
+      // Store the URL to navigate to after conversation is created
+      setPendingBrowserUrl(url);
+
+      // Find the provider for the initial model
+      const modelInfo = chatModels.find((m) => m.id === initialModel);
+      const selectedProvider = modelInfo?.provider as
+        | SupportedChatProvider
+        | undefined;
+
+      // Create conversation with the selected agent
+      createConversationMutation.mutate(
+        {
+          agentId: initialAgentId,
+          selectedModel: initialModel,
+          selectedProvider,
+          chatApiKeyId: initialApiKeyId,
+        },
+        {
+          onSuccess: (newConversation) => {
+            if (newConversation) {
+              newlyCreatedConversationRef.current = newConversation.id;
+              selectConversation(newConversation.id);
+              // URL navigation will happen via useBrowserStream after conversation connects
+            }
+          },
+        },
+      );
+    },
+    [
+      initialAgentId,
+      initialModel,
+      initialApiKeyId,
+      chatModels,
+      createConversationMutation,
+      selectConversation,
+    ],
+  );
+
+  // Callback to clear pending browser URL after navigation completes
+  const handleInitialNavigateComplete = useCallback(() => {
+    setPendingBrowserUrl(undefined);
+  }, []);
+
   // Handle initial agent change (when no conversation exists)
   const handleInitialAgentChange = useCallback((agentId: string) => {
     setInitialAgentId(agentId);
@@ -1296,6 +1350,10 @@ export default function ChatPage() {
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
         isInstallingBrowser={isInstallingBrowser}
+        onCreateConversationWithUrl={handleCreateConversationWithUrl}
+        isCreatingConversation={createConversationMutation.isPending}
+        initialNavigateUrl={pendingBrowserUrl}
+        onInitialNavigateComplete={handleInitialNavigateComplete}
       />
 
       <PromptVersionHistoryDialog

@@ -18,6 +18,7 @@ import {
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -44,6 +45,14 @@ interface BrowserPreviewContentProps {
   isInstalling?: boolean;
   /** When true, this is a popup that follows the active conversation */
   isPopup?: boolean;
+  /** Called when user enters a URL without a conversation - should create conversation and navigate */
+  onCreateConversationWithUrl?: (url: string) => void;
+  /** Whether conversation creation is in progress */
+  isCreatingConversation?: boolean;
+  /** URL to navigate to once connected (after conversation creation) */
+  initialNavigateUrl?: string;
+  /** Called after initial navigation is triggered */
+  onInitialNavigateComplete?: () => void;
 }
 
 export function BrowserPreviewContent({
@@ -53,10 +62,15 @@ export function BrowserPreviewContent({
   className,
   isInstalling = false,
   isPopup = false,
+  onCreateConversationWithUrl,
+  isCreatingConversation = false,
+  initialNavigateUrl,
+  onInitialNavigateComplete,
 }: BrowserPreviewContentProps) {
   const [typeText, setTypeText] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const initialNavigateTriggeredRef = useRef(false);
 
   const {
     screenshot,
@@ -80,14 +94,32 @@ export function BrowserPreviewContent({
     conversationId,
     isActive,
     isPopup,
+    initialUrl: initialNavigateUrl,
   });
 
   const handleNavigate = useCallback(
     (e: FormEvent) => {
       e.preventDefault();
-      navigate(urlInput);
+      if (!urlInput.trim()) return;
+
+      // Normalize URL
+      let normalizedUrl = urlInput.trim();
+      if (
+        !normalizedUrl.startsWith("http://") &&
+        !normalizedUrl.startsWith("https://")
+      ) {
+        normalizedUrl = `https://${normalizedUrl}`;
+      }
+
+      if (conversationId) {
+        // Has conversation - navigate directly
+        navigate(normalizedUrl);
+      } else if (onCreateConversationWithUrl) {
+        // No conversation - create one and navigate
+        onCreateConversationWithUrl(normalizedUrl);
+      }
     },
-    [urlInput, navigate],
+    [urlInput, conversationId, navigate, onCreateConversationWithUrl],
   );
 
   const handleType = useCallback(
@@ -154,6 +186,30 @@ export function BrowserPreviewContent({
     },
     [isConnected, isInteracting, click],
   );
+
+  // Clear initial URL state once connected (backend handles initial navigation via subscription)
+  useEffect(() => {
+    if (
+      initialNavigateUrl &&
+      isConnected &&
+      conversationId &&
+      !initialNavigateTriggeredRef.current
+    ) {
+      initialNavigateTriggeredRef.current = true;
+      onInitialNavigateComplete?.();
+    }
+  }, [
+    initialNavigateUrl,
+    isConnected,
+    conversationId,
+    onInitialNavigateComplete,
+  ]);
+
+  // Reset the trigger ref when conversationId changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset ref when conversationId changes
+  useEffect(() => {
+    initialNavigateTriggeredRef.current = false;
+  }, [conversationId]);
 
   return (
     <div
@@ -329,15 +385,24 @@ export function BrowserPreviewContent({
             }}
             onFocus={() => setIsEditingUrl(true)}
             className="h-7 text-xs!"
-            disabled={isNavigating || !conversationId}
+            disabled={isNavigating || isCreatingConversation}
           />
           <Button
             type="submit"
             size="sm"
             className="h-7 px-3 text-xs"
-            disabled={isNavigating || !urlInput.trim() || !conversationId}
+            disabled={
+              isNavigating ||
+              isCreatingConversation ||
+              !urlInput.trim() ||
+              (!conversationId && !onCreateConversationWithUrl)
+            }
           >
-            {isNavigating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Go"}
+            {isNavigating || isCreatingConversation ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              "Go"
+            )}
           </Button>
         </form>
       </div>
@@ -356,7 +421,7 @@ export function BrowserPreviewContent({
       >
         {isConnecting && (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-2">
+            <div className="text-center space-y-2 mt-20">
               <LoadingSpinner />
               <p className="text-sm text-muted-foreground">Connecting...</p>
             </div>
@@ -394,13 +459,6 @@ export function BrowserPreviewContent({
                   <Loader2 className="h-12 w-12 text-muted-foreground mx-auto animate-spin" />
                   <p className="text-sm text-muted-foreground">
                     Installing browser...
-                  </p>
-                </>
-              ) : !conversationId ? (
-                <>
-                  <Globe className="h-12 w-12 text-muted-foreground mx-auto" />
-                  <p className="text-sm text-muted-foreground">
-                    Send a message to start browsing
                   </p>
                 </>
               ) : (

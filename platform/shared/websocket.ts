@@ -17,6 +17,8 @@ const SubscribeBrowserStreamPayloadSchema = z.object({
   // Viewport dimensions for screenshots - frontend sends container size
   viewportWidth: z.number().int().min(100).max(2000).optional(),
   viewportHeight: z.number().int().min(100).max(2000).optional(),
+  // Initial URL to navigate to (for new conversations created from URL bar)
+  initialUrl: z.string().url().optional(),
 });
 
 const UnsubscribeBrowserStreamPayloadSchema = z.object({

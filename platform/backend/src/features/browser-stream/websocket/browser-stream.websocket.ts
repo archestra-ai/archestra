@@ -101,6 +101,9 @@ export class BrowserStreamSocketClientContext {
           ws,
           conversationId,
           clientContext,
+          typeof payload?.initialUrl === "string"
+            ? payload.initialUrl
+            : undefined,
         );
         return true;
 
@@ -218,6 +221,7 @@ export class BrowserStreamSocketClientContext {
       organizationId: string;
       userIsProfileAdmin: boolean;
     },
+    initialUrl?: string,
   ): Promise<void> {
     // Unsubscribe from any existing stream first (for this WebSocket)
     this.unsubscribeBrowserStream(ws);
@@ -268,6 +272,7 @@ export class BrowserStreamSocketClientContext {
       agentId,
       conversationId,
       userContext,
+      initialUrl,
     );
     if (!tabResult.success) {
       logger.warn(

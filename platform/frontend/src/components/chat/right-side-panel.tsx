@@ -18,6 +18,14 @@ interface RightSidePanelProps {
   conversationId: string | undefined;
   /** When true, shows "Installing browser" message in browser panel */
   isInstallingBrowser?: boolean;
+  /** Called when user enters a URL without a conversation - should create conversation and navigate */
+  onCreateConversationWithUrl?: (url: string) => void;
+  /** Whether conversation creation is in progress */
+  isCreatingConversation?: boolean;
+  /** URL to navigate to once connected (after conversation creation) */
+  initialNavigateUrl?: string;
+  /** Called after initial navigation is triggered */
+  onInitialNavigateComplete?: () => void;
 }
 
 export function RightSidePanel({
@@ -28,6 +36,10 @@ export function RightSidePanel({
   onBrowserClose,
   conversationId,
   isInstallingBrowser = false,
+  onCreateConversationWithUrl,
+  isCreatingConversation = false,
+  initialNavigateUrl,
+  onInitialNavigateComplete,
 }: RightSidePanelProps) {
   const [width, setWidth] = useState(() => {
     if (typeof window !== "undefined") {
@@ -160,7 +172,7 @@ export function RightSidePanel({
         <div
           className="flex-shrink-0"
           style={{
-            height: "50%",
+            height: isArtifactOpen ? "50%" : "unset",
           }}
         >
           <BrowserPanel
@@ -168,6 +180,10 @@ export function RightSidePanel({
             onClose={onBrowserClose}
             conversationId={conversationId}
             isInstalling={isInstallingBrowser}
+            onCreateConversationWithUrl={onCreateConversationWithUrl}
+            isCreatingConversation={isCreatingConversation}
+            initialNavigateUrl={initialNavigateUrl}
+            onInitialNavigateComplete={onInitialNavigateComplete}
           />
         </div>
       )}

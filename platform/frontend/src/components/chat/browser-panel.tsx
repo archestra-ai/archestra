@@ -16,6 +16,14 @@ interface BrowserPanelProps {
   conversationId: string | undefined;
   /** When true, shows "Installing browser" message instead of normal content */
   isInstalling?: boolean;
+  /** Called when user enters a URL without a conversation - should create conversation and navigate */
+  onCreateConversationWithUrl?: (url: string) => void;
+  /** Whether conversation creation is in progress */
+  isCreatingConversation?: boolean;
+  /** URL to navigate to once connected (after conversation creation) */
+  initialNavigateUrl?: string;
+  /** Called after initial navigation is triggered */
+  onInitialNavigateComplete?: () => void;
 }
 
 export function BrowserPanel({
@@ -23,6 +31,10 @@ export function BrowserPanel({
   onClose,
   conversationId,
   isInstalling = false,
+  onCreateConversationWithUrl,
+  isCreatingConversation = false,
+  initialNavigateUrl,
+  onInitialNavigateComplete,
 }: BrowserPanelProps) {
   const handleOpenInNewWindow = useCallback(() => {
     if (!conversationId) return;
@@ -50,6 +62,10 @@ export function BrowserPanel({
       conversationId={conversationId}
       isActive={isOpen}
       isInstalling={isInstalling}
+      onCreateConversationWithUrl={onCreateConversationWithUrl}
+      isCreatingConversation={isCreatingConversation}
+      initialNavigateUrl={initialNavigateUrl}
+      onInitialNavigateComplete={onInitialNavigateComplete}
       className="border-t"
       headerActions={
         <>

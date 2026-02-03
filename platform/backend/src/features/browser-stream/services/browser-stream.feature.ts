@@ -61,11 +61,13 @@ class BrowserStreamFeature {
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    initialUrl?: string,
   ) {
     return this.getService().selectOrCreateTab(
       agentId,
       conversationId,
       userContext,
+      initialUrl,
     );
   }
 

@@ -55,6 +55,8 @@ interface UseBrowserStreamOptions {
   isActive: boolean;
   /** If true, this is a popup window that should follow the active conversation */
   isPopup?: boolean;
+  /** Initial URL to navigate to when subscribing (used for new conversations) */
+  initialUrl?: string;
 }
 
 interface UseBrowserStreamReturn {
@@ -82,6 +84,7 @@ export function useBrowserStream({
   conversationId: propConversationId,
   isActive,
   isPopup = false,
+  initialUrl,
 }: UseBrowserStreamOptions): UseBrowserStreamReturn {
   // For popups, track the active conversation from localStorage
   const [activeConversationId, setActiveConversationId] = useState<
@@ -156,27 +159,12 @@ export function useBrowserStream({
 
   // Subscribe to browser stream via existing WebSocket
   useEffect(() => {
-    if (!isActive || !conversationId) {
-      // Unsubscribe when panel closes
-      if (subscribedConversationIdRef.current) {
-        websocketService.send({
-          type: "unsubscribe_browser_stream",
-          payload: { conversationId: subscribedConversationIdRef.current },
-        });
-        subscribedConversationIdRef.current = null;
-      }
-      setIsConnected(false);
-      setScreenshot(null);
-      prevConversationIdRef.current = conversationId;
-      return;
-    }
-
-    // Clear state when switching conversations
-    const isConversationSwitch =
-      prevConversationIdRef.current !== undefined &&
+    // Clear state when conversation changes (including to/from undefined)
+    const conversationChanged =
       prevConversationIdRef.current !== conversationId;
 
-    if (isConversationSwitch) {
+    if (conversationChanged) {
+      // Unsubscribe from previous conversation
       if (subscribedConversationIdRef.current) {
         websocketService.send({
           type: "unsubscribe_browser_stream",
@@ -184,13 +172,18 @@ export function useBrowserStream({
         });
         subscribedConversationIdRef.current = null;
       }
+      // Reset all state immediately
       setScreenshot(null);
       setUrlInput("");
       setIsConnected(false);
       setIsEditingUrl(false);
+      setError(null);
+      prevConversationIdRef.current = conversationId;
     }
 
-    prevConversationIdRef.current = conversationId;
+    if (!isActive || !conversationId) {
+      return;
+    }
 
     setIsConnecting(true);
     setError(null);
@@ -306,7 +299,7 @@ export function useBrowserStream({
     const subscribeTimeout = setTimeout(() => {
       websocketService.send({
         type: "subscribe_browser_stream",
-        payload: { conversationId },
+        payload: { conversationId, initialUrl },
       });
       subscribedConversationIdRef.current = conversationId;
     }, 100);
@@ -330,7 +323,7 @@ export function useBrowserStream({
         subscribedConversationIdRef.current = null;
       }
     };
-  }, [isActive, conversationId, setIsEditingUrl]);
+  }, [isActive, conversationId, setIsEditingUrl, initialUrl]);
 
   const navigate = useCallback(
     (url: string) => {

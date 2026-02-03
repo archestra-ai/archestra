@@ -36,6 +36,11 @@ import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import {
+  MCPUIRenderer,
+  extractUIResource,
+  isMCPUIResource,
+} from "./mcp-ui-renderer";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -909,6 +914,35 @@ function MessageTool({
         toolResultPart={toolResultPart}
         errorText={errorText}
       />
+    );
+  }
+
+  // Check for MCP UI resources in tool output
+  const toolOutput = toolResultPart?.output ?? part.output;
+  const uiResource = extractUIResource(toolOutput);
+  
+  if (uiResource) {
+    return (
+      <Tool>
+        <ToolHeader
+          type={`tool-${toolName}`}
+          state="output-available"
+          isCollapsible={false}
+        />
+        <ToolContent>
+          <MCPUIRenderer
+            resource={uiResource}
+            onNotify={(message, type) => {
+              // TODO: Integrate with Archestra's toast system
+              console.log(`[MCP-UI Notification] ${type}: ${message}`);
+            }}
+            onLinkOpen={(url) => {
+              window.open(url, "_blank", "noopener,noreferrer");
+            }}
+            className="w-full min-h-[100px]"
+          />
+        </ToolContent>
+      </Tool>
     );
   }
 

@@ -3,9 +3,58 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import websocketService from "@/lib/websocket";
 
+/** localStorage key for tracking the active browser conversation */
+const ACTIVE_BROWSER_CONVERSATION_KEY = "activeBrowserConversation";
+
+interface ActiveBrowserConversation {
+  conversationId: string;
+  agentId?: string;
+  timestamp: number;
+}
+
+/**
+ * Store the active browser conversation in localStorage.
+ * Called when the main panel subscribes to a browser stream.
+ */
+export function setActiveBrowserConversation(
+  conversationId: string,
+  agentId?: string,
+): void {
+  const data: ActiveBrowserConversation = {
+    conversationId,
+    agentId,
+    timestamp: Date.now(),
+  };
+  localStorage.setItem(ACTIVE_BROWSER_CONVERSATION_KEY, JSON.stringify(data));
+}
+
+/**
+ * Get the active browser conversation from localStorage.
+ */
+export function getActiveBrowserConversation(): ActiveBrowserConversation | null {
+  try {
+    const data = localStorage.getItem(ACTIVE_BROWSER_CONVERSATION_KEY);
+    if (data) {
+      return JSON.parse(data) as ActiveBrowserConversation;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null;
+}
+
+/**
+ * Clear the active browser conversation from localStorage.
+ */
+export function clearActiveBrowserConversation(): void {
+  localStorage.removeItem(ACTIVE_BROWSER_CONVERSATION_KEY);
+}
+
 interface UseBrowserStreamOptions {
   conversationId: string | undefined;
   isActive: boolean;
+  /** If true, this is a popup window that should follow the active conversation */
+  isPopup?: boolean;
 }
 
 interface UseBrowserStreamReturn {
@@ -30,16 +79,31 @@ interface UseBrowserStreamReturn {
 }
 
 export function useBrowserStream({
-  conversationId,
+  conversationId: propConversationId,
   isActive,
+  isPopup = false,
 }: UseBrowserStreamOptions): UseBrowserStreamReturn {
+  // For popups, track the active conversation from localStorage
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | undefined
+  >(() => {
+    if (isPopup) {
+      const active = getActiveBrowserConversation();
+      return active?.conversationId;
+    }
+    return propConversationId;
+  });
+
+  // The effective conversationId: from prop for main panel, from localStorage for popup
+  const conversationId = isPopup ? activeConversationId : propConversationId;
+
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [urlInput, setUrlInput] = useState<string>("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [isEditingUrlState, setIsEditingUrlState] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -47,10 +111,43 @@ export function useBrowserStream({
   const subscribedConversationIdRef = useRef<string | null>(null);
   const prevConversationIdRef = useRef<string | undefined>(undefined);
   const isEditingUrlRef = useRef(false);
-  // Keep ref in sync with state for use in subscription callbacks
+
+  // Wrapper that updates BOTH ref (immediately) and state (for UI)
+  // This prevents race conditions where screenshot updates come in
+  // before the useEffect syncs the ref
+  const setIsEditingUrl = useCallback((value: boolean) => {
+    isEditingUrlRef.current = value;
+    setIsEditingUrlState(value);
+  }, []);
+
+  // For popups, listen for storage changes to follow active conversation
   useEffect(() => {
-    isEditingUrlRef.current = isEditingUrl;
-  }, [isEditingUrl]);
+    if (!isPopup) return;
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === ACTIVE_BROWSER_CONVERSATION_KEY && e.newValue) {
+        try {
+          const data = JSON.parse(e.newValue) as ActiveBrowserConversation;
+          if (data.conversationId !== activeConversationId) {
+            setActiveConversationId(data.conversationId);
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [isPopup, activeConversationId]);
+
+  // For main panel (not popup), store active conversation in localStorage when subscribing
+  useEffect(() => {
+    if (isPopup || !isActive || !conversationId) return;
+
+    // Store active conversation for popups to follow
+    setActiveBrowserConversation(conversationId);
+  }, [isPopup, isActive, conversationId]);
 
   // Subscribe to browser stream via existing WebSocket
   useEffect(() => {
@@ -228,7 +325,7 @@ export function useBrowserStream({
         subscribedConversationIdRef.current = null;
       }
     };
-  }, [isActive, conversationId]);
+  }, [isActive, conversationId, setIsEditingUrl]);
 
   const navigate = useCallback(
     (url: string) => {
@@ -253,7 +350,7 @@ export function useBrowserStream({
         payload: { conversationId, url: normalizedUrl },
       });
     },
-    [conversationId],
+    [conversationId, setIsEditingUrl],
   );
 
   const navigateBack = useCallback(() => {
@@ -344,6 +441,6 @@ export function useBrowserStream({
     pressKey,
     setUrlInput,
     setIsEditingUrl,
-    isEditingUrl,
+    isEditingUrl: isEditingUrlState,
   };
 }

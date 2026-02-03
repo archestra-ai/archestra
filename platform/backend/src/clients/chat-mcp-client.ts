@@ -820,7 +820,8 @@ export async function getChatMcpTools({
               }
 
               // Sync navigation history when browser_navigate tool is used
-              if (conversationId && mcpTool.name.includes("browser_navigate")) {
+              // Note: Use endsWith to avoid matching browser_navigate_back/forward
+              if (conversationId && mcpTool.name.endsWith("browser_navigate")) {
                 const navigateUrl = toolArguments?.url;
                 if (typeof navigateUrl === "string" && navigateUrl) {
                   const { browserStreamFeature } = await import(
@@ -1229,9 +1230,10 @@ async function addGlobalCatalogTools({
                 }
               }
 
+              // Note: Use endsWith to avoid matching browser_navigate_back/forward
               if (
                 conversationId &&
-                catalogTool.name.includes("browser_navigate")
+                catalogTool.name.endsWith("browser_navigate")
               ) {
                 const navigateUrl = toolArguments?.url;
                 if (typeof navigateUrl === "string" && navigateUrl) {

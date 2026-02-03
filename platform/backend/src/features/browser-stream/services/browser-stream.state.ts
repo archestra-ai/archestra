@@ -199,6 +199,12 @@ export const applyNavigate = (params: {
     return Err({ kind: "TabNotFound", tabId });
   }
 
+  // Skip if navigating to the same URL as the current position
+  // This prevents duplicate consecutive entries in history
+  if (tab.current === url) {
+    return Ok(state);
+  }
+
   const truncated = tab.history.slice(0, tab.historyCursor + 1);
   const updatedHistory: NonEmptyArray<string> =
     truncated.length === 0 ? [url] : [truncated[0], ...truncated.slice(1), url];

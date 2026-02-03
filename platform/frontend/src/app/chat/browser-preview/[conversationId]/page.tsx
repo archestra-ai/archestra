@@ -8,5 +8,6 @@ interface PageProps {
 
 export default async function BrowserPreviewPage({ params }: PageProps) {
   const { conversationId } = await params;
-  return <BrowserPreviewClient conversationId={conversationId} />;
+  // Pass initial conversationId - the popup will follow active conversation via localStorage
+  return <BrowserPreviewClient initialConversationId={conversationId} />;
 }

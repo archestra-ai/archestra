@@ -16,6 +16,8 @@ export type BrowserStreamSubscription = {
   userContext: BrowserUserContext;
   intervalId: NodeJS.Timeout;
   isSending: boolean;
+  /** When true, skip syncing URL changes to history (used during back/forward navigation) */
+  skipHistorySync: boolean;
 };
 
 type BrowserStreamClientContextParams = {
@@ -305,6 +307,7 @@ export class BrowserStreamSocketClientContext {
       userContext,
       intervalId,
       isSending: false,
+      skipHistorySync: false,
     });
 
     void sendTick();
@@ -379,6 +382,10 @@ export class BrowserStreamSocketClientContext {
       return;
     }
 
+    // Skip history sync during back navigation to prevent race conditions
+    // where periodic screenshots detect URL change and add to history
+    subscription.skipHistorySync = true;
+
     try {
       const result = await browserStreamFeature.navigateBack(
         subscription.agentId,
@@ -409,6 +416,8 @@ export class BrowserStreamSocketClientContext {
             error instanceof Error ? error.message : "Navigate back failed",
         },
       });
+    } finally {
+      subscription.skipHistorySync = false;
     }
   }
 
@@ -428,6 +437,10 @@ export class BrowserStreamSocketClientContext {
       });
       return;
     }
+
+    // Skip history sync during forward navigation to prevent race conditions
+    // where periodic screenshots detect URL change and add to history
+    subscription.skipHistorySync = true;
 
     try {
       const result = await browserStreamFeature.navigateForward(
@@ -462,6 +475,8 @@ export class BrowserStreamSocketClientContext {
             error instanceof Error ? error.message : "Navigate forward failed",
         },
       });
+    } finally {
+      subscription.skipHistorySync = false;
     }
   }
 
@@ -698,9 +713,57 @@ export class BrowserStreamSocketClientContext {
           const state = stateResult.value;
           const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
           if (activeTab) {
-            canGoBack = activeTab.historyCursor > 0;
-            canGoForward =
-              activeTab.historyCursor < activeTab.history.length - 1;
+            // Check if URL changed (e.g., from click-triggered navigation)
+            // If the current browser URL differs from our state, update history
+            // BUT skip during back/forward navigation to prevent race conditions
+            const subscription = this.browserSubscriptions.get(ws);
+            const shouldSyncHistory =
+              result.url &&
+              result.url !== activeTab.current &&
+              !this.isBlankUrl(result.url) &&
+              !subscription?.skipHistorySync;
+
+            if (shouldSyncHistory && result.url) {
+              // URL changed - sync navigation history
+              logger.info(
+                {
+                  agentId,
+                  conversationId,
+                  previousUrl: activeTab.current,
+                  newUrl: result.url,
+                },
+                "[BrowserStream] Detected URL change, syncing navigation history",
+              );
+              await browserStreamFeature.syncNavigationFromToolCall({
+                agentId,
+                conversationId,
+                userContext,
+                url: result.url,
+              });
+
+              // Reload state to get updated canGoBack/canGoForward
+              const updatedStateResult = await browserStateManager.getOrLoad({
+                agentId,
+                userId: userContext.userId,
+                conversationId,
+              });
+
+              if (updatedStateResult.tag === "Ok" && updatedStateResult.value) {
+                const updatedState = updatedStateResult.value;
+                const updatedTab = updatedState.tabs.find(
+                  (t) => t.id === updatedState.activeTabId,
+                );
+                if (updatedTab) {
+                  canGoBack = this.canNavigateBack(updatedTab);
+                  canGoForward =
+                    updatedTab.historyCursor < updatedTab.history.length - 1;
+                }
+              }
+            } else {
+              canGoBack = this.canNavigateBack(activeTab);
+              canGoForward =
+                activeTab.historyCursor < activeTab.history.length - 1;
+            }
           }
         }
 
@@ -741,6 +804,26 @@ export class BrowserStreamSocketClientContext {
         },
       });
     }
+  }
+
+  private isBlankUrl(url: string): boolean {
+    return url === "about:blank" || url === "about:newtab" || url === "";
+  }
+
+  /**
+   * Check if user can navigate back to a meaningful page
+   * Returns false if going back would land on about:blank or if at the start
+   */
+  private canNavigateBack(tab: {
+    historyCursor: number;
+    history: string[];
+  }): boolean {
+    if (tab.historyCursor <= 0) {
+      return false;
+    }
+    // Check if the previous entry is a blank URL - if so, can't go back to it
+    const previousUrl = tab.history[tab.historyCursor - 1];
+    return !this.isBlankUrl(previousUrl);
   }
 
   private async sendImmediateScreenshot(

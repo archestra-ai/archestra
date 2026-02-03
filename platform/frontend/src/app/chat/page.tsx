@@ -774,6 +774,37 @@ export default function ChatPage() {
       }
     }
 
+    // If opening browser panel and no conversation exists, create one first
+    // This allows the browser to connect immediately when panel is visible
+    if (
+      !isBrowserPanelOpen &&
+      !conversationId &&
+      initialAgentId &&
+      !createConversationMutation.isPending
+    ) {
+      // Find the provider for the initial model
+      const modelInfo = chatModels.find((m) => m.id === initialModel);
+      const selectedProvider = modelInfo?.provider ?? "anthropic";
+
+      createConversationMutation.mutate(
+        {
+          agentId: initialAgentId,
+          selectedModel: initialModel,
+          selectedProvider,
+          chatApiKeyId: initialApiKeyId,
+        },
+        {
+          onSuccess: (newConversation) => {
+            if (newConversation) {
+              // Mark this as a newly created conversation for MCP session clearing
+              newlyCreatedConversationRef.current = newConversation.id;
+              selectConversation(newConversation.id);
+            }
+          },
+        },
+      );
+    }
+
     const newValue = !isBrowserPanelOpen;
     setIsBrowserPanelOpen(newValue);
     localStorage.setItem(LocalStorageKeys.browserOpen, String(newValue));
@@ -782,6 +813,13 @@ export default function ChatPage() {
     hasPlaywrightMcp,
     isLoadingPlaywrightMcp,
     installBrowser,
+    conversationId,
+    initialAgentId,
+    initialModel,
+    initialApiKeyId,
+    chatModels,
+    createConversationMutation,
+    selectConversation,
   ]);
 
   // Close browser panel handler (also persists to localStorage)

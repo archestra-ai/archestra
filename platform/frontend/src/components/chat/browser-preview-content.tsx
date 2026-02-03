@@ -42,6 +42,8 @@ interface BrowserPreviewContentProps {
   className?: string;
   /** When true, shows "Installing browser" message instead of normal content */
   isInstalling?: boolean;
+  /** When true, this is a popup that follows the active conversation */
+  isPopup?: boolean;
 }
 
 export function BrowserPreviewContent({
@@ -50,6 +52,7 @@ export function BrowserPreviewContent({
   headerActions,
   className,
   isInstalling = false,
+  isPopup = false,
 }: BrowserPreviewContentProps) {
   const [typeText, setTypeText] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
@@ -76,6 +79,7 @@ export function BrowserPreviewContent({
   } = useBrowserStream({
     conversationId,
     isActive,
+    isPopup,
   });
 
   const handleNavigate = useCallback(
@@ -319,16 +323,19 @@ export function BrowserPreviewContent({
             type="text"
             placeholder="Enter URL..."
             value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
+            onChange={(e) => {
+              setIsEditingUrl(true);
+              setUrlInput(e.target.value);
+            }}
             onFocus={() => setIsEditingUrl(true)}
             className="h-7 text-xs!"
-            disabled={isNavigating || !isConnected}
+            disabled={isNavigating || !conversationId}
           />
           <Button
             type="submit"
             size="sm"
             className="h-7 px-3 text-xs"
-            disabled={isNavigating || !urlInput.trim() || !isConnected}
+            disabled={isNavigating || !urlInput.trim() || !conversationId}
           >
             {isNavigating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Go"}
           </Button>

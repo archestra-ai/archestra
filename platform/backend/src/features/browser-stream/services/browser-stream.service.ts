@@ -45,6 +45,11 @@ import {
 } from "./browser-stream.state-manager";
 
 /**
+ * Default URL to show when browser preview is opened for a new conversation
+ */
+const DEFAULT_BROWSER_PREVIEW_URL = "https://archestra.ai";
+
+/**
  * User context required for MCP client authentication
  */
 export interface BrowserUserContext {
@@ -274,6 +279,8 @@ export class BrowserStreamService {
 
   /**
    * Find the Playwright browser navigate tool for an agent
+   * Matches tools like "browser_navigate" or "playwright__browser_navigate"
+   * but NOT "browser_navigate_back" or "browser_navigate_forward"
    */
   private async findNavigateTool(
     agentId: string,
@@ -281,10 +288,23 @@ export class BrowserStreamService {
   ): Promise<string | null> {
     return this.findToolName(
       agentId,
-      (toolName) =>
-        toolName.includes("browser_navigate") ||
-        toolName.endsWith("__navigate") ||
-        (toolName.includes("playwright") && toolName.includes("navigate")),
+      (toolName) => {
+        // Check if it ends with "browser_navigate" (to match both
+        // "browser_navigate" and "prefix__browser_navigate")
+        if (toolName.endsWith("browser_navigate")) return true;
+        // Check for __navigate suffix (older naming convention)
+        if (toolName.endsWith("__navigate")) return true;
+        // As a fallback, check for playwright navigate but exclude back/forward
+        if (
+          toolName.includes("playwright") &&
+          toolName.includes("navigate") &&
+          !toolName.includes("_back") &&
+          !toolName.includes("_forward")
+        ) {
+          return true;
+        }
+        return false;
+      },
       userId,
     );
   }
@@ -887,8 +907,27 @@ export class BrowserStreamService {
           });
           this.invalidateTabsListCache({ agentId, userContext, tabsTool });
 
+          // Navigate to default URL for new conversations
+          const navigateTool = await this.findNavigateTool(
+            agentId,
+            userContext.userId,
+          );
+          if (navigateTool) {
+            logTabSyncInfo(
+              { agentId, conversationId, url: DEFAULT_BROWSER_PREVIEW_URL },
+              "[BrowserTabs] Navigating to default URL for new conversation",
+            );
+            await client.callTool({
+              name: navigateTool,
+              arguments: { url: DEFAULT_BROWSER_PREVIEW_URL },
+            });
+          }
+
           const tabId = generateTabId();
-          const initialState = createInitialState(tabId, "about:blank");
+          const initialState = createInitialState(
+            tabId,
+            DEFAULT_BROWSER_PREVIEW_URL,
+          );
           const stateWithIndex: BrowserState = {
             ...initialState,
             tabs: initialState.tabs.map((t) =>
@@ -1039,22 +1078,21 @@ export class BrowserStreamService {
     }
     this.invalidateTabsListCache({ agentId, userContext, tabsTool });
 
-    const initialUrl = restoreUrl || "about:blank";
-    if (restoreUrl) {
-      const navigateTool = await this.findNavigateTool(
-        agentId,
-        userContext.userId,
+    // Navigate to restore URL or default URL for new conversations
+    const initialUrl = restoreUrl || DEFAULT_BROWSER_PREVIEW_URL;
+    const navigateTool = await this.findNavigateTool(
+      agentId,
+      userContext.userId,
+    );
+    if (navigateTool) {
+      logTabSyncInfo(
+        { agentId, conversationId, url: initialUrl, isRestore: !!restoreUrl },
+        "[BrowserTabs] Navigating to initial URL for new tab",
       );
-      if (navigateTool) {
-        logTabSyncInfo(
-          { agentId, conversationId, restoreUrl },
-          "[BrowserTabs] Restoring URL for new tab",
-        );
-        await client.callTool({
-          name: navigateTool,
-          arguments: { url: restoreUrl },
-        });
-      }
+      await client.callTool({
+        name: navigateTool,
+        arguments: { url: initialUrl },
+      });
     }
 
     return { success: true, tabIndex: resolvedTabIndex, initialUrl };
@@ -1279,20 +1317,6 @@ export class BrowserStreamService {
   }
 
   /**
-   * Find the Playwright browser navigate back tool for an agent
-   */
-  private async findNavigateBackTool(
-    agentId: string,
-    userId?: string,
-  ): Promise<string | null> {
-    return this.findToolName(
-      agentId,
-      (toolName) => toolName.includes("browser_navigate_back"),
-      userId,
-    );
-  }
-
-  /**
    * Find the Playwright browser snapshot tool for an agent
    */
   private async findSnapshotTool(
@@ -1381,20 +1405,38 @@ export class BrowserStreamService {
     url: string,
     userContext: BrowserUserContext,
   ): Promise<NavigateResult> {
+    logger.info(
+      { agentId, conversationId, url },
+      "[BrowserNavigate] Starting navigation",
+    );
+
     const tabResult = await this.selectOrCreateTab(
       agentId,
       conversationId,
       userContext,
     );
     if (!tabResult.success) {
+      logger.error(
+        { agentId, conversationId, error: tabResult.error },
+        "[BrowserNavigate] Failed to select/create tab",
+      );
       throw new ApiError(
         500,
         tabResult.error ?? "Failed to select browser tab",
       );
     }
 
+    logger.info(
+      { agentId, conversationId, tabIndex: tabResult.tabIndex },
+      "[BrowserNavigate] Tab selected/created",
+    );
+
     const toolName = await this.findNavigateTool(agentId, userContext.userId);
     if (!toolName) {
+      logger.error(
+        { agentId, conversationId },
+        "[BrowserNavigate] No navigate tool available",
+      );
       throw new ApiError(
         400,
         "No browser navigate tool available for this agent",
@@ -1409,6 +1451,10 @@ export class BrowserStreamService {
       conversationId,
     );
     if (!client) {
+      logger.error(
+        { agentId, conversationId },
+        "[BrowserNavigate] Failed to get MCP client",
+      );
       throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
 
@@ -1416,7 +1462,10 @@ export class BrowserStreamService {
     // This ensures the page loads with the correct viewport from the start
     await this.resizeBrowser(agentId, conversationId, userContext);
 
-    logger.info({ agentId, toolName, url }, "Navigating browser via MCP");
+    logger.info(
+      { agentId, conversationId, toolName, url },
+      "[BrowserNavigate] Calling MCP navigate tool",
+    );
 
     const result = await client.callTool({
       name: toolName,
@@ -1425,8 +1474,17 @@ export class BrowserStreamService {
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
+      logger.error(
+        { agentId, conversationId, url, errorText },
+        "[BrowserNavigate] MCP navigate tool returned error",
+      );
       throw new ApiError(500, errorText || "Navigation failed");
     }
+
+    logger.info(
+      { agentId, conversationId, url },
+      "[BrowserNavigate] MCP navigate tool succeeded",
+    );
 
     const resolvedUrl =
       (await this.getCurrentUrl(agentId, conversationId, userContext)) ?? url;
@@ -1479,107 +1537,20 @@ export class BrowserStreamService {
 
   /**
    * Navigate browser back to the previous page
+   * Uses internal history state and navigates to the target URL directly
+   * (browser's native back history may be lost when MCP client reconnects)
    */
   async navigateBack(
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
   ): Promise<NavigateResult> {
-    const tabResult = await this.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
+    logger.info(
+      { agentId, conversationId },
+      "[BrowserNavigateBack] Starting back navigation",
     );
-    if (!tabResult.success) {
-      throw new ApiError(
-        500,
-        tabResult.error ?? "Failed to select browser tab",
-      );
-    }
 
-    const toolName = await this.findNavigateBackTool(
-      agentId,
-      userContext.userId,
-    );
-    if (!toolName) {
-      throw new ApiError(
-        400,
-        "No browser navigate back tool available for this agent",
-      );
-    }
-
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
-    }
-
-    logger.info({ agentId, toolName }, "Navigating browser back via MCP");
-
-    const result = await client.callTool({
-      name: toolName,
-      arguments: {},
-    });
-
-    if (result.isError) {
-      const errorText = this.extractTextContent(result.content);
-      throw new ApiError(500, errorText || "Navigate back failed");
-    }
-
-    // Update persisted state to reflect the back navigation
-    const loadResult = await browserStateManager.getOrLoad({
-      agentId,
-      userId: userContext.userId,
-      conversationId,
-    });
-
-    if (isOk(loadResult) && loadResult.value) {
-      const existingState = loadResult.value;
-      const backResult = applyBack({
-        state: existingState,
-        tabId: existingState.activeTabId,
-      });
-
-      if (isOk(backResult)) {
-        await browserStateManager.set({
-          agentId,
-          userId: userContext.userId,
-          conversationId,
-          state: backResult.value.state,
-        });
-
-        logTabSyncInfo(
-          {
-            agentId,
-            conversationId,
-            newUrl: backResult.value.state.tabs.find(
-              (t) => t.id === existingState.activeTabId,
-            )?.current,
-          },
-          "[BrowserTabs] Updated state after navigate back",
-        );
-      }
-    }
-
-    return {
-      success: true,
-    };
-  }
-
-  /**
-   * Navigate browser forward to the next page in history
-   */
-  async navigateForward(
-    agentId: string,
-    conversationId: string,
-    userContext: BrowserUserContext,
-  ): Promise<NavigateResult> {
-    // Check if we can go forward before doing anything
+    // Check if we can go back before doing anything
     const loadResult = await browserStateManager.getOrLoad({
       agentId,
       userId: userContext.userId,
@@ -1587,6 +1558,10 @@ export class BrowserStreamService {
     });
 
     if (!isOk(loadResult) || !loadResult.value) {
+      logger.warn(
+        { agentId, conversationId },
+        "[BrowserNavigateBack] No browser state available",
+      );
       return { success: false, error: "No browser state available" };
     }
 
@@ -1595,8 +1570,22 @@ export class BrowserStreamService {
       (t) => t.id === existingState.activeTabId,
     );
 
-    if (!activeTab || activeTab.historyCursor >= activeTab.history.length - 1) {
-      return { success: false, error: "No forward history available" };
+    if (!activeTab || activeTab.historyCursor <= 0) {
+      logger.warn(
+        { agentId, conversationId, historyCursor: activeTab?.historyCursor },
+        "[BrowserNavigateBack] No back history available",
+      );
+      return { success: false, error: "No back history available" };
+    }
+
+    // Check if going back would land on about:blank - don't allow that
+    const targetUrl = activeTab.history[activeTab.historyCursor - 1];
+    if (this.isBlankUrl(targetUrl)) {
+      logger.warn(
+        { agentId, conversationId, targetUrl },
+        "[BrowserNavigateBack] Cannot go back to blank page",
+      );
+      return { success: false, error: "No back history available" };
     }
 
     const tabResult = await this.selectOrCreateTab(
@@ -1605,21 +1594,29 @@ export class BrowserStreamService {
       userContext,
     );
     if (!tabResult.success) {
+      logger.error(
+        { agentId, conversationId, error: tabResult.error },
+        "[BrowserNavigateBack] Failed to select/create tab",
+      );
       throw new ApiError(
         500,
         tabResult.error ?? "Failed to select browser tab",
       );
     }
 
-    // Get the URL we want to navigate to
-    const targetUrl = activeTab.history[activeTab.historyCursor + 1];
+    // targetUrl already defined above when checking for blank URLs
 
-    // Navigate to the URL using the navigate tool (forward navigation uses regular navigate)
+    // Navigate to the URL using the navigate tool (back navigation uses regular navigate
+    // because browser's native history may be lost when MCP client reconnects)
     const navigateTool = await this.findNavigateTool(
       agentId,
       userContext.userId,
     );
     if (!navigateTool) {
+      logger.error(
+        { agentId, conversationId },
+        "[BrowserNavigateBack] No navigate tool available",
+      );
       throw new ApiError(400, "No browser navigate tool available");
     }
 
@@ -1631,12 +1628,16 @@ export class BrowserStreamService {
       conversationId,
     );
     if (!client) {
+      logger.error(
+        { agentId, conversationId },
+        "[BrowserNavigateBack] Failed to get MCP client",
+      );
       throw new ApiError(500, "Failed to connect to MCP Gateway");
     }
 
     logger.info(
-      { agentId, toolName: navigateTool, url: targetUrl },
-      "Navigating browser forward via MCP",
+      { agentId, conversationId, toolName: navigateTool, url: targetUrl },
+      "[BrowserNavigateBack] Navigating to target URL from history",
     );
 
     const result = await client.callTool({
@@ -1646,6 +1647,160 @@ export class BrowserStreamService {
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
+      logger.error(
+        { agentId, conversationId, url: targetUrl, errorText },
+        "[BrowserNavigateBack] Navigate tool returned error",
+      );
+      throw new ApiError(500, errorText || "Navigate back failed");
+    }
+
+    // Update persisted state to reflect the back navigation
+    const backResult = applyBack({
+      state: existingState,
+      tabId: existingState.activeTabId,
+    });
+
+    if (isOk(backResult)) {
+      await browserStateManager.set({
+        agentId,
+        userId: userContext.userId,
+        conversationId,
+        state: backResult.value.state,
+      });
+
+      logTabSyncInfo(
+        {
+          agentId,
+          conversationId,
+          newUrl: backResult.value.state.tabs.find(
+            (t) => t.id === existingState.activeTabId,
+          )?.current,
+          historyCursor: backResult.value.state.tabs.find(
+            (t) => t.id === existingState.activeTabId,
+          )?.historyCursor,
+        },
+        "[BrowserNavigateBack] Updated state after navigate back",
+      );
+    }
+
+    return {
+      success: true,
+      url: targetUrl,
+    };
+  }
+
+  /**
+   * Navigate browser forward to the next page in history
+   * Uses internal history state and navigates to the target URL directly
+   * (browser's native forward history may be lost when MCP client reconnects)
+   */
+  async navigateForward(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+  ): Promise<NavigateResult> {
+    logger.info(
+      { agentId, conversationId },
+      "[BrowserNavigateForward] Starting forward navigation",
+    );
+
+    // Check if we can go forward before doing anything
+    const loadResult = await browserStateManager.getOrLoad({
+      agentId,
+      userId: userContext.userId,
+      conversationId,
+    });
+
+    if (!isOk(loadResult) || !loadResult.value) {
+      logger.warn(
+        { agentId, conversationId },
+        "[BrowserNavigateForward] No browser state available",
+      );
+      return { success: false, error: "No browser state available" };
+    }
+
+    const existingState = loadResult.value;
+    const activeTab = existingState.tabs.find(
+      (t) => t.id === existingState.activeTabId,
+    );
+
+    if (!activeTab || activeTab.historyCursor >= activeTab.history.length - 1) {
+      logger.warn(
+        {
+          agentId,
+          conversationId,
+          historyCursor: activeTab?.historyCursor,
+          historyLength: activeTab?.history.length,
+        },
+        "[BrowserNavigateForward] No forward history available",
+      );
+      return { success: false, error: "No forward history available" };
+    }
+
+    const tabResult = await this.selectOrCreateTab(
+      agentId,
+      conversationId,
+      userContext,
+    );
+    if (!tabResult.success) {
+      logger.error(
+        { agentId, conversationId, error: tabResult.error },
+        "[BrowserNavigateForward] Failed to select/create tab",
+      );
+      throw new ApiError(
+        500,
+        tabResult.error ?? "Failed to select browser tab",
+      );
+    }
+
+    // Get the URL we want to navigate to from internal history
+    const targetUrl = activeTab.history[activeTab.historyCursor + 1];
+
+    // Navigate to the URL using the navigate tool (forward navigation uses regular navigate
+    // because browser's native history may be lost when MCP client reconnects)
+    const navigateTool = await this.findNavigateTool(
+      agentId,
+      userContext.userId,
+    );
+    if (!navigateTool) {
+      logger.error(
+        { agentId, conversationId },
+        "[BrowserNavigateForward] No navigate tool available",
+      );
+      throw new ApiError(400, "No browser navigate tool available");
+    }
+
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.organizationId,
+      userContext.userIsProfileAdmin,
+      conversationId,
+    );
+    if (!client) {
+      logger.error(
+        { agentId, conversationId },
+        "[BrowserNavigateForward] Failed to get MCP client",
+      );
+      throw new ApiError(500, "Failed to connect to MCP Gateway");
+    }
+
+    logger.info(
+      { agentId, conversationId, toolName: navigateTool, url: targetUrl },
+      "[BrowserNavigateForward] Navigating to target URL from history",
+    );
+
+    const result = await client.callTool({
+      name: navigateTool,
+      arguments: { url: targetUrl },
+    });
+
+    if (result.isError) {
+      const errorText = this.extractTextContent(result.content);
+      logger.error(
+        { agentId, conversationId, url: targetUrl, errorText },
+        "[BrowserNavigateForward] Navigate tool returned error",
+      );
       throw new ApiError(500, errorText || "Navigate forward failed");
     }
 
@@ -1668,8 +1823,11 @@ export class BrowserStreamService {
           agentId,
           conversationId,
           newUrl: targetUrl,
+          historyCursor: forwardResult.value.state.tabs.find(
+            (t) => t.id === existingState.activeTabId,
+          )?.historyCursor,
         },
-        "[BrowserTabs] Updated state after navigate forward",
+        "[BrowserNavigateForward] Updated state after navigate forward",
       );
     }
 

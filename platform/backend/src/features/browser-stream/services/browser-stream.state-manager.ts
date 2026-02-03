@@ -69,8 +69,6 @@ class BrowserStateManager {
           tabs: runtime.tabs.map((t) => ({
             id: t.id,
             current: t.current,
-            historyLength: t.history.length,
-            historyCursor: t.historyCursor,
           })),
         },
         "[BrowserStateManager] Loaded state from database",
@@ -172,9 +170,6 @@ class BrowserStateManager {
         tabs: state.tabs.map((t) => ({
           id: t.id,
           current: t.current,
-          historyLength: t.history.length,
-          historyCursor: t.historyCursor,
-          history: t.history,
         })),
       },
       "[BrowserStateManager] State set and persisted",

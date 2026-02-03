@@ -12,7 +12,6 @@ const BROWSER_WS_MESSAGE_TYPES = [
   "unsubscribe_browser_stream",
   "browser_navigate",
   "browser_navigate_back",
-  "browser_navigate_forward",
   "browser_click",
   "browser_type",
   "browser_press_key",
@@ -124,15 +123,6 @@ class BrowserStreamFeature {
     return this.getService().syncTabMappingFromTabsToolCall(params);
   }
 
-  syncNavigationFromToolCall(params: {
-    agentId: string;
-    conversationId: string;
-    userContext: BrowserUserContext;
-    url: string;
-  }) {
-    return this.getService().syncNavigationFromToolCall(params);
-  }
-
   takeScreenshot(
     agentId: string,
     conversationId: string,
@@ -215,18 +205,6 @@ class BrowserStreamFeature {
 
   cleanupOrphanedTabs(agentId: string, userContext: BrowserUserContext) {
     return this.getService().cleanupOrphanedTabs(agentId, userContext);
-  }
-
-  navigateForward(
-    agentId: string,
-    conversationId: string,
-    userContext: BrowserUserContext,
-  ) {
-    return this.getService().navigateForward(
-      agentId,
-      conversationId,
-      userContext,
-    );
   }
 }
 

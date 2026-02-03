@@ -189,8 +189,7 @@ describe("websocket browser-stream screenshot handling", () => {
           conversationId: conversation.id,
           screenshot: "img",
           url: "http://example.com",
-          canGoBack: false,
-          canGoForward: false,
+          canGoBack: true,
         },
       }),
     );

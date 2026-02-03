@@ -1029,22 +1029,6 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     }
   }
 
-  // Sync navigation history when browser_navigate tool is used
-  // Note: Use endsWith to avoid matching browser_navigate_back/forward
-  if (conversationId && toolName.endsWith("browser_navigate")) {
-    const navigateUrl = toolArguments?.url;
-    if (typeof navigateUrl === "string" && navigateUrl) {
-      if (browserStreamFeature.isEnabled()) {
-        await browserStreamFeature.syncNavigationFromToolCall({
-          agentId,
-          conversationId,
-          userContext: { userId, organizationId, userIsProfileAdmin },
-          url: navigateUrl,
-        });
-      }
-    }
-  }
-
   // Convert MCP content to string for AI SDK
   return (result.content as Array<{ type: string; text?: string }>)
     .map((item: { type: string; text?: string }) => {

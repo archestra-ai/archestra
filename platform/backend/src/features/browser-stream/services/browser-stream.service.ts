@@ -20,12 +20,10 @@ import {
   shouldLogBrowserStreamTabSync,
 } from "./browser-stream.log-settings";
 import {
-  applyBack,
-  applyForward,
-  applyNavigate,
   applyTabsClose,
   applyTabsCreate,
   applyTabsList,
+  applyUpdateCurrentUrl,
   resolveIndexForTab,
 } from "./browser-stream.state";
 import {
@@ -306,6 +304,21 @@ export class BrowserStreamService {
   }
 
   /**
+   * Find the Playwright browser navigate back tool for an agent
+   * Matches tools like "browser_navigate_back" or "playwright__browser_navigate_back"
+   */
+  private async findNavigateBackTool(
+    agentId: string,
+    userId?: string,
+  ): Promise<string | null> {
+    return this.findToolName(
+      agentId,
+      (toolName) => toolName.includes("browser_navigate_back"),
+      userId,
+    );
+  }
+
+  /**
    * Find the Playwright browser screenshot tool for an agent
    */
   private async findScreenshotTool(
@@ -447,14 +460,12 @@ export class BrowserStreamService {
   /**
    * Select or create a browser tab for a conversation
    * Uses Playwright MCP browser_tabs tool and persists state to database
-   * @param skipUrlSync - Skip URL sync during back/forward navigation to prevent history corruption
    */
   async selectOrCreateTab(
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
     initialUrl?: string,
-    skipUrlSync?: boolean,
   ): Promise<TabResult> {
     const lockKey = toConversationStateKey(
       agentId,
@@ -482,7 +493,6 @@ export class BrowserStreamService {
       conversationId,
       userContext,
       initialUrl,
-      skipUrlSync,
     );
     this.tabSelectionLocks.set(lockKey, task);
 
@@ -500,7 +510,6 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
     initialUrl?: string,
-    skipUrlSync?: boolean,
   ): Promise<TabResult> {
     const tabsTool = await this.findTabsTool(agentId, userContext.userId);
     if (!tabsTool) {
@@ -636,8 +645,6 @@ export class BrowserStreamService {
                 const indexMismatch =
                   currentTabIndex !== undefined &&
                   currentTabIndex !== existingTabIndex;
-                const urlMismatch =
-                  currentUrl !== undefined && currentUrl !== storedUrl;
 
                 if (indexMismatch) {
                   forceMismatch = true;
@@ -654,17 +661,6 @@ export class BrowserStreamService {
                     "[BrowserTabs] Stale tab selection detected, triggering mismatch handling",
                   );
                 } else {
-                  // Skip URL sync during back/forward navigation to prevent history corruption
-                  if (urlMismatch && !skipUrlSync) {
-                    await this.syncActiveTabUrlFromBrowser({
-                      agentId,
-                      conversationId,
-                      userContext,
-                      state: existingState,
-                      currentUrl,
-                    });
-                  }
-
                   await this.restoreUrlIfNeeded({
                     agentId,
                     conversationId,
@@ -1221,42 +1217,6 @@ export class BrowserStreamService {
     }
   }
 
-  private async syncActiveTabUrlFromBrowser(params: {
-    agentId: string;
-    conversationId: string;
-    userContext: BrowserUserContext;
-    state: BrowserState;
-    currentUrl?: string;
-  }): Promise<void> {
-    const { agentId, conversationId, userContext, state, currentUrl } = params;
-    if (!currentUrl || this.isBlankUrl(currentUrl)) {
-      return;
-    }
-
-    const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId);
-    if (!activeTab || activeTab.current === currentUrl) {
-      return;
-    }
-
-    const navigateResult = applyNavigate({
-      state,
-      tabId: state.activeTabId,
-      url: currentUrl,
-    });
-    if (isOk(navigateResult)) {
-      await browserStateManager.set({
-        agentId,
-        userId: userContext.userId,
-        conversationId,
-        state: navigateResult.value,
-      });
-      logger.debug(
-        { agentId, conversationId, currentUrl },
-        "[BrowserTabs] Synced active tab URL from browser",
-      );
-    }
-  }
-
   /**
    * Convert parsed tabs list to BrowserTabsListEntry format
    * Uses the actual current tab from the tool response, not hardcoded index 0
@@ -1489,7 +1449,7 @@ export class BrowserStreamService {
     const resolvedUrl =
       (await this.getCurrentUrl(agentId, conversationId, userContext)) ?? url;
 
-    // Update history in state
+    // Update current URL in state for page restoration when switching conversations
     const loadResult = await browserStateManager.getOrLoad({
       agentId,
       userId: userContext.userId,
@@ -1498,33 +1458,27 @@ export class BrowserStreamService {
 
     if (isOk(loadResult) && loadResult.value) {
       const state = loadResult.value;
-      const navigateResult = applyNavigate({
+      const updateResult = applyUpdateCurrentUrl({
         state,
         tabId: state.activeTabId,
         url: resolvedUrl,
       });
 
-      if (isOk(navigateResult)) {
+      if (isOk(updateResult)) {
         await browserStateManager.set({
           agentId,
           userId: userContext.userId,
           conversationId,
-          state: navigateResult.value,
+          state: updateResult.value,
         });
-        const activeTab = navigateResult.value.tabs.find(
-          (t) => t.id === state.activeTabId,
-        );
         logTabSyncInfo(
           {
             agentId,
             conversationId,
             url: resolvedUrl,
             tabId: state.activeTabId,
-            history: activeTab?.history,
-            historyLength: activeTab?.history.length,
-            historyCursor: activeTab?.historyCursor,
           },
-          "[BrowserTabs] Updated navigation history",
+          "[BrowserTabs] Updated current URL",
         );
       }
     }
@@ -1537,8 +1491,7 @@ export class BrowserStreamService {
 
   /**
    * Navigate browser back to the previous page
-   * Uses internal history state and navigates to the target URL directly
-   * (browser's native back history may be lost when MCP client reconnects)
+   * Uses browser's native back navigation - fails gracefully if no history
    */
   async navigateBack(
     agentId: string,
@@ -1550,51 +1503,11 @@ export class BrowserStreamService {
       "[BrowserNavigateBack] Starting back navigation",
     );
 
-    // Check if we can go back before doing anything
-    const loadResult = await browserStateManager.getOrLoad({
-      agentId,
-      userId: userContext.userId,
-      conversationId,
-    });
-
-    if (!isOk(loadResult) || !loadResult.value) {
-      logger.warn(
-        { agentId, conversationId },
-        "[BrowserNavigateBack] No browser state available",
-      );
-      return { success: false, error: "No browser state available" };
-    }
-
-    const existingState = loadResult.value;
-    const activeTab = existingState.tabs.find(
-      (t) => t.id === existingState.activeTabId,
-    );
-
-    if (!activeTab || activeTab.historyCursor <= 0) {
-      logger.warn(
-        { agentId, conversationId, historyCursor: activeTab?.historyCursor },
-        "[BrowserNavigateBack] No back history available",
-      );
-      return { success: false, error: "No back history available" };
-    }
-
-    // Check if going back would land on about:blank - don't allow that
-    const targetUrl = activeTab.history[activeTab.historyCursor - 1];
-    if (this.isBlankUrl(targetUrl)) {
-      logger.warn(
-        { agentId, conversationId, targetUrl },
-        "[BrowserNavigateBack] Cannot go back to blank page",
-      );
-      return { success: false, error: "No back history available" };
-    }
-
-    // Skip URL sync during back navigation to prevent history corruption
+    // Ensure we have a tab selected
     const tabResult = await this.selectOrCreateTab(
       agentId,
       conversationId,
       userContext,
-      undefined, // initialUrl
-      true, // skipUrlSync - prevents syncActiveTabUrlFromBrowser from corrupting history
     );
     if (!tabResult.success) {
       logger.error(
@@ -1607,20 +1520,17 @@ export class BrowserStreamService {
       );
     }
 
-    // targetUrl already defined above when checking for blank URLs
-
-    // Navigate to the URL using the navigate tool (back navigation uses regular navigate
-    // because browser's native history may be lost when MCP client reconnects)
-    const navigateTool = await this.findNavigateTool(
+    // Find the browser_navigate_back tool
+    const navigateBackTool = await this.findNavigateBackTool(
       agentId,
       userContext.userId,
     );
-    if (!navigateTool) {
+    if (!navigateBackTool) {
       logger.error(
         { agentId, conversationId },
-        "[BrowserNavigateBack] No navigate tool available",
+        "[BrowserNavigateBack] No navigate back tool available",
       );
-      throw new ApiError(400, "No browser navigate tool available");
+      throw new ApiError(400, "No browser navigate back tool available");
     }
 
     const client = await getChatMcpClient(
@@ -1639,257 +1549,69 @@ export class BrowserStreamService {
     }
 
     logger.debug(
-      { agentId, conversationId, toolName: navigateTool, url: targetUrl },
-      "[BrowserNavigateBack] Navigating to target URL from history",
+      { agentId, conversationId, toolName: navigateBackTool },
+      "[BrowserNavigateBack] Calling browser navigate back tool",
     );
 
     const result = await client.callTool({
-      name: navigateTool,
-      arguments: { url: targetUrl },
+      name: navigateBackTool,
+      arguments: {},
     });
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
-      logger.error(
-        { agentId, conversationId, url: targetUrl, errorText },
-        "[BrowserNavigateBack] Navigate tool returned error",
-      );
-      throw new ApiError(500, errorText || "Navigate back failed");
-    }
-
-    // Get the actual browser URL (may differ from targetUrl due to redirects/normalization)
-    const actualUrl =
-      (await this.getCurrentUrl(agentId, conversationId, userContext)) ??
-      targetUrl;
-
-    // Update persisted state to reflect the back navigation
-    const backResult = applyBack({
-      state: existingState,
-      tabId: existingState.activeTabId,
-    });
-
-    if (isOk(backResult)) {
-      let finalState = backResult.value.state;
-
-      // If actual URL differs from history URL, update current without adding to history
-      // This prevents URL normalization mismatches from triggering sync later
-      if (actualUrl !== targetUrl) {
-        finalState = {
-          ...finalState,
-          tabs: finalState.tabs.map((t) =>
-            t.id === existingState.activeTabId
-              ? { ...t, current: actualUrl }
-              : t,
-          ),
-        };
-        logger.debug(
-          { agentId, conversationId, historyUrl: targetUrl, actualUrl },
-          "[BrowserNavigateBack] Synced current URL to actual browser URL",
-        );
-      }
-
-      await browserStateManager.set({
-        agentId,
-        userId: userContext.userId,
-        conversationId,
-        state: finalState,
-      });
-
-      logTabSyncInfo(
-        {
-          agentId,
-          conversationId,
-          newUrl: finalState.tabs.find(
-            (t) => t.id === existingState.activeTabId,
-          )?.current,
-          historyCursor: finalState.tabs.find(
-            (t) => t.id === existingState.activeTabId,
-          )?.historyCursor,
-        },
-        "[BrowserNavigateBack] Updated state after navigate back",
-      );
-    }
-
-    return {
-      success: true,
-      url: actualUrl,
-    };
-  }
-
-  /**
-   * Navigate browser forward to the next page in history
-   * Uses internal history state and navigates to the target URL directly
-   * (browser's native forward history may be lost when MCP client reconnects)
-   */
-  async navigateForward(
-    agentId: string,
-    conversationId: string,
-    userContext: BrowserUserContext,
-  ): Promise<NavigateResult> {
-    logger.debug(
-      { agentId, conversationId },
-      "[BrowserNavigateForward] Starting forward navigation",
-    );
-
-    // Check if we can go forward before doing anything
-    const loadResult = await browserStateManager.getOrLoad({
-      agentId,
-      userId: userContext.userId,
-      conversationId,
-    });
-
-    if (!isOk(loadResult) || !loadResult.value) {
       logger.warn(
-        { agentId, conversationId },
-        "[BrowserNavigateForward] No browser state available",
+        { agentId, conversationId, errorText },
+        "[BrowserNavigateBack] Navigate back tool returned error",
       );
-      return { success: false, error: "No browser state available" };
+      // Return error instead of throwing - back navigation failure is not fatal
+      return {
+        success: false,
+        error: errorText || "No back history available",
+      };
     }
 
-    const existingState = loadResult.value;
-    const activeTab = existingState.tabs.find(
-      (t) => t.id === existingState.activeTabId,
-    );
-
-    if (!activeTab || activeTab.historyCursor >= activeTab.history.length - 1) {
-      logger.warn(
-        {
-          agentId,
-          conversationId,
-          historyCursor: activeTab?.historyCursor,
-          historyLength: activeTab?.history.length,
-        },
-        "[BrowserNavigateForward] No forward history available",
-      );
-      return { success: false, error: "No forward history available" };
-    }
-
-    // Skip URL sync during forward navigation to prevent history corruption
-    const tabResult = await this.selectOrCreateTab(
+    // Get the actual browser URL after navigation
+    const actualUrl = await this.getCurrentUrl(
       agentId,
       conversationId,
       userContext,
-      undefined, // initialUrl
-      true, // skipUrlSync - prevents syncActiveTabUrlFromBrowser from corrupting history
-    );
-    if (!tabResult.success) {
-      logger.error(
-        { agentId, conversationId, error: tabResult.error },
-        "[BrowserNavigateForward] Failed to select/create tab",
-      );
-      throw new ApiError(
-        500,
-        tabResult.error ?? "Failed to select browser tab",
-      );
-    }
-
-    // Get the URL we want to navigate to from internal history
-    const targetUrl = activeTab.history[activeTab.historyCursor + 1];
-
-    // Navigate to the URL using the navigate tool (forward navigation uses regular navigate
-    // because browser's native history may be lost when MCP client reconnects)
-    const navigateTool = await this.findNavigateTool(
-      agentId,
-      userContext.userId,
-    );
-    if (!navigateTool) {
-      logger.error(
-        { agentId, conversationId },
-        "[BrowserNavigateForward] No navigate tool available",
-      );
-      throw new ApiError(400, "No browser navigate tool available");
-    }
-
-    const client = await getChatMcpClient(
-      agentId,
-      userContext.userId,
-      userContext.organizationId,
-      userContext.userIsProfileAdmin,
-      conversationId,
-    );
-    if (!client) {
-      logger.error(
-        { agentId, conversationId },
-        "[BrowserNavigateForward] Failed to get MCP client",
-      );
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
-    }
-
-    logger.debug(
-      { agentId, conversationId, toolName: navigateTool, url: targetUrl },
-      "[BrowserNavigateForward] Navigating to target URL from history",
     );
 
-    const result = await client.callTool({
-      name: navigateTool,
-      arguments: { url: targetUrl },
-    });
-
-    if (result.isError) {
-      const errorText = this.extractTextContent(result.content);
-      logger.error(
-        { agentId, conversationId, url: targetUrl, errorText },
-        "[BrowserNavigateForward] Navigate tool returned error",
-      );
-      throw new ApiError(500, errorText || "Navigate forward failed");
-    }
-
-    // Get the actual browser URL (may differ from targetUrl due to redirects/normalization)
-    const actualUrl =
-      (await this.getCurrentUrl(agentId, conversationId, userContext)) ??
-      targetUrl;
-
-    // Update persisted state to reflect the forward navigation
-    const forwardResult = applyForward({
-      state: existingState,
-      tabId: existingState.activeTabId,
-    });
-
-    if (isOk(forwardResult)) {
-      let finalState = forwardResult.value.state;
-
-      // If actual URL differs from history URL, update current without adding to history
-      // This prevents URL normalization mismatches from triggering sync later
-      if (actualUrl !== targetUrl) {
-        finalState = {
-          ...finalState,
-          tabs: finalState.tabs.map((t) =>
-            t.id === existingState.activeTabId
-              ? { ...t, current: actualUrl }
-              : t,
-          ),
-        };
-        logger.debug(
-          { agentId, conversationId, historyUrl: targetUrl, actualUrl },
-          "[BrowserNavigateForward] Synced current URL to actual browser URL",
-        );
-      }
-
-      await browserStateManager.set({
+    // Update the current URL in state (for page restoration when switching conversations)
+    if (actualUrl && !this.isBlankUrl(actualUrl)) {
+      const loadResult = await browserStateManager.getOrLoad({
         agentId,
         userId: userContext.userId,
         conversationId,
-        state: finalState,
       });
 
-      logTabSyncInfo(
-        {
-          agentId,
-          conversationId,
-          newUrl: finalState.tabs.find(
-            (t) => t.id === existingState.activeTabId,
-          )?.current,
-          historyCursor: finalState.tabs.find(
-            (t) => t.id === existingState.activeTabId,
-          )?.historyCursor,
-        },
-        "[BrowserNavigateForward] Updated state after navigate forward",
-      );
+      if (isOk(loadResult) && loadResult.value) {
+        const state = loadResult.value;
+        const updateResult = applyUpdateCurrentUrl({
+          state,
+          tabId: state.activeTabId,
+          url: actualUrl,
+        });
+
+        if (isOk(updateResult)) {
+          await browserStateManager.set({
+            agentId,
+            userId: userContext.userId,
+            conversationId,
+            state: updateResult.value,
+          });
+          logTabSyncInfo(
+            { agentId, conversationId, url: actualUrl },
+            "[BrowserNavigateBack] Updated current URL after back navigation",
+          );
+        }
+      }
     }
 
     return {
       success: true,
-      url: actualUrl,
+      url: actualUrl ?? undefined,
     };
   }
 
@@ -2473,79 +2195,6 @@ export class BrowserStreamService {
           "[BrowserTabs] Cleared state after closing last tab",
         );
       }
-    }
-  }
-
-  /**
-   * Sync browser state from AI-initiated browser_navigate tool calls.
-   * Updates navigation history in persisted state.
-   */
-  async syncNavigationFromToolCall(params: {
-    agentId: string;
-    conversationId: string;
-    userContext: BrowserUserContext;
-    url: string;
-  }): Promise<void> {
-    const { agentId, conversationId, userContext, url } = params;
-
-    // Load existing state
-    const loadResult = await browserStateManager.getOrLoad({
-      agentId,
-      userId: userContext.userId,
-      conversationId,
-    });
-
-    const existingState = isOk(loadResult) ? loadResult.value : null;
-    if (!existingState) {
-      logger.warn(
-        { agentId, conversationId, url },
-        "[BrowserTabs] No state found to update navigation history",
-      );
-      return;
-    }
-
-    const resolvedUrl =
-      (await this.getCurrentUrl(agentId, conversationId, userContext)) ?? url;
-
-    // Apply navigation to update history
-    const navigateResult = applyNavigate({
-      state: existingState,
-      tabId: existingState.activeTabId,
-      url: resolvedUrl,
-    });
-
-    if (isOk(navigateResult)) {
-      await browserStateManager.set({
-        agentId,
-        userId: userContext.userId,
-        conversationId,
-        state: navigateResult.value,
-      });
-
-      const activeTab = navigateResult.value.tabs.find(
-        (t) => t.id === existingState.activeTabId,
-      );
-      logTabSyncInfo(
-        {
-          agentId,
-          conversationId,
-          url: resolvedUrl,
-          tabId: existingState.activeTabId,
-          historyLength: activeTab?.history.length,
-          historyCursor: activeTab?.historyCursor,
-        },
-        "[BrowserTabs] Updated navigation history from AI navigate action",
-      );
-    } else {
-      logger.warn(
-        {
-          agentId,
-          conversationId,
-          url: resolvedUrl,
-          error: navigateResult.error,
-        },
-        "[BrowserTabs] Failed to apply navigation to state",
-      );
     }
   }
 

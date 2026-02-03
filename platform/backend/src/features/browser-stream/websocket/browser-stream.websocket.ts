@@ -4,7 +4,6 @@ import { WebSocket as WS } from "ws";
 import { closeChatMcpClient } from "@/clients/chat-mcp-client";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
-import { browserStateManager } from "@/features/browser-stream/services/browser-stream.state-manager";
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
 
@@ -16,8 +15,6 @@ export type BrowserStreamSubscription = {
   userContext: BrowserUserContext;
   intervalId: NodeJS.Timeout;
   isSending: boolean;
-  /** When true, skip syncing URL changes to history (used during back/forward navigation) */
-  skipHistorySync: boolean;
 };
 
 type BrowserStreamClientContextParams = {
@@ -121,10 +118,6 @@ export class BrowserStreamSocketClientContext {
 
       case "browser_navigate_back":
         await this.handleBrowserNavigateBack(ws, conversationId);
-        return true;
-
-      case "browser_navigate_forward":
-        await this.handleBrowserNavigateForward(ws, conversationId);
         return true;
 
       case "browser_click":
@@ -312,7 +305,6 @@ export class BrowserStreamSocketClientContext {
       userContext,
       intervalId,
       isSending: false,
-      skipHistorySync: false,
     });
 
     void sendTick();
@@ -387,10 +379,6 @@ export class BrowserStreamSocketClientContext {
       return;
     }
 
-    // Skip history sync during back navigation to prevent race conditions
-    // where periodic screenshots detect URL change and add to history
-    subscription.skipHistorySync = true;
-
     try {
       const result = await browserStreamFeature.navigateBack(
         subscription.agentId,
@@ -421,67 +409,6 @@ export class BrowserStreamSocketClientContext {
             error instanceof Error ? error.message : "Navigate back failed",
         },
       });
-    } finally {
-      subscription.skipHistorySync = false;
-    }
-  }
-
-  async handleBrowserNavigateForward(
-    ws: WebSocket,
-    conversationId: string,
-  ): Promise<void> {
-    const subscription = this.browserSubscriptions.get(ws);
-    if (!subscription || subscription.conversationId !== conversationId) {
-      this.sendToClient(ws, {
-        type: "browser_navigate_forward_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: "Not subscribed to this conversation's browser stream",
-        },
-      });
-      return;
-    }
-
-    // Skip history sync during forward navigation to prevent race conditions
-    // where periodic screenshots detect URL change and add to history
-    subscription.skipHistorySync = true;
-
-    try {
-      const result = await browserStreamFeature.navigateForward(
-        subscription.agentId,
-        conversationId,
-        subscription.userContext,
-      );
-
-      this.sendToClient(ws, {
-        type: "browser_navigate_forward_result",
-        payload: {
-          conversationId,
-          success: result.success,
-          error: result.error,
-        },
-      });
-
-      if (result.success) {
-        await this.sendImmediateScreenshot(ws, conversationId);
-      }
-    } catch (error) {
-      logger.error(
-        { error, conversationId },
-        "Browser navigate forward failed",
-      );
-      this.sendToClient(ws, {
-        type: "browser_navigate_forward_result",
-        payload: {
-          conversationId,
-          success: false,
-          error:
-            error instanceof Error ? error.message : "Navigate forward failed",
-        },
-      });
-    } finally {
-      subscription.skipHistorySync = false;
     }
   }
 
@@ -704,73 +631,9 @@ export class BrowserStreamSocketClientContext {
       );
 
       if (result.screenshot) {
-        // Get navigation state for back/forward buttons
-        let canGoBack = false;
-        let canGoForward = false;
-
-        const stateResult = await browserStateManager.getOrLoad({
-          agentId,
-          userId: userContext.userId,
-          conversationId,
-        });
-
-        if (stateResult.tag === "Ok" && stateResult.value) {
-          const state = stateResult.value;
-          const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
-          if (activeTab) {
-            // Check if URL changed (e.g., from click-triggered navigation)
-            // If the current browser URL differs from our state, update history
-            // BUT skip during back/forward navigation to prevent race conditions
-            const subscription = this.browserSubscriptions.get(ws);
-            const shouldSyncHistory =
-              result.url &&
-              result.url !== activeTab.current &&
-              !this.isBlankUrl(result.url) &&
-              !subscription?.skipHistorySync;
-
-            if (shouldSyncHistory && result.url) {
-              // URL changed - sync navigation history
-              logger.info(
-                {
-                  agentId,
-                  conversationId,
-                  previousUrl: activeTab.current,
-                  newUrl: result.url,
-                },
-                "[BrowserStream] Detected URL change, syncing navigation history",
-              );
-              await browserStreamFeature.syncNavigationFromToolCall({
-                agentId,
-                conversationId,
-                userContext,
-                url: result.url,
-              });
-
-              // Reload state to get updated canGoBack/canGoForward
-              const updatedStateResult = await browserStateManager.getOrLoad({
-                agentId,
-                userId: userContext.userId,
-                conversationId,
-              });
-
-              if (updatedStateResult.tag === "Ok" && updatedStateResult.value) {
-                const updatedState = updatedStateResult.value;
-                const updatedTab = updatedState.tabs.find(
-                  (t) => t.id === updatedState.activeTabId,
-                );
-                if (updatedTab) {
-                  canGoBack = this.canNavigateBack(updatedTab);
-                  canGoForward =
-                    updatedTab.historyCursor < updatedTab.history.length - 1;
-                }
-              }
-            } else {
-              canGoBack = this.canNavigateBack(activeTab);
-              canGoForward =
-                activeTab.historyCursor < activeTab.history.length - 1;
-            }
-          }
-        }
+        // Determine canGoBack based on current URL
+        // If on about:blank, there's nowhere useful to go back to
+        const canGoBack = result.url ? !this.isBlankUrl(result.url) : false;
 
         this.sendToClient(ws, {
           type: "browser_screenshot",
@@ -781,7 +644,6 @@ export class BrowserStreamSocketClientContext {
             viewportWidth: result.viewportWidth,
             viewportHeight: result.viewportHeight,
             canGoBack,
-            canGoForward,
           },
         });
       } else {
@@ -813,22 +675,6 @@ export class BrowserStreamSocketClientContext {
 
   private isBlankUrl(url: string): boolean {
     return url === "about:blank" || url === "about:newtab" || url === "";
-  }
-
-  /**
-   * Check if user can navigate back to a meaningful page
-   * Returns false if going back would land on about:blank or if at the start
-   */
-  private canNavigateBack(tab: {
-    historyCursor: number;
-    history: string[];
-  }): boolean {
-    if (tab.historyCursor <= 0) {
-      return false;
-    }
-    // Check if the previous entry is a blank URL - if so, can't go back to it
-    const previousUrl = tab.history[tab.historyCursor - 1];
-    return !this.isBlankUrl(previousUrl);
   }
 
   private async sendImmediateScreenshot(

@@ -68,10 +68,8 @@ interface UseBrowserStreamReturn {
   isInteracting: boolean;
   error: string | null;
   canGoBack: boolean;
-  canGoForward: boolean;
   navigate: (url: string) => void;
   navigateBack: () => void;
-  navigateForward: () => void;
   click: (x: number, y: number) => void;
   type: (text: string) => void;
   pressKey: (key: string) => void;
@@ -109,7 +107,6 @@ export function useBrowserStream({
   const [isEditingUrlState, setIsEditingUrlState] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
-  const [canGoForward, setCanGoForward] = useState(false);
 
   const subscribedConversationIdRef = useRef<string | null>(null);
   const prevConversationIdRef = useRef<string | undefined>(undefined);
@@ -200,7 +197,6 @@ export function useBrowserStream({
           }
           // Update navigation state
           setCanGoBack(message.payload.canGoBack ?? false);
-          setCanGoForward(message.payload.canGoForward ?? false);
           setError(null);
           setIsConnecting(false);
           setIsConnected(true);
@@ -282,20 +278,6 @@ export function useBrowserStream({
       },
     );
 
-    const unsubNavigateForward = websocketService.subscribe(
-      "browser_navigate_forward_result",
-      (message) => {
-        if (message.payload.conversationId === conversationId) {
-          setIsNavigating(false);
-          if (message.payload.success) {
-            // Navigation message removed - user doesn't want these in chat
-          } else if (message.payload.error) {
-            setError(message.payload.error);
-          }
-        }
-      },
-    );
-
     const subscribeTimeout = setTimeout(() => {
       websocketService.send({
         type: "subscribe_browser_stream",
@@ -313,7 +295,6 @@ export function useBrowserStream({
       unsubType();
       unsubPressKey();
       unsubNavigateBack();
-      unsubNavigateForward();
 
       if (subscribedConversationIdRef.current) {
         websocketService.send({
@@ -359,18 +340,6 @@ export function useBrowserStream({
 
     websocketService.send({
       type: "browser_navigate_back",
-      payload: { conversationId },
-    });
-  }, [conversationId]);
-
-  const navigateForward = useCallback(() => {
-    if (!websocketService.isConnected() || !conversationId) return;
-
-    setIsNavigating(true);
-    setError(null);
-
-    websocketService.send({
-      type: "browser_navigate_forward",
       payload: { conversationId },
     });
   }, [conversationId]);
@@ -430,10 +399,8 @@ export function useBrowserStream({
     isInteracting,
     error,
     canGoBack,
-    canGoForward,
     navigate,
     navigateBack,
-    navigateForward,
     click,
     type,
     pressKey,

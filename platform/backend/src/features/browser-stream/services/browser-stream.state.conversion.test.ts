@@ -44,8 +44,6 @@ describe("browser-stream.state.conversion", () => {
       expect(tab.id).toBe(tabId);
       expect(tab.index).toEqual(None);
       expect(tab.current).toBe(url);
-      expect(tab.history).toEqual([url]);
-      expect(tab.historyCursor).toBe(0);
     });
   });
 
@@ -55,8 +53,6 @@ describe("browser-stream.state.conversion", () => {
         id: "tab-1",
         index: Some(0),
         current: "https://example.com",
-        history: ["https://example.com"],
-        historyCursor: 0,
       };
 
       const runtime: BrowserState = {
@@ -72,8 +68,6 @@ describe("browser-stream.state.conversion", () => {
       expect(persisted.tabs).toHaveProperty("tab-1");
       expect(persisted.tabs["tab-1"]).toEqual({
         current: "https://example.com",
-        history: ["https://example.com"],
-        historyCursor: 0,
       });
     });
 
@@ -82,16 +76,12 @@ describe("browser-stream.state.conversion", () => {
         id: "tab-1",
         index: Some(0),
         current: "https://example.com",
-        history: ["https://example.com"],
-        historyCursor: 0,
       };
 
       const tab2: BrowserTabState = {
         id: "tab-2",
         index: Some(1),
         current: "https://google.com/search",
-        history: ["https://google.com", "https://google.com/search"],
-        historyCursor: 1,
       };
 
       const runtime: BrowserState = {
@@ -105,7 +95,7 @@ describe("browser-stream.state.conversion", () => {
       expect(persisted.activeTabId).toBe("tab-2");
       expect(persisted.tabOrder).toEqual(["tab-1", "tab-2"]);
       expect(Object.keys(persisted.tabs)).toHaveLength(2);
-      expect(persisted.tabs["tab-2"].historyCursor).toBe(1);
+      expect(persisted.tabs["tab-2"].current).toBe("https://google.com/search");
     });
   });
 
@@ -117,8 +107,6 @@ describe("browser-stream.state.conversion", () => {
         tabs: {
           "tab-1": {
             current: "https://example.com",
-            history: ["https://example.com"],
-            historyCursor: 0,
           },
         },
       };
@@ -133,8 +121,6 @@ describe("browser-stream.state.conversion", () => {
       expect(tab.id).toBe("tab-1");
       expect(tab.index).toEqual(None);
       expect(tab.current).toBe("https://example.com");
-      expect(tab.history).toEqual(["https://example.com"]);
-      expect(tab.historyCursor).toBe(0);
     });
 
     it("should preserve tab order when converting", () => {
@@ -144,18 +130,12 @@ describe("browser-stream.state.conversion", () => {
         tabs: {
           "tab-1": {
             current: "https://a.com",
-            history: ["https://a.com"],
-            historyCursor: 0,
           },
           "tab-2": {
             current: "https://b.com",
-            history: ["https://b.com"],
-            historyCursor: 0,
           },
           "tab-3": {
             current: "https://c.com",
-            history: ["https://c.com"],
-            historyCursor: 0,
           },
         },
       };
@@ -187,8 +167,6 @@ describe("browser-stream.state.conversion", () => {
 
       expect(restoredTab.id).toBe(originalTab.id);
       expect(restoredTab.current).toBe(originalTab.current);
-      expect(restoredTab.history).toEqual(originalTab.history);
-      expect(restoredTab.historyCursor).toBe(originalTab.historyCursor);
       // Index is not persisted, so both should be None
       expect(isSome(restoredTab.index)).toBe(false);
     });

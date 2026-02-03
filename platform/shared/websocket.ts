@@ -57,10 +57,6 @@ const BrowserNavigateBackPayloadSchema = z.object({
   conversationId: z.string().uuid(),
 });
 
-const BrowserNavigateForwardPayloadSchema = z.object({
-  conversationId: z.string().uuid(),
-});
-
 const BrowserSetZoomPayloadSchema = z.object({
   conversationId: z.string().uuid(),
   zoomPercent: z.number().min(10).max(200), // Zoom percentage (10% to 200%)
@@ -113,10 +109,6 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
     payload: BrowserNavigateBackPayloadSchema,
   }),
   z.object({
-    type: z.literal("browser_navigate_forward"),
-    payload: BrowserNavigateForwardPayloadSchema,
-  }),
-  z.object({
     type: z.literal("browser_set_zoom"),
     payload: BrowserSetZoomPayloadSchema,
   }),
@@ -151,9 +143,8 @@ export type BrowserScreenshotMessage = {
     // Screenshot dimensions for accurate click mapping
     viewportWidth?: number;
     viewportHeight?: number;
-    // Navigation state for back/forward buttons
+    // Navigation state for back button
     canGoBack?: boolean;
-    canGoForward?: boolean;
   };
 };
 
@@ -229,15 +220,6 @@ export type BrowserNavigateBackResultMessage = {
   };
 };
 
-export type BrowserNavigateForwardResultMessage = {
-  type: "browser_navigate_forward_result";
-  payload: {
-    conversationId: string;
-    success: boolean;
-    error?: string;
-  };
-};
-
 // MCP Logs server -> client messages
 export type McpLogsMessage = {
   type: "mcp_logs";
@@ -267,7 +249,6 @@ export type ServerWebSocketMessage =
   | BrowserScreenshotMessage
   | BrowserNavigateResultMessage
   | BrowserNavigateBackResultMessage
-  | BrowserNavigateForwardResultMessage
   | BrowserStreamErrorMessage
   | BrowserClickResultMessage
   | BrowserTypeResultMessage

@@ -177,6 +177,44 @@ export const ZhipuaiErrorTypes = {
   RATE_LIMIT: "1305",
 } as const;
 
+/**
+ * OpenRouter API error types
+ * OpenRouter uses OpenAI-compatible error format, so types are similar to OpenAI.
+ * @see https://openrouter.ai/docs/errors
+ */
+export const OpenrouterErrorTypes = {
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  INVALID_API_KEY: "invalid_api_key",
+  NOT_FOUND: "not_found_error",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  // OpenRouter-specific error codes
+  MODEL_NOT_FOUND: "model_not_found",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+  RATE_LIMIT: "rate_limit_exceeded",
+  INSUFFICIENT_CREDITS: "insufficient_credits",
+  PROVIDER_ERROR: "provider_error",
+} as const;
+
+/**
+ * DeepSeek API error types
+ * DeepSeek uses OpenAI-compatible error format, so types are similar to OpenAI.
+ * @see https://api-docs.deepseek.com/
+ */
+export const DeepseekErrorTypes = {
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  INVALID_API_KEY: "invalid_api_key",
+  NOT_FOUND: "not_found_error",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  // DeepSeek-specific error codes
+  MODEL_NOT_FOUND: "model_not_found",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+  RATE_LIMIT: "rate_limit_exceeded",
+} as const;
+
 // =============================================================================
 // Normalized Chat Error Codes
 // =============================================================================

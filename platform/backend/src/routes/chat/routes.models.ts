@@ -508,6 +508,105 @@ async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from DeepSeek API
+ * DeepSeek uses OpenAI-compatible API format
+ */
+async function fetchDeepseekModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.deepseek.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch DeepSeek models",
+    );
+    throw new Error(`Failed to fetch DeepSeek models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  // Filter to chat-compatible models
+  // Include: deepseek-chat, deepseek-reasoner models
+  const chatModelPrefixes = ["deepseek-chat", "deepseek-reasoner"];
+
+  return data.data
+    .filter((model) => {
+      const id = model.id.toLowerCase();
+      // Must start with a chat model prefix or be a recognized chat model
+      return chatModelPrefixes.some((prefix) =>
+        id.startsWith(prefix),
+      ) || id.includes("chat") || id.includes("reasoner");
+    })
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "deepseek" as const,
+      createdAt: new Date(model.created * 1000).toISOString(),
+    }));
+}
+
+
+
+/**
+ * Fetch models from OpenRouter API
+ * OpenRouter uses OpenAI-compatible API format
+ */
+async function fetchOpenrouterModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.openrouter.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch OpenRouter models",
+    );
+    throw new Error(`Failed to fetch OpenRouter models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      name?: string;
+      created?: number;
+      context_length?: number;
+      pricing?: {
+        prompt?: string;
+        completion?: string;
+      };
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.name || model.id,
+    provider: "openrouter" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : new Date().toISOString(),
+  }));
+}
+
+/**
  * Fetch models from AWS Bedrock API
  * Uses Bearer token authentication (proxy handles AWS credentials)
  */
@@ -732,6 +831,7 @@ async function getProviderApiKey({
     openai: () => config.chat.openai.apiKey || null,
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
+    openrouter: () => config.chat.openrouter?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
   };
 
@@ -753,6 +853,7 @@ const modelFetchers: Record<
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
   zhipuai: fetchZhipuaiModels,
+  openrouter: fetchOpenrouterModels,
 };
 
 // Register all model fetchers with the sync service

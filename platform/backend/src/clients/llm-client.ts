@@ -64,6 +64,15 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "zhipuai";
   }
 
+  if (lowerModel.includes("deepseek")) {
+    return "deepseek";
+  }
+
+  // OpenRouter models typically use provider/model format (e.g., "openai/gpt-4", "anthropic/claude-3")
+  if (lowerModel.includes("/") && !lowerModel.startsWith("bedrock/")) {
+    return "openrouter";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -87,6 +96,8 @@ const envApiKeyGetters: Record<
   openai: () => config.chat.openai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  openrouter: () => config.chat.openrouter.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
 };
 
 /**
@@ -122,6 +133,8 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
       secret?.secret?.zhipuaiApiKey ??
+      secret?.secret?.deepseekApiKey ??
+      secret?.secret?.openrouterApiKey ??
       secret?.secret?.cohereApiKey ??
       secret?.secret?.bedrockApiKey;
     if (secretValue) {
@@ -166,6 +179,8 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
+  openrouter: "openai/gpt-4o-mini", // OpenRouter's fast model via OpenAI
+  deepseek: "deepseek-chat", // DeepSeek's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
   mistral: "mistral-small-latest", // Mistral's fast model
 };
@@ -309,6 +324,37 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.zhipuai.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  deepseek: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+      );
+    }
+    // DeepSeek uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.deepseek.baseUrl,
+    });
+    return client(modelName);
+  },
+
+
+  openrouter: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "OpenRouter API key is required. Please configure OPENROUTER_API_KEY.",
+      );
+    }
+    // OpenRouter uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.openrouter.baseUrl,
     });
     return client(modelName);
   },
@@ -482,6 +528,29 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("zhipuai", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    deepseek: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/deepseek/:agentId (SDK appends /chat/completions)
+      // DeepSeek is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("deepseek", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+
+    openrouter: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/openrouter/:agentId (SDK appends /chat/completions)
+      // OpenRouter is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("openrouter", agentId),
         headers,
       });
       return client.chat(modelName);

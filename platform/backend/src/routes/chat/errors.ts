@@ -12,6 +12,7 @@ import {
   type SupportedProvider,
   VllmErrorTypes,
   ZhipuaiErrorTypes,
+  DeepseekErrorTypes,
 } from "@shared";
 import { APICallError, RetryError } from "ai";
 import logger from "@/logging";
@@ -1095,6 +1096,85 @@ function mapOllamaErrorWrapper(
   );
 }
 
+
+
+/**
+ * Parse DeepSeek error response body.
+ * DeepSeek uses OpenAI-compatible error format: { error: { type, code, message } }
+ *
+ * @see https://api-docs.deepseek.com/
+ */
+function parseDeepseekError(responseBody: string): ParsedOpenAIError | null {
+  // DeepSeek uses the same error format as OpenAI
+  return parseOpenAIError(responseBody);
+}
+
+/**
+ * Map DeepSeek error to ChatErrorCode.
+ * DeepSeek uses OpenAI-compatible error format.
+ *
+ * @see https://api-docs.deepseek.com/
+ */
+function mapDeepseekErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  const errorType = parsedError?.type;
+  const errorCode = parsedError?.code;
+
+  // First check error.code for specific error codes
+  if (errorCode) {
+    if (
+      errorCode === DeepseekErrorTypes.INVALID_API_KEY ||
+      errorCode === OpenAIErrorTypes.INVALID_API_KEY_CODE
+    ) {
+      return ChatErrorCode.Authentication;
+    }
+    if (
+      errorCode === DeepseekErrorTypes.CONTEXT_LENGTH_EXCEEDED ||
+      errorCode === OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED
+    ) {
+      return ChatErrorCode.ContextTooLong;
+    }
+    if (errorCode === DeepseekErrorTypes.MODEL_NOT_FOUND) {
+      return ChatErrorCode.NotFound;
+    }
+    if (errorCode === DeepseekErrorTypes.RATE_LIMIT) {
+      return ChatErrorCode.RateLimit;
+    }
+  }
+
+  // Then check error.type
+  if (errorType) {
+    switch (errorType) {
+      case DeepseekErrorTypes.AUTHENTICATION:
+      case DeepseekErrorTypes.INVALID_API_KEY:
+        return ChatErrorCode.Authentication;
+      case DeepseekErrorTypes.NOT_FOUND:
+        return ChatErrorCode.NotFound;
+      case DeepseekErrorTypes.SERVER_ERROR:
+      case DeepseekErrorTypes.SERVICE_UNAVAILABLE:
+        return ChatErrorCode.ServerError;
+      case DeepseekErrorTypes.INVALID_REQUEST:
+        return ChatErrorCode.InvalidRequest;
+    }
+  }
+
+  // Fall back to OpenAI error mapping (since DeepSeek is OpenAI-compatible)
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
+function mapDeepseekErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapDeepseekErrorToCode(
+    statusCode,
+    parsedError as ParsedOpenAIError | null,
+  );
+}
+
+
 /**
  * Registry of provider-specific error parsers.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
@@ -1111,6 +1191,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
+  deepseek: parseDeepseekError,
 };
 
 /**
@@ -1129,6 +1210,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,
+  deepseek: mapDeepseekErrorWrapper,
 };
 
 // =============================================================================

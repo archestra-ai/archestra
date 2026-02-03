@@ -11,9 +11,11 @@ import type {
   Anthropic,
   Cerebras,
   Cohere,
+  Deepseek,
   Gemini,
   Mistral,
   OpenAi,
+  Openrouter,
   Vllm,
   Zhipuai,
 } from "@/types";
@@ -22,12 +24,14 @@ type ProviderMessages = {
   anthropic: Anthropic.Types.MessagesRequest["messages"];
   cerebras: Cerebras.Types.ChatCompletionsRequest["messages"];
   cohere: Cohere.Types.ChatRequest["messages"];
+  deepseek: Deepseek.Types.ChatCompletionsRequest["messages"];
   gemini: Gemini.Types.GenerateContentRequest["contents"];
   mistral: Mistral.Types.ChatCompletionsRequest["messages"];
   openai: OpenAi.Types.ChatCompletionsRequest["messages"];
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
+  openrouter: Openrouter.Types.ChatCompletionsRequest["messages"];
 };
 
 /**

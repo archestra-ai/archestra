@@ -17,6 +17,8 @@ import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapterV2/coher
 import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapterV2/gemini";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapterV2/openai";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapterV2/zhipuai";
+import { getUsageTokens as getDeepseekUsage } from "@/routes/proxy/adapterV2/deepseek";
+import { getUsageTokens as getOpenrouterUsage } from "@/routes/proxy/adapterV2/openrouter";
 import type { Agent } from "@/types";
 
 type Fetch = (
@@ -481,6 +483,24 @@ export function getObservableFetch(
           );
         } else if (provider === "zhipuai") {
           const { input, output } = getZhipuaiUsage(data.usage);
+          reportLLMTokens(
+            provider,
+            profile,
+            { input, output },
+            model,
+            externalAgentId,
+          );
+        } else if (provider === "deepseek") {
+          const { input, output } = getDeepseekUsage(data.usage);
+          reportLLMTokens(
+            provider,
+            profile,
+            { input, output },
+            model,
+            externalAgentId,
+          );
+        } else if (provider === "openrouter") {
+          const { input, output } = getOpenrouterUsage(data.usage);
           reportLLMTokens(
             provider,
             profile,

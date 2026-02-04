@@ -831,16 +831,37 @@ export default class K8sDeployment {
     }
 
     // 5. Merge environment variables (YAML env vars + system env vars)
-    if (
-      deployment.spec?.template?.spec?.containers?.[0] &&
-      envVars.length > 0
-    ) {
+    // Also filter out YAML secretKeyRef entries for keys that don't have values
+    if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
+
+      // Build a set of valid secret keys (secrets that have values and will be in K8s Secret)
+      const validSecretKeys = new Set<string>();
+      for (const e of envVars) {
+        const secretKey = e.valueFrom?.secretKeyRef?.key;
+        if (secretKey) {
+          validSecretKeys.add(secretKey);
+        }
+      }
+
+      // Filter YAML env vars to remove secretKeyRef entries for keys without values
+      // This prevents "couldn't find key X in Secret" errors when secrets are optional/empty
+      if (container.env) {
+        container.env = container.env.filter((envVar) => {
+          // Keep all non-secretKeyRef env vars
+          if (!envVar.valueFrom?.secretKeyRef) {
+            return true;
+          }
+          // Only keep secretKeyRef env vars if the key will be in the K8s Secret
+          const secretKey = envVar.valueFrom.secretKeyRef.key;
+          return secretKey && validSecretKeys.has(secretKey);
+        });
+      }
+
+      // Add system env vars that are not already defined in YAML
       const existingEnvNames = new Set(
         (container.env || []).map((e) => e.name),
       );
-
-      // Add system env vars that are not already defined in YAML
       for (const envVar of envVars) {
         if (!existingEnvNames.has(envVar.name)) {
           container.env = [...(container.env || []), envVar];

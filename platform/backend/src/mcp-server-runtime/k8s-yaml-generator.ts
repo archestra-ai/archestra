@@ -450,6 +450,21 @@ export function customYamlToDeployment(
       ...systemValues.labels,
     };
 
+    // YAML parser converts "true"/"false" to booleans and numbers to numbers.
+    // K8s env var values must be strings, so convert them back.
+    const containers = parsed.spec.template?.spec?.containers;
+    if (containers) {
+      for (const container of containers) {
+        if (container.env) {
+          for (const envVar of container.env) {
+            if (envVar.value != null && typeof envVar.value !== "string") {
+              envVar.value = String(envVar.value);
+            }
+          }
+        }
+      }
+    }
+
     return parsed;
   } catch {
     return null;

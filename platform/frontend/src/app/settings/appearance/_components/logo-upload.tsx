@@ -3,6 +3,7 @@
 import { Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -10,7 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { toast } from "sonner";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useUpdateOrganization } from "@/lib/organization.query";
 

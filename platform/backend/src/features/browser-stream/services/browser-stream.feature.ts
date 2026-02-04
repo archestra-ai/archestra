@@ -12,7 +12,6 @@ const BROWSER_WS_MESSAGE_TYPES = [
   "unsubscribe_browser_stream",
   "browser_navigate",
   "browser_navigate_back",
-  "browser_navigate_forward",
   "browser_click",
   "browser_type",
   "browser_press_key",
@@ -53,19 +52,21 @@ class BrowserStreamFeature {
 
   // Delegate all service methods
 
-  checkAvailability(agentId: string) {
-    return this.getService().checkAvailability(agentId);
+  checkAvailability(agentId: string, userId?: string) {
+    return this.getService().checkAvailability(agentId, userId);
   }
 
   selectOrCreateTab(
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    initialUrl?: string,
   ) {
     return this.getService().selectOrCreateTab(
       agentId,
       conversationId,
       userContext,
+      initialUrl,
     );
   }
 
@@ -122,15 +123,6 @@ class BrowserStreamFeature {
     return this.getService().syncTabMappingFromTabsToolCall(params);
   }
 
-  syncNavigationFromToolCall(params: {
-    agentId: string;
-    conversationId: string;
-    userContext: BrowserUserContext;
-    url: string;
-  }) {
-    return this.getService().syncNavigationFromToolCall(params);
-  }
-
   takeScreenshot(
     agentId: string,
     conversationId: string,
@@ -143,8 +135,16 @@ class BrowserStreamFeature {
     );
   }
 
-  getCurrentUrl(agentId: string, userContext: BrowserUserContext) {
-    return this.getService().getCurrentUrl(agentId, userContext);
+  getCurrentUrl(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+  ) {
+    return this.getService().getCurrentUrl(
+      agentId,
+      conversationId,
+      userContext,
+    );
   }
 
   click(
@@ -205,18 +205,6 @@ class BrowserStreamFeature {
 
   cleanupOrphanedTabs(agentId: string, userContext: BrowserUserContext) {
     return this.getService().cleanupOrphanedTabs(agentId, userContext);
-  }
-
-  navigateForward(
-    agentId: string,
-    conversationId: string,
-    userContext: BrowserUserContext,
-  ) {
-    return this.getService().navigateForward(
-      agentId,
-      conversationId,
-      userContext,
-    );
   }
 }
 

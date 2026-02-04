@@ -18,6 +18,8 @@ import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
   AgentTeamModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
@@ -89,9 +91,18 @@ const toolCache = new LRUCacheManager<Record<string, Tool>>({
 });
 
 /**
- * Generate cache key from agentId and userId
+ * Generate cache key from agentId, userId, and optional conversationId.
+ * When conversationId is provided, each conversation gets its own MCP client
+ * and therefore its own browser instance for proper isolation.
  */
-function getCacheKey(agentId: string, userId: string): string {
+function getCacheKey(
+  agentId: string,
+  userId: string,
+  conversationId?: string,
+): string {
+  if (conversationId) {
+    return `${agentId}:${userId}:${conversationId}`;
+  }
   return `${agentId}:${userId}`;
 }
 
@@ -128,8 +139,8 @@ export const __test = {
 /**
  * Select the appropriate token for a user based on team overlap
  * Priority:
- * 1. Personal user token (if user has access to profile via team membership)
- * 2. Organization token (if user is profile admin)
+ * 1. Personal user token (always preferred - ensures userId is available for global catalog tools)
+ * 2. Organization token (fallback for admins)
  * 3. Team token where user is a member AND team is assigned to profile
  *
  * @param agentId - The profile (agent) ID
@@ -140,6 +151,7 @@ export const __test = {
 async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
+  organizationId: string,
   userIsProfileAdmin: boolean,
 ): Promise<{
   tokenValue: string;
@@ -148,40 +160,36 @@ async function selectMCPGatewayToken(
   isOrganizationToken: boolean;
   isUserToken?: boolean;
 } | null> {
-  // Get user's team IDs and profile's team IDs (needed for access check)
+  // Get user's team IDs and profile's team IDs (needed for fallback token selection)
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
   const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
   const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
 
-  // 1. Try personal user token first (if user has access via team membership)
-  if (commonTeamIds.length > 0) {
-    // Get organizationId from one of the common teams
-    const team = await TeamModel.findById(commonTeamIds[0]);
-    if (team) {
-      const userToken = await UserTokenModel.findByUserAndOrg(
-        userId,
-        team.organizationId,
+  // 1. Always try to get/create a personal user token first
+  // This ensures userId is available in the token for global catalog tools
+  {
+    // Ensure user has a token (creates one if missing)
+    const userToken = await UserTokenModel.ensureUserToken(
+      userId,
+      organizationId,
+    );
+    const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
+    if (tokenValue) {
+      logger.info(
+        {
+          agentId,
+          userId,
+          tokenId: userToken.id,
+        },
+        "Using personal user token for chat MCP client",
       );
-      if (userToken) {
-        const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
-        if (tokenValue) {
-          logger.info(
-            {
-              agentId,
-              userId,
-              tokenId: userToken.id,
-            },
-            "Using personal user token for chat MCP client",
-          );
-          return {
-            tokenValue,
-            tokenId: userToken.id,
-            teamId: null,
-            isOrganizationToken: false,
-            isUserToken: true,
-          };
-        }
-      }
+      return {
+        tokenValue,
+        tokenId: userToken.id,
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+      };
     }
   }
 
@@ -200,7 +208,7 @@ async function selectMCPGatewayToken(
             userId,
             tokenId: orgToken.id,
           },
-          "Using organization token for chat MCP client",
+          "Using organization token for chat MCP client (fallback)",
         );
         return {
           tokenValue,
@@ -225,7 +233,7 @@ async function selectMCPGatewayToken(
               tokenId: token.id,
               teamId: token.teamId,
             },
-            "Selected team-scoped token for chat MCP client",
+            "Selected team-scoped token for chat MCP client (fallback)",
           );
           return {
             tokenValue,
@@ -321,20 +329,60 @@ export function clearChatMcpClient(agentId: string): void {
 }
 
 /**
+ * Close and remove cached MCP client for a specific agent/user/conversation.
+ * Should be called when browser stream unsubscribes to free resources.
+ *
+ * @param agentId - The agent (profile) ID
+ * @param userId - The user ID
+ * @param conversationId - The conversation ID
+ */
+export function closeChatMcpClient(
+  agentId: string,
+  userId: string,
+  conversationId: string,
+): void {
+  const cacheKey = getCacheKey(agentId, userId, conversationId);
+  const client = clientCache.get(cacheKey);
+  if (client) {
+    try {
+      client.close();
+      logger.info(
+        { agentId, userId, conversationId, cacheKey },
+        "Closed MCP client connection for conversation",
+      );
+    } catch (error) {
+      logger.warn(
+        { agentId, userId, conversationId, cacheKey, error },
+        "Error closing MCP client connection (non-fatal)",
+      );
+    }
+    clientCache.delete(cacheKey);
+  }
+
+  // Also clear tool cache for this conversation
+  const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
+  toolCache.delete(toolCacheKey);
+}
+
+/**
  * Get or create MCP client for the specified agent and user
  * Connects to internal MCP Gateway with team token authentication
  *
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
+ * @param organizationId - The organization ID for token creation
  * @param userIsProfileAdmin - Whether the user is a profile admin
+ * @param conversationId - Optional conversation ID for per-conversation browser isolation
  * @returns MCP Client connected to the gateway, or null if connection fails
  */
 export async function getChatMcpClient(
   agentId: string,
   userId: string,
+  organizationId: string,
   userIsProfileAdmin: boolean,
+  conversationId?: string,
 ): Promise<Client | null> {
-  const cacheKey = getCacheKey(agentId, userId);
+  const cacheKey = getCacheKey(agentId, userId, conversationId);
 
   // Check cache first
   const cachedClient = clientCache.get(cacheKey);
@@ -384,6 +432,7 @@ export async function getChatMcpClient(
   const tokenResult = await selectMCPGatewayToken(
     agentId,
     userId,
+    organizationId,
     userIsProfileAdmin,
   );
   if (!tokenResult) {
@@ -491,9 +540,9 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
  *
  * @param agentId - The agent ID to fetch tools for
  * @param userId - The user ID for authentication
+ * @param organizationId - The organization ID for token creation
  * @param userIsProfileAdmin - Whether the user is a profile admin
  * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
- * @param organizationId - Optional organization ID for agent tools lookup
  * @param conversationId - Optional conversation ID for browser tab selection
  * @returns Record of tool name to AI SDK Tool object
  */
@@ -501,20 +550,20 @@ export async function getChatMcpTools({
   agentName,
   agentId,
   userId,
+  organizationId,
   userIsProfileAdmin,
   enabledToolIds,
   conversationId,
-  organizationId,
   sessionId,
   delegationChain,
 }: {
   agentName: string;
   agentId: string;
   userId: string;
+  organizationId: string;
   userIsProfileAdmin: boolean;
   enabledToolIds?: string[];
   conversationId?: string;
-  organizationId?: string;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
   /** Delegation chain of agent IDs for tracking delegated agent calls */
@@ -555,6 +604,7 @@ export async function getChatMcpTools({
   const mcpGwToken = await selectMCPGatewayToken(
     agentId,
     userId,
+    organizationId,
     userIsProfileAdmin,
   );
   if (!mcpGwToken) {
@@ -566,7 +616,14 @@ export async function getChatMcpTools({
   }
 
   // Still use MCP client for listing tools (via MCP Gateway)
-  const client = await getChatMcpClient(agentId, userId, userIsProfileAdmin);
+  // Pass conversationId for per-conversation browser isolation
+  const client = await getChatMcpClient(
+    agentId,
+    userId,
+    organizationId,
+    userIsProfileAdmin,
+    conversationId,
+  );
 
   if (!client) {
     logger.warn(
@@ -623,42 +680,6 @@ export async function getChatMcpTools({
             const toolArguments = isRecord(args) ? args : undefined;
 
             try {
-              // For browser tools, ensure the correct conversation tab is selected first
-              // Only if browser streaming feature is enabled
-              // Lazily loaded to avoid circular dependency (browser-stream.feature.ts imports from chat-mcp-client.ts)
-              const { browserStreamFeature } = await import(
-                "@/features/browser-stream/services/browser-stream.feature"
-              );
-
-              if (
-                conversationId &&
-                isBrowserMcpTool(mcpTool.name) &&
-                browserStreamFeature.isEnabled()
-              ) {
-                logger.info(
-                  { agentId, userId, conversationId, toolName: mcpTool.name },
-                  "Selecting conversation browser tab before executing browser tool",
-                );
-
-                const tabResult = await browserStreamFeature.selectOrCreateTab(
-                  agentId,
-                  conversationId,
-                  { userId, userIsProfileAdmin },
-                );
-
-                if (!tabResult.success) {
-                  logger.warn(
-                    {
-                      agentId,
-                      conversationId,
-                      toolName: mcpTool.name,
-                      error: tabResult.error,
-                    },
-                    "Failed to select conversation tab for browser tool, continuing anyway",
-                  );
-                }
-              }
-
               // Check if this is an Archestra tool - handle directly without DB lookup
               if (isArchestraMcpServerTool(mcpTool.name)) {
                 const archestraResponse = await executeArchestraTool(
@@ -706,89 +727,17 @@ export async function getChatMcpTools({
                   .join("\n");
               }
 
-              // Execute non-Archestra tools via mcpClient
-              // This allows passing userId securely without risk of header spoofing
-              const toolCall = {
-                id: randomUUID(),
-                name: mcpTool.name,
-                arguments: toolArguments ?? {},
-              };
-              logger.info({ toolCall, userId }, "Executing MCP tool call");
-              const result = await mcpClient.executeToolCall(
-                toolCall,
+              // Execute non-Archestra tools via shared helper with browser sync
+              return await executeMcpTool({
+                toolName: mcpTool.name,
+                toolArguments,
                 agentId,
-                {
-                  tokenId: mcpGwToken.tokenId,
-                  teamId: mcpGwToken.teamId,
-                  isOrganizationToken: mcpGwToken.isOrganizationToken,
-                  organizationId,
-                  userId, // Pass userId for user-owned server priority
-                },
-              );
-
-              // Check if MCP tool returned an error first
-              // When isError is true, throw to signal AI SDK that tool execution failed
-              // This allows AI SDK to create a tool-error part and continue the conversation
-              if (result.isError) {
-                // Extract error message from content (where MCP server puts the error details)
-                // Content can be an array (from MCP server response) or null (from internal errors)
-                const extractedError = Array.isArray(result.content)
-                  ? result.content
-                      .map((item: { type: string; text?: string }) =>
-                        item.type === "text" && item.text
-                          ? item.text
-                          : JSON.stringify(item),
-                      )
-                      .join("\n")
-                  : null;
-                const errorMessage =
-                  extractedError || result.error || "Tool execution failed";
-                throw new Error(errorMessage);
-              }
-
-              if (conversationId && mcpTool.name.includes("browser_tabs")) {
-                const { browserStreamFeature } = await import(
-                  "@/features/browser-stream/services/browser-stream.feature"
-                );
-                if (browserStreamFeature.isEnabled()) {
-                  await browserStreamFeature.syncTabMappingFromTabsToolCall({
-                    agentId,
-                    conversationId,
-                    userContext: { userId, userIsProfileAdmin },
-                    toolArguments,
-                    toolResultContent: result.content,
-                    tabsToolName: mcpTool.name,
-                  });
-                }
-              }
-
-              // Sync navigation history when browser_navigate tool is used
-              if (conversationId && mcpTool.name.includes("browser_navigate")) {
-                const navigateUrl = toolArguments?.url;
-                if (typeof navigateUrl === "string" && navigateUrl) {
-                  const { browserStreamFeature } = await import(
-                    "@/features/browser-stream/services/browser-stream.feature"
-                  );
-                  if (browserStreamFeature.isEnabled()) {
-                    await browserStreamFeature.syncNavigationFromToolCall({
-                      agentId,
-                      conversationId,
-                      userContext: { userId, userIsProfileAdmin },
-                      url: navigateUrl,
-                    });
-                  }
-                }
-              }
-
-              // Convert MCP content to string for AI SDK
-              return (result.content as Array<{ type: string; text?: string }>)
-                .map((item: { type: string; text?: string }) => {
-                  if (item.type === "text" && item.text) {
-                    return item.text;
-                  }
-                  return JSON.stringify(item);
-                })
-                .join("\n");
+                userId,
+                organizationId,
+                userIsProfileAdmin,
+                conversationId,
+                mcpGwToken,
+              });
             } catch (error) {
               logger.error(
                 {
@@ -933,6 +882,18 @@ export async function getChatMcpTools({
       }
     }
 
+    // Fetch tools from globally available catalogs (e.g., Playwright browser preview)
+    // These are personal servers that users can auto-install, tools available for all agents
+    await addGlobalCatalogTools({
+      aiTools,
+      userId,
+      organizationId,
+      userIsProfileAdmin,
+      agentId,
+      conversationId,
+      mcpGwToken,
+    });
+
     // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
     toolCache.set(toolCacheKey, aiTools);
 
@@ -944,6 +905,302 @@ export async function getChatMcpTools({
       "Failed to fetch tools from MCP Gateway",
     );
     return {};
+  }
+}
+
+/**
+ * Context for MCP tool execution with browser sync support.
+ */
+interface ToolExecutionContext {
+  toolName: string;
+  toolArguments: Record<string, unknown> | undefined;
+  agentId: string;
+  userId: string;
+  organizationId: string;
+  userIsProfileAdmin: boolean;
+  conversationId?: string;
+  mcpGwToken: {
+    tokenId: string;
+    teamId: string | null;
+    isOrganizationToken: boolean;
+  } | null;
+}
+
+/**
+ * Shared helper for executing MCP tools with browser state synchronization.
+ * Handles:
+ * - Browser tab selection for browser tools
+ * - MCP tool execution via mcpClient
+ * - Browser state sync (tabs and navigation)
+ * - Content conversion to string format
+ *
+ * @returns The tool result as a string
+ * @throws Error if tool execution fails
+ */
+async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
+  const {
+    toolName,
+    toolArguments,
+    agentId,
+    userId,
+    organizationId,
+    userIsProfileAdmin,
+    conversationId,
+    mcpGwToken,
+  } = ctx;
+
+  // For browser tools, ensure the correct conversation tab is selected first
+  const { browserStreamFeature } = await import(
+    "@/features/browser-stream/services/browser-stream.feature"
+  );
+
+  if (
+    conversationId &&
+    isBrowserMcpTool(toolName) &&
+    browserStreamFeature.isEnabled()
+  ) {
+    logger.debug(
+      { agentId, userId, conversationId, toolName },
+      "Selecting conversation browser tab before executing browser tool",
+    );
+
+    const tabResult = await browserStreamFeature.selectOrCreateTab(
+      agentId,
+      conversationId,
+      { userId, organizationId, userIsProfileAdmin },
+    );
+
+    if (!tabResult.success) {
+      logger.warn(
+        { agentId, conversationId, toolName, error: tabResult.error },
+        "Failed to select conversation tab for browser tool, continuing anyway",
+      );
+    }
+  }
+
+  // Execute via mcpClient
+  const toolCall = {
+    id: randomUUID(),
+    name: toolName,
+    arguments: toolArguments ?? {},
+  };
+
+  const result = await mcpClient.executeToolCall(
+    toolCall,
+    agentId,
+    mcpGwToken
+      ? {
+          tokenId: mcpGwToken.tokenId,
+          teamId: mcpGwToken.teamId,
+          isOrganizationToken: mcpGwToken.isOrganizationToken,
+          organizationId,
+          userId,
+        }
+      : undefined,
+  );
+
+  // Check if MCP tool returned an error
+  if (result.isError) {
+    const extractedError = Array.isArray(result.content)
+      ? result.content
+          .map((item: { type: string; text?: string }) =>
+            item.type === "text" && item.text
+              ? item.text
+              : JSON.stringify(item),
+          )
+          .join("\n")
+      : null;
+    const errorMessage =
+      extractedError || result.error || "Tool execution failed";
+    throw new Error(errorMessage);
+  }
+
+  // Sync browser state if needed
+  if (conversationId && toolName.includes("browser_tabs")) {
+    if (browserStreamFeature.isEnabled()) {
+      await browserStreamFeature.syncTabMappingFromTabsToolCall({
+        agentId,
+        conversationId,
+        userContext: { userId, organizationId, userIsProfileAdmin },
+        toolArguments,
+        toolResultContent: result.content,
+        tabsToolName: toolName,
+      });
+    }
+  }
+
+  // Convert MCP content to string for AI SDK
+  return (result.content as Array<{ type: string; text?: string }>)
+    .map((item: { type: string; text?: string }) => {
+      if (item.type === "text" && item.text) {
+        return item.text;
+      }
+      return JSON.stringify(item);
+    })
+    .join("\n");
+}
+
+/**
+ * Add tools from globally available catalogs (e.g., Playwright browser preview).
+ * These catalogs are marked as `isGloballyAvailable` and their tools are available
+ * for all agents without explicit assignment. Each user gets their own isolated server.
+ *
+ * Mutates the aiTools object to add global catalog tools.
+ */
+async function addGlobalCatalogTools({
+  aiTools,
+  userId,
+  organizationId,
+  userIsProfileAdmin,
+  agentId,
+  conversationId,
+  mcpGwToken,
+}: {
+  aiTools: Record<string, Tool>;
+  userId: string;
+  organizationId: string;
+  userIsProfileAdmin: boolean;
+  agentId: string;
+  conversationId?: string;
+  mcpGwToken: {
+    tokenValue: string;
+    tokenId: string;
+    teamId: string | null;
+    isOrganizationToken: boolean;
+    isUserToken?: boolean;
+  } | null;
+}): Promise<void> {
+  try {
+    // Get all globally available catalogs
+    const globalCatalogs =
+      await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
+
+    if (globalCatalogs.length === 0) {
+      return;
+    }
+
+    logger.info(
+      {
+        userId,
+        globalCatalogCount: globalCatalogs.length,
+        catalogNames: globalCatalogs.map((c) => c.name),
+      },
+      "Checking for user's personal servers for global catalogs",
+    );
+
+    for (const catalog of globalCatalogs) {
+      // Check if user has a personal server installed for this catalog
+      const userServer = await McpServerModel.getUserPersonalServerForCatalog(
+        userId,
+        catalog.id,
+      );
+
+      if (!userServer) {
+        logger.debug(
+          { userId, catalogId: catalog.id, catalogName: catalog.name },
+          "User does not have personal server for global catalog",
+        );
+        continue;
+      }
+
+      logger.info(
+        {
+          userId,
+          catalogId: catalog.id,
+          catalogName: catalog.name,
+          serverId: userServer.id,
+        },
+        "User has personal server for global catalog, fetching tools",
+      );
+
+      // Get tools for this catalog from the database
+      const catalogTools = await ToolModel.findByCatalogId(catalog.id);
+
+      if (catalogTools.length === 0) {
+        logger.debug(
+          { userId, catalogId: catalog.id, catalogName: catalog.name },
+          "No tools found for global catalog",
+        );
+        continue;
+      }
+
+      // Convert catalog tools to AI SDK Tool format
+      for (const catalogTool of catalogTools) {
+        // Skip if tool already exists (agent-assigned tools take precedence)
+        if (aiTools[catalogTool.name]) {
+          logger.debug(
+            { userId, toolName: catalogTool.name },
+            "Skipping global catalog tool - already exists from agent assignment",
+          );
+          continue;
+        }
+
+        const normalizedSchema = normalizeJsonSchema(catalogTool.parameters);
+
+        aiTools[catalogTool.name] = {
+          description: catalogTool.description || `Tool: ${catalogTool.name}`,
+          inputSchema: jsonSchema(normalizedSchema),
+          execute: async (args: unknown) => {
+            logger.info(
+              {
+                agentId,
+                userId,
+                toolName: catalogTool.name,
+                catalogId: catalog.id,
+                serverId: userServer.id,
+                arguments: args,
+              },
+              "Executing global catalog tool from chat",
+            );
+
+            const toolArguments = isRecord(args) ? args : undefined;
+
+            try {
+              // Execute via shared helper with browser sync
+              return await executeMcpTool({
+                toolName: catalogTool.name,
+                toolArguments,
+                agentId,
+                userId,
+                organizationId,
+                userIsProfileAdmin,
+                conversationId,
+                mcpGwToken,
+              });
+            } catch (error) {
+              logger.error(
+                {
+                  agentId,
+                  userId,
+                  toolName: catalogTool.name,
+                  err: error,
+                  errorMessage:
+                    error instanceof Error ? error.message : String(error),
+                },
+                "Global catalog tool execution failed",
+              );
+              throw error;
+            }
+          },
+        };
+      }
+
+      logger.info(
+        {
+          userId,
+          catalogId: catalog.id,
+          catalogName: catalog.name,
+          toolCount: catalogTools.length,
+          totalTools: Object.keys(aiTools).length,
+        },
+        "Added global catalog tools to chat tools",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { userId, error },
+      "Failed to fetch global catalog tools, continuing without them",
+    );
   }
 }
 

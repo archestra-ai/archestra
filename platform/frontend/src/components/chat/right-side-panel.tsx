@@ -16,6 +16,20 @@ interface RightSidePanelProps {
   isBrowserOpen: boolean;
   onBrowserClose: () => void;
   conversationId: string | undefined;
+  /** When true, shows "Installing browser" message in browser panel */
+  isInstallingBrowser?: boolean;
+  /** Whether Playwright MCP tools are available */
+  hasPlaywrightMcp?: boolean;
+  /** Called to install browser (Playwright MCP) */
+  onInstallBrowser?: () => Promise<unknown>;
+  /** Called when user enters a URL without a conversation - should create conversation and navigate */
+  onCreateConversationWithUrl?: (url: string) => void;
+  /** Whether conversation creation is in progress */
+  isCreatingConversation?: boolean;
+  /** URL to navigate to once connected (after conversation creation) */
+  initialNavigateUrl?: string;
+  /** Called after initial navigation is triggered */
+  onInitialNavigateComplete?: () => void;
 }
 
 export function RightSidePanel({
@@ -25,6 +39,13 @@ export function RightSidePanel({
   isBrowserOpen,
   onBrowserClose,
   conversationId,
+  isInstallingBrowser = false,
+  hasPlaywrightMcp = false,
+  onInstallBrowser,
+  onCreateConversationWithUrl,
+  isCreatingConversation = false,
+  initialNavigateUrl,
+  onInitialNavigateComplete,
 }: RightSidePanelProps) {
   const [width, setWidth] = useState(() => {
     if (typeof window !== "undefined") {
@@ -157,13 +178,20 @@ export function RightSidePanel({
         <div
           className="flex-shrink-0"
           style={{
-            height: "50%",
+            height: isArtifactOpen ? "50%" : "unset",
           }}
         >
           <BrowserPanel
             isOpen={isBrowserOpen}
             onClose={onBrowserClose}
             conversationId={conversationId}
+            isInstallingBrowser={isInstallingBrowser}
+            hasPlaywrightMcp={hasPlaywrightMcp}
+            onInstallBrowser={onInstallBrowser}
+            onCreateConversationWithUrl={onCreateConversationWithUrl}
+            isCreatingConversation={isCreatingConversation}
+            initialNavigateUrl={initialNavigateUrl}
+            onInitialNavigateComplete={onInitialNavigateComplete}
           />
         </div>
       )}

@@ -3,17 +3,14 @@ import {
   hasDuplicateValues,
   isSome,
   uniqueValues,
-  updateTab,
 } from "./browser-stream.state.helpers";
 import {
   type BrowserState,
   type BrowserStateError,
-  type BrowserStateUpdate,
   type BrowserTabId,
   type BrowserTabState,
   type BrowserTabsListEntry,
   Err,
-  type NonEmptyArray,
   Ok,
   type Result,
   Some,
@@ -129,8 +126,6 @@ export const applyTabsCreate = (params: {
     id: tabId,
     index: Some(index),
     current: initialUrl,
-    history: [initialUrl],
-    historyCursor: 0,
   };
 
   return Ok({
@@ -188,7 +183,11 @@ export const applyTabsClose = (params: {
   });
 };
 
-export const applyNavigate = (params: {
+/**
+ * Update the current URL for a tab without tracking history.
+ * Used for page restoration when switching conversations.
+ */
+export const applyUpdateCurrentUrl = (params: {
   state: BrowserState;
   tabId: BrowserTabId;
   url: string;
@@ -199,80 +198,12 @@ export const applyNavigate = (params: {
     return Err({ kind: "TabNotFound", tabId });
   }
 
-  const truncated = tab.history.slice(0, tab.historyCursor + 1);
-  const updatedHistory: NonEmptyArray<string> =
-    truncated.length === 0 ? [url] : [truncated[0], ...truncated.slice(1), url];
-  const updatedTab = {
-    ...tab,
-    current: url,
-    history: updatedHistory,
-    historyCursor: updatedHistory.length - 1,
-  };
+  const updatedTabs = state.tabs.map((t) =>
+    t.id === tabId ? { ...t, current: url } : t,
+  );
 
   return Ok({
     ...state,
-    tabs: updateTab(state.tabs, tabId, () => updatedTab),
-  });
-};
-
-export const applyBack = (params: {
-  state: BrowserState;
-  tabId: BrowserTabId;
-}): Result<BrowserStateError, BrowserStateUpdate> => {
-  const { state, tabId } = params;
-  const tab = findTabById(state.tabs, tabId);
-  if (!tab) {
-    return Err({ kind: "TabNotFound", tabId });
-  }
-
-  if (tab.historyCursor <= 0) {
-    return Err({ kind: "NoBackHistory", tabId });
-  }
-
-  const newCursor = tab.historyCursor - 1;
-  const url = tab.history[newCursor];
-  const updatedTab = {
-    ...tab,
-    current: url,
-    historyCursor: newCursor,
-  };
-
-  return Ok({
-    state: {
-      ...state,
-      tabs: updateTab(state.tabs, tabId, () => updatedTab),
-    },
-    effect: { tag: "Navigate", tabId, url },
-  });
-};
-
-export const applyForward = (params: {
-  state: BrowserState;
-  tabId: BrowserTabId;
-}): Result<BrowserStateError, BrowserStateUpdate> => {
-  const { state, tabId } = params;
-  const tab = findTabById(state.tabs, tabId);
-  if (!tab) {
-    return Err({ kind: "TabNotFound", tabId });
-  }
-
-  if (tab.historyCursor >= tab.history.length - 1) {
-    return Err({ kind: "NoForwardHistory", tabId });
-  }
-
-  const newCursor = tab.historyCursor + 1;
-  const url = tab.history[newCursor];
-  const updatedTab = {
-    ...tab,
-    current: url,
-    historyCursor: newCursor,
-  };
-
-  return Ok({
-    state: {
-      ...state,
-      tabs: updateTab(state.tabs, tabId, () => updatedTab),
-    },
-    effect: { tag: "Navigate", tabId, url },
+    tabs: updatedTabs,
   });
 };

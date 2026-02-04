@@ -1,6 +1,8 @@
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_SERVER_NAME,
   type PredefinedRoleName,
   type SupportedProvider,
   testMcpServerCommand,
@@ -178,6 +180,34 @@ async function seedChatAssistantAgent(): Promise<void> {
 async function seedArchestraCatalogAndTools(): Promise<void> {
   await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
   logger.info("Seeded Archestra catalog and tools");
+}
+
+/**
+ * Seeds Playwright browser preview MCP catalog.
+ * This is a globally available catalog - tools are auto-included for all agents in chat.
+ * Each user gets their own personal Playwright server instance when they click the Browser button.
+ */
+async function seedPlaywrightCatalog(): Promise<void> {
+  await db
+    .insert(schema.internalMcpCatalogTable)
+    .values({
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      name: PLAYWRIGHT_MCP_SERVER_NAME,
+      description:
+        "Browser automation for chat - each user gets their own isolated browser session",
+      serverType: "local",
+      requiresAuth: false,
+      isGloballyAvailable: true,
+      localConfig: {
+        dockerImage: "mcr.microsoft.com/playwright/mcp",
+        transportType: "stdio",
+        // Reduce logging verbosity from Playwright MCP server
+        arguments: ["--console-level", "error"],
+      },
+    })
+    .onConflictDoNothing();
+
+  logger.info("Seeded Playwright browser preview catalog");
 }
 
 /**
@@ -423,6 +453,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultTeam();
   await seedChatAssistantAgent();
   await seedArchestraCatalogAndTools();
+  await seedPlaywrightCatalog();
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();

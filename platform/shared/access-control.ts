@@ -443,6 +443,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatAgentMcpTools]: {
     profile: ["read"],
   },
+  [RouteId.GetChatGlobalTools]: {
+    conversation: ["read"],
+  },
   [RouteId.CreateChatConversation]: {
     conversation: ["create"],
   },

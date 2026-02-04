@@ -1,0 +1,1 @@
+ALTER TABLE "internal_mcp_catalog" ADD COLUMN "is_globally_available" boolean DEFAULT false NOT NULL;

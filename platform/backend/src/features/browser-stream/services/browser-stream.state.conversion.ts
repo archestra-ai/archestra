@@ -3,7 +3,6 @@ import {
   type BrowserState,
   type BrowserTabId,
   type BrowserTabState,
-  type NonEmptyArray,
   None,
   type PersistedBrowserState,
   type PersistedBrowserTabState,
@@ -25,8 +24,6 @@ export const toPersistedState = (
   for (const tab of runtime.tabs) {
     tabs[tab.id] = {
       current: tab.current,
-      history: tab.history,
-      historyCursor: tab.historyCursor,
     };
   }
 
@@ -49,8 +46,6 @@ export const toRuntimeState = (
       id: tabId,
       index: None,
       current: persistedTab.current,
-      history: persistedTab.history,
-      historyCursor: persistedTab.historyCursor,
     };
   });
 
@@ -68,13 +63,10 @@ export const createInitialState = (
   tabId: BrowserTabId,
   initialUrl: string,
 ): BrowserState => {
-  const history: NonEmptyArray<string> = [initialUrl];
   const tab: BrowserTabState = {
     id: tabId,
     index: None,
     current: initialUrl,
-    history,
-    historyCursor: 0,
   };
 
   return {

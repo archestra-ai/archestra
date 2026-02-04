@@ -14,12 +14,33 @@ interface BrowserPanelProps {
   isOpen: boolean;
   onClose: () => void;
   conversationId: string | undefined;
+  /** When true, shows "Installing browser" message instead of normal content */
+  isInstallingBrowser?: boolean;
+  /** Whether Playwright MCP tools are available */
+  hasPlaywrightMcp?: boolean;
+  /** Called to install browser (Playwright MCP) */
+  onInstallBrowser?: () => Promise<unknown>;
+  /** Called when user enters a URL without a conversation - should create conversation and navigate */
+  onCreateConversationWithUrl?: (url: string) => void;
+  /** Whether conversation creation is in progress */
+  isCreatingConversation?: boolean;
+  /** URL to navigate to once connected (after conversation creation) */
+  initialNavigateUrl?: string;
+  /** Called after initial navigation is triggered */
+  onInitialNavigateComplete?: () => void;
 }
 
 export function BrowserPanel({
   isOpen,
   onClose,
   conversationId,
+  isInstallingBrowser = false,
+  hasPlaywrightMcp = false,
+  onInstallBrowser,
+  onCreateConversationWithUrl,
+  isCreatingConversation = false,
+  initialNavigateUrl,
+  onInitialNavigateComplete,
 }: BrowserPanelProps) {
   const handleOpenInNewWindow = useCallback(() => {
     if (!conversationId) return;
@@ -46,6 +67,13 @@ export function BrowserPanel({
     <BrowserPreviewContent
       conversationId={conversationId}
       isActive={isOpen}
+      isInstallingBrowser={isInstallingBrowser}
+      hasPlaywrightMcp={hasPlaywrightMcp}
+      onInstallBrowser={onInstallBrowser}
+      onCreateConversationWithUrl={onCreateConversationWithUrl}
+      isCreatingConversation={isCreatingConversation}
+      initialNavigateUrl={initialNavigateUrl}
+      onInitialNavigateComplete={onInitialNavigateComplete}
       className="border-t"
       headerActions={
         <>

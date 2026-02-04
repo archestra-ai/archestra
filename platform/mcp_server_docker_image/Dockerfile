@@ -46,6 +46,17 @@ RUN npm install -g npm@11.8.0 && \
         tar -xzf "$TMP_DIR/tar.tgz" -C "$NPM_TAR_PATH" --strip-components=1 && \
         rm -rf "$TMP_DIR" && \
         echo "Patched tar to 7.5.7 in npm"; \
+    fi && \
+    # Patch @isaacs/brace-expansion to 5.0.1 inside npm's bundled node_modules to fix GHSA-7h2j-956f-4vf2 (ReDoS)
+    BRACE_SHA256="c908309f6735b002952f2b02563e68d98cba0375322a189ebc4f6f47637ee95b" && \
+    NPM_BRACE_PATH="/usr/local/lib/node_modules/npm/node_modules/@isaacs/brace-expansion" && \
+    if [ -d "$NPM_BRACE_PATH" ]; then \
+        TMP_DIR=$(mktemp -d) && \
+        wget -qO "$TMP_DIR/brace-expansion.tgz" https://registry.npmjs.org/@isaacs/brace-expansion/-/brace-expansion-5.0.1.tgz && \
+        rm -rf "$NPM_BRACE_PATH"/* && \
+        tar -xzf "$TMP_DIR/brace-expansion.tgz" -C "$NPM_BRACE_PATH" --strip-components=1 && \
+        rm -rf "$TMP_DIR" && \
+        echo "Patched @isaacs/brace-expansion to 5.0.1 in npm"; \
     fi
 
 WORKDIR /opt/node-deps

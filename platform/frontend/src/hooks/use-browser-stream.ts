@@ -3,9 +3,60 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import websocketService from "@/lib/websocket";
 
+/** localStorage key for tracking the active browser conversation */
+const ACTIVE_BROWSER_CONVERSATION_KEY = "activeBrowserConversation";
+
+interface ActiveBrowserConversation {
+  conversationId: string;
+  agentId?: string;
+  timestamp: number;
+}
+
+/**
+ * Store the active browser conversation in localStorage.
+ * Called when the main panel subscribes to a browser stream.
+ */
+export function setActiveBrowserConversation(
+  conversationId: string,
+  agentId?: string,
+): void {
+  const data: ActiveBrowserConversation = {
+    conversationId,
+    agentId,
+    timestamp: Date.now(),
+  };
+  localStorage.setItem(ACTIVE_BROWSER_CONVERSATION_KEY, JSON.stringify(data));
+}
+
+/**
+ * Get the active browser conversation from localStorage.
+ */
+export function getActiveBrowserConversation(): ActiveBrowserConversation | null {
+  try {
+    const data = localStorage.getItem(ACTIVE_BROWSER_CONVERSATION_KEY);
+    if (data) {
+      return JSON.parse(data) as ActiveBrowserConversation;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null;
+}
+
+/**
+ * Clear the active browser conversation from localStorage.
+ */
+export function clearActiveBrowserConversation(): void {
+  localStorage.removeItem(ACTIVE_BROWSER_CONVERSATION_KEY);
+}
+
 interface UseBrowserStreamOptions {
   conversationId: string | undefined;
   isActive: boolean;
+  /** If true, this is a popup window that should follow the active conversation */
+  isPopup?: boolean;
+  /** Initial URL to navigate to when subscribing (used for new conversations) */
+  initialUrl?: string;
 }
 
 interface UseBrowserStreamReturn {
@@ -17,10 +68,8 @@ interface UseBrowserStreamReturn {
   isInteracting: boolean;
   error: string | null;
   canGoBack: boolean;
-  canGoForward: boolean;
   navigate: (url: string) => void;
   navigateBack: () => void;
-  navigateForward: () => void;
   click: (x: number, y: number) => void;
   type: (text: string) => void;
   pressKey: (key: string) => void;
@@ -30,51 +79,89 @@ interface UseBrowserStreamReturn {
 }
 
 export function useBrowserStream({
-  conversationId,
+  conversationId: propConversationId,
   isActive,
+  isPopup = false,
+  initialUrl,
 }: UseBrowserStreamOptions): UseBrowserStreamReturn {
+  // For popups, track the active conversation from localStorage
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | undefined
+  >(() => {
+    if (isPopup) {
+      const active = getActiveBrowserConversation();
+      return active?.conversationId;
+    }
+    return propConversationId;
+  });
+
+  // The effective conversationId: from prop for main panel, from localStorage for popup
+  const conversationId = isPopup ? activeConversationId : propConversationId;
+
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [urlInput, setUrlInput] = useState<string>("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [isEditingUrlState, setIsEditingUrlState] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
-  const [canGoForward, setCanGoForward] = useState(false);
 
   const subscribedConversationIdRef = useRef<string | null>(null);
   const prevConversationIdRef = useRef<string | undefined>(undefined);
   const isEditingUrlRef = useRef(false);
-  // Keep ref in sync with state for use in subscription callbacks
+
+  // Wrapper that updates BOTH ref (immediately) and state (for UI)
+  // This prevents race conditions where screenshot updates come in
+  // before the useEffect syncs the ref
+  const setIsEditingUrl = useCallback((value: boolean) => {
+    isEditingUrlRef.current = value;
+    setIsEditingUrlState(value);
+  }, []);
+
+  // For popups, listen for storage changes to follow active conversation
   useEffect(() => {
-    isEditingUrlRef.current = isEditingUrl;
-  }, [isEditingUrl]);
+    if (!isPopup) return;
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === ACTIVE_BROWSER_CONVERSATION_KEY && e.newValue) {
+        try {
+          const data = JSON.parse(e.newValue) as ActiveBrowserConversation;
+          if (data.conversationId !== activeConversationId) {
+            setActiveConversationId(data.conversationId);
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [isPopup, activeConversationId]);
+
+  // For main panel (not popup), store active conversation in localStorage when subscribing
+  useEffect(() => {
+    if (isPopup || !isActive || !conversationId) return;
+
+    // Store active conversation for popups to follow
+    setActiveBrowserConversation(conversationId);
+
+    // Cleanup: clear localStorage when panel closes or conversation changes
+    return () => {
+      clearActiveBrowserConversation();
+    };
+  }, [isPopup, isActive, conversationId]);
 
   // Subscribe to browser stream via existing WebSocket
   useEffect(() => {
-    if (!isActive || !conversationId) {
-      // Unsubscribe when panel closes
-      if (subscribedConversationIdRef.current) {
-        websocketService.send({
-          type: "unsubscribe_browser_stream",
-          payload: { conversationId: subscribedConversationIdRef.current },
-        });
-        subscribedConversationIdRef.current = null;
-      }
-      setIsConnected(false);
-      setScreenshot(null);
-      prevConversationIdRef.current = conversationId;
-      return;
-    }
-
-    // Clear state when switching conversations
-    const isConversationSwitch =
-      prevConversationIdRef.current !== undefined &&
+    // Clear state when conversation changes (including to/from undefined)
+    const conversationChanged =
       prevConversationIdRef.current !== conversationId;
 
-    if (isConversationSwitch) {
+    if (conversationChanged) {
+      // Unsubscribe from previous conversation
       if (subscribedConversationIdRef.current) {
         websocketService.send({
           type: "unsubscribe_browser_stream",
@@ -82,13 +169,18 @@ export function useBrowserStream({
         });
         subscribedConversationIdRef.current = null;
       }
+      // Reset all state immediately
       setScreenshot(null);
       setUrlInput("");
       setIsConnected(false);
       setIsEditingUrl(false);
+      setError(null);
+      prevConversationIdRef.current = conversationId;
     }
 
-    prevConversationIdRef.current = conversationId;
+    if (!isActive || !conversationId) {
+      return;
+    }
 
     setIsConnecting(true);
     setError(null);
@@ -105,7 +197,6 @@ export function useBrowserStream({
           }
           // Update navigation state
           setCanGoBack(message.payload.canGoBack ?? false);
-          setCanGoForward(message.payload.canGoForward ?? false);
           setError(null);
           setIsConnecting(false);
           setIsConnected(true);
@@ -187,24 +278,10 @@ export function useBrowserStream({
       },
     );
 
-    const unsubNavigateForward = websocketService.subscribe(
-      "browser_navigate_forward_result",
-      (message) => {
-        if (message.payload.conversationId === conversationId) {
-          setIsNavigating(false);
-          if (message.payload.success) {
-            // Navigation message removed - user doesn't want these in chat
-          } else if (message.payload.error) {
-            setError(message.payload.error);
-          }
-        }
-      },
-    );
-
     const subscribeTimeout = setTimeout(() => {
       websocketService.send({
         type: "subscribe_browser_stream",
-        payload: { conversationId },
+        payload: { conversationId, initialUrl },
       });
       subscribedConversationIdRef.current = conversationId;
     }, 100);
@@ -218,7 +295,6 @@ export function useBrowserStream({
       unsubType();
       unsubPressKey();
       unsubNavigateBack();
-      unsubNavigateForward();
 
       if (subscribedConversationIdRef.current) {
         websocketService.send({
@@ -228,7 +304,7 @@ export function useBrowserStream({
         subscribedConversationIdRef.current = null;
       }
     };
-  }, [isActive, conversationId]);
+  }, [isActive, conversationId, setIsEditingUrl, initialUrl]);
 
   const navigate = useCallback(
     (url: string) => {
@@ -253,7 +329,7 @@ export function useBrowserStream({
         payload: { conversationId, url: normalizedUrl },
       });
     },
-    [conversationId],
+    [conversationId, setIsEditingUrl],
   );
 
   const navigateBack = useCallback(() => {
@@ -264,18 +340,6 @@ export function useBrowserStream({
 
     websocketService.send({
       type: "browser_navigate_back",
-      payload: { conversationId },
-    });
-  }, [conversationId]);
-
-  const navigateForward = useCallback(() => {
-    if (!websocketService.isConnected() || !conversationId) return;
-
-    setIsNavigating(true);
-    setError(null);
-
-    websocketService.send({
-      type: "browser_navigate_forward",
       payload: { conversationId },
     });
   }, [conversationId]);
@@ -335,15 +399,13 @@ export function useBrowserStream({
     isInteracting,
     error,
     canGoBack,
-    canGoForward,
     navigate,
     navigateBack,
-    navigateForward,
     click,
     type,
     pressKey,
     setUrlInput,
     setIsEditingUrl,
-    isEditingUrl,
+    isEditingUrl: isEditingUrlState,
   };
 }

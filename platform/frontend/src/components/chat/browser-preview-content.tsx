@@ -6,7 +6,6 @@ import {
 } from "@shared";
 import {
   ArrowLeft,
-  ArrowRight,
   ChevronDown,
   ChevronUp,
   Globe,
@@ -18,6 +17,7 @@ import {
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -40,6 +40,22 @@ interface BrowserPreviewContentProps {
   headerActions?: React.ReactNode;
   /** Additional class names for the container */
   className?: string;
+  /** When true, shows "Installing browser" message instead of normal content */
+  isInstallingBrowser?: boolean;
+  /** Whether Playwright MCP tools are available */
+  hasPlaywrightMcp?: boolean;
+  /** Called to install browser (Playwright MCP) */
+  onInstallBrowser?: () => Promise<unknown>;
+  /** When true, this is a popup that follows the active conversation */
+  isPopup?: boolean;
+  /** Called when user enters a URL without a conversation - should create conversation and navigate */
+  onCreateConversationWithUrl?: (url: string) => void;
+  /** Whether conversation creation is in progress */
+  isCreatingConversation?: boolean;
+  /** URL to navigate to once connected (after conversation creation) */
+  initialNavigateUrl?: string;
+  /** Called after initial navigation is triggered */
+  onInitialNavigateComplete?: () => void;
 }
 
 export function BrowserPreviewContent({
@@ -47,10 +63,19 @@ export function BrowserPreviewContent({
   isActive,
   headerActions,
   className,
+  isInstallingBrowser = false,
+  hasPlaywrightMcp = false,
+  onInstallBrowser,
+  isPopup = false,
+  onCreateConversationWithUrl,
+  isCreatingConversation = false,
+  initialNavigateUrl,
+  onInitialNavigateComplete,
 }: BrowserPreviewContentProps) {
   const [typeText, setTypeText] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const initialNavigateTriggeredRef = useRef(false);
 
   const {
     screenshot,
@@ -61,10 +86,8 @@ export function BrowserPreviewContent({
     isInteracting,
     error,
     canGoBack,
-    canGoForward,
     navigate,
     navigateBack,
-    navigateForward,
     click,
     type,
     pressKey,
@@ -73,14 +96,33 @@ export function BrowserPreviewContent({
   } = useBrowserStream({
     conversationId,
     isActive,
+    isPopup,
+    initialUrl: initialNavigateUrl,
   });
 
   const handleNavigate = useCallback(
     (e: FormEvent) => {
       e.preventDefault();
-      navigate(urlInput);
+      if (!urlInput.trim()) return;
+
+      // Normalize URL
+      let normalizedUrl = urlInput.trim();
+      if (
+        !normalizedUrl.startsWith("http://") &&
+        !normalizedUrl.startsWith("https://")
+      ) {
+        normalizedUrl = `https://${normalizedUrl}`;
+      }
+
+      if (conversationId) {
+        // Has conversation - navigate directly
+        navigate(normalizedUrl);
+      } else if (onCreateConversationWithUrl) {
+        // No conversation - create one and navigate
+        onCreateConversationWithUrl(normalizedUrl);
+      }
     },
-    [urlInput, navigate],
+    [urlInput, conversationId, navigate, onCreateConversationWithUrl],
   );
 
   const handleType = useCallback(
@@ -147,6 +189,30 @@ export function BrowserPreviewContent({
     },
     [isConnected, isInteracting, click],
   );
+
+  // Clear initial URL state once connected (backend handles initial navigation via subscription)
+  useEffect(() => {
+    if (
+      initialNavigateUrl &&
+      isConnected &&
+      conversationId &&
+      !initialNavigateTriggeredRef.current
+    ) {
+      initialNavigateTriggeredRef.current = true;
+      onInitialNavigateComplete?.();
+    }
+  }, [
+    initialNavigateUrl,
+    isConnected,
+    conversationId,
+    onInitialNavigateComplete,
+  ]);
+
+  // Reset the trigger ref when conversationId changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset ref when conversationId changes
+  useEffect(() => {
+    initialNavigateTriggeredRef.current = false;
+  }, [conversationId]);
 
   return (
     <div
@@ -299,35 +365,38 @@ export function BrowserPreviewContent({
             className="h-7 w-7 flex-shrink-0"
             onClick={navigateBack}
             disabled={isNavigating || !isConnected || !canGoBack}
+            title="Go back"
           >
             <ArrowLeft className="h-3 w-3" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={navigateForward}
-            disabled={isNavigating || !isConnected || !canGoForward}
-          >
-            <ArrowRight className="h-3 w-3" />
           </Button>
           <Input
             type="text"
             placeholder="Enter URL..."
             value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
+            onChange={(e) => {
+              setIsEditingUrl(true);
+              setUrlInput(e.target.value);
+            }}
             onFocus={() => setIsEditingUrl(true)}
             className="h-7 text-xs!"
-            disabled={isNavigating || !isConnected}
+            disabled={isNavigating || isCreatingConversation}
           />
           <Button
             type="submit"
             size="sm"
             className="h-7 px-3 text-xs"
-            disabled={isNavigating || !urlInput.trim() || !isConnected}
+            disabled={
+              isNavigating ||
+              isCreatingConversation ||
+              !urlInput.trim() ||
+              (!conversationId && !onCreateConversationWithUrl)
+            }
           >
-            {isNavigating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Go"}
+            {isNavigating || isCreatingConversation ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              "Go"
+            )}
           </Button>
         </form>
       </div>
@@ -342,11 +411,11 @@ export function BrowserPreviewContent({
       {/* Content - Screenshot with clickable overlay */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-hidden bg-muted min-h-0 relative"
+        className="flex-1 overflow-hidden min-h-0 relative"
       >
         {isConnecting && (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-2">
+            <div className="text-center space-y-2 mt-20">
               <LoadingSpinner />
               <p className="text-sm text-muted-foreground">Connecting...</p>
             </div>
@@ -378,11 +447,37 @@ export function BrowserPreviewContent({
         )}
         {!isConnecting && !screenshot && (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-2">
-              <Globe className="h-12 w-12 text-muted-foreground mx-auto" />
-              <p className="text-sm text-muted-foreground">
-                Enter a URL above to start browsing
-              </p>
+            <div className="text-center space-y-4">
+              {!hasPlaywrightMcp ? (
+                // Not installed - show install button
+                <>
+                  <Button
+                    onClick={() => onInstallBrowser?.()}
+                    disabled={isInstallingBrowser}
+                    className="mt-10"
+                  >
+                    {isInstallingBrowser ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Installing
+                      </>
+                    ) : (
+                      "Install Browser"
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Required only before first usage of the Browser Preview
+                  </p>
+                </>
+              ) : (
+                // Installed - show normal empty state
+                <>
+                  <Globe className="h-10 w-10 xs text-muted-foreground mx-auto mt-14" />
+                  <p className="text-sm text-muted-foreground">
+                    Ready to browse
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}

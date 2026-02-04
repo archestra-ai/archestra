@@ -17,6 +17,8 @@ const SubscribeBrowserStreamPayloadSchema = z.object({
   // Viewport dimensions for screenshots - frontend sends container size
   viewportWidth: z.number().int().min(100).max(2000).optional(),
   viewportHeight: z.number().int().min(100).max(2000).optional(),
+  // Initial URL to navigate to (for new conversations created from URL bar)
+  initialUrl: z.string().url().optional(),
 });
 
 const UnsubscribeBrowserStreamPayloadSchema = z.object({
@@ -52,10 +54,6 @@ const BrowserGetSnapshotPayloadSchema = z.object({
 });
 
 const BrowserNavigateBackPayloadSchema = z.object({
-  conversationId: z.string().uuid(),
-});
-
-const BrowserNavigateForwardPayloadSchema = z.object({
   conversationId: z.string().uuid(),
 });
 
@@ -111,10 +109,6 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
     payload: BrowserNavigateBackPayloadSchema,
   }),
   z.object({
-    type: z.literal("browser_navigate_forward"),
-    payload: BrowserNavigateForwardPayloadSchema,
-  }),
-  z.object({
     type: z.literal("browser_set_zoom"),
     payload: BrowserSetZoomPayloadSchema,
   }),
@@ -149,9 +143,8 @@ export type BrowserScreenshotMessage = {
     // Screenshot dimensions for accurate click mapping
     viewportWidth?: number;
     viewportHeight?: number;
-    // Navigation state for back/forward buttons
+    // Navigation state for back button
     canGoBack?: boolean;
-    canGoForward?: boolean;
   };
 };
 
@@ -227,15 +220,6 @@ export type BrowserNavigateBackResultMessage = {
   };
 };
 
-export type BrowserNavigateForwardResultMessage = {
-  type: "browser_navigate_forward_result";
-  payload: {
-    conversationId: string;
-    success: boolean;
-    error?: string;
-  };
-};
-
 // MCP Logs server -> client messages
 export type McpLogsMessage = {
   type: "mcp_logs";
@@ -265,7 +249,6 @@ export type ServerWebSocketMessage =
   | BrowserScreenshotMessage
   | BrowserNavigateResultMessage
   | BrowserNavigateBackResultMessage
-  | BrowserNavigateForwardResultMessage
   | BrowserStreamErrorMessage
   | BrowserClickResultMessage
   | BrowserTypeResultMessage

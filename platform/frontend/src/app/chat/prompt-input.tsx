@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useProfileToolsWithIds } from "@/lib/chat.query";
+import { useGlobalChatTools, useProfileToolsWithIds } from "@/lib/chat.query";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -120,6 +120,7 @@ const PromptInputContent = ({
 
   // Check if agent has tools or delegations
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
+  const { data: globalTools = [] } = useGlobalChatTools();
   const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
 
   // Check if user can update organization settings (to show settings link in tooltip)
@@ -135,8 +136,8 @@ const PromptInputContent = ({
     [controller.textInput],
   );
 
-  // Check if there are tools or delegated agents
-  const hasTools = tools.length > 0;
+  // Check if there are tools or delegated agents (including global tools like Playwright)
+  const hasTools = tools.length > 0 || globalTools.length > 0;
   const hasDelegatedAgents = delegatedAgents.length > 0;
   const hasContent = hasTools || hasDelegatedAgents;
 

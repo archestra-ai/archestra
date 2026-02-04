@@ -132,7 +132,7 @@ describe("browser-stream routes authorization", () => {
       available: true,
       tools: ["browser_navigate"],
     });
-    expect(availabilitySpy).toHaveBeenCalledWith(agent.id);
+    expect(availabilitySpy).toHaveBeenCalledWith(agent.id, owner.id);
 
     await app.close();
   });

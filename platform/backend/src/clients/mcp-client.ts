@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { isBrowserMcpTool } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
@@ -137,7 +138,11 @@ class McpClient {
     tokenAuth?: TokenAuthContext,
   ): Promise<CommonToolResult> {
     // Validate and get tool metadata
-    const validationResult = await this.validateAndGetTool(toolCall, agentId);
+    const validationResult = await this.validateAndGetTool(
+      toolCall,
+      agentId,
+      tokenAuth,
+    );
     if ("error" in validationResult) {
       return validationResult.error;
     }
@@ -367,11 +372,12 @@ class McpClient {
   private async validateAndGetTool(
     toolCall: CommonToolCall,
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<
     | { tool: McpToolWithServerMetadata; catalogItem: InternalMcpCatalog }
     | { error: CommonToolResult }
   > {
-    // Get MCP tool
+    // Get MCP tool from agent-assigned tools
     const mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
       [toolCall.name],
       agentId,
@@ -379,6 +385,18 @@ class McpClient {
     const tool = mcpTools[0];
 
     if (!tool) {
+      // Tool not found in agent-assigned tools, check for global catalog tools
+      if (tokenAuth?.userId) {
+        const globalToolResult = await this.findGlobalCatalogTool(
+          toolCall,
+          agentId,
+          tokenAuth.userId,
+        );
+        if (globalToolResult) {
+          return globalToolResult;
+        }
+      }
+
       return {
         error: await this.createErrorResult(
           toolCall,
@@ -414,6 +432,86 @@ class McpClient {
     }
 
     return { tool, catalogItem };
+  }
+
+  /**
+   * Find a tool from globally available catalogs.
+   * Global catalogs are catalogs marked as `isGloballyAvailable` where users can have personal servers.
+   */
+  private async findGlobalCatalogTool(
+    toolCall: CommonToolCall,
+    _agentId: string,
+    userId: string,
+  ): Promise<{
+    tool: McpToolWithServerMetadata;
+    catalogItem: InternalMcpCatalog;
+  } | null> {
+    // Get all globally available catalogs
+    const globalCatalogs =
+      await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
+
+    if (globalCatalogs.length === 0) {
+      return null;
+    }
+
+    // Check each global catalog to see if the user has a personal server
+    // and if that server has the requested tool
+    for (const catalog of globalCatalogs) {
+      // Check if tool name matches this catalog's prefix (e.g., "playwright-browser__browser_navigate")
+      const catalogPrefix = `${catalog.name}__`;
+      if (!toolCall.name.startsWith(catalogPrefix)) {
+        continue;
+      }
+
+      // Check if user has a personal server for this catalog
+      const userServer = await McpServerModel.getUserPersonalServerForCatalog(
+        userId,
+        catalog.id,
+      );
+
+      if (!userServer) {
+        continue;
+      }
+
+      // Find the tool in the catalog's tools
+      const catalogTools = await ToolModel.findByCatalogId(catalog.id);
+      const matchingTool = catalogTools.find((t) => t.name === toolCall.name);
+
+      if (!matchingTool) {
+        continue;
+      }
+
+      logger.info(
+        {
+          toolName: toolCall.name,
+          userId,
+          catalogId: catalog.id,
+          catalogName: catalog.name,
+          serverId: userServer.id,
+        },
+        "Found tool in global catalog, using user's personal server",
+      );
+
+      // Build the McpToolWithServerMetadata from the catalog tool and user's server
+      // For global catalog tools, the user's personal server is both credential and execution source
+      const tool: McpToolWithServerMetadata = {
+        toolName: matchingTool.name,
+        responseModifierTemplate: null, // Global catalog tools don't have response modifiers
+        mcpServerSecretId: userServer.secretId,
+        mcpServerName: userServer.name,
+        mcpServerCatalogId: catalog.id,
+        mcpServerId: userServer.id,
+        credentialSourceMcpServerId: userServer.id, // User's personal server provides credentials
+        executionSourceMcpServerId: userServer.id, // User's personal server executes tools
+        useDynamicTeamCredential: false, // Global catalog tools use the user's personal server directly
+        catalogName: catalog.name,
+        catalogId: catalog.id,
+      };
+
+      return { tool, catalogItem: catalog };
+    }
+
+    return null;
   }
 
   // Gets secrets of a given MCP server
@@ -966,7 +1064,9 @@ class McpClient {
   }
 
   /**
-   * Persist tool call to database with error handling
+   * Persist tool call to database with error handling.
+   * Skips browser tools to prevent DB bloat from frequent screenshot calls.
+   * Truncates large tool results to prevent excessive storage.
    */
   private async persistToolCall(
     agentId: string,
@@ -974,6 +1074,11 @@ class McpClient {
     toolCall: CommonToolCall,
     toolResult: CommonToolResult,
   ): Promise<void> {
+    // Skip browser tool logging to prevent DB bloat
+    if (isBrowserMcpTool(toolCall.name)) {
+      return;
+    }
+
     try {
       const savedToolCall = await McpToolCallModel.create({
         agentId,

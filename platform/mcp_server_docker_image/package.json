@@ -16,6 +16,7 @@
     "lodash": ">=4.17.23",
     "lodash-es": ">=4.17.23",
     "diff": ">=5.2.2",
-    "brace-expansion": ">=2.0.2"
+    "brace-expansion": ">=2.0.2",
+    "@isaacs/brace-expansion": ">=5.0.1"
   }
 }

@@ -34,20 +34,27 @@ test.describe("Metrics API", () => {
     // First, make an API call to generate metrics data
     await request.get(`${API_BASE_URL}/openapi.json`);
 
-    const response = await fetchMetrics(
-      request,
-      METRICS_BASE_URL,
-      METRICS_BEARER_TOKEN,
-    );
+    // Poll metrics until the route appears (handles race condition where metrics might not be immediately available)
+    let metricsText = "";
+    await expect
+      .poll(
+        async () => {
+          const response = await fetchMetrics(
+            request,
+            METRICS_BASE_URL,
+            METRICS_BEARER_TOKEN,
+          );
+          expect(response.ok()).toBeTruthy();
+          metricsText = await response.text();
+          return metricsText;
+        },
+        { timeout: 10000, intervals: [500, 1000, 2000] },
+      )
+      .toContain('route="/openapi.json"');
 
-    expect(response.ok()).toBeTruthy();
-
-    const metricsText = await response.text();
+    // Verify standard metrics format
     expect(metricsText).toContain("# HELP");
     expect(metricsText).toContain("http_request_duration_seconds");
-
-    // Check that we have route labels from our API call above
-    expect(metricsText).toContain('route="/openapi.json"');
 
     /**
      * Ensure /metrics route is NOT present (since it's not exposed on main port)

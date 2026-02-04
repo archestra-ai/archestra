@@ -16,8 +16,6 @@ export type BrowserTabState = {
   id: BrowserTabId;
   index: Option<number>;
   current: string;
-  history: NonEmptyArray<string>;
-  historyCursor: number;
 };
 
 export type BrowserState = {
@@ -31,15 +29,6 @@ export type BrowserTabsListEntry = {
   isCurrent: boolean;
 };
 
-export type BrowserEffect =
-  | { tag: "Navigate"; tabId: BrowserTabId; url: string }
-  | { tag: "None" };
-
-export type BrowserStateUpdate = {
-  state: BrowserState;
-  effect: BrowserEffect;
-};
-
 export type BrowserStateError =
   | { kind: "ActiveTabMissing"; activeTabId: BrowserTabId }
   | { kind: "DuplicateTabId"; tabId: BrowserTabId }
@@ -50,15 +39,7 @@ export type BrowserStateError =
   | { kind: "TabIndexNotFound"; index: number }
   | { kind: "TabCountMismatch"; expected: number; actual: number }
   | { kind: "MultipleCurrentTabs"; indices: number[] }
-  | {
-      kind: "HistoryCursorOutOfBounds";
-      tabId: BrowserTabId;
-      historyLength: number;
-      historyCursor: number;
-    }
   | { kind: "CannotCloseLastTab" }
-  | { kind: "NoBackHistory"; tabId: BrowserTabId }
-  | { kind: "NoForwardHistory"; tabId: BrowserTabId }
   | { kind: "TabIndexUnavailable"; tabId: BrowserTabId };
 
 /**
@@ -66,8 +47,6 @@ export type BrowserStateError =
  */
 export type PersistedBrowserTabState = {
   current: string;
-  history: NonEmptyArray<string>;
-  historyCursor: number;
 };
 
 /**

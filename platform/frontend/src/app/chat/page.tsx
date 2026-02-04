@@ -109,6 +109,10 @@ export default function ChatPage() {
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
+  // Store pending URL for browser navigation after conversation is created
+  const [pendingBrowserUrl, setPendingBrowserUrl] = useState<
+    string | undefined
+  >(undefined);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -406,33 +410,15 @@ export default function ChatPage() {
     ? (conversation?.agentId ?? conversation?.agent?.id)
     : (initialAgentId ?? undefined);
 
-  // Check if Playwright MCP is available for browser panel
-  const { hasPlaywrightMcp, isLoading: isLoadingPlaywrightMcp } =
-    useHasPlaywrightMcpTools(browserToolsAgentId);
+  // Check if Playwright MCP is available for browser panel and get install function
+  const {
+    hasPlaywrightMcp,
+    isInstalling: isInstallingBrowser,
+    installBrowser,
+  } = useHasPlaywrightMcpTools(browserToolsAgentId);
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
-
-  // Close browser panel when switching to a profile without Playwright tools
-  useEffect(() => {
-    // Only close if we have an agentId and tools have finished loading
-    // When agentId is undefined, the query is disabled and isLoading is false,
-    // so we must also check that browserToolsAgentId exists
-    if (
-      browserToolsAgentId &&
-      !isLoadingPlaywrightMcp &&
-      !hasPlaywrightMcp &&
-      isBrowserPanelOpen
-    ) {
-      setIsBrowserPanelOpen(false);
-      localStorage.setItem(LocalStorageKeys.browserOpen, "false");
-    }
-  }, [
-    browserToolsAgentId,
-    hasPlaywrightMcp,
-    isBrowserPanelOpen,
-    isLoadingPlaywrightMcp,
-  ]);
 
   // Clear MCP Gateway sessions when opening a NEW conversation
   useEffect(() => {
@@ -770,7 +756,7 @@ export default function ChatPage() {
     });
   };
 
-  // Persist browser panel state
+  // Persist browser panel state - just opens panel, installation happens inside if needed
   const toggleBrowserPanel = useCallback(() => {
     const newValue = !isBrowserPanelOpen;
     setIsBrowserPanelOpen(newValue);
@@ -781,6 +767,56 @@ export default function ChatPage() {
   const closeBrowserPanel = useCallback(() => {
     setIsBrowserPanelOpen(false);
     localStorage.setItem(LocalStorageKeys.browserOpen, "false");
+  }, []);
+
+  // Handle creating conversation from browser URL input (when no conversation exists)
+  const handleCreateConversationWithUrl = useCallback(
+    (url: string) => {
+      if (!initialAgentId || createConversationMutation.isPending) {
+        return;
+      }
+
+      // Store the URL to navigate to after conversation is created
+      setPendingBrowserUrl(url);
+
+      // Find the provider for the initial model
+      const modelInfo = chatModels.find((m) => m.id === initialModel);
+      const selectedProvider = modelInfo?.provider as
+        | SupportedChatProvider
+        | undefined;
+
+      // Create conversation with the selected agent
+      createConversationMutation.mutate(
+        {
+          agentId: initialAgentId,
+          selectedModel: initialModel,
+          selectedProvider,
+          chatApiKeyId: initialApiKeyId,
+        },
+        {
+          onSuccess: (newConversation) => {
+            if (newConversation) {
+              newlyCreatedConversationRef.current = newConversation.id;
+              selectConversation(newConversation.id);
+              // URL navigation will happen via useBrowserStream after conversation connects
+            }
+          },
+        },
+      );
+    },
+    [
+      initialAgentId,
+      initialModel,
+      initialApiKeyId,
+      chatModels,
+      createConversationMutation,
+      selectConversation,
+    ],
+  );
+
+  // Callback to clear pending browser URL after navigation completes
+  const handleInitialNavigateComplete = useCallback(() => {
+    setPendingBrowserUrl(undefined);
   }, []);
 
   // Handle initial agent change (when no conversation exists)
@@ -1081,7 +1117,7 @@ export default function ChatPage() {
                   <FileText className="h-3 w-3 mr-1" />
                   Artifact
                 </Button>
-                {hasPlaywrightMcp && isBrowserStreamingEnabled && (
+                {isBrowserStreamingEnabled && (
                   <>
                     <div className="w-px h-4 bg-border" />
                     <Button
@@ -1279,11 +1315,16 @@ export default function ChatPage() {
         artifact={conversation?.artifact}
         isArtifactOpen={isArtifactOpen}
         onArtifactToggle={toggleArtifactPanel}
-        isBrowserOpen={
-          isBrowserPanelOpen && isBrowserStreamingEnabled && hasPlaywrightMcp
-        }
+        isBrowserOpen={isBrowserPanelOpen && isBrowserStreamingEnabled}
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
+        isInstallingBrowser={isInstallingBrowser}
+        hasPlaywrightMcp={hasPlaywrightMcp}
+        onInstallBrowser={installBrowser}
+        onCreateConversationWithUrl={handleCreateConversationWithUrl}
+        isCreatingConversation={createConversationMutation.isPending}
+        initialNavigateUrl={pendingBrowserUrl}
+        onInitialNavigateComplete={handleInitialNavigateComplete}
       />
 
       <PromptVersionHistoryDialog

@@ -39,17 +39,6 @@ export const validateBrowserState = (params: {
     return Err({ kind: "ActiveTabMissing", activeTabId: state.activeTabId });
   }
 
-  for (const tab of state.tabs) {
-    if (tab.historyCursor < 0 || tab.historyCursor >= tab.history.length) {
-      return Err({
-        kind: "HistoryCursorOutOfBounds",
-        tabId: tab.id,
-        historyLength: tab.history.length,
-        historyCursor: tab.historyCursor,
-      });
-    }
-  }
-
   const indices = state.tabs.flatMap((tab) =>
     isSome(tab.index) ? [tab.index.value] : [],
   );

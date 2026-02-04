@@ -300,6 +300,7 @@ export function AppSidebar() {
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
   const { data: starCount } = useGithubStars();
+  const formattedStarCount = starCount ?? "";
   const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
 
   const logoToShow = logo ? (
@@ -341,10 +342,10 @@ export function AppSidebar() {
             isAuthenticated={isAuthenticated}
             pathname={pathname}
             searchParams={searchParams}
-            starCount={starCount}
+            starCount={formattedStarCount}
           />
         ) : (
-          <CommunitySideBarSection starCount={starCount} />
+          <CommunitySideBarSection starCount={formattedStarCount} />
         )}
       </SidebarContent>
       <FooterSideBarSection pathname={pathname} />

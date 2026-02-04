@@ -70,6 +70,18 @@ class BrowserStreamFeature {
     );
   }
 
+  restoreConversationUrl(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+  ) {
+    return this.getService().restoreConversationUrl(
+      agentId,
+      conversationId,
+      userContext,
+    );
+  }
+
   navigate(
     agentId: string,
     conversationId: string,
@@ -112,15 +124,13 @@ class BrowserStreamFeature {
     return this.getService().closeTab(agentId, conversationId, userContext);
   }
 
-  syncTabMappingFromTabsToolCall(params: {
+  syncUrlFromNavigateToolCall(params: {
     agentId: string;
     conversationId: string;
     userContext: BrowserUserContext;
-    toolArguments?: Record<string, unknown>;
     toolResultContent: unknown;
-    tabsToolName?: string;
   }) {
-    return this.getService().syncTabMappingFromTabsToolCall(params);
+    return this.getService().syncUrlFromNavigateToolCall(params);
   }
 
   takeScreenshot(
@@ -201,10 +211,6 @@ class BrowserStreamFeature {
     userContext: BrowserUserContext,
   ) {
     return this.getService().getSnapshot(agentId, conversationId, userContext);
-  }
-
-  cleanupOrphanedTabs(agentId: string, userContext: BrowserUserContext) {
-    return this.getService().cleanupOrphanedTabs(agentId, userContext);
   }
 }
 

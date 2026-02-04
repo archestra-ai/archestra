@@ -11,7 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useUpdateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
+import {
+  useGetDeploymentYamlPreview,
+  useUpdateInternalMcpCatalogItem,
+} from "@/lib/internal-mcp-catalog.query";
 import { K8sYamlEditor } from "./k8s-yaml-editor";
 
 type CatalogItem =
@@ -25,19 +28,22 @@ interface YamlConfigDialogProps {
 export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
+  // Fetch the deployment YAML preview (generates default if not stored)
+  const { data: yamlPreview, isLoading: isLoadingYaml } =
+    useGetDeploymentYamlPreview(item?.id ?? null);
+
   // Local state for form fields
   const [deploymentYaml, setDeploymentYaml] = useState("");
   // Track original YAML to detect changes
   const [originalYaml, setOriginalYaml] = useState("");
 
-  // Initialize form state when dialog opens
+  // Initialize form state when YAML preview is loaded
   useEffect(() => {
-    if (item) {
-      const yaml = item.deploymentSpecYaml ?? "";
-      setDeploymentYaml(yaml);
-      setOriginalYaml(yaml);
+    if (yamlPreview?.yaml) {
+      setDeploymentYaml(yamlPreview.yaml);
+      setOriginalYaml(yamlPreview.yaml);
     }
-  }, [item]);
+  }, [yamlPreview]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -129,14 +135,20 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        {item && isLocalServer && (
-          <K8sYamlEditor
-            catalogId={item.id}
-            value={deploymentYaml}
-            onChange={handleYamlChange}
-            isSaved={true}
-          />
-        )}
+        {item &&
+          isLocalServer &&
+          (isLoadingYaml ? (
+            <div className="flex items-center justify-center h-64 text-muted-foreground">
+              Loading YAML...
+            </div>
+          ) : (
+            <K8sYamlEditor
+              catalogId={item.id}
+              value={deploymentYaml}
+              onChange={handleYamlChange}
+              isSaved={true}
+            />
+          ))}
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} type="button">

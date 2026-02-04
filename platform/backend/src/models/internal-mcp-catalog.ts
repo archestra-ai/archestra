@@ -1,6 +1,5 @@
 import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { generateDeploymentYamlTemplate } from "@/mcp-server-runtime";
 import { secretManager } from "@/secrets-manager";
 import type {
   InsertInternalMcpCatalog,
@@ -153,29 +152,6 @@ class InternalMcpCatalogModel {
     }
   }
 
-  /**
-   * Generates deployment YAML on-the-fly for local catalog items that don't have custom YAML.
-   * Mutates the items by setting deploymentSpecYaml if it's empty.
-   */
-  private static enrichWithGeneratedYaml(
-    catalogItems: InternalMcpCatalog[],
-  ): void {
-    for (const item of catalogItems) {
-      // Only generate for local servers without custom YAML
-      if (item.serverType === "local" && !item.deploymentSpecYaml) {
-        item.deploymentSpecYaml = generateDeploymentYamlTemplate({
-          serverId: item.id,
-          serverName: item.name,
-          namespace: "default",
-          dockerImage: item.localConfig?.dockerImage || "",
-          command: item.localConfig?.command,
-          arguments: item.localConfig?.arguments,
-          environment: item.localConfig?.environment,
-        });
-      }
-    }
-  }
-
   static async create(
     catalogItem: InsertInternalMcpCatalog,
   ): Promise<InternalMcpCatalog> {
@@ -201,9 +177,6 @@ class InternalMcpCatalogModel {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
     }
 
-    // Generate YAML for local servers without custom YAML
-    InternalMcpCatalogModel.enrichWithGeneratedYaml(catalogItems);
-
     return catalogItems;
   }
 
@@ -227,9 +200,6 @@ class InternalMcpCatalogModel {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
     }
 
-    // Generate YAML for local servers without custom YAML
-    InternalMcpCatalogModel.enrichWithGeneratedYaml(catalogItems);
-
     return catalogItems;
   }
 
@@ -251,9 +221,6 @@ class InternalMcpCatalogModel {
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets([catalogItem]);
     }
-
-    // Generate YAML for local servers without custom YAML
-    InternalMcpCatalogModel.enrichWithGeneratedYaml([catalogItem]);
 
     return catalogItem;
   }

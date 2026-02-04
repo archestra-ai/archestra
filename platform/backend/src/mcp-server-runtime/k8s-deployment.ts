@@ -703,6 +703,7 @@ export default class K8sDeployment {
     );
 
     // Build env values map for placeholder resolution
+    // Note: Values may be booleans/numbers at runtime despite type annotations, so we convert to string
     const envValues: Record<string, string> = {};
     if (this.catalogItem?.localConfig?.environment) {
       for (const envDef of this.catalogItem.localConfig.environment) {
@@ -713,19 +714,19 @@ export default class K8sDeployment {
 
         let value: string | undefined;
         if (envDef.promptOnInstallation) {
-          value = this.environmentValues?.[envDef.key];
+          const rawValue = this.environmentValues?.[envDef.key];
+          value = rawValue != null ? String(rawValue) : undefined;
         } else {
-          value = envDef.value;
+          value = envDef.value != null ? String(envDef.value) : undefined;
           // Interpolate ${user_config.xxx} placeholders
           if (value && (this.environmentValues || this.userConfigValues)) {
             value = value.replace(
               /\$\{user_config\.([^}]+)\}/g,
               (match, configKey) => {
-                return (
-                  this.environmentValues?.[configKey] ||
-                  this.userConfigValues?.[configKey] ||
-                  match
-                );
+                const configValue =
+                  this.environmentValues?.[configKey] ??
+                  this.userConfigValues?.[configKey];
+                return configValue != null ? String(configValue) : match;
               },
             );
           }
@@ -963,13 +964,15 @@ export default class K8sDeployment {
         }
 
         // Add env var value to envMap based on prompting behavior
+        // Note: Values may be booleans/numbers at runtime despite type annotations, so we convert to string
         let value: string | undefined;
         if (envDef.promptOnInstallation) {
           // Prompted during installation - get from environmentValues
-          value = this.environmentValues?.[envDef.key];
+          const rawValue = this.environmentValues?.[envDef.key];
+          value = rawValue != null ? String(rawValue) : undefined;
         } else {
           // Static value from catalog - get from envDef.value
-          value = envDef.value;
+          value = envDef.value != null ? String(envDef.value) : undefined;
 
           // Interpolate ${user_config.xxx} placeholders with actual values
           // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
@@ -977,11 +980,10 @@ export default class K8sDeployment {
             value = value.replace(
               /\$\{user_config\.([^}]+)\}/g,
               (match, configKey) => {
-                return (
-                  this.environmentValues?.[configKey] ||
-                  this.userConfigValues?.[configKey] ||
-                  match
-                );
+                const configValue =
+                  this.environmentValues?.[configKey] ??
+                  this.userConfigValues?.[configKey];
+                return configValue != null ? String(configValue) : match;
               },
             );
           }
@@ -996,7 +998,7 @@ export default class K8sDeployment {
       // Fallback: If no catalog item but environmentValues provided,
       // process them directly (backward compatibility for tests and direct usage)
       Object.entries(this.environmentValues).forEach(([key, value]) => {
-        envMap.set(key, value);
+        envMap.set(key, value != null ? String(value) : "");
       });
     }
 
@@ -1005,7 +1007,7 @@ export default class K8sDeployment {
       Object.entries(this.userConfigValues).forEach(([key, value]) => {
         // Convert to uppercase with underscores for environment variable convention
         const envKey = key.toUpperCase().replace(/[^A-Z0-9]/g, "_");
-        envMap.set(envKey, value);
+        envMap.set(envKey, value != null ? String(value) : "");
       });
     }
 

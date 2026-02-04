@@ -508,24 +508,23 @@ async function getGlobalToolIdsForUser(userId: string): Promise<string[]> {
     return [];
   }
 
-  const globalToolIds: string[] = [];
+  const catalogIds = globalCatalogs.map((c) => c.id);
 
-  for (const catalog of globalCatalogs) {
-    const userServer = await McpServerModel.getUserPersonalServerForCatalog(
-      userId,
-      catalog.id,
-    );
-    if (!userServer) {
-      continue;
-    }
+  // Batch load: get all user's personal servers for these catalogs
+  const userServersByCatalog =
+    await McpServerModel.getUserPersonalServersForCatalogs(userId, catalogIds);
 
-    const catalogTools = await ToolModel.findByCatalogId(catalog.id);
-    for (const tool of catalogTools) {
-      globalToolIds.push(tool.id);
-    }
+  // Filter to catalogs where user has a personal server
+  const catalogsWithUserServer = catalogIds.filter((id) =>
+    userServersByCatalog.has(id),
+  );
+
+  if (catalogsWithUserServer.length === 0) {
+    return [];
   }
 
-  return globalToolIds;
+  // Batch load: get all tool IDs for these catalogs
+  return ToolModel.getToolIdsByCatalogIds(catalogsWithUserServer);
 }
 
 export default ConversationModel;

@@ -938,6 +938,25 @@ class ToolModel {
   }
 
   /**
+   * Get tool IDs for multiple catalogs in a single query.
+   * Used for batch loading tool IDs across multiple catalogs.
+   */
+  static async getToolIdsByCatalogIds(catalogIds: string[]): Promise<string[]> {
+    if (catalogIds.length === 0) {
+      return [];
+    }
+
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+      })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.catalogId, catalogIds));
+
+    return tools.map((t) => t.id);
+  }
+
+  /**
    * Delete all tools for a specific catalog item
    * Used when the last MCP server installation for a catalog is removed
    * Returns the number of tools deleted

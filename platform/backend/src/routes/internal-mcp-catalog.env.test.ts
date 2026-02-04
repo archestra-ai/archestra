@@ -2,7 +2,7 @@ import { describe, expect, test } from "@/test";
 import { InternalMcpCatalogModel } from "@/models";
 import {
   generateDeploymentYamlTemplate,
-  mergeEnvironmentIntoYaml,
+  mergeLocalConfigIntoYaml,
 } from "@/mcp-server-runtime/k8s-yaml-generator";
 
 describe("Internal MCP Catalog - Environment Variables", () => {
@@ -183,7 +183,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
       });
 
       // Merge with mounted secret handling
-      const mergedYaml = mergeEnvironmentIntoYaml(yamlTemplate, environment);
+      const mergedYaml = mergeLocalConfigIntoYaml(yamlTemplate, environment);
 
       expect(mergedYaml).toContain("volumeMounts");
       expect(mergedYaml).toContain("mountPath: /secrets/SERVICE_ACCOUNT_JSON");
@@ -342,7 +342,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
       const previouslyManagedKeys = new Set(environment.map((e) => e.key));
 
       // Merge with previouslyManagedKeys to remove REMOVE_VAR
-      const updatedYaml = mergeEnvironmentIntoYaml(
+      const updatedYaml = mergeLocalConfigIntoYaml(
         catalog.deploymentSpecYaml!,
         newEnvironment,
         previouslyManagedKeys,
@@ -382,7 +382,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
 
       // Remove all env vars
       const previouslyManagedKeys = new Set(environment.map((e) => e.key));
-      const updatedYaml = mergeEnvironmentIntoYaml(
+      const updatedYaml = mergeLocalConfigIntoYaml(
         yamlTemplate,
         [], // Empty environment
         previouslyManagedKeys,
@@ -425,7 +425,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
       ];
 
       const previouslyManagedKeys = new Set(originalEnv.map((e) => e.key));
-      const updatedYaml = mergeEnvironmentIntoYaml(
+      const updatedYaml = mergeLocalConfigIntoYaml(
         yamlTemplate,
         newEnv,
         previouslyManagedKeys,
@@ -468,7 +468,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
       ];
 
       const previouslyManagedKeys = new Set(originalEnv.map((e) => e.key));
-      const updatedYaml = mergeEnvironmentIntoYaml(
+      const updatedYaml = mergeLocalConfigIntoYaml(
         yamlTemplate,
         newEnv,
         previouslyManagedKeys,
@@ -524,7 +524,7 @@ spec:
       // Previously managed keys only includes MANAGED_VAR
       const previouslyManagedKeys = new Set(["MANAGED_VAR"]);
 
-      const updatedYaml = mergeEnvironmentIntoYaml(
+      const updatedYaml = mergeLocalConfigIntoYaml(
         yamlWithCustomEnv,
         environment,
         previouslyManagedKeys,
@@ -576,7 +576,7 @@ spec:
       // Both were previously managed
       const previouslyManagedKeys = new Set(["KEEP_VAR", "DELETE_VAR"]);
 
-      const updatedYaml = mergeEnvironmentIntoYaml(
+      const updatedYaml = mergeLocalConfigIntoYaml(
         yamlWithManagedEnvs,
         newEnvironment,
         previouslyManagedKeys,
@@ -617,7 +617,7 @@ spec:
         },
       ];
 
-      const updatedYaml = mergeEnvironmentIntoYaml(
+      const updatedYaml = mergeLocalConfigIntoYaml(
         yamlWithoutEnv,
         newEnvironment,
         new Set(), // No previously managed keys
@@ -677,7 +677,7 @@ spec:
         "DELETED_MANAGED_VAR",
       ]);
 
-      const updatedYaml = mergeEnvironmentIntoYaml(
+      const updatedYaml = mergeLocalConfigIntoYaml(
         yaml,
         newEnvironment,
         previouslyManagedKeys,
@@ -780,8 +780,8 @@ spec:
 
       // Mounted secret should NOT be in env (it's a volume mount)
       // Note: generateDeploymentYamlTemplate adds all secrets to env,
-      // but mergeEnvironmentIntoYaml handles mounted secrets correctly
-      const mergedYaml = mergeEnvironmentIntoYaml(yamlTemplate, environment);
+      // but mergeLocalConfigIntoYaml handles mounted secrets correctly
+      const mergedYaml = mergeLocalConfigIntoYaml(yamlTemplate, environment);
       expect(mergedYaml).toContain("mountPath: /secrets/MOUNTED_SECRET");
     });
   });

@@ -11,7 +11,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import type { InternalMcpCatalog, McpServer } from "@/types";
-import { parseAndMergeYaml, resolvePlaceholders } from "./k8s-yaml-generator";
+import { customYamlToDeployment, resolvePlaceholders } from "./k8s-yaml-generator";
 import type { K8sDeploymentState, K8sDeploymentStatusSummary } from "./schemas";
 
 const {
@@ -534,6 +534,10 @@ export default class K8sDeployment {
         nodeSelector,
       );
       if (yamlDeployment) {
+        logger.info(
+          { mcpServerId: this.mcpServer.id },
+          "generated deploymentSpecYaml",
+        );
         return yamlDeployment;
       }
       // If YAML parsing failed, fall through to default generation
@@ -559,7 +563,7 @@ export default class K8sDeployment {
       readOnly: true,
     }));
 
-    // Build volumes for mounted secrets (single volume with all secret keys)
+    // Build volumes for secrets mounted as files (single volume with all secret keys)
     const volumes: k8s.V1Volume[] =
       mountedSecrets.length > 0
         ? [
@@ -586,7 +590,7 @@ export default class K8sDeployment {
       ...(nodeSelector && Object.keys(nodeSelector).length > 0
         ? { nodeSelector }
         : {}),
-      // Add volumes for mounted secrets
+      // Add volumes for secrets mounted as files
       ...(volumes.length > 0 ? { volumes } : {}),
       containers: [
         {
@@ -755,7 +759,7 @@ export default class K8sDeployment {
     });
 
     // Parse YAML and merge with system values
-    const deployment = parseAndMergeYaml(resolvedYaml, {
+    const deployment = customYamlToDeployment(resolvedYaml, {
       deploymentName: this.deploymentName,
       serverId: this.mcpServer.id,
       serverName: this.mcpServer.name,
@@ -778,19 +782,6 @@ export default class K8sDeployment {
         ...(deployment.spec.template.spec.nodeSelector || {}),
         ...nodeSelector,
       };
-    }
-
-    // 2. Add HTTP port if needed
-    if (needsHttp && deployment.spec?.template?.spec?.containers?.[0]) {
-      const container = deployment.spec.template.spec.containers[0];
-      if (!container.ports || container.ports.length === 0) {
-        container.ports = [
-          {
-            containerPort: httpPort,
-            protocol: "TCP",
-          },
-        ];
-      }
     }
 
     // 3. Get environment variables and mounted secrets for system-managed env vars

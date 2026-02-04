@@ -21,6 +21,10 @@ export interface DeploymentYamlContext {
   arguments?: string[];
   environment?: z.infer<typeof EnvironmentVariableSchema>[];
   serviceAccount?: string;
+  /** Transport type: "stdio" (default) or "streamable-http" */
+  transportType?: "stdio" | "streamable-http";
+  /** HTTP port for streamable-http transport (default: 8080) */
+  httpPort?: number;
 }
 
 /**
@@ -72,7 +76,8 @@ const ARCHESTRA_PLACEHOLDERS = [
 export function generateDeploymentYamlTemplate(
   context: DeploymentYamlContext,
 ): string {
-  const { environment = [] } = context;
+  const { environment = [], transportType = "stdio", httpPort = 8080 } = context;
+  const needsHttp = transportType === "streamable-http";
 
   // Build environment variables section
   const envSection: Array<{
@@ -100,6 +105,34 @@ export function generateDeploymentYamlTemplate(
         value: placeholder("env", envVar.key),
       });
     }
+  }
+
+  // Build container spec based on transport type
+  const containerSpec: Record<string, unknown> = {
+    name: "mcp-server",
+    image: placeholder("archestra", "docker_image"),
+    // command and args come from basic config
+    ...(envSection.length > 0 ? { env: envSection } : {}),
+    resources: {
+      requests: {
+        memory: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
+        cpu: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
+      },
+    },
+  };
+
+  if (needsHttp) {
+    // HTTP transport: expose port
+    containerSpec.ports = [
+      {
+        containerPort: httpPort,
+        protocol: "TCP",
+      },
+    ];
+  } else {
+    // Stdio transport: enable stdin for JSON-RPC communication
+    containerSpec.stdin = true;
+    containerSpec.tty = false;
   }
 
   // Build the deployment spec structure
@@ -133,26 +166,8 @@ export function generateDeploymentYamlTemplate(
         },
         spec: {
           terminationGracePeriodSeconds: 5,
-          // serviceAccountName: default
-          containers: [
-            {
-              name: "mcp-server",
-              image: placeholder("archestra", "docker_image"),
-              // command and args come from basic config
-              stdin: true,
-              tty: false,
-              ...(envSection.length > 0 ? { env: envSection } : {}),
-              resources: {
-                requests: {
-                  memory: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
-                  cpu: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
-                },
-                // limits:
-                //   memory: "256Mi"
-                //   cpu: "500m"
-              },
-            },
-          ],
+          serviceAccountName: placeholder("archestra", "service_account"),
+          containers: [containerSpec],
           restartPolicy: "Always",
         },
       },
@@ -406,13 +421,26 @@ export function resolvePlaceholders(
 
 /**
  * Parses YAML and merges it with system-managed values.
- * Protected fields are always overwritten.
+ *
+ * ## Protected Fields (always overwritten)
+ *
+ * These fields are system-managed and will be overwritten regardless of YAML values:
+ *
+ * - `metadata.name` - Set to system-generated deployment name
+ * - `metadata.labels` - System labels merged in (take precedence over user labels):
+ *   - `app: "mcp-server"`
+ *   - `mcp-server-id: <serverId>`
+ *   - `mcp-server-name: <serverName>`
+ * - `spec.selector.matchLabels` - Always set to system labels (required for pod selection)
+ * - `spec.template.metadata.labels` - System labels merged in (required for selector matching)
+ *
+ * ## User-Customizable Fields
  *
  * @param yamlString - The user's YAML string
  * @param systemValues - System-managed values that must be applied
- * @returns Merged K8s Deployment spec
+ * @returns Merged K8s Deployment spec, or null if parsing failed
  */
-export function parseAndMergeYaml(
+export function customYamlToDeployment(
   yamlString: string,
   systemValues: {
     deploymentName: string;
@@ -481,7 +509,7 @@ export function parseAndMergeYaml(
  *   If not provided, all existing env vars not in the new environment are preserved.
  * @returns Updated YAML string with merged environment variables
  */
-export function mergeEnvironmentIntoYaml(
+export function mergeLocalConfigIntoYaml(
   yamlString: string,
   environment: Array<{
     key: string;

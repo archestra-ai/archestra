@@ -5,7 +5,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   generateDeploymentYamlTemplate,
-  mergeEnvironmentIntoYaml,
+  mergeLocalConfigIntoYaml,
   validateDeploymentYaml,
 } from "@/mcp-server-runtime/k8s-yaml-generator";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
@@ -201,7 +201,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.deploymentSpecYaml &&
         restBody.localConfig?.environment
       ) {
-        restBody.deploymentSpecYaml = mergeEnvironmentIntoYaml(
+        restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
           restBody.deploymentSpecYaml,
           restBody.localConfig.environment,
         );
@@ -456,7 +456,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
           // Merge current environment into the existing YAML
-          restBody.deploymentSpecYaml = mergeEnvironmentIntoYaml(
+          restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
             existingYaml,
             environment,
             previouslyManagedKeys,

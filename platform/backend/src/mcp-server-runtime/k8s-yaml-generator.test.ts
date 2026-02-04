@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import type { z } from "zod";
 import {
   generateDeploymentYamlTemplate,
-  mergeEnvironmentIntoYaml,
+  mergeLocalConfigIntoYaml,
   validateDeploymentYaml,
 } from "./k8s-yaml-generator";
 
@@ -46,7 +46,7 @@ describe("k8s-yaml-generator", () => {
     });
   });
 
-  describe("mergeEnvironmentIntoYaml", () => {
+  describe("mergeLocalConfigIntoYaml", () => {
     const baseYamlWithCustomizations = `# Kubernetes Deployment Spec for MCP Server
 apiVersion: apps/v1
 kind: Deployment
@@ -99,7 +99,7 @@ spec:
         { key: "NEW_VAR", type: "plain_text", promptOnInstallation: false },
       ];
 
-      const result = mergeEnvironmentIntoYaml(
+      const result = mergeLocalConfigIntoYaml(
         baseYamlWithCustomizations,
         environment,
       );
@@ -127,7 +127,7 @@ spec:
         { key: "DB_PASSWORD", type: "secret", promptOnInstallation: false },
       ];
 
-      const result = mergeEnvironmentIntoYaml(
+      const result = mergeLocalConfigIntoYaml(
         baseYamlWithCustomizations,
         environment,
       );
@@ -153,7 +153,7 @@ spec:
         },
       ];
 
-      const result = mergeEnvironmentIntoYaml(
+      const result = mergeLocalConfigIntoYaml(
         baseYamlWithCustomizations,
         environment,
       );
@@ -174,7 +174,7 @@ spec:
         { key: "NEW_VAR", type: "plain_text", promptOnInstallation: false },
       ];
 
-      const result = mergeEnvironmentIntoYaml(
+      const result = mergeLocalConfigIntoYaml(
         baseYamlWithCustomizations,
         environment,
       );
@@ -192,7 +192,7 @@ spec:
     test("handles empty environment array by preserving existing env vars", () => {
       const environment: EnvironmentVariable[] = [];
 
-      const result = mergeEnvironmentIntoYaml(
+      const result = mergeLocalConfigIntoYaml(
         baseYamlWithCustomizations,
         environment,
       );
@@ -233,7 +233,7 @@ spec:
         { key: "NEW_VAR", type: "plain_text", promptOnInstallation: false },
       ];
 
-      const result = mergeEnvironmentIntoYaml(yamlWithoutEnv, environment);
+      const result = mergeLocalConfigIntoYaml(yamlWithoutEnv, environment);
 
       // Should add env section
       expect(result).toContain("name: NEW_VAR");
@@ -271,7 +271,7 @@ spec:
         { key: "NEW_VAR", type: "plain_text", promptOnInstallation: false },
       ];
 
-      const result = mergeEnvironmentIntoYaml(yamlWithComments, environment);
+      const result = mergeLocalConfigIntoYaml(yamlWithComments, environment);
 
       // Comments at the top should be preserved
       expect(result).toContain("# This is a custom comment");
@@ -291,7 +291,7 @@ spec:
         { key: "NUM_VAR", type: "number", promptOnInstallation: false },
       ];
 
-      const result = mergeEnvironmentIntoYaml(
+      const result = mergeLocalConfigIntoYaml(
         baseYamlWithCustomizations,
         environment,
       );
@@ -320,7 +320,7 @@ spec:
         { key: "EXISTING_VAR", type: "secret", promptOnInstallation: false },
       ];
 
-      const result = mergeEnvironmentIntoYaml(
+      const result = mergeLocalConfigIntoYaml(
         baseYamlWithCustomizations,
         environment,
       );
@@ -370,7 +370,7 @@ spec:
       // Previously, both EXISTING_VAR and CUSTOM_VAR were managed by localConfig
       const previouslyManagedKeys = new Set(["EXISTING_VAR", "CUSTOM_VAR"]);
 
-      const result = mergeEnvironmentIntoYaml(
+      const result = mergeLocalConfigIntoYaml(
         yamlWithTwoEnvVars,
         newEnvironment,
         previouslyManagedKeys,
@@ -422,7 +422,7 @@ spec:
       // Previously, only EXISTING_VAR was managed (USER_ADDED_VAR was added by user in YAML)
       const previouslyManagedKeys = new Set(["EXISTING_VAR"]);
 
-      const result = mergeEnvironmentIntoYaml(
+      const result = mergeLocalConfigIntoYaml(
         yamlWithUserAddedEnv,
         newEnvironment,
         previouslyManagedKeys,
@@ -442,7 +442,7 @@ spec:
         { key: "NEW_VAR", type: "plain_text", promptOnInstallation: false },
       ];
 
-      const result = mergeEnvironmentIntoYaml(invalidYaml, environment);
+      const result = mergeLocalConfigIntoYaml(invalidYaml, environment);
 
       // Should return original YAML unchanged
       expect(result).toBe(invalidYaml);

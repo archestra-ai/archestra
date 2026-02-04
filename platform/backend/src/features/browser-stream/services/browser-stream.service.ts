@@ -168,6 +168,7 @@ export class BrowserStreamService {
   /**
    * Get tools from globally available catalogs for a user.
    * These are catalogs marked as `isGloballyAvailable` where the user has a personal server.
+   * Uses batch loading to avoid N+1 queries.
    */
   private async getGlobalCatalogToolsForUser(
     userId: string,
@@ -179,27 +180,26 @@ export class BrowserStreamService {
       return [];
     }
 
-    const tools: { name: string; catalogId: string }[] = [];
+    const catalogIds = globalCatalogs.map((c) => c.id);
 
-    for (const catalog of globalCatalogs) {
-      // Check if user has a personal server for this catalog
-      const userServer = await McpServerModel.getUserPersonalServerForCatalog(
+    // Batch load: get all user's personal servers for these catalogs
+    const userServersByCatalog =
+      await McpServerModel.getUserPersonalServersForCatalogs(
         userId,
-        catalog.id,
+        catalogIds,
       );
 
-      if (!userServer) {
-        continue;
-      }
+    // Filter to catalogs where user has a personal server
+    const catalogsWithUserServer = catalogIds.filter((id) =>
+      userServersByCatalog.has(id),
+    );
 
-      // Get tools from this catalog
-      const catalogTools = await ToolModel.findByCatalogId(catalog.id);
-      for (const tool of catalogTools) {
-        tools.push({ name: tool.name, catalogId: catalog.id });
-      }
+    if (catalogsWithUserServer.length === 0) {
+      return [];
     }
 
-    return tools;
+    // Batch load: get all tools for these catalogs
+    return ToolModel.getToolNamesByCatalogIds(catalogsWithUserServer);
   }
 
   private async findToolName(

@@ -913,6 +913,31 @@ class ToolModel {
   }
 
   /**
+   * Get basic tool info (name and catalogId) for multiple catalogs in a single query.
+   * Used for batch loading tools across multiple catalogs.
+   */
+  static async getToolNamesByCatalogIds(
+    catalogIds: string[],
+  ): Promise<Array<{ name: string; catalogId: string }>> {
+    if (catalogIds.length === 0) {
+      return [];
+    }
+
+    const tools = await db
+      .select({
+        name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
+      })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.catalogId, catalogIds));
+
+    // Filter out any nulls (catalogId is nullable in schema)
+    return tools.filter(
+      (t): t is { name: string; catalogId: string } => t.catalogId !== null,
+    );
+  }
+
+  /**
    * Delete all tools for a specific catalog item
    * Used when the last MCP server installation for a catalog is removed
    * Returns the number of tools deleted

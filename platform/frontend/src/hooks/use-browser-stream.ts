@@ -111,6 +111,8 @@ export function useBrowserStream({
   const subscribedConversationIdRef = useRef<string | null>(null);
   const prevConversationIdRef = useRef<string | undefined>(undefined);
   const isEditingUrlRef = useRef(false);
+  /** Track if subscription is paused due to window/tab losing focus */
+  const isPausedDueToFocusRef = useRef(false);
 
   // Wrapper that updates BOTH ref (immediately) and state (for UI)
   // This prevents race conditions where screenshot updates come in
@@ -175,6 +177,7 @@ export function useBrowserStream({
       setIsConnected(false);
       setIsEditingUrl(false);
       setError(null);
+      isPausedDueToFocusRef.current = false;
       prevConversationIdRef.current = conversationId;
     }
 
@@ -305,6 +308,61 @@ export function useBrowserStream({
       }
     };
   }, [isActive, conversationId, setIsEditingUrl, initialUrl]);
+
+  // Handle window/tab visibility changes to pause/resume subscription
+  // This prevents multiple browser windows from interfering with each other
+  useEffect(() => {
+    if (!isActive || !conversationId) return;
+
+    const pauseSubscription = () => {
+      if (
+        subscribedConversationIdRef.current &&
+        !isPausedDueToFocusRef.current
+      ) {
+        isPausedDueToFocusRef.current = true;
+        websocketService.send({
+          type: "unsubscribe_browser_stream",
+          payload: { conversationId: subscribedConversationIdRef.current },
+        });
+      }
+    };
+
+    const resumeSubscription = () => {
+      if (isPausedDueToFocusRef.current && conversationId) {
+        isPausedDueToFocusRef.current = false;
+        websocketService.send({
+          type: "subscribe_browser_stream",
+          payload: { conversationId, initialUrl },
+        });
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        pauseSubscription();
+      } else {
+        resumeSubscription();
+      }
+    };
+
+    const handleBlur = () => {
+      pauseSubscription();
+    };
+
+    const handleFocus = () => {
+      resumeSubscription();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [isActive, conversationId, initialUrl]);
 
   const navigate = useCallback(
     (url: string) => {

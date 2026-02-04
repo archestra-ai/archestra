@@ -13428,6 +13428,7 @@ export type GetChatGlobalToolsResponses = {
         id: string;
         name: string;
         description: string | null;
+        catalogId: string;
     }>;
 };
 

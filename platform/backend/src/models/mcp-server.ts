@@ -528,6 +528,29 @@ class McpServerModel {
   }
 
   /**
+   * Get a user's personal server for a specific catalog.
+   * Personal servers have no teamId and are owned by the user.
+   */
+  static async getUserPersonalServerForCatalog(
+    userId: string,
+    catalogId: string,
+  ): Promise<McpServer | null> {
+    const [result] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          eq(schema.mcpServersTable.ownerId, userId),
+          isNull(schema.mcpServersTable.teamId), // Personal = no team
+        ),
+      )
+      .limit(1);
+
+    return result || null;
+  }
+
+  /**
    * Validate that an MCP server can be connected to with given secretId
    */
   static async validateConnection(

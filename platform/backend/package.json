@@ -88,7 +88,7 @@
     "drizzle-kit": "^0.31.8",
     "drizzle-orm": "^0.45.0",
     "drizzle-zod": "^0.8.3",
-    "fastify": "^5.7.0",
+    "fastify": "^5.7.3",
     "fastify-metrics": "^12.1.0",
     "fastify-plugin": "^5.1.0",
     "fastify-type-provider-zod": "^6.0.0",

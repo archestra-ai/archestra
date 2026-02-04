@@ -2,7 +2,7 @@ import config from "@/config";
 import {
   BrowserStreamService,
   type BrowserUserContext,
-} from "./browser-stream";
+} from "./browser-stream.service";
 
 /**
  * Browser WebSocket message types that should be guarded by the feature flag
@@ -52,19 +52,21 @@ class BrowserStreamFeature {
 
   // Delegate all service methods
 
-  checkAvailability(agentId: string) {
-    return this.getService().checkAvailability(agentId);
+  checkAvailability(agentId: string, userId?: string) {
+    return this.getService().checkAvailability(agentId, userId);
   }
 
   selectOrCreateTab(
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    initialUrl?: string,
   ) {
     return this.getService().selectOrCreateTab(
       agentId,
       conversationId,
       userContext,
+      initialUrl,
     );
   }
 
@@ -110,6 +112,17 @@ class BrowserStreamFeature {
     return this.getService().closeTab(agentId, conversationId, userContext);
   }
 
+  syncTabMappingFromTabsToolCall(params: {
+    agentId: string;
+    conversationId: string;
+    userContext: BrowserUserContext;
+    toolArguments?: Record<string, unknown>;
+    toolResultContent: unknown;
+    tabsToolName?: string;
+  }) {
+    return this.getService().syncTabMappingFromTabsToolCall(params);
+  }
+
   takeScreenshot(
     agentId: string,
     conversationId: string,
@@ -122,8 +135,16 @@ class BrowserStreamFeature {
     );
   }
 
-  getCurrentUrl(agentId: string, userContext: BrowserUserContext) {
-    return this.getService().getCurrentUrl(agentId, userContext);
+  getCurrentUrl(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+  ) {
+    return this.getService().getCurrentUrl(
+      agentId,
+      conversationId,
+      userContext,
+    );
   }
 
   click(
@@ -180,6 +201,10 @@ class BrowserStreamFeature {
     userContext: BrowserUserContext,
   ) {
     return this.getService().getSnapshot(agentId, conversationId, userContext);
+  }
+
+  cleanupOrphanedTabs(agentId: string, userContext: BrowserUserContext) {
+    return this.getService().cleanupOrphanedTabs(agentId, userContext);
   }
 }
 

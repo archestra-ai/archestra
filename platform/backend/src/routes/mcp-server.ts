@@ -193,15 +193,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Check for duplicate personal installation (same user, no team)
+        // Return existing server instead of erroring (idempotent behavior)
         if (!serverData.teamId) {
           const existingPersonal = existingServers.find(
             (s) => s.ownerId === user.id && !s.teamId,
           );
           if (existingPersonal) {
-            throw new ApiError(
-              400,
-              "You already have a personal installation of this MCP server",
-            );
+            return reply.send(existingPersonal);
           }
         }
 

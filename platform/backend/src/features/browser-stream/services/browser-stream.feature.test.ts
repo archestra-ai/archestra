@@ -22,7 +22,7 @@ vi.mock("@/config", async (importOriginal) => {
 });
 
 // Import after mocking (dynamic import needed because of the mock)
-const { browserStreamFeature } = await import("./browser-stream-feature");
+const { browserStreamFeature } = await import("./browser-stream.feature");
 
 describe("BrowserStreamFeature", () => {
   beforeEach(() => {

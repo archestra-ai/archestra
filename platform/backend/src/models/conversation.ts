@@ -14,12 +14,15 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { PersistedBrowserState } from "@/features/browser-stream/services/browser-stream.state.types";
 import type {
   Conversation,
   InsertConversation,
   UpdateConversation,
 } from "@/types";
 import ConversationEnabledToolModel from "./conversation-enabled-tool";
+import InternalMcpCatalogModel from "./internal-mcp-catalog";
+import McpServerModel from "./mcp-server";
 import ToolModel from "./tool";
 
 class ConversationModel {
@@ -53,12 +56,14 @@ class ConversationModel {
       )
       .map((tool) => tool.id);
 
+    const globalToolIds = await getGlobalToolIdsForUser(data.userId);
+
     // Set enabled tools to non-Archestra tools plus default Archestra tools
     // This creates a custom tool selection with most Archestra tools disabled
-    await ConversationEnabledToolModel.setEnabledTools(
-      conversation.id,
-      nonArchestraToolIds,
-    );
+    await ConversationEnabledToolModel.setEnabledTools(conversation.id, [
+      ...nonArchestraToolIds,
+      ...globalToolIds,
+    ]);
 
     const conversationWithAgent = (await ConversationModel.findById({
       id: conversation.id,
@@ -409,6 +414,89 @@ class ConversationModel {
 
     return result[0]?.agentId ?? null;
   }
+
+  /**
+   * Get the browser state for a conversation.
+   * Returns null if no browser state is stored.
+   */
+  static async getBrowserState(
+    conversationId: string,
+  ): Promise<PersistedBrowserState | null> {
+    const result = await db
+      .select({ browserState: schema.conversationsTable.browserState })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversationId))
+      .limit(1);
+
+    return result[0]?.browserState ?? null;
+  }
+
+  /**
+   * Update the browser state for a conversation.
+   * Pass null to clear the browser state.
+   */
+  static async updateBrowserState(
+    conversationId: string,
+    state: PersistedBrowserState | null,
+  ): Promise<void> {
+    await db
+      .update(schema.conversationsTable)
+      .set({ browserState: state })
+      .where(eq(schema.conversationsTable.id, conversationId));
+  }
+
+  /**
+   * Get all conversation IDs that have browser state for a specific agent and user.
+   * Used for orphan tab cleanup - identifies which conversations "own" browser tabs.
+   */
+  static async getConversationIdsWithBrowserStateByAgent(
+    agentId: string,
+    userId: string,
+  ): Promise<string[]> {
+    const result = await db
+      .select({ id: schema.conversationsTable.id })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.agentId, agentId),
+          eq(schema.conversationsTable.userId, userId),
+          isNotNull(schema.conversationsTable.browserState),
+        ),
+      );
+
+    return result.map((r) => r.id);
+  }
+}
+
+// =============================================================================
+// Internal Helpers (not exported)
+// =============================================================================
+
+async function getGlobalToolIdsForUser(userId: string): Promise<string[]> {
+  const globalCatalogs =
+    await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
+  if (globalCatalogs.length === 0) {
+    return [];
+  }
+
+  const globalToolIds: string[] = [];
+
+  for (const catalog of globalCatalogs) {
+    const userServer = await McpServerModel.getUserPersonalServerForCatalog(
+      userId,
+      catalog.id,
+    );
+    if (!userServer) {
+      continue;
+    }
+
+    const catalogTools = await ToolModel.findByCatalogId(catalog.id);
+    for (const tool of catalogTools) {
+      globalToolIds.push(tool.id);
+    }
+  }
+
+  return globalToolIds;
 }
 
 export default ConversationModel;

@@ -194,13 +194,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Merge environment variables into YAML if both are present
-      // This ensures env/secret configuration is reflected in the YAML
-      if (
-        restBody.serverType === "local" &&
-        restBody.deploymentSpecYaml &&
-        restBody.localConfig?.environment
-      ) {
+      // Only merge environment variables into YAML if YAML is explicitly provided
+      // The YAML is only stored when explicitly edited via the "Edit Deployment Yaml" dialog
+      if (restBody.deploymentSpecYaml && restBody.localConfig?.environment) {
         restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
           restBody.deploymentSpecYaml,
           restBody.localConfig.environment,
@@ -452,32 +448,28 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Merge environment variables into existing YAML if present
-      // This ensures env/secret changes are reflected in the saved YAML
-      const isLocalServer =
-        restBody.serverType === "local" ||
-        (!restBody.serverType && originalCatalogItem.serverType === "local");
+      // Merge environment variables into YAML in two cases:
+      // 1. YAML is explicitly provided in request (user editing via "Edit Deployment Yaml" dialog)
+      // 2. YAML already exists in database and env vars are being updated (main form edit)
+      const yamlToUpdate =
+        restBody.deploymentSpecYaml ?? originalCatalogItem.deploymentSpecYaml;
 
-      if (isLocalServer) {
-        const existingYaml =
-          restBody.deploymentSpecYaml || originalCatalogItem.deploymentSpecYaml;
-        const environment = restBody.localConfig?.environment ?? [];
+      if (yamlToUpdate && restBody.localConfig?.environment) {
+        const environment = restBody.localConfig.environment;
 
-        if (existingYaml) {
-          // Build set of previously managed keys to detect removed env vars
-          const previouslyManagedKeys = new Set<string>(
-            (originalCatalogItem.localConfig?.environment ?? []).map(
-              (env) => env.key,
-            ),
-          );
+        // Build set of previously managed keys to detect removed env vars
+        const previouslyManagedKeys = new Set<string>(
+          (originalCatalogItem.localConfig?.environment ?? []).map(
+            (env) => env.key,
+          ),
+        );
 
-          // Merge current environment into the existing YAML
-          restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
-            existingYaml,
-            environment,
-            previouslyManagedKeys,
-          );
-        }
+        // Merge current environment into the YAML
+        restBody.deploymentSpecYaml = mergeLocalConfigIntoYaml(
+          yamlToUpdate,
+          environment,
+          previouslyManagedKeys,
+        );
       }
 
       // Update the catalog item

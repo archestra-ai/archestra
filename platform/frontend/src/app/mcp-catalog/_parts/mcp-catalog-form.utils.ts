@@ -21,16 +21,8 @@ export function transformFormToApiData(
     data.serverUrl = values.serverUrl;
   }
 
-  // Handle top-level deploymentSpecYaml for local servers
-  // Only save if user modified the YAML (compare with original)
-  if (values.serverType === "local" && values.deploymentSpecYaml?.trim()) {
-    const currentYaml = values.deploymentSpecYaml.trim();
-    const originalYaml = values.originalDeploymentSpecYaml?.trim();
-    // Only include if YAML was modified from the original
-    if (currentYaml !== originalYaml) {
-      data.deploymentSpecYaml = currentYaml;
-    }
-  }
+  // Note: deploymentSpecYaml is handled separately via the "Edit Deployment Yaml" dialog
+  // The main form does not touch the YAML - it's only stored when explicitly edited
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {

@@ -178,8 +178,8 @@ export function generateDeploymentYamlTemplate(
     },
   };
 
-  // Convert to YAML with comments
-  let yamlString = yaml.dump(deploymentSpec, {
+  // Convert to YAML
+  const yamlString = yaml.dump(deploymentSpec, {
     lineWidth: -1, // Don't wrap lines
     quotingType: '"',
     forceQuotes: false,
@@ -187,52 +187,7 @@ export function generateDeploymentYamlTemplate(
     sortKeys: false,
   });
 
-  // Add helpful comments
-  yamlString = addYamlComments(yamlString);
-
   return yamlString;
-}
-
-/**
- * Adds helpful comments to the YAML template.
- */
-function addYamlComments(yamlString: string): string {
-  const lines = yamlString.split("\n");
-  const result: string[] = [];
-
-  // Add header comment
-  result.push("# Kubernetes Deployment Spec for MCP Server");
-  result.push("#");
-  result.push(
-    "# You can customize this YAML. Environment variables are managed",
-  );
-  result.push(
-    "# automatically - add/remove them in the Environment Variables section above.",
-  );
-  result.push("#");
-  result.push("# Placeholders (replaced at deployment time):");
-  result.push(
-    "#   ${env.KEY}       - Value of plain text environment variable",
-  );
-  result.push(
-    "#   ${secret.KEY}    - Reference to K8s Secret (for sensitive values)",
-  );
-  result.push("#   ${archestra.*}   - System values injected by Archestra:");
-  result.push("#       deployment_name, server_id, server_name, namespace,");
-  result.push(
-    "#       docker_image, secret_name, command, arguments, service_account",
-  );
-  result.push("#");
-  result.push("# Protected fields (always overwritten at deployment):");
-  result.push("#   - metadata.labels: mcp-server-id, app");
-  result.push("#   - spec.selector.matchLabels");
-  result.push("#   - spec.template.metadata.labels: mcp-server-id, app");
-  result.push("#");
-  result.push("");
-
-  result.push(...lines);
-
-  return result.join("\n");
 }
 
 /**

@@ -3,6 +3,7 @@
 import { type archestraApiTypes, E2eTestId } from "@shared";
 import {
   AlertTriangle,
+  Code,
   FileText,
   Info,
   MoreVertical,
@@ -46,6 +47,7 @@ import { McpAssignmentsDialog } from "./mcp-assignments-dialog";
 import { McpLogsDialog } from "./mcp-logs-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
+import { YamlConfigDialog } from "./yaml-config-dialog";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -161,6 +163,7 @@ export function McpServerCard({
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
+  const [isYamlConfigDialogOpen, setIsYamlConfigDialogOpen] = useState(false);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
     name: string;
@@ -318,6 +321,12 @@ export function McpServerCard({
             <Info className="mr-2 h-4 w-4" />
             About
           </DropdownMenuItem>
+          {variant === "local" && (
+            <DropdownMenuItem onClick={() => setIsYamlConfigDialogOpen(true)}>
+              <Code className="mr-2 h-4 w-4" />
+              Edit Deployment Yaml
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={onDelete} className="text-destructive">
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
@@ -691,6 +700,11 @@ export function McpServerCard({
         onClose={() => setUninstallingServer(null)}
         isCancelingInstallation={isInstalling}
         onCancelInstallation={onCancelInstallation}
+      />
+
+      <YamlConfigDialog
+        item={isYamlConfigDialogOpen ? item : null}
+        onClose={() => setIsYamlConfigDialogOpen(false)}
       />
     </>
   );

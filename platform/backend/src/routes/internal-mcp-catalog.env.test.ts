@@ -159,6 +159,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
 
       // YAML should contain env placeholders
       expect(catalog.deploymentSpecYaml).toContain("name: LOG_LEVEL");
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing YAML placeholders
       expect(catalog.deploymentSpecYaml).toContain("value: ${env.LOG_LEVEL}");
       expect(catalog.deploymentSpecYaml).toContain("name: API_KEY");
       expect(catalog.deploymentSpecYaml).toContain("secretKeyRef");
@@ -342,8 +343,9 @@ describe("Internal MCP Catalog - Environment Variables", () => {
       const previouslyManagedKeys = new Set(environment.map((e) => e.key));
 
       // Merge with previouslyManagedKeys to remove REMOVE_VAR
+      expect(catalog.deploymentSpecYaml).toBeDefined();
       const updatedYaml = mergeLocalConfigIntoYaml(
-        catalog.deploymentSpecYaml!,
+        catalog.deploymentSpecYaml as string,
         newEnvironment,
         previouslyManagedKeys,
       );
@@ -412,6 +414,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
 
       // Verify it's a plain text env var
       expect(yamlTemplate).toContain("name: CONVERTABLE_VAR");
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing YAML placeholders
       expect(yamlTemplate).toContain("value: ${env.CONVERTABLE_VAR}");
       expect(yamlTemplate).not.toContain("secretKeyRef");
 
@@ -434,6 +437,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
       // Should now use secretKeyRef
       expect(updatedYaml).toContain("name: CONVERTABLE_VAR");
       expect(updatedYaml).toContain("secretKeyRef");
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing YAML placeholders
       expect(updatedYaml).not.toContain("value: ${env.CONVERTABLE_VAR}");
     });
 
@@ -476,6 +480,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
 
       // Should now use plain value
       expect(updatedYaml).toContain("name: CONVERTABLE_VAR");
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing YAML placeholders
       expect(updatedYaml).toContain("value: ${env.CONVERTABLE_VAR}");
       expect(updatedYaml).not.toContain("secretKeyRef");
     });
@@ -625,6 +630,7 @@ spec:
 
       // Should now have env section
       expect(updatedYaml).toContain("name: NEW_VAR");
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing YAML placeholders
       expect(updatedYaml).toContain("value: ${env.NEW_VAR}");
     });
 
@@ -767,12 +773,15 @@ spec:
 
       // Plain text types use ${env.KEY}
       expect(yamlTemplate).toContain("name: PLAIN_VAR");
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing YAML placeholders
       expect(yamlTemplate).toContain("value: ${env.PLAIN_VAR}");
 
       // Boolean and number are treated as plain text
       expect(yamlTemplate).toContain("name: BOOL_VAR");
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing YAML placeholders
       expect(yamlTemplate).toContain("value: ${env.BOOL_VAR}");
       expect(yamlTemplate).toContain("name: NUM_VAR");
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing YAML placeholders
       expect(yamlTemplate).toContain("value: ${env.NUM_VAR}");
 
       // Secret uses secretKeyRef

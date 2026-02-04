@@ -694,8 +694,8 @@ export default class K8sDeployment {
     yamlString: string,
     dockerImage: string,
     localConfig: z.infer<typeof LocalConfigSchema>,
-    needsHttp: boolean,
-    httpPort: number,
+    _needsHttp: boolean,
+    _httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
   ): k8s.V1Deployment | null {
     const k8sSecretName = K8sDeployment.constructK8sSecretName(

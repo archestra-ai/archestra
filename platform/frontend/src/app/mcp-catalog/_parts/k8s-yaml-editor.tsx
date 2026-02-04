@@ -132,21 +132,7 @@ export function K8sYamlEditor({
       )}
 
       {/* Editor Header with Reset Button */}
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">
-          Customize the Kubernetes Deployment spec. Use placeholders:{" "}
-          <code className="text-xs bg-muted px-1 py-0.5 rounded">
-            ${"{env.KEY}"}
-          </code>
-          ,{" "}
-          <code className="text-xs bg-muted px-1 py-0.5 rounded">
-            ${"{secret.KEY}"}
-          </code>
-          ,{" "}
-          <code className="text-xs bg-muted px-1 py-0.5 rounded">
-            ${"{archestra.*}"}
-          </code>
-        </p>
+      <div className="flex justify-end items-center">
         <Button
           type="button"
           variant="outline"
@@ -189,25 +175,6 @@ export function K8sYamlEditor({
             },
           }}
         />
-      </div>
-
-      {/* Help Text */}
-      <div className="text-xs text-muted-foreground space-y-1">
-        <p>
-          <strong>Protected fields:</strong> Labels{" "}
-          <code className="bg-muted px-1 rounded">mcp-server-id</code>,{" "}
-          <code className="bg-muted px-1 rounded">app</code>, and selector are
-          managed by Archestra and will be overwritten.
-        </p>
-        <p>
-          <strong>System placeholders:</strong>{" "}
-          <code className="bg-muted px-1 rounded">deployment_name</code>,{" "}
-          <code className="bg-muted px-1 rounded">server_id</code>,{" "}
-          <code className="bg-muted px-1 rounded">server_name</code>,{" "}
-          <code className="bg-muted px-1 rounded">namespace</code>,{" "}
-          <code className="bg-muted px-1 rounded">docker_image</code>,{" "}
-          <code className="bg-muted px-1 rounded">secret_name</code>
-        </p>
       </div>
     </div>
   );

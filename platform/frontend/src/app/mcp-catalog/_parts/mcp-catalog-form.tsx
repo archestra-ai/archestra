@@ -2,23 +2,12 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
-import {
-  AlertCircle,
-  ChevronDown,
-  ChevronRight,
-  Settings2,
-} from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { lazy, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
@@ -34,7 +23,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeatureFlag, useFeatureValue } from "@/lib/features.hook";
 import { useGetSecret } from "@/lib/secrets.query";
-import { K8sYamlEditor } from "./k8s-yaml-editor";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -102,9 +90,6 @@ export function McpCatalogForm({
           },
         },
   });
-
-  // State for advanced configuration collapsed section
-  const [advancedConfigOpen, setAdvancedConfigOpen] = useState(false);
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
@@ -400,74 +385,6 @@ export function McpCatalogForm({
                   />
                 </>
               )}
-
-              {/* Advanced Kubernetes Configuration */}
-              <Collapsible
-                open={advancedConfigOpen}
-                onOpenChange={setAdvancedConfigOpen}
-                className="border rounded-lg"
-              >
-                <CollapsibleTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="w-full flex items-center justify-between p-4 h-auto"
-                    type="button"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Settings2 className="h-4 w-4" />
-                      <span className="font-medium">
-                        Advanced Configuration
-                      </span>
-                    </div>
-                    {advancedConfigOpen ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="px-4 pt-2 pb-4 space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="localConfig.serviceAccount"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Service Account</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="default"
-                            className="font-mono"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          K8s service account for the deployment pods
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="deploymentSpecYaml"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Kubernetes Deployment Spec (YAML)</FormLabel>
-                        <FormControl>
-                          <K8sYamlEditor
-                            catalogId={initialValues?.id}
-                            value={field.value}
-                            onChange={field.onChange}
-                            isSaved={mode === "edit"}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CollapsibleContent>
-              </Collapsible>
             </>
           )}
         </div>

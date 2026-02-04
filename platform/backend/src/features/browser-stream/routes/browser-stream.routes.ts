@@ -2,9 +2,9 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
+import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
 import { ConversationModel } from "@/models";
-import type { BrowserUserContext } from "@/services/browser-stream";
-import { browserStreamFeature } from "@/services/browser-stream-feature";
 import { ApiError, constructResponseSchema } from "@/types";
 
 const ConversationParamsSchema = z.object({

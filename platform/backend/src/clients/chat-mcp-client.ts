@@ -625,9 +625,9 @@ export async function getChatMcpTools({
             try {
               // For browser tools, ensure the correct conversation tab is selected first
               // Only if browser streaming feature is enabled
-              // Lazily loaded to avoid circular dependency (browser-stream.ts imports from chat-mcp-client.ts)
+              // Lazily loaded to avoid circular dependency (browser-stream.feature.ts imports from chat-mcp-client.ts)
               const { browserStreamFeature } = await import(
-                "@/services/browser-stream-feature"
+                "@/features/browser-stream/services/browser-stream.feature"
               );
 
               if (
@@ -744,6 +744,40 @@ export async function getChatMcpTools({
                 const errorMessage =
                   extractedError || result.error || "Tool execution failed";
                 throw new Error(errorMessage);
+              }
+
+              if (conversationId && mcpTool.name.includes("browser_tabs")) {
+                const { browserStreamFeature } = await import(
+                  "@/features/browser-stream/services/browser-stream.feature"
+                );
+                if (browserStreamFeature.isEnabled()) {
+                  await browserStreamFeature.syncTabMappingFromTabsToolCall({
+                    agentId,
+                    conversationId,
+                    userContext: { userId, userIsProfileAdmin },
+                    toolArguments,
+                    toolResultContent: result.content,
+                    tabsToolName: mcpTool.name,
+                  });
+                }
+              }
+
+              // Sync navigation history when browser_navigate tool is used
+              if (conversationId && mcpTool.name.includes("browser_navigate")) {
+                const navigateUrl = toolArguments?.url;
+                if (typeof navigateUrl === "string" && navigateUrl) {
+                  const { browserStreamFeature } = await import(
+                    "@/features/browser-stream/services/browser-stream.feature"
+                  );
+                  if (browserStreamFeature.isEnabled()) {
+                    await browserStreamFeature.syncNavigationFromToolCall({
+                      agentId,
+                      conversationId,
+                      userContext: { userId, userIsProfileAdmin },
+                      url: navigateUrl,
+                    });
+                  }
+                }
               }
 
               // Convert MCP content to string for AI SDK

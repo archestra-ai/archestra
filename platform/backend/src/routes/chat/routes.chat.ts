@@ -27,6 +27,7 @@ import {
   resolveProviderApiKey,
 } from "@/clients/llm-client";
 import config from "@/config";
+import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { extractAndIngestDocuments } from "@/knowledge-graph/chat-document-extractor";
 import logger from "@/logging";
 import {
@@ -39,7 +40,6 @@ import {
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { browserStreamFeature } from "@/services/browser-stream-feature";
 import {
   ApiError,
   constructResponseSchema,

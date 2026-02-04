@@ -2,7 +2,7 @@ import config from "@/config";
 import {
   BrowserStreamService,
   type BrowserUserContext,
-} from "./browser-stream";
+} from "./browser-stream.service";
 
 /**
  * Browser WebSocket message types that should be guarded by the feature flag
@@ -12,6 +12,7 @@ const BROWSER_WS_MESSAGE_TYPES = [
   "unsubscribe_browser_stream",
   "browser_navigate",
   "browser_navigate_back",
+  "browser_navigate_forward",
   "browser_click",
   "browser_type",
   "browser_press_key",
@@ -110,6 +111,26 @@ class BrowserStreamFeature {
     return this.getService().closeTab(agentId, conversationId, userContext);
   }
 
+  syncTabMappingFromTabsToolCall(params: {
+    agentId: string;
+    conversationId: string;
+    userContext: BrowserUserContext;
+    toolArguments?: Record<string, unknown>;
+    toolResultContent: unknown;
+    tabsToolName?: string;
+  }) {
+    return this.getService().syncTabMappingFromTabsToolCall(params);
+  }
+
+  syncNavigationFromToolCall(params: {
+    agentId: string;
+    conversationId: string;
+    userContext: BrowserUserContext;
+    url: string;
+  }) {
+    return this.getService().syncNavigationFromToolCall(params);
+  }
+
   takeScreenshot(
     agentId: string,
     conversationId: string,
@@ -180,6 +201,22 @@ class BrowserStreamFeature {
     userContext: BrowserUserContext,
   ) {
     return this.getService().getSnapshot(agentId, conversationId, userContext);
+  }
+
+  cleanupOrphanedTabs(agentId: string, userContext: BrowserUserContext) {
+    return this.getService().cleanupOrphanedTabs(agentId, userContext);
+  }
+
+  navigateForward(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+  ) {
+    return this.getService().navigateForward(
+      agentId,
+      conversationId,
+      userContext,
+    );
   }
 }
 

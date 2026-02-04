@@ -6,7 +6,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
-import { BrowserStreamService } from "@/services/browser-stream";
+import { BrowserStreamService } from "@/features/browser-stream/services/browser-stream.service";
 import { beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 
@@ -25,8 +25,10 @@ vi.mock("@/config", async (importOriginal) => {
 });
 
 // Import routes AFTER mocking config (dynamic import needed because of the mock)
-const { default: browserStreamRoutes } = await import("./browser-stream");
-const { default: chatRoutes } = await import("./chat/routes.chat");
+const { default: browserStreamRoutes } = await import(
+  "./browser-stream.routes"
+);
+const { default: chatRoutes } = await import("@/routes/chat/routes.chat");
 
 const buildAppWithUser = async (user: User, organizationId: string) => {
   const app = Fastify({ logger: false })

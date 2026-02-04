@@ -9,12 +9,12 @@ import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
 import zhipuaiProxyRoutesV2 from "./proxy/routesv2/zhipuai";
 
+export { default as browserStreamRoutes } from "@/features/browser-stream/routes/browser-stream.routes";
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
-export { default as browserStreamRoutes } from "./browser-stream";
 export { default as chatApiKeysRoutes } from "./chat/routes.api-keys";
 export { default as chatRoutes } from "./chat/routes.chat";
 export { default as chatModelsRoutes } from "./chat/routes.models";

@@ -12850,6 +12850,9 @@ export type GetChatConversationsResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        browserState: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         artifact: string | null;
         createdAt: string;
         updatedAt: string;
@@ -12953,6 +12956,9 @@ export type CreateChatConversationResponses = {
         selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        browserState: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
@@ -13135,6 +13141,9 @@ export type GetChatConversationResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        browserState: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         artifact: string | null;
         createdAt: string;
         updatedAt: string;
@@ -13241,6 +13250,9 @@ export type UpdateChatConversationResponses = {
         selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        browserState: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
@@ -13432,6 +13444,9 @@ export type GenerateChatConversationTitleResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        browserState: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         artifact: string | null;
         createdAt: string;
         updatedAt: string;
@@ -13535,6 +13550,9 @@ export type UpdateChatMessageResponses = {
         selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        browserState: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;

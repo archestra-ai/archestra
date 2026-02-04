@@ -14,6 +14,9 @@ const SubscribeBrowserStreamPayloadSchema = z.object({
   conversationId: z.string().uuid(),
   // Deprecated: tabIndex was derived from chat list ordering and is ignored.
   tabIndex: z.number().int().min(0).optional(),
+  // Viewport dimensions for screenshots - frontend sends container size
+  viewportWidth: z.number().int().min(100).max(2000).optional(),
+  viewportHeight: z.number().int().min(100).max(2000).optional(),
 });
 
 const UnsubscribeBrowserStreamPayloadSchema = z.object({
@@ -49,6 +52,10 @@ const BrowserGetSnapshotPayloadSchema = z.object({
 });
 
 const BrowserNavigateBackPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+});
+
+const BrowserNavigateForwardPayloadSchema = z.object({
   conversationId: z.string().uuid(),
 });
 
@@ -104,6 +111,10 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
     payload: BrowserNavigateBackPayloadSchema,
   }),
   z.object({
+    type: z.literal("browser_navigate_forward"),
+    payload: BrowserNavigateForwardPayloadSchema,
+  }),
+  z.object({
     type: z.literal("browser_set_zoom"),
     payload: BrowserSetZoomPayloadSchema,
   }),
@@ -135,6 +146,12 @@ export type BrowserScreenshotMessage = {
     conversationId: string;
     screenshot: string;
     url?: string;
+    // Screenshot dimensions for accurate click mapping
+    viewportWidth?: number;
+    viewportHeight?: number;
+    // Navigation state for back/forward buttons
+    canGoBack?: boolean;
+    canGoForward?: boolean;
   };
 };
 
@@ -210,6 +227,15 @@ export type BrowserNavigateBackResultMessage = {
   };
 };
 
+export type BrowserNavigateForwardResultMessage = {
+  type: "browser_navigate_forward_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
 // MCP Logs server -> client messages
 export type McpLogsMessage = {
   type: "mcp_logs";
@@ -239,6 +265,7 @@ export type ServerWebSocketMessage =
   | BrowserScreenshotMessage
   | BrowserNavigateResultMessage
   | BrowserNavigateBackResultMessage
+  | BrowserNavigateForwardResultMessage
   | BrowserStreamErrorMessage
   | BrowserClickResultMessage
   | BrowserTypeResultMessage

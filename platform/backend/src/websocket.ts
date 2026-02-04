@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { IncomingMessage, Server } from "node:http";
 import { PassThrough } from "node:stream";
 import {
@@ -12,26 +11,10 @@ import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
+import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import logger from "@/logging";
 import McpServerRuntimeManager from "@/mcp-server-runtime/manager";
-import {
-  ConversationModel,
-  McpServerModel,
-  MessageModel,
-  UserModel,
-} from "@/models";
-import type { BrowserUserContext } from "@/services/browser-stream";
-import { browserStreamFeature } from "@/services/browser-stream-feature";
-
-const SCREENSHOT_INTERVAL_MS = 3000; // Stream at ~0.33 FPS (every 3 seconds)
-
-interface BrowserStreamSubscription {
-  conversationId: string;
-  agentId: string;
-  userContext: BrowserUserContext;
-  intervalId: NodeJS.Timeout;
-  isSending: boolean;
-}
+import { McpServerModel, UserModel } from "@/models";
 
 interface McpLogsSubscription {
   serverId: string;
@@ -54,98 +37,53 @@ type MessageHandler = (
 
 class WebSocketService {
   private wss: WebSocketServer | null = null;
-  private browserSubscriptions: Map<WebSocket, BrowserStreamSubscription> =
-    new Map();
   private mcpLogsSubscriptions: Map<WebSocket, McpLogsSubscription> = new Map();
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
+  private browserStreamContext: BrowserStreamSocketClientContext | null = null;
 
-  private messageHandlers: Record<ClientWebSocketMessageType, MessageHandler> =
-    {
-      subscribe_browser_stream: (ws, message, clientContext) => {
-        if (message.type !== "subscribe_browser_stream") return;
-        return this.handleSubscribeBrowserStream(
-          ws,
-          message.payload.conversationId,
-          clientContext,
-        );
-      },
-      unsubscribe_browser_stream: (ws) => {
-        this.unsubscribeBrowserStream(ws);
-      },
-      browser_navigate: (ws, message) => {
-        if (message.type !== "browser_navigate") return;
-        return this.handleBrowserNavigate(
-          ws,
-          message.payload.conversationId,
-          message.payload.url,
-        );
-      },
-      browser_navigate_back: (ws, message) => {
-        if (message.type !== "browser_navigate_back") return;
-        return this.handleBrowserNavigateBack(
-          ws,
-          message.payload.conversationId,
-        );
-      },
-      browser_click: (ws, message) => {
-        if (message.type !== "browser_click") return;
-        return this.handleBrowserClick(
-          ws,
-          message.payload.conversationId,
-          message.payload.element,
-          message.payload.x,
-          message.payload.y,
-        );
-      },
-      browser_type: (ws, message) => {
-        if (message.type !== "browser_type") return;
-        return this.handleBrowserType(
-          ws,
-          message.payload.conversationId,
-          message.payload.text,
-          message.payload.element,
-        );
-      },
-      browser_press_key: (ws, message) => {
-        if (message.type !== "browser_press_key") return;
-        return this.handleBrowserPressKey(
-          ws,
-          message.payload.conversationId,
-          message.payload.key,
-        );
-      },
-      browser_get_snapshot: (ws, message) => {
-        if (message.type !== "browser_get_snapshot") return;
-        return this.handleBrowserGetSnapshot(
-          ws,
-          message.payload.conversationId,
-        );
-      },
-      browser_set_zoom: (ws, message) => {
-        if (message.type !== "browser_set_zoom") return;
-        // TODO: Implement setZoom when browserStreamFeature supports it
-        this.sendToClient(ws, {
-          type: "browser_set_zoom_result",
-          payload: {
-            conversationId: message.payload.conversationId,
-            success: false,
-            error: "Set zoom is not yet implemented",
-          },
-        });
-      },
-      subscribe_mcp_logs: (ws, message, clientContext) => {
-        if (message.type !== "subscribe_mcp_logs") return;
-        return this.handleSubscribeMcpLogs(
-          ws,
-          message.payload.serverId,
-          message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
-          clientContext,
-        );
-      },
-      unsubscribe_mcp_logs: (ws) => {
-        this.unsubscribeMcpLogs(ws);
-      },
+  /**
+   * Proxy object for browser subscriptions - exposes Map-like interface for testing.
+   * Delegates to browserStreamContext when enabled, otherwise uses empty Map behavior.
+   */
+  get browserSubscriptions() {
+    const context = this.browserStreamContext;
+    return {
+      clear: () => context?.clearSubscriptions(),
+      has: (ws: WebSocket) => context?.hasSubscription(ws) ?? false,
+      get: (ws: WebSocket) => context?.getSubscription(ws),
     };
+  }
+
+  /**
+   * Initialize browser stream context for testing without starting the full WebSocket server.
+   * Only call this in test environments.
+   */
+  initBrowserStreamContextForTesting(): void {
+    if (BrowserStreamSocketClientContext.isBrowserStreamEnabled()) {
+      this.browserStreamContext = new BrowserStreamSocketClientContext({
+        wss: null,
+        sendToClient: (ws, message) => this.sendToClient(ws, message),
+      });
+    }
+  }
+
+  // Browser messages are handled by browserStreamContext - see handleMessage()
+  private messageHandlers: Partial<
+    Record<ClientWebSocketMessageType, MessageHandler>
+  > = {
+    subscribe_mcp_logs: (ws, message, clientContext) => {
+      if (message.type !== "subscribe_mcp_logs") return;
+      return this.handleSubscribeMcpLogs(
+        ws,
+        message.payload.serverId,
+        message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
+        clientContext,
+      );
+    },
+    unsubscribe_mcp_logs: (ws) => {
+      this.unsubscribeMcpLogs(ws);
+    },
+  };
 
   start(httpServer: Server) {
     const { path } = config.websocket;
@@ -154,6 +92,15 @@ class WebSocketService {
       server: httpServer,
       path,
     });
+    if (BrowserStreamSocketClientContext.isBrowserStreamEnabled()) {
+      this.browserStreamContext = new BrowserStreamSocketClientContext({
+        wss: this.wss,
+        sendToClient: (ws, message) => this.sendToClient(ws, message),
+      });
+    } else {
+      this.browserStreamContext?.stop();
+      this.browserStreamContext = null;
+    }
 
     logger.info(`WebSocket server started on path ${path}`);
 
@@ -204,7 +151,6 @@ class WebSocketService {
         });
 
         ws.on("close", () => {
-          this.unsubscribeBrowserStream(ws);
           this.unsubscribeMcpLogs(ws);
           logger.info(
             `WebSocket client disconnected. Remaining connections: ${this.wss?.clients.size}`,
@@ -214,7 +160,6 @@ class WebSocketService {
 
         ws.on("error", (error) => {
           logger.error({ error }, "WebSocket error");
-          this.unsubscribeBrowserStream(ws);
           this.unsubscribeMcpLogs(ws);
           this.clientContexts.delete(ws);
         });
@@ -235,21 +180,28 @@ class WebSocketService {
       return;
     }
 
-    // Check if browser streaming feature is enabled for browser-related messages
+    // Delegate browser messages to browserStreamContext
     if (
-      browserStreamFeature.isBrowserWebSocketMessage(message.type) &&
-      !browserStreamFeature.isEnabled()
+      BrowserStreamSocketClientContext.isBrowserWebSocketMessage(message.type)
     ) {
-      this.sendToClient(ws, {
-        type: "browser_stream_error",
-        payload: {
-          conversationId:
-            "conversationId" in message.payload
-              ? String(message.payload.conversationId)
-              : "",
-          error: "Browser streaming feature is disabled",
-        },
-      });
+      if (this.browserStreamContext) {
+        await this.browserStreamContext.handleMessage(
+          message,
+          ws,
+          clientContext,
+        );
+      } else {
+        this.sendToClient(ws, {
+          type: "browser_stream_error",
+          payload: {
+            conversationId:
+              "conversationId" in message.payload
+                ? String(message.payload.conversationId)
+                : "",
+            error: "Browser streaming feature is disabled",
+          },
+        });
+      }
       return;
     }
 
@@ -258,394 +210,6 @@ class WebSocketService {
       await handler(ws, message, clientContext);
     } else {
       logger.warn({ message }, "Unknown WebSocket message type");
-    }
-  }
-
-  private async handleSubscribeBrowserStream(
-    ws: WebSocket,
-    conversationId: string,
-    clientContext: WebSocketClientContext,
-  ): Promise<void> {
-    this.unsubscribeBrowserStream(ws);
-
-    const agentId = await ConversationModel.getAgentIdForUser(
-      conversationId,
-      clientContext.userId,
-      clientContext.organizationId,
-    );
-    if (!agentId) {
-      logger.warn(
-        {
-          conversationId,
-          userId: clientContext.userId,
-          organizationId: clientContext.organizationId,
-        },
-        "Unauthorized or missing conversation for browser stream",
-      );
-      this.sendToClient(ws, {
-        type: "browser_stream_error",
-        payload: {
-          conversationId,
-          error: "Conversation not found",
-        },
-      });
-      return;
-    }
-
-    logger.info(
-      { conversationId, agentId },
-      "Browser stream client subscribed",
-    );
-
-    const userContext: BrowserUserContext = {
-      userId: clientContext.userId,
-      userIsProfileAdmin: clientContext.userIsProfileAdmin,
-    };
-
-    const tabResult = await browserStreamFeature.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
-    );
-    if (!tabResult.success) {
-      logger.warn(
-        { conversationId, agentId, error: tabResult.error },
-        "Failed to select/create browser tab",
-      );
-    }
-
-    const sendTick = async () => {
-      const subscription = this.browserSubscriptions.get(ws);
-      if (!subscription) return;
-      if (subscription.isSending) return;
-
-      subscription.isSending = true;
-      try {
-        await this.sendScreenshot(ws, agentId, conversationId, userContext);
-      } finally {
-        subscription.isSending = false;
-      }
-    };
-
-    const intervalId = setInterval(() => {
-      if (ws.readyState === WS.OPEN) {
-        void sendTick();
-      } else {
-        this.unsubscribeBrowserStream(ws);
-      }
-    }, SCREENSHOT_INTERVAL_MS);
-
-    this.browserSubscriptions.set(ws, {
-      conversationId,
-      agentId,
-      userContext,
-      intervalId,
-      isSending: false,
-    });
-
-    void sendTick();
-  }
-
-  private unsubscribeBrowserStream(ws: WebSocket): void {
-    const subscription = this.browserSubscriptions.get(ws);
-    if (subscription) {
-      clearInterval(subscription.intervalId);
-      this.browserSubscriptions.delete(ws);
-      logger.info(
-        { conversationId: subscription.conversationId },
-        "Browser stream client unsubscribed",
-      );
-    }
-  }
-
-  private async handleBrowserNavigate(
-    ws: WebSocket,
-    conversationId: string,
-    url: string,
-  ): Promise<void> {
-    const subscription = this.browserSubscriptions.get(ws);
-    if (!subscription || subscription.conversationId !== conversationId) {
-      this.sendToClient(ws, {
-        type: "browser_navigate_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: "Not subscribed to this conversation's browser stream",
-        },
-      });
-      return;
-    }
-
-    try {
-      const result = await browserStreamFeature.navigate(
-        subscription.agentId,
-        conversationId,
-        url,
-        subscription.userContext,
-      );
-
-      if (result.success) {
-        await this.addNavigationMessageToConversation(conversationId, url);
-      }
-
-      this.sendToClient(ws, {
-        type: "browser_navigate_result",
-        payload: {
-          conversationId,
-          success: result.success,
-          url: result.url,
-          error: result.error,
-        },
-      });
-    } catch (error) {
-      logger.error({ error, conversationId, url }, "Browser navigation failed");
-      this.sendToClient(ws, {
-        type: "browser_navigate_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: error instanceof Error ? error.message : "Navigation failed",
-        },
-      });
-    }
-  }
-
-  private async handleBrowserNavigateBack(
-    ws: WebSocket,
-    conversationId: string,
-  ): Promise<void> {
-    const subscription = this.browserSubscriptions.get(ws);
-    if (!subscription || subscription.conversationId !== conversationId) {
-      this.sendToClient(ws, {
-        type: "browser_navigate_back_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: "Not subscribed to this conversation's browser stream",
-        },
-      });
-      return;
-    }
-
-    try {
-      const result = await browserStreamFeature.navigateBack(
-        subscription.agentId,
-        conversationId,
-        subscription.userContext,
-      );
-
-      if (result.success) {
-        await this.addNavigationBackMessageToConversation(conversationId);
-      }
-
-      this.sendToClient(ws, {
-        type: "browser_navigate_back_result",
-        payload: {
-          conversationId,
-          success: result.success,
-          error: result.error,
-        },
-      });
-    } catch (error) {
-      logger.error({ error, conversationId }, "Browser navigate back failed");
-      this.sendToClient(ws, {
-        type: "browser_navigate_back_result",
-        payload: {
-          conversationId,
-          success: false,
-          error:
-            error instanceof Error ? error.message : "Navigate back failed",
-        },
-      });
-    }
-  }
-
-  private async handleBrowserClick(
-    ws: WebSocket,
-    conversationId: string,
-    element?: string,
-    x?: number,
-    y?: number,
-  ): Promise<void> {
-    const subscription = this.browserSubscriptions.get(ws);
-    if (!subscription || subscription.conversationId !== conversationId) {
-      this.sendToClient(ws, {
-        type: "browser_click_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: "Not subscribed to this conversation's browser stream",
-        },
-      });
-      return;
-    }
-
-    try {
-      const result = await browserStreamFeature.click(
-        subscription.agentId,
-        conversationId,
-        subscription.userContext,
-        element,
-        x,
-        y,
-      );
-      this.sendToClient(ws, {
-        type: "browser_click_result",
-        payload: {
-          conversationId,
-          success: result.success,
-          error: result.error,
-        },
-      });
-    } catch (error) {
-      logger.error(
-        { error, conversationId, element, x, y },
-        "Browser click failed",
-      );
-      this.sendToClient(ws, {
-        type: "browser_click_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: error instanceof Error ? error.message : "Click failed",
-        },
-      });
-    }
-  }
-
-  private async handleBrowserType(
-    ws: WebSocket,
-    conversationId: string,
-    text: string,
-    element?: string,
-  ): Promise<void> {
-    const subscription = this.browserSubscriptions.get(ws);
-    if (!subscription || subscription.conversationId !== conversationId) {
-      this.sendToClient(ws, {
-        type: "browser_type_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: "Not subscribed to this conversation's browser stream",
-        },
-      });
-      return;
-    }
-
-    try {
-      const result = await browserStreamFeature.type(
-        subscription.agentId,
-        conversationId,
-        subscription.userContext,
-        text,
-        element,
-      );
-      this.sendToClient(ws, {
-        type: "browser_type_result",
-        payload: {
-          conversationId,
-          success: result.success,
-          error: result.error,
-        },
-      });
-    } catch (error) {
-      logger.error({ error, conversationId }, "Browser type failed");
-      this.sendToClient(ws, {
-        type: "browser_type_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: error instanceof Error ? error.message : "Type failed",
-        },
-      });
-    }
-  }
-
-  private async handleBrowserPressKey(
-    ws: WebSocket,
-    conversationId: string,
-    key: string,
-  ): Promise<void> {
-    const subscription = this.browserSubscriptions.get(ws);
-    if (!subscription || subscription.conversationId !== conversationId) {
-      this.sendToClient(ws, {
-        type: "browser_press_key_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: "Not subscribed to this conversation's browser stream",
-        },
-      });
-      return;
-    }
-
-    try {
-      const result = await browserStreamFeature.pressKey(
-        subscription.agentId,
-        conversationId,
-        subscription.userContext,
-        key,
-      );
-      this.sendToClient(ws, {
-        type: "browser_press_key_result",
-        payload: {
-          conversationId,
-          success: result.success,
-          error: result.error,
-        },
-      });
-    } catch (error) {
-      logger.error({ error, conversationId, key }, "Browser press key failed");
-      this.sendToClient(ws, {
-        type: "browser_press_key_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: error instanceof Error ? error.message : "Press key failed",
-        },
-      });
-    }
-  }
-
-  private async handleBrowserGetSnapshot(
-    ws: WebSocket,
-    conversationId: string,
-  ): Promise<void> {
-    const subscription = this.browserSubscriptions.get(ws);
-    if (!subscription || subscription.conversationId !== conversationId) {
-      this.sendToClient(ws, {
-        type: "browser_snapshot",
-        payload: {
-          conversationId,
-          error: "Not subscribed to this conversation's browser stream",
-        },
-      });
-      return;
-    }
-
-    try {
-      const result = await browserStreamFeature.getSnapshot(
-        subscription.agentId,
-        conversationId,
-        subscription.userContext,
-      );
-      this.sendToClient(ws, {
-        type: "browser_snapshot",
-        payload: {
-          conversationId,
-          snapshot: result.snapshot,
-          error: result.error,
-        },
-      });
-    } catch (error) {
-      logger.error({ error, conversationId }, "Browser get snapshot failed");
-      this.sendToClient(ws, {
-        type: "browser_snapshot",
-        payload: {
-          conversationId,
-          error: error instanceof Error ? error.message : "Snapshot failed",
-        },
-      });
     }
   }
 
@@ -775,59 +339,6 @@ class WebSocketService {
     }
   }
 
-  private async sendScreenshot(
-    ws: WebSocket,
-    agentId: string,
-    conversationId: string,
-    userContext: BrowserUserContext,
-  ): Promise<void> {
-    if (ws.readyState !== WS.OPEN) {
-      return;
-    }
-
-    try {
-      const result = await browserStreamFeature.takeScreenshot(
-        agentId,
-        conversationId,
-        userContext,
-      );
-
-      if (result.screenshot) {
-        this.sendToClient(ws, {
-          type: "browser_screenshot",
-          payload: {
-            conversationId,
-            screenshot: result.screenshot,
-            url: result.url,
-          },
-        });
-      } else {
-        this.sendToClient(ws, {
-          type: "browser_stream_error",
-          payload: {
-            conversationId,
-            error: result.error ?? "No screenshot returned from browser tool",
-          },
-        });
-      }
-    } catch (error) {
-      logger.error(
-        { error, conversationId },
-        "Error taking screenshot for stream",
-      );
-      this.sendToClient(ws, {
-        type: "browser_stream_error",
-        payload: {
-          conversationId,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Screenshot capture failed",
-        },
-      });
-    }
-  }
-
   private sendToClient(ws: WebSocket, message: ServerWebSocketMessage): void {
     if (ws.readyState === WS.OPEN) {
       ws.send(JSON.stringify(message));
@@ -889,11 +400,6 @@ class WebSocketService {
   }
 
   stop() {
-    // Clear all subscriptions
-    for (const [ws, subscription] of this.browserSubscriptions) {
-      clearInterval(subscription.intervalId);
-      this.browserSubscriptions.delete(ws);
-    }
     for (const [ws] of this.mcpLogsSubscriptions) {
       this.unsubscribeMcpLogs(ws);
     }
@@ -988,73 +494,6 @@ class WebSocketService {
       payload: { message: "Unauthorized" },
     });
     ws.close(4401, "Unauthorized");
-  }
-
-  private async addNavigationMessageToConversation(
-    conversationId: string,
-    url: string,
-  ): Promise<void> {
-    try {
-      const navigationMessage = {
-        id: randomUUID(),
-        role: "user",
-        parts: [
-          {
-            type: "text",
-            text: `[User manually navigated browser to: ${url}]`,
-          },
-        ],
-      };
-
-      await MessageModel.create({
-        conversationId,
-        role: "user",
-        content: navigationMessage,
-      });
-
-      logger.info(
-        { conversationId, url },
-        "Added navigation context message to conversation",
-      );
-    } catch (error) {
-      logger.error(
-        { error, conversationId, url },
-        "Failed to add navigation message to conversation",
-      );
-    }
-  }
-
-  private async addNavigationBackMessageToConversation(
-    conversationId: string,
-  ): Promise<void> {
-    try {
-      const navigationMessage = {
-        id: randomUUID(),
-        role: "user",
-        parts: [
-          {
-            type: "text",
-            text: "[User navigated browser back to previous page]",
-          },
-        ],
-      };
-
-      await MessageModel.create({
-        conversationId,
-        role: "user",
-        content: navigationMessage,
-      });
-
-      logger.info(
-        { conversationId },
-        "Added navigation back context message to conversation",
-      );
-    } catch (error) {
-      logger.error(
-        { error, conversationId },
-        "Failed to add navigation back message to conversation",
-      );
-    }
   }
 }
 

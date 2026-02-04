@@ -18,17 +18,12 @@ import {
   Source_Sans_3,
 } from "next/font/google";
 import { PublicEnvScript } from "next-runtime-env";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppShell } from "./_parts/app-shell";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
-import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
-import { ConversationSearchProvider } from "@/components/conversation-search-provider";
-import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
-import { Toaster } from "@/components/ui/sonner";
-import { Version } from "@/components/version";
 import { ChatProvider } from "@/contexts/global-chat-context";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
@@ -153,25 +148,9 @@ export default function RootLayout({
                   <OrgThemeLoader />
                   <WithAuthCheck>
                     <WebsocketInitializer />
-                    <SidebarProvider>
-                      <AppSidebar />
-                      <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
-                        <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
-                          <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
-                        </header>
-                        <div className="flex-1 min-w-0 flex flex-col">
-                          <div className="flex-1 flex flex-col">
-                            <WithPagePermissions>
-                              {children}
-                            </WithPagePermissions>
-                          </div>
-                          <Version />
-                        </div>
-                      </main>
-                      <Toaster />
-                      <OnboardingDialogWrapper />
-                      <ConversationSearchProvider />
-                    </SidebarProvider>
+                    <AppShell>
+                      <WithPagePermissions>{children}</WithPagePermissions>
+                    </AppShell>
                   </WithAuthCheck>
                 </PostHogProviderWrapper>
               </ThemeProvider>

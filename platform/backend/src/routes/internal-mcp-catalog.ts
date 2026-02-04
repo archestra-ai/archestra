@@ -689,6 +689,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         arguments: catalogItem.localConfig?.arguments,
         environment: catalogItem.localConfig?.environment,
         serviceAccount: catalogItem.localConfig?.serviceAccount,
+        transportType: catalogItem.localConfig?.transportType,
+        httpPort: catalogItem.localConfig?.httpPort,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -757,6 +759,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         arguments: catalogItem.localConfig?.arguments,
         environment: catalogItem.localConfig?.environment,
         serviceAccount: catalogItem.localConfig?.serviceAccount,
+        transportType: catalogItem.localConfig?.transportType,
+        httpPort: catalogItem.localConfig?.httpPort,
       });
 
       return reply.send({ yaml: yamlTemplate });

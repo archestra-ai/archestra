@@ -629,17 +629,20 @@ export default class K8sDeployment {
             return arg;
           }),
           // For stdio-based MCP servers, we use stdin/stdout
-          stdin: true,
-          tty: false,
-          // For HTTP-based MCP servers, expose port
-          ports: needsHttp
-            ? [
-                {
-                  containerPort: httpPort,
-                  protocol: "TCP",
-                },
-              ]
-            : undefined,
+          // For HTTP-based MCP servers, expose port instead
+          ...(needsHttp
+            ? {
+                ports: [
+                  {
+                    containerPort: httpPort,
+                    protocol: "TCP",
+                  },
+                ],
+              }
+            : {
+                stdin: true,
+                tty: false,
+              }),
           // Add volume mounts for mounted secrets
           ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
           // Set resource requests/limits for the container (with defaults)
@@ -694,8 +697,8 @@ export default class K8sDeployment {
     yamlString: string,
     dockerImage: string,
     localConfig: z.infer<typeof LocalConfigSchema>,
-    _needsHttp: boolean,
-    _httpPort: number,
+    needsHttp: boolean,
+    httpPort: number,
     nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
   ): k8s.V1Deployment | null {
     const k8sSecretName = K8sDeployment.constructK8sSecretName(
@@ -897,6 +900,31 @@ export default class K8sDeployment {
 
         if (!container.args || container.args.length === 0) {
           container.args = processedArgs;
+        }
+      }
+    }
+
+    // 7. Set transport-specific container settings (stdin/tty for stdio, ports for HTTP)
+    if (deployment.spec?.template?.spec?.containers?.[0]) {
+      const container = deployment.spec.template.spec.containers[0];
+
+      if (needsHttp) {
+        // HTTP transport: expose port if not already defined
+        if (!container.ports || container.ports.length === 0) {
+          container.ports = [
+            {
+              containerPort: httpPort,
+              protocol: "TCP",
+            },
+          ];
+        }
+      } else {
+        // Stdio transport: enable stdin for JSON-RPC communication
+        if (container.stdin === undefined) {
+          container.stdin = true;
+        }
+        if (container.tty === undefined) {
+          container.tty = false;
         }
       }
     }

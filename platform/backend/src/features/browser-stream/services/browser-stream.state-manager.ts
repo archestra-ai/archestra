@@ -1,12 +1,11 @@
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
-import { isErr } from "./browser-stream.state.helpers";
 import {
-  type LegacyPersistedBrowserState,
-  type SimpleBrowserState,
   Err,
+  type LegacyPersistedBrowserState,
   Ok,
   type Result,
+  type SimpleBrowserState,
 } from "./browser-stream.state.types";
 
 export type ConversationStateKey = `${string}:${string}:${string}`;
@@ -91,7 +90,9 @@ class BrowserStateManager {
   /**
    * Clear browser state from database.
    */
-  async clear(conversationId: string): Promise<Result<StateManagerError, void>> {
+  async clear(
+    conversationId: string,
+  ): Promise<Result<StateManagerError, void>> {
     try {
       await ConversationModel.updateBrowserState(conversationId, null);
 

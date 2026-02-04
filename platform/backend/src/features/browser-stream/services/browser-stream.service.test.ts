@@ -1,6 +1,7 @@
 import * as chatMcpClient from "@/clients/chat-mcp-client";
 import { beforeEach, describe, expect, test, vi } from "@/test";
 import { BrowserStreamService } from "./browser-stream.service";
+import { Ok } from "./browser-stream.state.types";
 import { browserStateManager } from "./browser-stream.state-manager";
 
 describe("BrowserStreamService URL handling", () => {
@@ -500,7 +501,7 @@ describe("BrowserStreamService URL handling", () => {
 
     // Mock state manager to return no stored state
     vi.spyOn(browserStateManager, "get").mockResolvedValue(null);
-    vi.spyOn(browserStateManager, "set").mockResolvedValue();
+    vi.spyOn(browserStateManager, "set").mockResolvedValue(Ok(undefined));
 
     // Mock findTabsTool
     vi.spyOn(
@@ -562,7 +563,7 @@ describe("BrowserStreamService URL handling", () => {
     vi.spyOn(browserStateManager, "get").mockResolvedValue({
       url: "https://stored.example.com",
     });
-    vi.spyOn(browserStateManager, "set").mockResolvedValue();
+    vi.spyOn(browserStateManager, "set").mockResolvedValue(Ok(undefined));
 
     // Mock findTabsTool and findNavigateTool
     vi.spyOn(
@@ -689,7 +690,7 @@ describe("BrowserStreamService URL handling", () => {
 
     // Mock state manager to return no stored state
     vi.spyOn(browserStateManager, "get").mockResolvedValue(null);
-    vi.spyOn(browserStateManager, "set").mockResolvedValue();
+    vi.spyOn(browserStateManager, "set").mockResolvedValue(Ok(undefined));
 
     // Mock findTabsTool
     vi.spyOn(
@@ -805,4 +806,3 @@ describe("BrowserStreamService URL handling", () => {
     );
   });
 });
-

@@ -1,5 +1,4 @@
 import {
-  DEFAULT_BROWSER_PREVIEW_URL,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
   isBrowserMcpTool,
@@ -20,8 +19,6 @@ import {
   shouldLogBrowserStreamScreenshots,
   shouldLogBrowserStreamTabSync,
 } from "./browser-stream.log-settings";
-import { isErr } from "./browser-stream.state.helpers";
-import type { SimpleBrowserState } from "./browser-stream.state.types";
 import {
   browserStateManager,
   type ConversationStateKey,
@@ -489,7 +486,13 @@ export class BrowserStreamService {
       const browserTabs = listData?.tabs ?? [];
 
       logTabSyncInfo(
-        { agentId, conversationId, storedTabIndex, storedUrl, tabCount: browserTabs.length },
+        {
+          agentId,
+          conversationId,
+          storedTabIndex,
+          storedUrl,
+          tabCount: browserTabs.length,
+        },
         "[BrowserTabs] Checking for existing tab",
       );
 
@@ -581,9 +584,13 @@ export class BrowserStreamService {
       }
 
       // Navigate to stored URL if we have one
-      const urlToLoad = storedUrl && !this.isBlankUrl(storedUrl) ? storedUrl : initialUrl;
+      const urlToLoad =
+        storedUrl && !this.isBlankUrl(storedUrl) ? storedUrl : initialUrl;
       if (urlToLoad) {
-        const navigateTool = await this.findNavigateTool(agentId, userContext.userId);
+        const navigateTool = await this.findNavigateTool(
+          agentId,
+          userContext.userId,
+        );
         if (navigateTool) {
           await client.callTool({
             name: navigateTool,
@@ -605,7 +612,8 @@ export class BrowserStreamService {
 
       return { success: true, tabIndex: newTabIndex };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       logger.error(
         { error, agentId, conversationId },
         "[BrowserTabs] selectOrCreateTab failed",
@@ -645,10 +653,11 @@ export class BrowserStreamService {
     }
 
     // Get oldest conversation with browser state
-    const oldest = await ConversationModel.getOldestConversationWithBrowserState(
-      agentId,
-      userContext.userId,
-    );
+    const oldest =
+      await ConversationModel.getOldestConversationWithBrowserState(
+        agentId,
+        userContext.userId,
+      );
 
     if (!oldest) {
       return;
@@ -680,71 +689,6 @@ export class BrowserStreamService {
 
     // Clear state for the closed conversation
     await browserStateManager.clear(oldest.id);
-  }
-
-  private async restoreUrlIfNeeded(params: {
-    agentId: string;
-    conversationId: string;
-    userId: string;
-    storedUrl: string;
-    client: NonNullable<Awaited<ReturnType<typeof getChatMcpClient>>>;
-  }): Promise<void> {
-    const { agentId, conversationId, userId, storedUrl, client } = params;
-
-    if (this.isBlankUrl(storedUrl)) {
-      return;
-    }
-
-    const navigateTool = await this.findNavigateTool(agentId, userId);
-    if (!navigateTool) {
-      return;
-    }
-
-    // Get current URL to check if navigation is needed
-    const tabsTool = await this.findTabsTool(agentId, userId);
-    if (tabsTool) {
-      const listData = await this.getTabsList({
-        agentId,
-        userContext: {
-          userId,
-          organizationId: "", // Not needed for just reading tabs
-          userIsProfileAdmin: false,
-        },
-        client,
-        tabsTool,
-      });
-
-      const currentUrl = listData
-        ? this.extractCurrentUrlFromTabsContent(listData.content)
-        : undefined;
-
-      // Only navigate if current URL is blank or different
-      if (currentUrl && !this.isBlankUrl(currentUrl)) {
-        return; // Tab already has a URL loaded
-      }
-    }
-
-    logTabSyncInfo(
-      { agentId, conversationId, storedUrl },
-      "[BrowserTabs] Restoring URL after restart",
-    );
-
-    try {
-      await client.callTool({
-        name: navigateTool,
-        arguments: { url: storedUrl },
-      });
-    } catch (error) {
-      logger.warn(
-        {
-          agentId,
-          conversationId,
-          storedUrl,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "[BrowserTabs] Failed to restore URL after restart",
-      );
-    }
   }
 
   /**
@@ -1515,22 +1459,6 @@ export class BrowserStreamService {
       return true;
     }
     return url.toLowerCase().startsWith("about:blank");
-  }
-
-  /**
-   * Check if two URLs match (with tolerance for trailing slashes and minor differences).
-   * Used to verify a tab still belongs to a conversation after potential index shifts.
-   */
-  private urlsMatch(
-    tabUrl: string | undefined,
-    storedUrl: string | undefined,
-  ): boolean {
-    if (!tabUrl || !storedUrl) {
-      return false;
-    }
-    // Normalize URLs by removing trailing slashes for comparison
-    const normalize = (url: string) => url.replace(/\/+$/, "").toLowerCase();
-    return normalize(tabUrl) === normalize(storedUrl);
   }
 
   private extractCurrentUrlFromTabsContent(

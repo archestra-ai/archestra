@@ -1,6 +1,5 @@
 import {
   archestraApiSdk,
-  isBrowserMcpTool,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
   type SupportedProvider,
@@ -490,19 +489,13 @@ export function useHasPlaywrightMcpTools(agentId: string | undefined) {
   const globalToolsQuery = useGlobalChatTools();
   const browserInstall = useBrowserInstallation();
 
+  // Only check global tools with PLAYWRIGHT_MCP_CATALOG_ID
+  // Profile tools (e.g., microsoft__playwright-mcp) should NOT enable browser preview
+  // Those tools work as regular MCP tools but without the integrated preview feature
   const hasPlaywrightMcp =
-    // Check profile tools
-    (toolsQuery.data?.some((tool) => {
-      const toolName = tool.name;
-      return typeof toolName === "string" && isBrowserMcpTool(toolName);
-    }) ??
-      false) ||
-    // Also check global tools (Playwright is globally available)
-    (globalToolsQuery.data?.some((tool) => {
-      const toolName = tool.name;
-      return typeof toolName === "string" && isBrowserMcpTool(toolName);
-    }) ??
-      false);
+    globalToolsQuery.data?.some(
+      (tool) => tool.catalogId === PLAYWRIGHT_MCP_CATALOG_ID,
+    ) ?? false;
 
   return {
     hasPlaywrightMcp,

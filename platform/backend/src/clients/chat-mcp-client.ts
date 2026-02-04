@@ -1016,15 +1016,33 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
   }
 
   // Sync browser state if needed
-  if (conversationId && toolName.includes("browser_tabs")) {
-    if (browserStreamFeature.isEnabled()) {
-      await browserStreamFeature.syncTabMappingFromTabsToolCall({
+  logger.debug(
+    { conversationId, toolName, isEnabled: browserStreamFeature.isEnabled() },
+    "[executeMcpTool] Checking browser sync conditions",
+  );
+  if (conversationId && browserStreamFeature.isEnabled()) {
+    // Sync URL for browser_navigate (but not browser_navigate_back/forward)
+    const isNavigateTool =
+      toolName.endsWith("browser_navigate") ||
+      toolName.endsWith("__navigate") ||
+      (toolName.includes("playwright") &&
+        toolName.includes("navigate") &&
+        !toolName.includes("_back") &&
+        !toolName.includes("_forward"));
+    logger.debug(
+      { toolName, isNavigateTool, conversationId },
+      "[executeMcpTool] Checking navigate sync condition",
+    );
+    if (isNavigateTool) {
+      logger.info(
+        { toolName, agentId, conversationId },
+        "[executeMcpTool] Syncing URL from navigate tool call",
+      );
+      await browserStreamFeature.syncUrlFromNavigateToolCall({
         agentId,
         conversationId,
         userContext: { userId, organizationId, userIsProfileAdmin },
-        toolArguments,
         toolResultContent: result.content,
-        tabsToolName: toolName,
       });
     }
   }

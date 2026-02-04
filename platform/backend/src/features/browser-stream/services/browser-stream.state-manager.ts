@@ -1,16 +1,11 @@
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
 import {
-  toPersistedState,
-  toRuntimeState,
-} from "./browser-stream.state.conversion";
-import { isErr } from "./browser-stream.state.helpers";
-import {
-  type BrowserState,
-  type BrowserStateError,
   Err,
+  type LegacyPersistedBrowserState,
   Ok,
   type Result,
+  type SimpleBrowserState,
 } from "./browser-stream.state.types";
 
 export type ConversationStateKey = `${string}:${string}:${string}`;
@@ -21,199 +16,59 @@ export const toConversationStateKey = (
   conversationId: string,
 ): ConversationStateKey => `${agentId}:${userId}:${conversationId}`;
 
-type StateManagerError =
-  | { kind: "DatabaseError"; message: string }
-  | { kind: "StateError"; error: BrowserStateError };
+type StateManagerError = { kind: "DatabaseError"; message: string };
 
 /**
- * Manages browser tab state with in-memory cache and database persistence.
- * Replaces the simple conversationTabMap with full logical tab state management.
+ * Manages browser tab state with database persistence.
+ * Simplified to store one tab per conversation with lazy migration from legacy format.
  */
 class BrowserStateManager {
-  private cache = new Map<ConversationStateKey, BrowserState>();
-
   /**
-   * Get browser state for a conversation, loading from DB if not cached.
+   * Get browser state for a conversation from the database.
    * Returns null if no state exists for the conversation.
+   * Automatically migrates legacy multi-tab format to simple format.
    */
-  async getOrLoad(params: {
-    agentId: string;
-    userId: string;
-    conversationId: string;
-  }): Promise<Result<StateManagerError, BrowserState | null>> {
-    const { agentId, userId, conversationId } = params;
-    const key = toConversationStateKey(agentId, userId, conversationId);
-
-    const cached = this.cache.get(key);
-    if (cached) {
-      return Ok(cached);
+  async get(conversationId: string): Promise<SimpleBrowserState | null> {
+    const persisted = await ConversationModel.getBrowserState(conversationId);
+    if (!persisted) {
+      return null;
     }
 
-    try {
-      const persisted = await ConversationModel.getBrowserState(conversationId);
-      if (!persisted) {
-        return Ok(null);
-      }
-
-      const runtime = toRuntimeState(persisted);
-      this.cache.set(key, runtime);
-
+    // Check if this is legacy format and migrate
+    if (this.isLegacyFormat(persisted)) {
+      const migrated = this.migrateLegacyFormat(persisted);
       logger.info(
-        {
-          agentId,
-          userId,
-          conversationId,
-          tabCount: runtime.tabs.length,
-          activeTabId: runtime.activeTabId,
-          tabOrder: runtime.tabOrder,
-          tabs: runtime.tabs.map((t) => ({
-            id: t.id,
-            current: t.current,
-          })),
-        },
-        "[BrowserStateManager] Loaded state from database",
+        { conversationId, migratedUrl: migrated.url },
+        "[BrowserStateManager] Migrated legacy state format",
       );
-
-      return Ok(runtime);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error(
-        { agentId, userId, conversationId, error: message },
-        "[BrowserStateManager] Failed to load state from database",
-      );
-      return Err({ kind: "DatabaseError", message });
+      return migrated;
     }
+
+    // Already in new format
+    return persisted as SimpleBrowserState;
   }
 
   /**
-   * Update browser state by applying a pure transformation function.
-   * Caches the result and persists to database.
+   * Set browser state directly.
+   * Persists the state to database.
    */
-  async update(params: {
-    agentId: string;
-    userId: string;
-    conversationId: string;
-    updateFn: (state: BrowserState) => Result<BrowserStateError, BrowserState>;
-  }): Promise<Result<StateManagerError, BrowserState>> {
-    const { agentId, userId, conversationId, updateFn } = params;
-    const key = toConversationStateKey(agentId, userId, conversationId);
-
-    const loadResult = await this.getOrLoad({
-      agentId,
-      userId,
-      conversationId,
-    });
-    if (isErr(loadResult)) {
-      return loadResult;
-    }
-
-    const currentState = loadResult.value;
-    if (!currentState) {
-      return Err({
-        kind: "StateError",
-        error: { kind: "TabNotFound", tabId: "none" },
-      });
-    }
-
-    const updateResult = updateFn(currentState);
-    if (isErr(updateResult)) {
-      return Err({ kind: "StateError", error: updateResult.error });
-    }
-
-    const newState = updateResult.value;
-    this.cache.set(key, newState);
-
-    const persistResult = await this.persist({
-      agentId,
-      userId,
-      conversationId,
-    });
-    if (isErr(persistResult)) {
-      return persistResult;
-    }
-
-    return Ok(newState);
-  }
-
-  /**
-   * Set browser state directly (for initialization or restoration).
-   * Caches and persists the state.
-   */
-  async set(params: {
-    agentId: string;
-    userId: string;
-    conversationId: string;
-    state: BrowserState;
-  }): Promise<Result<StateManagerError, BrowserState>> {
-    const { agentId, userId, conversationId, state } = params;
-    const key = toConversationStateKey(agentId, userId, conversationId);
-
-    this.cache.set(key, state);
-
-    const persistResult = await this.persist({
-      agentId,
-      userId,
-      conversationId,
-    });
-    if (isErr(persistResult)) {
-      return persistResult;
-    }
-
-    logger.info(
-      {
-        agentId,
-        userId,
-        conversationId,
-        tabCount: state.tabs.length,
-        activeTabId: state.activeTabId,
-        tabOrder: state.tabOrder,
-        tabs: state.tabs.map((t) => ({
-          id: t.id,
-          current: t.current,
-        })),
-      },
-      "[BrowserStateManager] State set and persisted",
-    );
-
-    return Ok(state);
-  }
-
-  /**
-   * Persist current cached state to database.
-   */
-  async persist(params: {
-    agentId: string;
-    userId: string;
-    conversationId: string;
-  }): Promise<Result<StateManagerError, void>> {
-    const { agentId, userId, conversationId } = params;
-    const key = toConversationStateKey(agentId, userId, conversationId);
-
-    const cached = this.cache.get(key);
-    if (!cached) {
-      return Ok(undefined);
-    }
-
+  async set(
+    conversationId: string,
+    state: SimpleBrowserState,
+  ): Promise<Result<StateManagerError, void>> {
     try {
-      const persisted = toPersistedState(cached);
-      await ConversationModel.updateBrowserState(conversationId, persisted);
+      await ConversationModel.updateBrowserState(conversationId, state);
 
-      logger.info(
-        {
-          agentId,
-          userId,
-          conversationId,
-          tabCount: cached.tabs.length,
-          activeTabId: cached.activeTabId,
-        },
-        "[BrowserStateManager] Persisted state to database",
+      logger.debug(
+        { conversationId, url: state.url, tabIndex: state.tabIndex },
+        "[BrowserStateManager] State set and persisted",
       );
 
       return Ok(undefined);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(
-        { agentId, userId, conversationId, error: message },
+        { conversationId, error: message },
         "[BrowserStateManager] Failed to persist state to database",
       );
       return Err({ kind: "DatabaseError", message });
@@ -221,66 +76,71 @@ class BrowserStateManager {
   }
 
   /**
-   * Get cached state without loading from database.
+   * Update just the URL in browser state.
+   * Creates state if it doesn't exist.
    */
-  getCached(params: {
-    agentId: string;
-    userId: string;
-    conversationId: string;
-  }): BrowserState | undefined {
-    const { agentId, userId, conversationId } = params;
-    const key = toConversationStateKey(agentId, userId, conversationId);
-    return this.cache.get(key);
+  async updateUrl(conversationId: string, url: string): Promise<void> {
+    const existing = await this.get(conversationId);
+    await this.set(conversationId, {
+      url,
+      tabIndex: existing?.tabIndex,
+    });
   }
 
   /**
-   * Clear cache entry for a conversation.
+   * Clear browser state from database.
    */
-  clearCache(params: {
-    agentId: string;
-    userId: string;
-    conversationId: string;
-  }): void {
-    const { agentId, userId, conversationId } = params;
-    const key = toConversationStateKey(agentId, userId, conversationId);
-    this.cache.delete(key);
-
-    logger.debug(
-      { agentId, userId, conversationId },
-      "[BrowserStateManager] Cleared cache entry",
-    );
-  }
-
-  /**
-   * Clear browser state from both cache and database.
-   */
-  async clear(params: {
-    agentId: string;
-    userId: string;
-    conversationId: string;
-  }): Promise<Result<StateManagerError, void>> {
-    const { agentId, userId, conversationId } = params;
-    const key = toConversationStateKey(agentId, userId, conversationId);
-
-    this.cache.delete(key);
-
+  async clear(
+    conversationId: string,
+  ): Promise<Result<StateManagerError, void>> {
     try {
       await ConversationModel.updateBrowserState(conversationId, null);
 
-      logger.info(
-        { agentId, userId, conversationId },
-        "[BrowserStateManager] Cleared state from cache and database",
+      logger.debug(
+        { conversationId },
+        "[BrowserStateManager] Cleared state from database",
       );
 
       return Ok(undefined);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(
-        { agentId, userId, conversationId, error: message },
+        { conversationId, error: message },
         "[BrowserStateManager] Failed to clear state from database",
       );
       return Err({ kind: "DatabaseError", message });
     }
+  }
+
+  /**
+   * Detect if state is in legacy multi-tab format.
+   */
+  private isLegacyFormat(state: unknown): state is LegacyPersistedBrowserState {
+    if (typeof state !== "object" || state === null) {
+      return false;
+    }
+    const candidate = state as Record<string, unknown>;
+    return (
+      typeof candidate.activeTabId === "string" &&
+      Array.isArray(candidate.tabOrder) &&
+      typeof candidate.tabs === "object" &&
+      candidate.tabs !== null
+    );
+  }
+
+  /**
+   * Migrate legacy multi-tab format to simple single-tab format.
+   * Extracts URL from the active tab.
+   */
+  private migrateLegacyFormat(
+    legacy: LegacyPersistedBrowserState,
+  ): SimpleBrowserState {
+    const activeTab = legacy.tabs[legacy.activeTabId];
+    const url = activeTab?.current ?? "about:blank";
+
+    // tabIndex will be undefined since we don't know the current browser state
+    // This will trigger new tab creation on next access
+    return { url };
   }
 }
 

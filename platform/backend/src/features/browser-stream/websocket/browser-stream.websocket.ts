@@ -4,6 +4,7 @@ import { WebSocket as WS } from "ws";
 import { closeChatMcpClient } from "@/clients/chat-mcp-client";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
+import { browserStateManager } from "@/features/browser-stream/services/browser-stream.state-manager";
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
 
@@ -261,6 +262,7 @@ export class BrowserStreamSocketClientContext {
     };
 
     // Select or create the tab for this conversation
+    // This also restores the conversation's URL if it had one
     const tabResult = await browserStreamFeature.selectOrCreateTab(
       agentId,
       conversationId,
@@ -631,6 +633,19 @@ export class BrowserStreamSocketClientContext {
       );
 
       if (result.screenshot) {
+        // Sync URL to conversation state, but ONLY if subscription is still active
+        // for the same conversation. This prevents race conditions where screenshot
+        // completes after user switched conversations.
+        const currentSubscription = this.browserSubscriptions.get(ws);
+        if (
+          currentSubscription &&
+          currentSubscription.conversationId === conversationId &&
+          result.url &&
+          !this.isBlankUrl(result.url)
+        ) {
+          await browserStateManager.updateUrl(conversationId, result.url);
+        }
+
         // Determine canGoBack based on current URL
         // If on about:blank, there's nowhere useful to go back to
         const canGoBack = result.url ? !this.isBlankUrl(result.url) : false;

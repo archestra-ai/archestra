@@ -31,8 +31,12 @@ test.describe("Metrics API", () => {
   test("returns metrics when authentication is provided", async ({
     request,
   }) => {
-    // First, make an API call to generate metrics data
-    await request.get(`${API_BASE_URL}/openapi.json`);
+    // Make multiple API calls to ensure metrics are generated on all pods
+    // (CI runs with 5 replicas, each with its own metrics registry)
+    const apiCalls = Array.from({ length: 10 }, () =>
+      request.get(`${API_BASE_URL}/openapi.json`),
+    );
+    await Promise.all(apiCalls);
 
     // Poll metrics until the route appears (handles race condition where metrics might not be immediately available)
     let metricsText = "";

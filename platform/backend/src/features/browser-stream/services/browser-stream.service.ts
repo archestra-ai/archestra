@@ -3,6 +3,7 @@ import {
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
   isBrowserMcpTool,
+  PLAYWRIGHT_MCP_CATALOG_ID,
   TimeInMs,
 } from "@shared";
 import { LRUCacheManager } from "@/cache-manager";
@@ -141,7 +142,9 @@ const logScreenshotInfo = (context: LogContext, message: string): void => {
  * Cache for agent tools to avoid repeated database queries during browser streaming.
  * Uses LRU eviction with 30-second TTL. Shared across all BrowserStreamService instances.
  */
-const toolsCache = new LRUCacheManager<{ name: string }[]>({
+const toolsCache = new LRUCacheManager<
+  { name: string; catalogId: string | null }[]
+>({
   maxSize: 100,
   defaultTtl: 30 * TimeInMs.Second,
 });
@@ -165,7 +168,7 @@ export class BrowserStreamService {
   private async getToolsForAgent(
     agentId: string,
     userId?: string,
-  ): Promise<{ name: string }[]> {
+  ): Promise<{ name: string; catalogId: string | null }[]> {
     // Include userId in cache key when provided
     const cacheKey = userId ? `${agentId}:${userId}` : agentId;
     const cached = toolsCache.get(cacheKey);
@@ -174,22 +177,25 @@ export class BrowserStreamService {
     }
 
     const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const toolNames = tools.map((t) => ({ name: t.name as string }));
+    const toolData = tools.map((t) => ({
+      name: t.name as string,
+      catalogId: t.catalogId,
+    }));
 
     // If userId is provided, also include global catalog tools
     if (userId) {
       const globalTools = await this.getGlobalCatalogToolsForUser(userId);
       for (const tool of globalTools) {
         // Avoid duplicates
-        if (!toolNames.some((t) => t.name === tool.name)) {
-          toolNames.push(tool);
+        if (!toolData.some((t) => t.name === tool.name)) {
+          toolData.push(tool);
         }
       }
     }
 
-    toolsCache.set(cacheKey, toolNames);
+    toolsCache.set(cacheKey, toolData);
 
-    return toolNames;
+    return toolData;
   }
 
   /**
@@ -198,7 +204,7 @@ export class BrowserStreamService {
    */
   private async getGlobalCatalogToolsForUser(
     userId: string,
-  ): Promise<{ name: string }[]> {
+  ): Promise<{ name: string; catalogId: string }[]> {
     const globalCatalogs =
       await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
 
@@ -206,7 +212,7 @@ export class BrowserStreamService {
       return [];
     }
 
-    const tools: { name: string }[] = [];
+    const tools: { name: string; catalogId: string }[] = [];
 
     for (const catalog of globalCatalogs) {
       // Check if user has a personal server for this catalog
@@ -222,7 +228,7 @@ export class BrowserStreamService {
       // Get tools from this catalog
       const catalogTools = await ToolModel.findByCatalogId(catalog.id);
       for (const tool of catalogTools) {
-        tools.push({ name: tool.name });
+        tools.push({ name: tool.name, catalogId: catalog.id });
       }
     }
 
@@ -236,7 +242,11 @@ export class BrowserStreamService {
   ): Promise<string | null> {
     const tools = await this.getToolsForAgent(agentId, userId);
 
+    // Only consider tools from the builtin playwright-browser catalog
     for (const tool of tools) {
+      if (tool.catalogId !== PLAYWRIGHT_MCP_CATALOG_ID) {
+        continue;
+      }
       const toolName = tool.name;
       if (typeof toolName === "string" && matches(toolName)) {
         return toolName;
@@ -247,7 +257,8 @@ export class BrowserStreamService {
   }
 
   /**
-   * Check if Playwright MCP browser tools are available for an agent
+   * Check if Playwright MCP browser tools are available for an agent.
+   * Only considers tools from the builtin playwright-browser catalog (PLAYWRIGHT_MCP_CATALOG_ID).
    * @param agentId - The agent ID
    * @param userId - Optional user ID to check global catalog tools
    */
@@ -256,14 +267,12 @@ export class BrowserStreamService {
     userId?: string,
   ): Promise<AvailabilityResult> {
     const tools = await this.getToolsForAgent(agentId, userId);
-    const browserToolNames = tools.flatMap((tool) => {
-      const toolName = tool.name;
-      if (typeof toolName !== "string") return [];
-      if (isBrowserMcpTool(toolName)) {
-        return [toolName];
-      }
-      return [];
-    });
+
+    // Only include tools from the builtin playwright-browser catalog
+    const browserToolNames = tools
+      .filter((tool) => tool.catalogId === PLAYWRIGHT_MCP_CATALOG_ID)
+      .filter((tool) => isBrowserMcpTool(tool.name))
+      .map((tool) => tool.name);
 
     return {
       available: browserToolNames.length > 0,

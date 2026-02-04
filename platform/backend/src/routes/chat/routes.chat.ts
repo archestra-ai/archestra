@@ -622,6 +622,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               id: z.string().uuid(),
               name: z.string(),
               description: z.string().nullable(),
+              catalogId: z.string().uuid(),
             }),
           ),
         ),
@@ -640,6 +641,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: string;
         name: string;
         description: string | null;
+        catalogId: string;
       }> = [];
 
       for (const catalog of globalCatalogs) {
@@ -661,6 +663,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: tool.id,
             name: tool.name,
             description: tool.description,
+            catalogId: catalog.id,
           });
         }
       }

@@ -32,13 +32,18 @@ import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
-import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
+import {
+  extractFileAttachments,
+  hasTextPart,
+  tryToExtractMcpUiMetadata,
+} from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { McpUIRenderer, type McpUIMetadata } from "./mcp-ui-renderer";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -534,10 +539,10 @@ export function ChatMessages({
                                 const isLastParsedTextPart =
                                   parsedIdx ===
                                   parsedParts.length -
-                                    1 -
-                                    [...parsedParts]
-                                      .reverse()
-                                      .findIndex((p) => p.type === "text");
+                                  1 -
+                                  [...parsedParts]
+                                    .reverse()
+                                    .findIndex((p) => p.type === "text");
                                 return (
                                   <EditableAssistantMessage
                                     key={parsedKey}
@@ -812,16 +817,16 @@ export function ChatMessages({
           {error && <InlineChatError error={error} />}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
-            <Message from="assistant">
-              <Image
-                src={"/logo.png"}
-                alt="Loading logo"
-                width={40}
-                height={40}
-                className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
-              />
-            </Message>
-          )}
+              <Message from="assistant">
+                <Image
+                  src={"/logo.png"}
+                  alt="Loading logo"
+                  width={40}
+                  height={40}
+                  className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
+                />
+              </Message>
+            )}
         </div>
       </ConversationContent>
       <ConversationScrollButton />
@@ -912,11 +917,24 @@ function MessageTool({
     );
   }
 
+  // Custom: Check for MCP UI Metadata in the output
+  const mcpUiMetadata = toolResultPart
+    ? tryToExtractMcpUiMetadata(toolResultPart.output)
+    : tryToExtractMcpUiMetadata(part.output);
+
+  if (mcpUiMetadata) {
+    return (
+      <div className="my-2">
+        <McpUIRenderer metadata={mcpUiMetadata} />
+      </div>
+    );
+  }
+
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
+    (toolResultPart && Boolean(toolResultPart.output)) ||
+    (!toolResultPart && Boolean(part.output)),
   );
 
   // Show logs button for failed tool calls
@@ -967,6 +985,9 @@ const tryToExtractErrorFromOutput = (output: unknown) => {
     return undefined;
   }
 };
+
+// Helper to extract MCP UI metadata moved to chat-messages.utils.ts
+
 const getHeaderState = ({
   state,
   toolResultPart,

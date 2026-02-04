@@ -1,0 +1,1 @@
+ALTER TABLE "internal_mcp_catalog" ADD COLUMN "deployment_spec_yaml" text;

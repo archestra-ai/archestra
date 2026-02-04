@@ -127,7 +127,7 @@ const userItems: MenuItem[] = [
   // Sign up is disabled - users must use invitation links to join
 ];
 
-const CommunitySideBarSection = ({ starCount }: { starCount: number }) => (
+const CommunitySideBarSection = ({ starCount }: { starCount: string }) => (
   <SidebarGroup className="px-4 py-0">
     <SidebarGroupLabel>Community</SidebarGroupLabel>
     <SidebarGroupContent>
@@ -200,7 +200,7 @@ const MainSideBarSection = ({
   isAuthenticated: boolean;
   pathname: string;
   searchParams: URLSearchParams;
-  starCount: number;
+  starCount: string;
 }) => {
   const allItems = getNavigationItems(isAuthenticated);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);

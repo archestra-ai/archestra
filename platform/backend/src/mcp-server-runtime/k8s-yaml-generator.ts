@@ -76,7 +76,11 @@ const ARCHESTRA_PLACEHOLDERS = [
 export function generateDeploymentYamlTemplate(
   context: DeploymentYamlContext,
 ): string {
-  const { environment = [], transportType = "stdio", httpPort = 8080 } = context;
+  const {
+    environment = [],
+    transportType = "stdio",
+    httpPort = 8080,
+  } = context;
   const needsHttp = transportType === "streamable-http";
 
   // Build environment variables section

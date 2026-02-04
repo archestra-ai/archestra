@@ -402,17 +402,33 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Created Readonly Vault external vault secret reference for local config secrets",
         );
       } else if (restBody.localConfig?.environment) {
+        // Get existing secret values to preserve keys that are still in the request
+        const existingSecretValues: Record<string, string> = {};
+        if (localConfigSecretId) {
+          const existingSecret =
+            await secretManager().getSecret(localConfigSecretId);
+          if (existingSecret?.secret) {
+            for (const [key, value] of Object.entries(existingSecret.secret)) {
+              existingSecretValues[key] = String(value);
+            }
+          }
+        }
+
         // Extract secret env vars from localConfig.environment
+        // Preserve existing values for keys that are in the request but have no new value
         const secretEnvVars: Record<string, string> = {};
 
         for (const envVar of restBody.localConfig.environment) {
-          if (
-            envVar.type === "secret" &&
-            envVar.value &&
-            !envVar.promptOnInstallation
-          ) {
-            secretEnvVars[envVar.key] = envVar.value;
-            delete envVar.value; // Remove value from catalog template
+          if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+            if (envVar.value) {
+              // New value provided - use it
+              secretEnvVars[envVar.key] = envVar.value;
+              delete envVar.value; // Remove value from catalog template
+            } else if (existingSecretValues[envVar.key]) {
+              // No new value but key exists in existing secret - preserve it
+              secretEnvVars[envVar.key] = existingSecretValues[envVar.key];
+            }
+            // If no value and not in existing secret, skip (user added key without value)
           }
         }
 

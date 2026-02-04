@@ -1,9 +1,9 @@
-import { describe, expect, test } from "@/test";
-import { InternalMcpCatalogModel } from "@/models";
 import {
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
 } from "@/mcp-server-runtime/k8s-yaml-generator";
+import { InternalMcpCatalogModel } from "@/models";
+import { describe, expect, test } from "@/test";
 
 describe("Internal MCP Catalog - Environment Variables", () => {
   // =========================================================================

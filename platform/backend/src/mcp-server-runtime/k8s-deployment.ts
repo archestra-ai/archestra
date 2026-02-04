@@ -11,7 +11,10 @@ import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import type { InternalMcpCatalog, McpServer } from "@/types";
-import { customYamlToDeployment, resolvePlaceholders } from "./k8s-yaml-generator";
+import {
+  customYamlToDeployment,
+  resolvePlaceholders,
+} from "./k8s-yaml-generator";
 import type { K8sDeploymentState, K8sDeploymentStatusSummary } from "./schemas";
 
 const {
@@ -789,25 +792,25 @@ export default class K8sDeployment {
 
     // 4. Apply volume mounts for mounted secrets
     if (mountedSecrets.length > 0 && deployment.spec?.template?.spec) {
-      const volumes: k8s.V1Volume[] = [
-        {
-          name: "mounted-secrets",
-          secret: {
-            secretName: k8sSecretName,
-            items: mountedSecrets.map(({ key }) => ({ key, path: key })),
-          },
+      const newVolume: k8s.V1Volume = {
+        name: "mounted-secrets",
+        secret: {
+          secretName: k8sSecretName,
+          items: mountedSecrets.map(({ key }) => ({ key, path: key })),
         },
-      ];
+      };
 
-      deployment.spec.template.spec.volumes = [
-        ...(deployment.spec.template.spec.volumes || []),
-        ...volumes,
-      ];
+      // Filter out any existing "mounted-secrets" volume to avoid duplicates
+      const existingVolumes = (
+        deployment.spec.template.spec.volumes || []
+      ).filter((v) => v.name !== "mounted-secrets");
+
+      deployment.spec.template.spec.volumes = [...existingVolumes, newVolume];
 
       // Add volume mounts to container
       if (deployment.spec.template.spec.containers?.[0]) {
         const container = deployment.spec.template.spec.containers[0];
-        const volumeMounts: k8s.V1VolumeMount[] = mountedSecrets.map(
+        const newVolumeMounts: k8s.V1VolumeMount[] = mountedSecrets.map(
           ({ key }) => ({
             name: "mounted-secrets",
             mountPath: `/secrets/${key}`,
@@ -816,10 +819,13 @@ export default class K8sDeployment {
           }),
         );
 
-        container.volumeMounts = [
-          ...(container.volumeMounts || []),
-          ...volumeMounts,
-        ];
+        // Filter out existing mounts at paths we're about to add to avoid duplicates
+        const newMountPaths = new Set(newVolumeMounts.map((m) => m.mountPath));
+        const existingMounts = (container.volumeMounts || []).filter(
+          (m) => !newMountPaths.has(m.mountPath),
+        );
+
+        container.volumeMounts = [...existingMounts, ...newVolumeMounts];
       }
     }
 

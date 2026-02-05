@@ -523,6 +523,7 @@ export function AgentDialog({
       setToolsSearchOpen(false);
       setToolsShowAll(false);
       setSelectedToolsCount(0);
+      lastAutoSelectedProviderRef.current = null;
     }
   }, [open, agent, freshAgent, refetchAgent]);
 
@@ -565,15 +566,27 @@ export function AgentDialog({
     return null;
   }, [llmModel, modelsByProvider]);
 
-  // Reactive Model → Key: auto-select key when provider changes or data loads
+  // Track the provider that was active when auto-selection last ran,
+  // so we only auto-select when the provider actually changes (not when the user clears the key).
+  const lastAutoSelectedProviderRef = useRef<string | null>(null);
+
+  // Reactive Model → Key: auto-select key when provider changes
   // (mirrors ChatApiKeySelector's auto-select useEffect in prompt input)
   useEffect(() => {
     // Don't auto-select if no model/provider is set
-    if (!currentLlmProvider) return;
+    if (!currentLlmProvider) {
+      lastAutoSelectedProviderRef.current = null;
+      return;
+    }
     // Don't auto-select if no keys available (still loading)
     if (availableApiKeys.length === 0) return;
     // If current key already matches the model's provider, nothing to do
-    if (selectedApiKey?.provider === currentLlmProvider) return;
+    if (selectedApiKey?.provider === currentLlmProvider) {
+      lastAutoSelectedProviderRef.current = currentLlmProvider;
+      return;
+    }
+    // Only auto-select when the provider actually changed (not when user cleared the key)
+    if (lastAutoSelectedProviderRef.current === currentLlmProvider) return;
 
     // Auto-select best key for this provider (personal > team > org_wide)
     const scopePriority = { personal: 0, team: 1, org_wide: 2 } as const;
@@ -588,11 +601,14 @@ export function AgentDialog({
     if (providerKeys.length > 0) {
       setLlmApiKeyId(providerKeys[0].id);
     }
+    lastAutoSelectedProviderRef.current = currentLlmProvider;
   }, [currentLlmProvider, availableApiKeys, selectedApiKey]);
 
   // Model change handler - just sets model, key auto-selection is reactive via useEffect above
   const handleLlmModelChange = useCallback((modelId: string | null) => {
     setLlmModel(modelId);
+    // Reset auto-select tracking so provider change triggers key selection
+    lastAutoSelectedProviderRef.current = null;
   }, []);
 
   // Key change handler - imperatively auto-selects model (like prompt input's onProviderChange)
@@ -880,7 +896,11 @@ export function AgentDialog({
                   <ModelSelector
                     selectedModel={llmModel || ""}
                     onModelChange={(modelId) => handleLlmModelChange(modelId)}
-                    onClear={() => handleLlmModelChange(null)}
+                    onClear={() => {
+                      setLlmModel(null);
+                      setLlmApiKeyId(null);
+                      lastAutoSelectedProviderRef.current = null;
+                    }}
                   />
 
                   {/* API Key Selector Pill */}
@@ -917,7 +937,9 @@ export function AgentDialog({
                           <CommandGroup>
                             <CommandItem
                               onSelect={() => {
-                                handleLlmApiKeyChange(null);
+                                setLlmApiKeyId(null);
+                                setLlmModel(null);
+                                lastAutoSelectedProviderRef.current = null;
                                 setApiKeySelectorOpen(false);
                               }}
                             >

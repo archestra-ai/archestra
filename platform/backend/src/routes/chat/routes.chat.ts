@@ -286,7 +286,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         model,
         messages: modelMessages,
         tools: mcpTools,
-        stopWhen: stepCountIs(20),
+        stopWhen: stepCountIs(500),
         onFinish: async ({ usage, finishReason }) => {
           logger.info(
             {

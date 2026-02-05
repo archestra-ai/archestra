@@ -137,33 +137,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 isThreadReply: false,
                 metadata: {},
               };
-              // Resolve email via Bot Framework for card submissions too
-              try {
-                const member = await TeamsInfo.getMember(
-                  context,
-                  context.activity.from.id,
-                );
-                if (member?.email || member?.userPrincipalName) {
-                  cardMessage.senderEmail =
-                    member.email || member.userPrincipalName;
-                }
-              } catch {
-                // Non-critical: email resolution will fall back to Graph API
-              }
-
-              // Fall back to Graph API if TeamsInfo didn't resolve email
-              if (!cardMessage.senderEmail) {
-                const graphEmail = await provider.getUserEmail(
-                  cardMessage.senderId,
-                );
-                if (graphEmail) {
-                  cardMessage.senderEmail = graphEmail;
-                }
-              }
-
-              // Early auth check: reject unregistered users
+              // Resolve sender email and verify they are a registered Archestra user
               if (
-                !(await verifyArchestraUser(context, cardMessage.senderEmail))
+                !(await resolveAndVerifySender(context, provider, cardMessage))
               ) {
                 return;
               }
@@ -183,34 +159,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               return;
             }
 
-            // Resolve email via Bot Framework (no Graph API needed)
-            try {
-              const member = await TeamsInfo.getMember(
-                context,
-                context.activity.from.id,
-              );
-              if (member?.email || member?.userPrincipalName) {
-                message.senderEmail = member.email || member.userPrincipalName;
-              }
-            } catch (error) {
-              logger.debug(
-                {
-                  error: error instanceof Error ? error.message : String(error),
-                },
-                "[ChatOps] TeamsInfo.getMember failed, will fall back to Graph API if configured",
-              );
-            }
-
-            // Fall back to Graph API if TeamsInfo didn't resolve email
-            if (!message.senderEmail) {
-              const graphEmail = await provider.getUserEmail(message.senderId);
-              if (graphEmail) {
-                message.senderEmail = graphEmail;
-              }
-            }
-
-            // Early auth check: reject unregistered users before any processing
-            if (!(await verifyArchestraUser(context, message.senderEmail))) {
+            // Resolve sender email and verify they are a registered Archestra user
+            if (!(await resolveAndVerifySender(context, provider, message))) {
               return;
             }
 
@@ -790,14 +740,37 @@ function isCommand(text: string): boolean {
 }
 
 /**
- * Verify that the sender is a registered Archestra user.
- * Sends an error message and returns false if verification fails.
+ * Resolve sender email (TeamsInfo → Graph API fallback) and verify they are a registered Archestra user.
+ * Sets message.senderEmail and returns true if verified, false if rejected (with error sent to Teams).
  */
-async function verifyArchestraUser(
+async function resolveAndVerifySender(
   context: TurnContext,
-  senderEmail: string | undefined,
+  provider: { getUserEmail(aadObjectId: string): Promise<string | null> },
+  message: IncomingChatMessage,
 ): Promise<boolean> {
-  if (!senderEmail) {
+  // Try Bot Framework first (no Graph API permissions needed)
+  try {
+    const member = await TeamsInfo.getMember(context, context.activity.from.id);
+    if (member?.email || member?.userPrincipalName) {
+      message.senderEmail = member.email || member.userPrincipalName;
+    }
+  } catch (error) {
+    logger.debug(
+      { error: error instanceof Error ? error.message : String(error) },
+      "[ChatOps] TeamsInfo.getMember failed, will fall back to Graph API if configured",
+    );
+  }
+
+  // Fall back to Graph API if TeamsInfo didn't resolve email
+  if (!message.senderEmail) {
+    const graphEmail = await provider.getUserEmail(message.senderId);
+    if (graphEmail) {
+      message.senderEmail = graphEmail;
+    }
+  }
+
+  // Verify the sender is a registered Archestra user
+  if (!message.senderEmail) {
     logger.warn(
       "[ChatOps] Could not resolve sender email for early auth check",
     );
@@ -807,14 +780,14 @@ async function verifyArchestraUser(
     return false;
   }
 
-  const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+  const user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
   if (!user) {
     logger.warn(
-      { senderEmail },
+      { senderEmail: message.senderEmail },
       "[ChatOps] Sender is not a registered Archestra user",
     );
     await context.sendActivity(
-      `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+      `You (${message.senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
     );
     return false;
   }

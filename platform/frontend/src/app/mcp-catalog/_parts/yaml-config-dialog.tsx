@@ -98,17 +98,19 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
               <p>
                 <strong>Placeholders</strong> are replaced at deployment time:{" "}
                 <code className="text-xs bg-muted px-1 rounded">
-                  ${"{env.KEY}"}
+                  ${"{env.*}"}
                 </code>
                 ,{" "}
                 <code className="text-xs bg-muted px-1 rounded">
-                  ${"{secret.KEY}"}
+                  ${"{secret.*}"}
                 </code>
                 ,{" "}
                 <code className="text-xs bg-muted px-1 rounded">
                   ${"{archestra.*}"}
-                </code>{" "}
-                (system values like deployment_name, server_id, namespace).
+                </code>
+                . Available archestra values: deployment_name, server_id,
+                server_name, docker_image, secret_name, command,
+                arguments, service_account.
               </p>
               <p>
                 <strong>Protected fields</strong> are always overwritten by

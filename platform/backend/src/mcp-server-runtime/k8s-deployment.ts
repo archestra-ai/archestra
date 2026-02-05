@@ -770,7 +770,6 @@ export default class K8sDeployment {
       deploymentName: this.deploymentName,
       serverId: this.mcpServer.id,
       serverName: this.mcpServer.name,
-      namespace: this.namespace,
       labels,
     });
 

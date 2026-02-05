@@ -25,7 +25,8 @@ type UsageExtractor =
 
 /**
  * Maps each provider to its usage token extraction function for fetch-based observability.
- * Providers mapped to `null` use their own observability wrappers (e.g. Gemini uses getObservableGenAI).
+ * Providers mapped to `null` use their own observability wrappers (e.g. Gemini uses getObservableGenAI,
+ * Bedrock uses its own client) and should not extract tokens here to avoid double-reporting.
  * Using Record<SupportedProvider, ...> ensures TypeScript enforces adding new providers here.
  */
 const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
@@ -37,7 +38,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   anthropic: getAnthropicUsage,
   cohere: getCohereUsage,
   zhipuai: getZhipuaiUsage,
-  gemini: getGeminiUsage,
+  gemini: null,
   bedrock: null,
 };
 

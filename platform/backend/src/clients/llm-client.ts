@@ -64,6 +64,10 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "zhipuai";
   }
 
+  if (lowerModel.includes("deepseek")) {
+    return "deepseek";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -81,6 +85,7 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
@@ -122,6 +127,7 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
       secret?.secret?.zhipuaiApiKey ??
+      secret?.secret?.deepseekApiKey ??
       secret?.secret?.cohereApiKey ??
       secret?.secret?.bedrockApiKey;
     if (secretValue) {
@@ -163,6 +169,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   cohere: "command-light", // Cohere's fast model
+  deepseek: "deepseek-chat", // DeepSeek's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
@@ -262,6 +269,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createCohere({
       apiKey,
       baseURL: config.llm.cohere.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  deepseek: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+      );
+    }
+    // DeepSeek uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.deepseek.baseUrl,
     });
     return client(modelName);
   },
@@ -430,6 +452,18 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       return client(modelName);
+    },
+
+    deepseek: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/deepseek/:agentId (SDK appends /chat/completions)
+      // DeepSeek uses OpenAI-compatible API, so we use the OpenAI SDK
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("deepseek", agentId),
+        headers,
+      });
+      // Use .chat() to force Chat Completions API
+      return client.chat(modelName);
     },
 
     cerebras: ({ apiKey, agentId, modelName, headers }) => {

@@ -7,6 +7,7 @@ import {
   Bedrock,
   Cerebras,
   Cohere,
+  DeepSeek,
   Gemini,
   Mistral,
   Ollama,
@@ -31,6 +32,7 @@ export const InteractionRequestSchema = z.union([
   Anthropic.API.MessagesRequestSchema,
   Bedrock.API.ConverseRequestSchema,
   Cerebras.API.ChatCompletionRequestSchema,
+  DeepSeek.API.ChatCompletionRequestSchema,
   Mistral.API.ChatCompletionRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
@@ -44,6 +46,7 @@ export const InteractionResponseSchema = z.union([
   Anthropic.API.MessagesResponseSchema,
   Bedrock.API.ConverseResponseSchema,
   Cerebras.API.ChatCompletionResponseSchema,
+  DeepSeek.API.ChatCompletionResponseSchema,
   Mistral.API.ChatCompletionResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
@@ -158,6 +161,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Zhipuai.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["deepseek:chatCompletions"]),
+    request: DeepSeek.API.ChatCompletionRequestSchema,
+    processedRequest:
+      DeepSeek.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: DeepSeek.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

@@ -2,6 +2,7 @@ import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import bedrockProxyRoutesV2 from "./proxy/routesv2/bedrock";
 import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
 import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
+import deepseekProxyRoutesV2 from "./proxy/routesv2/deepseek";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
@@ -40,6 +41,7 @@ export { default as policyConfigSubagentRoutes } from "./policy-config-subagent"
 export const anthropicProxyRoutes = anthropicProxyRoutesV2;
 export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;
 export const cohereProxyRoutes = cohereProxyRoutesV2;
+export const deepseekProxyRoutes = deepseekProxyRoutesV2;
 export const geminiProxyRoutes = geminiProxyRoutesV2;
 export const mistralProxyRoutes = mistralProxyRoutesV2;
 export const openAiProxyRoutes = openAiProxyRoutesV2;

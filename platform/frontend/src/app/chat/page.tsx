@@ -152,6 +152,20 @@ export default function ChatPage() {
     (typeof internalAgents)[number] | null
   >(null);
 
+  // Apply agent's LLM config (model + API key) to initial state
+  const applyAgentLlmConfig = useCallback(
+    (agent: (typeof internalAgents)[number]) => {
+      const agentData = agent as Record<string, unknown>;
+      if (agentData.llmModel) {
+        setInitialModel(agentData.llmModel as string);
+      }
+      if (agentData.llmApiKeyId) {
+        setInitialApiKeyId(agentData.llmApiKeyId as string);
+      }
+    },
+    [],
+  );
+
   // Set initial agent from URL param, localStorage, or default when data loads
   useEffect(() => {
     // Wait for internal agents to load - these are the chat-compatible agents
@@ -164,6 +178,7 @@ export default function ChatPage() {
         const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
         if (matchingAgent) {
           setInitialAgentId(urlAgentId);
+          applyAgentLlmConfig(matchingAgent);
           urlParamsConsumedRef.current = true;
           return;
         }
@@ -174,13 +189,16 @@ export default function ChatPage() {
     // Internal agents are the chat-compatible agents shown in the InitialAgentSelector
     if (!initialAgentId) {
       const savedAgentId = localStorage.getItem("selected-chat-agent");
-      if (savedAgentId && internalAgents.some((a) => a.id === savedAgentId)) {
+      const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
+      if (savedAgent) {
         setInitialAgentId(savedAgentId);
+        applyAgentLlmConfig(savedAgent);
         return;
       }
       setInitialAgentId(internalAgents[0].id);
+      applyAgentLlmConfig(internalAgents[0]);
     }
-  }, [initialAgentId, searchParams, internalAgents]);
+  }, [initialAgentId, searchParams, internalAgents, applyAgentLlmConfig]);
 
   // Initialize model from localStorage or default to first available
   useEffect(() => {
@@ -828,16 +846,10 @@ export default function ChatPage() {
       // If agent has LLM config, use it as initial model/key
       const selectedAgent = internalAgents.find((a) => a.id === agentId);
       if (selectedAgent) {
-        const agentData = selectedAgent as Record<string, unknown>;
-        if (agentData.llmModel) {
-          setInitialModel(agentData.llmModel as string);
-        }
-        if (agentData.llmApiKeyId) {
-          setInitialApiKeyId(agentData.llmApiKeyId as string);
-        }
+        applyAgentLlmConfig(selectedAgent);
       }
     },
-    [internalAgents],
+    [internalAgents, applyAgentLlmConfig],
   );
 
   // Handle initial submit (when no conversation exists)

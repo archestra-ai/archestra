@@ -39,9 +39,10 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 ### LLM Metrics
 
-- `llm_request_duration_seconds` - LLM API request duration by provider, agent_id, profile_id, profile_name, and status code
-- `llm_tokens_total` - Token consumption by provider, agent_id, profile_id, profile_name, and type (input/output)
-- `llm_blocked_tool_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, agent_id, profile_id, and profile_name
+- `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, profile_id, profile_name, and status code
+- `llm_tokens_total` - Token consumption by provider, model, agent_id, profile_id, profile_name, and type (input/output)
+- `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, profile_id, and profile_name. Requires token pricing to be configured in Archestra.
+- `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, profile_id, and profile_name
 - `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, profile_id, profile_name, and model. Helps developers choose models with lower initial response latency.
 - `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, profile_id, profile_name, and model. Allows comparing model response speeds for latency-sensitive applications.
 
@@ -227,6 +228,18 @@ Here are some PromQL queries for Grafana charts to get you started:
 
   ```promql
   sum(rate(llm_request_duration_seconds_count{status_code!~"2.."}[5m])) by (profile_name) / sum(rate(llm_request_duration_seconds_count[5m])) by (profile_name)
+  ```
+
+- Cost rate by profile and provider (USD/min):
+
+  ```promql
+  sum(rate(llm_cost_total[5m])) by (profile_name, provider) * 60
+  ```
+
+- Total accumulated cost by model:
+
+  ```promql
+  sum(llm_cost_total) by (model)
   ```
 
 - Time to first token (TTFT) p95 by model:

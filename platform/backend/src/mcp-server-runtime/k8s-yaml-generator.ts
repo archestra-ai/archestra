@@ -405,7 +405,6 @@ export function customYamlToDeployment(
     deploymentName: string;
     serverId: string;
     serverName: string;
-    namespace: string;
     labels: Record<string, string>;
   },
 ): k8s.V1Deployment | null {

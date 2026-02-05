@@ -1,8 +1,14 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -82,55 +88,92 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
     <Dialog open={!!item} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Deployment Yaml</DialogTitle>
+          <DialogTitle>Edit K8S Deployment Yaml</DialogTitle>
           <DialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                <strong className="text-amber-600">Warning:</strong> Only modify
-                if you understand Kubernetes deployments. Use "Reset to Default"
-                to restore Archestra-generated YAML.
-              </p>
               <p>
                 Customize the deployment to mount external secrets, volumes, or
                 add custom labels and annotations. Environment variables
                 configured in the UI take precedence over values defined here.
               </p>
-              <p>
-                <strong>Placeholders</strong> are replaced at deployment time:{" "}
-                <code className="text-xs bg-muted px-1 rounded">
-                  ${"{env.KEY}"}
-                </code>
-                ,{" "}
-                <code className="text-xs bg-muted px-1 rounded">
-                  ${"{secret.KEY}"}
-                </code>
-                ,{" "}
-                <code className="text-xs bg-muted px-1 rounded">
-                  ${"{archestra.*}"}
-                </code>{" "}
-                (system values like deployment_name, server_id, namespace).
-              </p>
-              <p>
-                <strong>Protected fields</strong> are always overwritten by
-                Archestra:{" "}
-                <code className="text-xs bg-muted px-1 rounded">
-                  mcp-server-id
-                </code>{" "}
-                and <code className="text-xs bg-muted px-1 rounded">app</code>{" "}
-                labels, and the deployment selector.
-              </p>
-              <p>
-                <strong>Transport-specific settings:</strong> Archestra requires{" "}
-                <code className="text-xs bg-muted px-1 rounded">
-                  stdin: true
-                </code>{" "}
-                and{" "}
-                <code className="text-xs bg-muted px-1 rounded">
-                  tty: false
-                </code>{" "}
-                for stdio servers, and a containerPort for streamable-http
-                servers. These are included in the default YAML.
-              </p>
+              <Collapsible>
+                <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors [&[data-state=open]>svg]:rotate-180">
+                  More details
+                  <ChevronDown className="h-3 w-3 transition-transform duration-200" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2 pt-2">
+                  <p>
+                    <strong>Placeholders</strong> are replaced at deployment
+                    time:{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      ${"{env.*}"}
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      ${"{secret.*}"}
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      ${"{archestra.*}"}
+                    </code>
+                    . Available archestra values:{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      deployment_name
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      server_id
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      server_name
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      docker_image
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      secret_name
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      command
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      arguments
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      service_account
+                    </code>
+                    .
+                  </p>
+                  <p>
+                    <strong>Protected fields</strong> are always overwritten by
+                    Archestra: mcp-server-id and app labels, and the deployment
+                    selector.
+                  </p>
+                  <p>
+                    <strong>Transport-specific settings:</strong> Archestra
+                    requires{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      stdin: true
+                    </code>{" "}
+                    and{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      tty: false
+                    </code>{" "}
+                    for stdio servers, and a{" "}
+                    <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
+                      containerPort
+                    </code>{" "}
+                    for streamable-http servers. These are included in the
+                    default YAML.
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           </DialogDescription>
         </DialogHeader>

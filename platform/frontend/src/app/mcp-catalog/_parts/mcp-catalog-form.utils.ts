@@ -21,7 +21,7 @@ export function transformFormToApiData(
     data.serverUrl = values.serverUrl;
   }
 
-  // Note: deploymentSpecYaml is handled separately via the "Edit Deployment Yaml" dialog
+  // Note: deploymentSpecYaml is handled separately via the "Edit K8S Deployment Yaml" dialog
   // The main form does not touch the YAML - it's only stored when explicitly edited
 
   // Handle local configuration

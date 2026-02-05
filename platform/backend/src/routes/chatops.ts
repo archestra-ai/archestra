@@ -1,5 +1,5 @@
 import { RouteId } from "@shared";
-import { TurnContext } from "botbuilder";
+import { TeamsInfo, TurnContext } from "botbuilder";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -14,6 +14,7 @@ import {
   AgentModel,
   ChatOpsChannelBindingModel,
   OrganizationModel,
+  UserModel,
 } from "@/models";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
@@ -136,6 +137,37 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 isThreadReply: false,
                 metadata: {},
               };
+              // Resolve email via Bot Framework for card submissions too
+              try {
+                const member = await TeamsInfo.getMember(
+                  context,
+                  context.activity.from.id,
+                );
+                if (member?.email || member?.userPrincipalName) {
+                  cardMessage.senderEmail =
+                    member.email || member.userPrincipalName;
+                }
+              } catch {
+                // Non-critical: email resolution will fall back to Graph API
+              }
+
+              // Fall back to Graph API if TeamsInfo didn't resolve email
+              if (!cardMessage.senderEmail) {
+                const graphEmail = await provider.getUserEmail(
+                  cardMessage.senderId,
+                );
+                if (graphEmail) {
+                  cardMessage.senderEmail = graphEmail;
+                }
+              }
+
+              // Early auth check: reject unregistered users
+              if (
+                !(await verifyArchestraUser(context, cardMessage.senderEmail))
+              ) {
+                return;
+              }
+
               await handleAgentSelection(context, cardMessage);
               return;
             }
@@ -148,6 +180,37 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             if (!message) {
               // Not a processable message (e.g., system event)
+              return;
+            }
+
+            // Resolve email via Bot Framework (no Graph API needed)
+            try {
+              const member = await TeamsInfo.getMember(
+                context,
+                context.activity.from.id,
+              );
+              if (member?.email || member?.userPrincipalName) {
+                message.senderEmail = member.email || member.userPrincipalName;
+              }
+            } catch (error) {
+              logger.debug(
+                {
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                "[ChatOps] TeamsInfo.getMember failed, will fall back to Graph API if configured",
+              );
+            }
+
+            // Fall back to Graph API if TeamsInfo didn't resolve email
+            if (!message.senderEmail) {
+              const graphEmail = await provider.getUserEmail(message.senderId);
+              if (graphEmail) {
+                message.senderEmail = graphEmail;
+              }
+            }
+
+            // Early auth check: reject unregistered users before any processing
+            if (!(await verifyArchestraUser(context, message.senderEmail))) {
               return;
             }
 
@@ -457,15 +520,16 @@ async function sendAgentSelectionCard(
   context: TurnContext,
   message: IncomingChatMessage,
 ): Promise<void> {
-  // Get available agents for MS Teams
-  const agents = await AgentModel.findByAllowedChatopsProvider(
-    "ms-teams" as ChatOpsProviderType,
-  );
+  // Get available agents for MS Teams, filtered by user access
+  const agents = await chatOpsManager.getAccessibleChatopsAgents({
+    provider: "ms-teams",
+    senderEmail: message.senderEmail,
+  });
 
   if (agents.length === 0) {
     await context.sendActivity(
-      "No agents are configured for Microsoft Teams.\n" +
-        "Please ask your administrator to enable Teams in the agent settings.",
+      "No agents are available for you in Microsoft Teams.\n" +
+        "Contact your administrator to get access to an agent with Teams enabled.",
     );
     return;
   }
@@ -726,11 +790,44 @@ function isCommand(text: string): boolean {
 }
 
 /**
+ * Verify that the sender is a registered Archestra user.
+ * Sends an error message and returns false if verification fails.
+ */
+async function verifyArchestraUser(
+  context: TurnContext,
+  senderEmail: string | undefined,
+): Promise<boolean> {
+  if (!senderEmail) {
+    logger.warn(
+      "[ChatOps] Could not resolve sender email for early auth check",
+    );
+    await context.sendActivity(
+      "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.",
+    );
+    return false;
+  }
+
+  const user = await UserModel.findByEmail(senderEmail.toLowerCase());
+  if (!user) {
+    logger.warn(
+      { senderEmail },
+      "[ChatOps] Sender is not a registered Archestra user",
+    );
+    await context.sendActivity(
+      `You (${senderEmail}) are not a registered Archestra user. Contact your administrator for access.`,
+    );
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Convert internal error codes to user-friendly messages
  */
 function getSecurityErrorMessage(error: string): string {
-  if (error.includes("User.ReadBasic.All permission")) {
-    return "Could not verify your identity. The bot requires the `User.ReadBasic.All` Microsoft Graph API permission to be configured. Please contact your administrator.";
+  if (error.includes("Could not resolve user email")) {
+    return "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.";
   }
   if (error.includes("not a registered Archestra user")) {
     // Extract email from error message if present

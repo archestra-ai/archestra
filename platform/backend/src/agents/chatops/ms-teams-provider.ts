@@ -442,6 +442,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       logger.error(
         { error: errorMessage(error), channelId },
         "[MSTeamsProvider] Failed to lookup team from channel. " +
+          "This is only needed with Azure AD application permissions (not RSC). " +
           "Team.ReadBasic.All and Channel.ReadBasic.All permissions are required.",
       );
       this.teamIdCache.set(cacheKey, null);
@@ -451,7 +452,8 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   /**
    * Get user's email from their AAD Object ID using Microsoft Graph API.
-   * Requires User.ReadBasic.All application permission.
+   * Fallback method when TeamsInfo.getMember() is unavailable.
+   * Requires User.Read.All application permission.
    */
   async getUserEmail(aadObjectId: string): Promise<string | null> {
     if (!this.graphClient) {
@@ -467,7 +469,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     } catch (error) {
       logger.error(
         { error: errorMessage(error), aadObjectId },
-        "[MSTeamsProvider] Failed to fetch user email. User.ReadBasic.All permission may be missing.",
+        "[MSTeamsProvider] Failed to fetch user email via Graph API fallback. User.Read.All permission may be missing.",
       );
       return null;
     }

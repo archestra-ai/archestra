@@ -8,23 +8,25 @@ export { BaseTokenizer, type ProviderMessage, type Tokenizer } from "./base";
 export { TiktokenTokenizer } from "./tiktoken";
 
 /**
+ * Maps each provider to a tokenizer factory.
+ * Using Record<SupportedProvider, ...> ensures TypeScript enforces adding new providers here.
+ */
+const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
+  anthropic: () => new AnthropicTokenizer(),
+  openai: () => new TiktokenTokenizer(),
+  cerebras: () => new TiktokenTokenizer(),
+  cohere: () => new TiktokenTokenizer(),
+  mistral: () => new TiktokenTokenizer(),
+  vllm: () => new TiktokenTokenizer(),
+  ollama: () => new TiktokenTokenizer(),
+  zhipuai: () => new TiktokenTokenizer(),
+  gemini: () => new TiktokenTokenizer(),
+  bedrock: () => new TiktokenTokenizer(),
+};
+
+/**
  * Get the tokenizer for a given provider
  */
 export function getTokenizer(provider: SupportedProvider): Tokenizer {
-  switch (provider) {
-    case "anthropic":
-      return new AnthropicTokenizer();
-    case "cerebras":
-    case "cohere":
-    case "mistral":
-    case "openai":
-    case "vllm":
-    case "ollama":
-    case "zhipuai":
-      // These providers use tiktoken-compatible tokenization
-      return new TiktokenTokenizer();
-    default:
-      // For any other provider including Gemini, use tiktoken as fallback
-      return new TiktokenTokenizer();
-  }
+  return tokenizerFactories[provider]();
 }

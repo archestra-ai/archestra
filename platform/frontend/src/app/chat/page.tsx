@@ -218,7 +218,7 @@ export default function ChatPage() {
 
   // Handle provider change from API key selector - auto-select a model from new provider
   const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedChatProvider) => {
+    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
       const providerModels = modelsByProvider[newProvider];
       if (providerModels && providerModels.length > 0) {
         // Try to restore from localStorage for this provider
@@ -382,7 +382,7 @@ export default function ChatPage() {
 
   // Handle provider change from API key selector - auto-select a model from new provider
   const handleProviderChange = useCallback(
-    (newProvider: SupportedChatProvider) => {
+    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
       if (!conversation) return;
 
       const providerModels = modelsByProvider[newProvider];
@@ -820,10 +820,25 @@ export default function ChatPage() {
   }, []);
 
   // Handle initial agent change (when no conversation exists)
-  const handleInitialAgentChange = useCallback((agentId: string) => {
-    setInitialAgentId(agentId);
-    localStorage.setItem("selected-chat-agent", agentId);
-  }, []);
+  const handleInitialAgentChange = useCallback(
+    (agentId: string) => {
+      setInitialAgentId(agentId);
+      localStorage.setItem("selected-chat-agent", agentId);
+
+      // If agent has LLM config, use it as initial model/key
+      const selectedAgent = internalAgents.find((a) => a.id === agentId);
+      if (selectedAgent) {
+        const agentData = selectedAgent as Record<string, unknown>;
+        if (agentData.llmModel) {
+          setInitialModel(agentData.llmModel as string);
+        }
+        if (agentData.llmApiKeyId) {
+          setInitialApiKeyId(agentData.llmApiKeyId as string);
+        }
+      }
+    },
+    [internalAgents],
+  );
 
   // Handle initial submit (when no conversation exists)
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
@@ -1276,6 +1291,16 @@ export default function ChatPage() {
                   tokensUsed={tokensUsed}
                   maxContextLength={selectedModelContextLength}
                   inputModalities={selectedModelInputModalities}
+                  agentLlmApiKeyId={
+                    conversationId && conversation?.agent.id
+                      ? ((conversation.agent as Record<string, unknown>)
+                          .llmApiKeyId as string | null)
+                      : ((
+                          internalAgents.find((a) => a.id === initialAgentId) as
+                            | Record<string, unknown>
+                            | undefined
+                        )?.llmApiKeyId as string | null)
+                  }
                 />
                 <div className="text-center">
                   <Version inline />

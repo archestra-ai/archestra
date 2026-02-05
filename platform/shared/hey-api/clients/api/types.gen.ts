@@ -6377,6 +6377,8 @@ export type GetAgentsResponses = {
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
+            llmApiKeyId: string | null;
+            llmModel: string | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -6449,6 +6451,8 @@ export type CreateAgentData = {
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
+        llmApiKeyId?: string | null;
+        llmModel?: string | null;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -6546,6 +6550,8 @@ export type CreateAgentResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6692,6 +6698,8 @@ export type GetAllAgentsResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6829,6 +6837,8 @@ export type GetDefaultMcpGatewayResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6966,6 +6976,8 @@ export type GetDefaultLlmProxyResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -7184,6 +7196,8 @@ export type GetAgentResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -7247,6 +7261,8 @@ export type UpdateAgentData = {
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
+        llmApiKeyId?: string | null;
+        llmModel?: string | null;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -7346,6 +7362,8 @@ export type UpdateAgentResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -7486,6 +7504,8 @@ export type GetAgentVersionsResponses = {
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
+            llmApiKeyId: string | null;
+            llmModel: string | null;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -7637,6 +7657,8 @@ export type RollbackAgentResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -11958,6 +11980,8 @@ export type GetChatApiKeysResponses = {
         vaultSecretPath?: string | null;
         vaultSecretKey?: string | null;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
     }>;
 };
 
@@ -12063,6 +12087,7 @@ export type GetAvailableChatApiKeysData = {
     path?: never;
     query?: {
         provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        includeKeyId?: string;
     };
     url: '/api/chat-api-keys/available';
 };
@@ -12147,6 +12172,8 @@ export type GetAvailableChatApiKeysResponses = {
         vaultSecretPath?: string | null;
         vaultSecretKey?: string | null;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
     }>;
 };
 
@@ -12320,6 +12347,8 @@ export type GetChatApiKeyResponses = {
         vaultSecretPath?: string | null;
         vaultSecretKey?: string | null;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
     };
 };
 
@@ -12862,6 +12891,7 @@ export type GetChatConversationsResponses = {
             systemPrompt: string | null;
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
         };
         messages: Array<unknown>;
     }>;
@@ -12970,6 +13000,7 @@ export type CreateChatConversationResponses = {
             systemPrompt: string | null;
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
         };
         messages: Array<unknown>;
     };
@@ -13153,6 +13184,7 @@ export type GetChatConversationResponses = {
             systemPrompt: string | null;
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
         };
         messages: Array<unknown>;
     };
@@ -13264,6 +13296,7 @@ export type UpdateChatConversationResponses = {
             systemPrompt: string | null;
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
         };
         messages: Array<unknown>;
     };
@@ -13536,6 +13569,7 @@ export type GenerateChatConversationTitleResponses = {
             systemPrompt: string | null;
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
         };
         messages: Array<unknown>;
     };
@@ -13644,6 +13678,7 @@ export type UpdateChatMessageResponses = {
             systemPrompt: string | null;
             userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
         };
         messages: Array<unknown>;
     };

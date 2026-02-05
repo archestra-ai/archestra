@@ -1,5 +1,5 @@
 import { MODEL_MARKER_PATTERNS, type SupportedProvider } from "@shared";
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ChatApiKey, Model } from "@/types";
 
@@ -303,6 +303,77 @@ class ApiKeyModelModel {
       );
 
     return results.map((r) => r.model);
+  }
+  /**
+   * Get the "best" model for a specific API key.
+   * Returns the model marked with is_best=true, or falls back to the first model.
+   */
+  static async getBestModel(apiKeyId: string): Promise<Model | null> {
+    const [result] = await db
+      .select({ model: schema.modelsTable })
+      .from(schema.apiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.apiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.apiKeyModelsTable.apiKeyId, apiKeyId),
+          eq(schema.apiKeyModelsTable.isBest, true),
+        ),
+      )
+      .limit(1);
+
+    if (result?.model) {
+      return result.model;
+    }
+
+    return ApiKeyModelModel.getFirstModelForApiKey(apiKeyId);
+  }
+
+  /**
+   * Get the "fastest" model for a specific API key.
+   * Returns the model marked with is_fastest=true, or falls back to the first model.
+   */
+  static async getFastestModel(apiKeyId: string): Promise<Model | null> {
+    const [result] = await db
+      .select({ model: schema.modelsTable })
+      .from(schema.apiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.apiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.apiKeyModelsTable.apiKeyId, apiKeyId),
+          eq(schema.apiKeyModelsTable.isFastest, true),
+        ),
+      )
+      .limit(1);
+
+    if (result?.model) {
+      return result.model;
+    }
+
+    return ApiKeyModelModel.getFirstModelForApiKey(apiKeyId);
+  }
+
+  /**
+   * Get the first model linked to an API key (used as fallback).
+   */
+  static async getFirstModelForApiKey(apiKeyId: string): Promise<Model | null> {
+    const [result] = await db
+      .select({ model: schema.modelsTable })
+      .from(schema.apiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.apiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(eq(schema.apiKeyModelsTable.apiKeyId, apiKeyId))
+      .orderBy(asc(schema.modelsTable.modelId))
+      .limit(1);
+
+    return result?.model ?? null;
   }
 }
 

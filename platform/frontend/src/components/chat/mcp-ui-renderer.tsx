@@ -26,7 +26,7 @@ export function ChatMcpUiRenderer({
   return (
     <div className="border rounded-md my-2 overflow-hidden bg-background">
       <AppRenderer
-        client={client}
+        client={client as any}
         toolName={toolName}
         toolInput={toolInput}
         toolResult={toolResult}
@@ -35,6 +35,7 @@ export function ChatMcpUiRenderer({
           window.open(url, "_blank");
           return {} as any;
         }}
+        sandbox={{ url: new URL("about:blank") }}
         // biome-ignore lint/suspicious/noExplicitAny: library types are strict
         onMessage={async (params) => {
           console.log("MCP UI Message:", params);

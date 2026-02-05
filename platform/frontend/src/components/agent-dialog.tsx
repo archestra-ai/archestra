@@ -888,8 +888,11 @@ export function AgentDialog({
               <div className="space-y-2">
                 <Label>LLM Configuration</Label>
                 <p className="text-sm text-muted-foreground">
-                  If nothing selected, best model from user&apos;s keys is used
-                  (org-wide → team → personal).
+                  {!llmModel
+                    ? "If nothing selected, best model from user\u2019s keys is used (org-wide \u2192 team \u2192 personal)."
+                    : selectedApiKey && selectedApiKey.scope !== "org_wide"
+                      ? "Selected key will be available to everyone who has access to this agent."
+                      : null}
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Model Selector - uses the same Dialog-based ModelSelector as prompt input */}

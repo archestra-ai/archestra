@@ -83,8 +83,10 @@ const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
           return;
         }
 
-        const { rewrittenUrl, proxyPath, strippedUuid } =
-          rewriteOllamaProxyUrl(request.url, API_PREFIX);
+        const { rewrittenUrl, proxyPath, strippedUuid } = rewriteOllamaProxyUrl(
+          request.url,
+          API_PREFIX,
+        );
         request.raw.url = rewrittenUrl;
 
         logger.info(

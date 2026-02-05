@@ -35,7 +35,14 @@ test.describe("Custom YAML Spec - Server Restart on YAML Edit", () => {
       localConfig: {
         command: "sh",
         arguments: ["-c", testMcpServerCommand],
-        environment: [{ key: "TEST_A", value: "test_ui", isSecret: false }],
+        environment: [
+          {
+            key: "TEST_A",
+            type: "plain_text" as const,
+            value: "test_ui",
+            promptOnInstallation: false,
+          },
+        ],
       },
     });
     const catalog = await catalogResponse.json();

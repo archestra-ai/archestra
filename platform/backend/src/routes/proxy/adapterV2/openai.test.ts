@@ -682,11 +682,11 @@ describe("OpenAIRequestAdapter", () => {
 
 describe("openaiAdapterFactory", () => {
   describe("extractApiKey", () => {
-    test("returns authorization header as-is (Bearer token)", () => {
+    test("returns authorization header stripped of Bearer prefix", () => {
       const headers = { authorization: "Bearer sk-test-key-123" };
       const apiKey = openaiAdapterFactory.extractApiKey(headers);
-      // Returns full header - OpenAI SDK handles "Bearer " prefix
-      expect(apiKey).toBe("Bearer sk-test-key-123");
+      // Strip "Bearer " prefix since the OpenAI SDK adds it back
+      expect(apiKey).toBe("sk-test-key-123");
     });
 
     test("returns authorization header as-is (non-Bearer)", () => {

@@ -116,11 +116,11 @@ Expose provider availability to the frontend for conditional UI rendering.
 
 Tokenizers estimate token counts for provider messages. Used by Model Optimization and Tool Results Compression.
 
-| File                              | Description                                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `backend/src/tokenizers/base.ts`  | Add provider message type to `ProviderMessage` union                                                    |
-| `backend/src/tokenizers/base.ts`  | Update `BaseTokenizer.getMessageText()` if provider has a different message format                      |
-| `backend/src/tokenizers/index.ts` | Add case to `getTokenizer()` switch - return appropriate tokenizer (or fallback to `TiktokenTokenizer`) |
+| File                              | Description                                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `backend/src/tokenizers/base.ts`  | Add provider message type to `ProviderMessage` union                                                         |
+| `backend/src/tokenizers/base.ts`  | Update `BaseTokenizer.getMessageText()` if provider has a different message format                           |
+| `backend/src/tokenizers/index.ts` | Add entry to `tokenizerFactories` record - return appropriate tokenizer (or fallback to `TiktokenTokenizer`) |
 
 ### Model Optimization
 
@@ -160,7 +160,7 @@ Dual LLM pattern uses a secondary LLM for Q&A verification of tool invocations. 
 | File                                     | Description                                                                                                                |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `backend/src/clients/dual-llm-client.ts` | Create `{Provider}DualLlmClient` class implementing `DualLlmClient` interface with `chat()` and `chatWithSchema()` methods |
-| `backend/src/clients/dual-llm-client.ts` | Add case to `createDualLlmClient()` factory switch                                                                         |
+| `backend/src/clients/dual-llm-client.ts` | Add entry to `dualLlmClientFactories` record                                                                               |
 
 ### Metrics
 
@@ -170,11 +170,10 @@ Prometheus metrics for request duration, token usage, and costs. Requires instru
 
 For example: OpenAI and Anthropic SDKs accept a custom `fetch` function, so we inject an instrumented fetch via `getObservableFetch()`. Gemini SDK doesn't expose fetch, so we wrap the SDK instance directly via `getObservableGenAI()`.
 
-| File                                                    | Description                                                                    |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `backend/src/llm-metrics.ts`                            | Implement instrumented API calls for the SDK                                   |
-| `backend/src/routes/proxy/utils/adapters/{provider}.ts` | Legacy adapter with `getUsageTokens()` function for metrics token extraction   |
-| `backend/src/routes/proxy/utils/adapters/index.ts`      | Export the legacy adapter (e.g., `export * as {provider} from "./{provider}"`) |
+| File                                               | Description                                                                                               |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `backend/src/llm-metrics.ts`                       | Add entry to `fetchUsageExtractors` record mapping provider to its `getUsageTokens()` extraction function |
+| `backend/src/routes/proxy/adapterV2/{provider}.ts` | Export `getUsageTokens()` function for metrics token extraction                                           |
 
 ### Frontend: Logs UI
 

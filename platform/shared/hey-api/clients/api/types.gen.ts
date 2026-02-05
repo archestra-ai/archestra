@@ -12455,6 +12455,7 @@ export type GetChatModelsData = {
     path?: never;
     query?: {
         provider?: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
+        includeApiKeyId?: string;
     };
     url: '/api/chat/models';
 };

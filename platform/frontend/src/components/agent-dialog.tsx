@@ -388,7 +388,11 @@ export function AgentDialog({
   const { data: currentDelegations = [] } = useAgentDelegations(agent?.id);
   const { data: chatopsProviders = [] } = useChatOpsStatus();
   const { data: features } = useFeatures();
-  const { data: availableApiKeys = [] } = useAvailableChatApiKeys();
+  const agentLlmApiKeyId = (agent as Record<string, unknown> | undefined)
+    ?.llmApiKeyId as string | null | undefined;
+  const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
+    includeKeyId: agentLlmApiKeyId,
+  });
   const { modelsByProvider } = useModelsByProvider();
 
   // Fetch fresh agent data when dialog opens

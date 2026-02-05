@@ -156,11 +156,12 @@ export function ChatApiKeySelector({
     return availableKeys.find((k) => k.id === currentConversationChatApiKeyId);
   }, [availableKeys, currentConversationChatApiKeyId]);
 
-  // Reset auto-select flag when conversation context changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: we want to reset when conversationId changes
+  // Reset auto-select flag when conversation or provider changes
+  // so auto-selection re-runs (e.g., when user picks a model from a different provider)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: we want to reset when conversationId or currentProvider changes
   useEffect(() => {
     hasAutoSelectedRef.current = false;
-  }, [conversationId]);
+  }, [conversationId, currentProvider]);
 
   // Auto-select first key when no key is selected or current key is invalid
   // biome-ignore lint/correctness/useExhaustiveDependencies: adding updateConversationMutation as a dependency would cause a infinite loop

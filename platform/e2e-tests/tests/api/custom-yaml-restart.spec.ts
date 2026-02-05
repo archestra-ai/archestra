@@ -75,7 +75,7 @@ test.describe("Custom YAML Spec - Server Restart on YAML Edit", () => {
     const yamlResponse = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: `/api/internal_mcp_catalog/${catalogId}/deployment-yaml`,
+      urlSuffix: `/api/internal_mcp_catalog/${catalogId}/deployment-yaml-preview`,
     });
     const { yaml: currentYaml } = await yamlResponse.json();
 

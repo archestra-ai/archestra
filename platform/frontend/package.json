@@ -43,7 +43,7 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
-    "@mcp-ui/client": "latest",
+    "@mcp-ui/client": "^6.0.0",
     "@sentry/nextjs": "^10.34.0",
     "@shared": "workspace:*",
     "@tanstack/react-query": "^5.90.17",

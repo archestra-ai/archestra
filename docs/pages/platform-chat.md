@@ -27,6 +27,18 @@ Chat will use LLM API Keys configured in Settings -> LLM API Keys. When a chat r
 
 See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the full list.
 
+## Rich UI Components (MCP UI)
+
+Archestra Chat supports rich UI components via the Model Context Protocol (MCP) UI extension. This allows MCP tools to return structured data that is rendered as interactive components (charts, forms, maps, etc.) directly in the chat interface.
+
+### How it works
+
+1. An MCP tool returns a result containing metadata in the `_meta` field.
+2. The `_meta` field specifies the UI component to render and its associated data.
+3. Archestra Chat uses the `@mcp-ui/client` library to render the component.
+
+For more information on building MCP servers with UI support, see the [MCP UI Documentation](https://github.com/mcp-ui/mcp-ui).
+
 ## Security Notes
 
 - API keys are stored encrypted using the configured [secrets manager](/docs/platform-secrets-management)

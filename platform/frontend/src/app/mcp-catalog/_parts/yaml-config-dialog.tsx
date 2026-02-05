@@ -109,8 +109,8 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
                   ${"{archestra.*}"}
                 </code>
                 . Available archestra values: deployment_name, server_id,
-                server_name, docker_image, secret_name, command,
-                arguments, service_account.
+                server_name, docker_image, secret_name, command, arguments,
+                service_account.
               </p>
               <p>
                 <strong>Protected fields</strong> are always overwritten by

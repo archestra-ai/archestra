@@ -1256,5 +1256,9 @@ export function createDualLlmClient(
     { provider },
     "[dualLlmClient] createDualLlmClient: creating client",
   );
-  return dualLlmClientFactories[provider](apiKey, model);
+  const factory = dualLlmClientFactories[provider];
+  if (!factory) {
+    throw new Error(`Unsupported provider for Dual LLM: ${provider}`);
+  }
+  return factory(apiKey, model);
 }

@@ -178,6 +178,11 @@ export const RouteId = {
   OllamaChatCompletionsWithDefaultAgent:
     "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
+
+  // Proxy Routes - x.ai (Grok)
+  XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
+  XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+
   // Proxy Routes - Zhipu AI
   ZhipuaiChatCompletionsWithDefaultAgent:
     "zhipuaiChatCompletionsWithDefaultAgent",

@@ -7,6 +7,7 @@ import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
+import xaiProxyRoutesV2 from "./proxy/routesv2/xai";
 import zhipuaiProxyRoutesV2 from "./proxy/routesv2/zhipuai";
 
 export { default as browserStreamRoutes } from "@/features/browser-stream/routes/browser-stream.routes";
@@ -45,6 +46,7 @@ export const mistralProxyRoutes = mistralProxyRoutesV2;
 export const openAiProxyRoutes = openAiProxyRoutesV2;
 export const vllmProxyRoutes = vllmProxyRoutesV2;
 export const ollamaProxyRoutes = ollamaProxyRoutesV2;
+export const xaiProxyRoutes = xaiProxyRoutesV2;
 export const zhipuaiProxyRoutes = zhipuaiProxyRoutesV2;
 // Bedrock proxy routes - V2 only (unified handler, AWS Converse API)
 export const bedrockProxyRoutes = bedrockProxyRoutesV2;

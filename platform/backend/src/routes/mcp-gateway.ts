@@ -10,8 +10,10 @@ import { UuidIdSchema } from "@/types";
 import {
   createAgentServer,
   createStatelessTransport,
+  extractBearerToken,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
+  validateSession,
 } from "./mcp-gateway.utils";
 
 // =============================================================================
@@ -193,19 +195,29 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { profileId, token } =
-        extractProfileIdAndTokenFromRequest(request) ?? {};
+      const { profileId } = request.params as { profileId: string };
+      const token = extractBearerToken(request);
 
-      if (!profileId || !token) {
+      let tokenAuth: TokenAuthContext | null = null;
+
+      // Try token auth first if token exists
+      if (token) {
+        tokenAuth = await validateMCPGatewayToken(profileId, token);
+      }
+      
+      // Fallback to session auth if no token or token invalid (optional strategy, here we try session if no token)
+      if (!tokenAuth && !token) {
+         tokenAuth = await validateSession(request, profileId);
+      }
+
+      if (!tokenAuth) {
         reply.status(401);
         return {
           error: "Unauthorized",
           message:
-            "Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
+            "Missing or invalid Authorization header/session. Expected: Bearer <archestra_token> or valid session cookie",
         };
       }
-
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
 
       reply.type("application/json");
       return {
@@ -243,30 +255,29 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { profileId, token } =
-        extractProfileIdAndTokenFromRequest(request) ?? {};
+      const { profileId } = request.params as { profileId: string };
+      const token = extractBearerToken(request);
 
-      if (!profileId || !token) {
-        reply.status(401);
-        return {
-          jsonrpc: "2.0",
-          error: {
-            code: -32000,
-            message:
-              "Unauthorized: Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
-          },
-          id: null,
-        };
+      let tokenAuth: TokenAuthContext | null = null;
+
+      // Try token auth first if token exists
+      if (token) {
+        tokenAuth = await validateMCPGatewayToken(profileId, token);
+      }
+      
+      // Fallback to session auth if no token
+      if (!token && !tokenAuth) {
+         tokenAuth = await validateSession(request, profileId);
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
       if (!tokenAuth) {
         reply.status(401);
         return {
           jsonrpc: "2.0",
           error: {
             code: -32000,
-            message: "Unauthorized: Invalid token for this profile",
+            message:
+              "Unauthorized: Missing or invalid Authorization header or Session. Expected: Bearer <archestra_token> or valid session cookie",
           },
           id: null,
         };

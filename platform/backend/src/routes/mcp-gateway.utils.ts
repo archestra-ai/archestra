@@ -16,6 +16,7 @@ import {
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import { userHasPermission } from "@/auth/utils";
+import { auth } from "@/auth/better-auth";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -367,36 +368,16 @@ export async function validateUserToken(
     return null;
   }
 
-  // Check if user has profile admin permission (can access all profiles)
-  const isProfileAdmin = await userHasPermission(
+  const hasAccess = await checkUserProfileAccess(
     token.userId,
     token.organizationId,
-    "profile",
-    "admin",
-  );
-
-  if (isProfileAdmin) {
-    return {
-      tokenId: token.id,
-      teamId: null, // User tokens aren't scoped to a single team
-      isOrganizationToken: false,
-      organizationId: token.organizationId,
-      isUserToken: true,
-      userId: token.userId,
-    };
-  }
-
-  // Non-admin: user can access profile if they are a member of any team assigned to the profile
-  const userTeamIds = await TeamModel.getUserTeamIds(token.userId);
-  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
-  const hasAccess = userTeamIds.some((teamId) =>
-    profileTeamIds.includes(teamId),
+    profileId,
   );
 
   if (!hasAccess) {
     logger.warn(
-      { profileId, userId: token.userId, userTeamIds, profileTeamIds },
-      "Profile not accessible via user token (no shared teams)",
+      { profileId, userId: token.userId },
+      "Profile not accessible via user token",
     );
     return null;
   }
@@ -437,4 +418,89 @@ export async function validateMCPGatewayToken(
     "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
   );
   return null;
+}
+
+/**
+ * Check if a user has access to a profile
+ */
+export async function checkUserProfileAccess(
+  userId: string,
+  organizationId: string,
+  profileId: string,
+): Promise<boolean> {
+  // Check if user has profile admin permission (can access all profiles)
+  const isProfileAdmin = await userHasPermission(
+    userId,
+    organizationId,
+    "profile",
+    "admin",
+  );
+
+  if (isProfileAdmin) {
+    return true;
+  }
+
+  // Non-admin: user can access profile if they are a member of any team assigned to the profile
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
+  const hasAccess = userTeamIds.some((teamId) =>
+    profileTeamIds.includes(teamId),
+  );
+
+  return hasAccess;
+}
+
+/**
+ * Validate a session for a specific profile (Cookie Auth)
+ */
+export async function validateSession(
+  request: FastifyRequest,
+  profileId: string,
+): Promise<TokenAuthResult | null> {
+  // Get headers from request
+  const headers = new Headers(request.headers as HeadersInit);
+  
+  try {
+    const session = await auth.api.getSession({
+      headers,
+    });
+
+    if (!session) {
+      return null;
+    }
+
+    // Use active organization from session or fallback to first org (handled by better-auth hooks usually)
+    // Here we need organizationId for permission check
+    const organizationId = session.session.activeOrganizationId;
+    if (!organizationId) {
+      // If no active org, we can't properly validate org-scoped permissions
+      return null;
+    }
+
+    const hasAccess = await checkUserProfileAccess(
+      session.user.id,
+      organizationId,
+      profileId,
+    );
+
+    if (!hasAccess) {
+      logger.warn(
+        { profileId, userId: session.user.id },
+        "validateSession: Profile not accessible via session (no permission)",
+      );
+      return null;
+    }
+
+    return {
+      tokenId: session.session.id,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: organizationId,
+      isUserToken: true,
+      userId: session.user.id,
+    };
+  } catch (error) {
+    logger.error({ err: error }, "validateSession: Error validating session");
+    return null;
+  }
 }

@@ -36,6 +36,7 @@ import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import { ChatMcpUiRenderer } from "./mcp-ui-renderer";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -912,6 +913,12 @@ function MessageTool({
     );
   }
 
+  // Check for MCP UI metadata
+  const meta = toolResultPart
+    ? tryToExtractMetaFromOutput(toolResultPart.output)
+    : undefined;
+  const hasMcpUi = meta?.ui?.resourceUri;
+
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
@@ -939,19 +946,36 @@ function MessageTool({
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
-        {toolResultPart && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
-        )}
-        {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
+        {hasMcpUi && toolResultPart ? (
+          <div className="mt-2">
+            <ChatMcpUiRenderer
+              toolName={toolName}
+              toolInput={part.input}
+              toolResult={
+                typeof toolResultPart.output === "string"
+                  ? JSON.parse(toolResultPart.output)
+                  : toolResultPart.output
+              }
+              agentId={agentId}
+            />
+          </div>
+        ) : (
+          <>
+            {toolResultPart && (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={toolResultPart.output}
+                errorText={errorText}
+              />
+            )}
+            {!toolResultPart && Boolean(part.output) && (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={part.output}
+                errorText={errorText}
+              />
+            )}
+          </>
         )}
       </ToolContent>
     </Tool>
@@ -979,4 +1003,17 @@ const getHeaderState = ({
   if (errorText) return "output-error";
   if (toolResultPart) return "output-available";
   return state;
+};
+
+const tryToExtractMetaFromOutput = (output: unknown) => {
+  try {
+    if (typeof output === "object" && output !== null)
+      // biome-ignore lint/suspicious/noExplicitAny: Metadata extraction
+      return (output as any)._meta;
+    if (typeof output !== "string") return undefined;
+    const json = JSON.parse(output);
+    return json._meta;
+  } catch (_error) {
+    return undefined;
+  }
 };

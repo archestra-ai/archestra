@@ -888,8 +888,8 @@ export function AgentDialog({
               <div className="space-y-2">
                 <Label>LLM Configuration</Label>
                 <p className="text-sm text-muted-foreground">
-                  Configure the default model and API key for this agent. When
-                  not set, the system uses the best available model.
+                  If nothing selected, best model from user&apos;s keys is used
+                  (org-wide → team → personal).
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Model Selector - uses the same Dialog-based ModelSelector as prompt input */}

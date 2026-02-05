@@ -324,7 +324,7 @@ export function McpServerCard({
           {variant === "local" && (
             <DropdownMenuItem onClick={() => setIsYamlConfigDialogOpen(true)}>
               <Code className="mr-2 h-4 w-4" />
-              Edit Deployment Yaml
+              Edit K8S Deployment Yaml
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onClick={onDelete} className="text-destructive">

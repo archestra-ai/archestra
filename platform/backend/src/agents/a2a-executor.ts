@@ -132,7 +132,7 @@ export async function executeA2AMessage(
     system: systemPrompt,
     prompt: message,
     tools: mcpTools,
-    stopWhen: stepCountIs(20),
+    stopWhen: stepCountIs(500),
   });
 
   // Wait for the stream to complete and get the final text

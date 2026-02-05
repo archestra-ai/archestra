@@ -15,7 +15,7 @@ test.describe("Custom YAML Spec - Server Restart on YAML Edit", () => {
     },
   );
 
-  test("server restarts after custom YAML is edited", async ({
+  test("server auto-restarts after custom YAML is edited", async ({
     request,
     makeApiRequest,
     createMcpCatalogItem,
@@ -80,22 +80,28 @@ test.describe("Custom YAML Spec - Server Restart on YAML Edit", () => {
     const { yaml: currentYaml } = await yamlResponse.json();
 
     const updatedYaml = currentYaml.replace(
-      /(- name: TEST_A\n\s+value: test_ui)/,
-      `$1\n        - name: TEST_B\n          value: test_custom`,
+      /(- name: TEST_A\n\s+value: \$\{env\.TEST_A\})/,
+      `$1\n            - name: TEST_B\n              value: test_custom`,
     );
 
     // ========================================
-    // STEP 4: Update catalog with new YAML
+    // STEP 4: Update catalog with new YAML (triggers auto-reinstall)
     // ========================================
     await makeApiRequest({
       request,
-      method: "patch",
+      method: "put",
       urlSuffix: `/api/internal_mcp_catalog/${catalogId}`,
       data: { deploymentSpecYaml: updatedYaml },
     });
 
     // ========================================
-    // STEP 5: Verify reinstall is required
+    // STEP 5: Wait for auto-reinstall to complete
+    // The server status will go: success -> pending -> success
+    // ========================================
+    await waitForServerInstallation(request, serverId, 60);
+
+    // ========================================
+    // STEP 6: Verify server is running again
     // ========================================
     const status2 = await makeApiRequest({
       request,
@@ -103,30 +109,7 @@ test.describe("Custom YAML Spec - Server Restart on YAML Edit", () => {
       urlSuffix: `/api/mcp_server/${serverId}`,
     });
     const serverData2 = await status2.json();
-    expect(serverData2.reinstallRequired).toBe(true);
-
-    // ========================================
-    // STEP 6: Trigger reinstall and wait
-    // ========================================
-    await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: `/api/mcp_server/${serverId}/reinstall`,
-      data: {},
-    });
-
-    await waitForServerInstallation(request, serverId, 60);
-
-    // ========================================
-    // STEP 7: Verify server is running again
-    // ========================================
-    const status3 = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: `/api/mcp_server/${serverId}`,
-    });
-    const serverData3 = await status3.json();
-    expect(serverData3.localInstallationStatus).toBe("success");
-    expect(serverData3.reinstallRequired).toBe(false);
+    expect(serverData2.localInstallationStatus).toBe("success");
+    expect(serverData2.reinstallRequired).toBe(false);
   });
 });

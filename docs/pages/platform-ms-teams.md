@@ -89,9 +89,9 @@ Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png]
         {
           "scopes": ["team", "groupchat"],
           "commands": [
-            { "title": "select-agent", "description": "Change which agent handles this channel" },
-            { "title": "status", "description": "Show current agent for this channel" },
-            { "title": "help", "description": "Show available commands" }
+            { "title": "/select-agent", "description": "Change which agent handles this channel" },
+            { "title": "/status", "description": "Show current agent for this channel" },
+            { "title": "/help", "description": "Show available commands" }
           ]
         }
       ]

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.39](https://github.com/archestra-ai/archestra/compare/platform-v1.0.38...platform-v1.0.39) (2026-02-06)
+
+
+### Bug Fixes
+
+* fix bulding arm platform image ([#2636](https://github.com/archestra-ai/archestra/issues/2636)) ([b5c447c](https://github.com/archestra-ai/archestra/commit/b5c447c83e0506198056127ed195fd6ec9656d23))
+
 ## [1.0.38](https://github.com/archestra-ai/archestra/compare/platform-v1.0.37...platform-v1.0.38) (2026-02-06)
 
 

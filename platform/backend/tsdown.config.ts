@@ -118,8 +118,8 @@ export default defineConfig((options: UserConfig) => {
     // Spread CLI options first so our config takes precedence
     ...options,
 
-    // Only bundle the server entry point
-    entry: ["src/server.ts"],
+    // Bundle server and standalone scripts that need to run in production
+    entry: ["src/server.ts", "src/standalone-scripts/run-migrations.ts"],
 
     // Copy SQL migrations and other assets that need to exist at runtime
     copy: ["src/database/migrations"],

@@ -456,7 +456,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
           type: "architecture",
           position: { x: AGENTS_GROUP_X + 15, y: -18 },
           data: {
-            label: "Langgraph",
+            label: "LangChain",
             highlighted: isA2a,
             highlightColor,
           },

@@ -247,34 +247,46 @@ tests:
           path: spec.template.spec.initContainers[0].image
           value: busybox:1.36
 
-  - it: should configure init container to wait for internal postgres
+  - it: should configure init container with env vars and parse ARCHESTRA_DATABASE_URL
     documentIndex: 1
-    set:
-      postgresql.external_database_url: null
     asserts:
+      # Init container should have ARCHESTRA_DATABASE_URL env var
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+          any: true
+      # Command should parse host/port from ARCHESTRA_DATABASE_URL at runtime
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: ".*-archestra-platform-postgresql.*5432.*"
+          pattern: ".*ARCHESTRA_DATABASE_URL.*"
 
-  - it: should configure init container to wait for external postgres
+  - it: should wait for PostgreSQL in init container when waitForPostgres is enabled
     documentIndex: 1
     set:
-      postgresql.enabled: false
-      postgresql.external_database_url: postgresql://user:pass@external-db.example.com:5432/mydb
+      archestra.initContainers.waitForPostgres.enabled: true
     asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: ".*external-db.example.com.*5432.*"
+          pattern: ".*nc -z.*"
 
-  - it: should configure init container to wait for external postgres with postgres:// scheme
+  - it: should skip PostgreSQL wait in init container when waitForPostgres is disabled
     documentIndex: 1
     set:
-      postgresql.enabled: false
-      postgresql.external_database_url: postgres://user:pass@external-db.example.com:5433/mydb
+      archestra.initContainers.waitForPostgres.enabled: false
     asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: ".*external-db.example.com.*5433.*"
+          pattern: ".*Skipping PostgreSQL readiness check.*"
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*nc -z.*"
 
   - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
     documentIndex: 1

@@ -38,6 +38,12 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ollamaEnabled: z.boolean(),
             /** Mistral mode - when enabled, Mistral AI provider is available */
             mistralEnabled: z.boolean(),
+            /** Groq mode - when enabled, Groq provider is available */
+            groqEnabled: z.boolean(),
+            /** x.AI (Grok) mode - when enabled, x.AI provider is available */
+            xaiEnabled: z.boolean(),
+            /** DeepSeek mode - when enabled, DeepSeek provider is available */
+            deepseekEnabled: z.boolean(),
             /** Global tool policy - permissive bypasses policy checks, restrictive enforces them */
             globalToolPolicy: z.enum(["permissive", "restrictive"]),
             /** Browser streaming - enables live browser automation via Playwright MCP */
@@ -78,6 +84,9 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         vllmEnabled: config.llm.vllm.enabled,
         ollamaEnabled: config.llm.ollama.enabled,
         mistralEnabled: true, // Mistral is always enabled (has default base URL)
+        groqEnabled: config.llm.groq.enabled,
+        xaiEnabled: config.llm.xai.enabled,
+        deepseekEnabled: config.llm.deepseek.enabled,
         globalToolPolicy,
         incomingEmail: getEmailProviderInfo(),
         knowledgeGraph: getKnowledgeGraphProviderInfo(),

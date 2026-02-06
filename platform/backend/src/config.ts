@@ -464,6 +464,18 @@ export default {
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
     },
+    groq: {
+      enabled: Boolean(process.env.ARCHESTRA_GROQ_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+    },
+    xai: {
+      enabled: Boolean(process.env.ARCHESTRA_XAI_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_XAI_BASE_URL || "https://api.x.ai/v1",
+    },
+    deepseek: {
+      enabled: Boolean(process.env.ARCHESTRA_DEEPSEEK_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -499,6 +511,15 @@ export default {
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",
+    },
+    groq: {
+      apiKey: process.env.ARCHESTRA_CHAT_GROQ_API_KEY || "",
+    },
+    xai: {
+      apiKey: process.env.ARCHESTRA_CHAT_XAI_API_KEY || "",
+    },
+    deepseek: {
+      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",

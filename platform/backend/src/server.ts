@@ -62,11 +62,14 @@ import {
   ApiError,
   Cerebras,
   Cohere,
+  Deepseek,
   Gemini,
+  Groq,
   Mistral,
   Ollama,
   OpenAi,
   Vllm,
+  Xai,
   Zhipuai,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -153,6 +156,24 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Groq.API.ChatCompletionRequestSchema, {
+    id: "GroqChatCompletionRequest",
+  });
+  z.globalRegistry.add(Groq.API.ChatCompletionResponseSchema, {
+    id: "GroqChatCompletionResponse",
+  });
+  z.globalRegistry.add(Xai.API.ChatCompletionRequestSchema, {
+    id: "XaiChatCompletionRequest",
+  });
+  z.globalRegistry.add(Xai.API.ChatCompletionResponseSchema, {
+    id: "XaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Deepseek.API.ChatCompletionRequestSchema, {
+    id: "DeepseekChatCompletionRequest",
+  });
+  z.globalRegistry.add(Deepseek.API.ChatCompletionResponseSchema, {
+    id: "DeepseekChatCompletionResponse",
   });
 }
 

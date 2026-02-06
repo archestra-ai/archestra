@@ -874,6 +874,150 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * Groq implementation of DualLlmClient
+ * Groq exposes an OpenAI-compatible API
+ */
+export class GroqDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string | undefined, model: string) {
+    logger.debug({ model }, "[dualLlmClient] Groq: initializing client");
+    this.client = new OpenAI({
+      apiKey: apiKey || "EMPTY",
+      baseURL: config.llm.groq.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+    return response.choices[0].message.content?.trim() || "";
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: Record<string, unknown>,
+    temperature = 0,
+  ): Promise<T> {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        {
+          role: "system",
+          content: `Respond with valid JSON matching this schema: ${JSON.stringify(schema)}`,
+        },
+        ...messages,
+      ],
+      temperature,
+    });
+    const content = response.choices[0].message.content || "";
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+    return JSON.parse((jsonMatch[1] || content).trim()) as T;
+  }
+}
+
+/**
+ * x.AI implementation of DualLlmClient
+ * x.AI exposes an OpenAI-compatible API
+ */
+export class XaiDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model: string) {
+    logger.debug({ model }, "[dualLlmClient] x.AI: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.xai.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+    return response.choices[0].message.content?.trim() || "";
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: Record<string, unknown>,
+    temperature = 0,
+  ): Promise<T> {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        {
+          role: "system",
+          content: `Respond with valid JSON matching this schema: ${JSON.stringify(schema)}`,
+        },
+        ...messages,
+      ],
+      temperature,
+    });
+    const content = response.choices[0].message.content || "";
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+    return JSON.parse((jsonMatch[1] || content).trim()) as T;
+  }
+}
+
+/**
+ * DeepSeek implementation of DualLlmClient
+ * DeepSeek exposes an OpenAI-compatible API
+ */
+export class DeepseekDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "deepseek-chat") {
+    logger.debug({ model }, "[dualLlmClient] DeepSeek: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.deepseek.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+    return response.choices[0].message.content?.trim() || "";
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: Record<string, unknown>,
+    temperature = 0,
+  ): Promise<T> {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        {
+          role: "system",
+          content: `Respond with valid JSON matching this schema: ${JSON.stringify(schema)}`,
+        },
+        ...messages,
+      ],
+      temperature,
+    });
+    const content = response.choices[0].message.content || "";
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+    return JSON.parse((jsonMatch[1] || content).trim()) as T;
+  }
+}
+
+/**
  * Zhipuai implementation of DualLlmClient
  * Zhipuai exposes an OpenAI-compatible API, so we use the OpenAI SDK with Zhipuai's base URL
  */
@@ -1223,6 +1367,19 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
     zhipuai: (apiKey, model) => {
       if (!apiKey) throw new Error("API key required for Zhipuai dual LLM");
       return new ZhipuaiDualLlmClient(apiKey, model);
+    },
+    groq: (apiKey, model) => {
+      if (!model) throw new Error("Model name required for Groq dual LLM");
+      return new GroqDualLlmClient(apiKey, model);
+    },
+    xai: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for x.AI dual LLM");
+      if (!model) throw new Error("Model name required for x.AI dual LLM");
+      return new XaiDualLlmClient(apiKey, model);
+    },
+    deepseek: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for DeepSeek dual LLM");
+      return new DeepseekDualLlmClient(apiKey, model);
     },
     bedrock: (apiKey, model) => {
       if (!model) throw new Error("Model name required for Bedrock dual LLM");

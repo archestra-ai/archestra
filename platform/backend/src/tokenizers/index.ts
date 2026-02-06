@@ -20,6 +20,9 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   vllm: () => new TiktokenTokenizer(),
   ollama: () => new TiktokenTokenizer(),
   zhipuai: () => new TiktokenTokenizer(),
+  groq: () => new TiktokenTokenizer(),
+  xai: () => new TiktokenTokenizer(),
+  deepseek: () => new TiktokenTokenizer(),
   gemini: () => new TiktokenTokenizer(),
   bedrock: () => new TiktokenTokenizer(),
 };

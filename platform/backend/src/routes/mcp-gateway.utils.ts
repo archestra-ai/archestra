@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -64,6 +65,7 @@ export async function createAgentServer(
     {
       capabilities: {
         tools: { listChanged: false },
+        resources: { subscribe: false, listChanged: false },
       },
     },
   );
@@ -207,10 +209,34 @@ export async function createAgentServer(
         // Transform CommonToolResult to MCP response format
         // When isError is true, we still return the content so the LLM can see
         // the error message and potentially try a different approach
+        let content = result.content;
+
+        // Fundamental Scalability Fix: Tag resource URIs with serverId
+        // This allows the gateway to route subsequent resource/read requests correctly.
+        if (result.serverId && !result.isError && content && typeof content === "object") {
+          const contents = Array.isArray(content) ? content : [content];
+          for (const item of contents) {
+            // biome-ignore lint/suspicious/noExplicitAny: items in tool results have dynamic structure
+            const meta = (item as any)?._meta;
+            if (meta?.ui?.resourceUri && typeof meta.ui.resourceUri === "string") {
+              const originalUri = meta.ui.resourceUri;
+              // Only tag if not already tagged
+              if (!originalUri.includes(`ui://${result.serverId}/`)) {
+                const strippedUri = originalUri.replace(/^ui:\/\//, "");
+                meta.ui.resourceUri = `ui://${result.serverId}/${strippedUri}`;
+                logger.info(
+                  { agentId, serverId: result.serverId, originalUri, taggedUri: meta.ui.resourceUri },
+                  "Tagged resource URI with serverId",
+                );
+              }
+            }
+          }
+        }
+
         return {
-          content: Array.isArray(result.content)
-            ? result.content
-            : [{ type: "text", text: JSON.stringify(result.content) }],
+          content: Array.isArray(content)
+            ? content
+            : [{ type: "text", text: JSON.stringify(content) }],
           isError: result.isError,
         };
       } catch (error) {
@@ -226,6 +252,48 @@ export async function createAgentServer(
       }
     },
   );
+
+  server.setRequestHandler(ReadResourceRequestSchema, async ({ params }) => {
+    logger.info(
+      { agentId, uri: params.uri },
+      "MCP gateway resource read request received",
+    );
+
+    // Fundamental Scalability Fix: Check if metadata injected serverId is present
+    // We expect URIs to be tagged with serverId like: ui://server_id/resource_path
+    // or passed via extra params if the protocol allowed (it doesn't easily in standard read).
+    // For now, we expect the URI to be the target server ID's specific URI.
+    // However, Archestra's mcp-gateway is a facade.
+    // We need a way to resolve WHICH server owns this resource.
+
+    // If the URI starts with a known server ID, use it.
+    // Archestra tools often use prefixes.
+    const uriParts = params.uri.split("/");
+    const possibleServerId = uriParts[2]; // ui://<serverId>/...
+
+    if (!possibleServerId) {
+      throw {
+        code: -32602,
+        message: "Invalid resource URI. Expected format: ui://<serverId>/path",
+      };
+    }
+
+    const result = await mcpClient.readResource({
+      serverId: possibleServerId,
+      resourceUri: params.uri,
+      agentId,
+      tokenAuth,
+    });
+
+    if ("error" in result) {
+      throw {
+        code: -32603,
+        message: result.error,
+      };
+    }
+
+    return result;
+  });
 
   logger.info({ agentId }, "MCP server instance created");
   return { server, agent };

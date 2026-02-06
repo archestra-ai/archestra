@@ -29,6 +29,8 @@ export type CommonToolResult = {
   content: unknown;
   isError: boolean;
   error?: string;
+  /** The ID of the MCP server that produced this result */
+  serverId?: string;
 };
 
 /**

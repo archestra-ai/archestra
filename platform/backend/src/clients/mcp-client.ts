@@ -5,7 +5,10 @@ import {
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import {
+  type ReadResourceResult,
+  type Tool,
+} from "@modelcontextprotocol/sdk/types.js";
 import { isBrowserMcpTool } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
@@ -215,6 +218,7 @@ class McpClient {
           result.content,
           !!result.isError,
           tool.responseModifierTemplate,
+          targetMcpServerId,
         );
       } catch (error) {
         const errorMessage =
@@ -280,6 +284,7 @@ class McpClient {
           agentId,
           errorMessage,
           tool.mcpServerName || "unknown",
+          targetMcpServerId,
         );
       }
     };
@@ -311,6 +316,80 @@ class McpClient {
             ),
           secrets,
         ),
+    );
+  }
+
+  /**
+   * Read a resource from a specific MCP server
+   */
+  async readResource(params: {
+    serverId: string;
+    resourceUri: string;
+    agentId: string;
+    tokenAuth?: TokenAuthContext;
+  }): Promise<ReadResourceResult | { error: string }> {
+    const { serverId, resourceUri, agentId } = params;
+
+    const mcpServer = await McpServerModel.findById(serverId);
+    if (!mcpServer || !mcpServer.catalogId) {
+      return { error: `MCP server ${serverId} not found or has no catalogId` };
+    }
+
+    const catalogItem = await InternalMcpCatalogModel.findById(
+      mcpServer.catalogId,
+    );
+    if (!catalogItem) {
+      return { error: `Catalog item ${mcpServer.catalogId} not found` };
+    }
+
+    const secretsResult = await this.getSecretsForMcpServer({
+      targetMcpServerId: serverId,
+      toolCall: { id: "resource-read", name: "resource-read", arguments: {} },
+      agentId,
+    });
+    if ("error" in secretsResult) {
+      return { error: "Failed to fetch secrets for MCP server" };
+    }
+    const { secrets } = secretsResult;
+
+    const connectionKey = `${catalogItem.id}:${serverId}`;
+
+    const executeRead = async (): Promise<
+      ReadResourceResult | { error: string }
+    > => {
+      try {
+        const transport = await this.getTransport(
+          catalogItem,
+          serverId,
+          secrets,
+        );
+        const client = await this.getOrCreateClient(connectionKey, transport);
+
+        // Strip the serverId prefix from the URI before sending to the actual server
+        // The URI was tagged as ui://<serverId>/<original_path>
+        let targetUri = resourceUri;
+        const prefix = `ui://${serverId}/`;
+        if (targetUri.startsWith(prefix)) {
+          targetUri = `ui://${targetUri.substring(prefix.length)}`;
+        }
+
+        return await client.readResource({ uri: targetUri });
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    };
+
+    if (!this.shouldLimitConcurrency()) {
+      return executeRead();
+    }
+
+    const transportKind = await this.getTransportKind(catalogItem, serverId);
+    const concurrencyLimit = this.getConcurrencyLimit(transportKind);
+
+    return this.connectionLimiter.runWithLimit(
+      connectionKey,
+      concurrencyLimit,
+      executeRead,
     );
   }
 
@@ -913,6 +992,7 @@ class McpClient {
     agentId: string,
     error: string,
     mcpServerName: string = "unknown",
+    serverId?: string,
   ): Promise<CommonToolResult> {
     const errorResult: CommonToolResult = {
       id: toolCall.id,
@@ -920,6 +1000,7 @@ class McpClient {
       content: null,
       isError: true,
       error,
+      serverId,
     };
 
     await this.persistToolCall(agentId, mcpServerName, toolCall, errorResult);
@@ -936,6 +1017,7 @@ class McpClient {
     content: unknown,
     isError: boolean,
     template: string | null,
+    serverId: string,
   ): Promise<CommonToolResult> {
     const modifiedContent = this.applyTemplate(
       content,
@@ -948,6 +1030,7 @@ class McpClient {
       name: toolCall.name,
       content: modifiedContent,
       isError,
+      serverId,
     };
 
     await this.persistToolCall(agentId, mcpServerName, toolCall, toolResult);

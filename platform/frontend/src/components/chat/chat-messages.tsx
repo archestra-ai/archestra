@@ -39,6 +39,7 @@ import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { MCPResourceRenderer } from "./mcp-resource-renderer";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -912,6 +913,35 @@ function MessageTool({
     );
   }
 
+  const output = toolResultPart?.output ?? part.output;
+
+  // Try to parse output to find MCP UI metadata
+  const parsedOutput =
+    typeof output !== "string"
+      ? output
+      : (() => {
+          try {
+            return JSON.parse(output);
+          } catch {
+            return output;
+          }
+        })();
+
+  const resourceUri = (() => {
+    if (!parsedOutput || typeof parsedOutput !== "object") return null;
+
+    // Check for resourceUri in _meta (MCP Apps standard)
+    // Handle both single result and array of results
+    const contents = Array.isArray(parsedOutput)
+      ? parsedOutput
+      : [parsedOutput];
+    for (const item of contents) {
+      if (item?._meta?.ui?.resourceUri)
+        return item._meta.ui.resourceUri as string;
+    }
+    return null;
+  })();
+
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
@@ -939,19 +969,31 @@ function MessageTool({
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
-        {toolResultPart && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
+        {resourceUri && agentId ? (
+          <MCPResourceRenderer
+            uri={resourceUri}
+            agentId={agentId}
+            toolName={toolName}
+            toolInput={part.input}
+            toolResult={parsedOutput}
           />
-        )}
-        {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
+        ) : (
+          <>
+            {toolResultPart && (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={toolResultPart.output}
+                errorText={errorText}
+              />
+            )}
+            {!toolResultPart && Boolean(part.output) && (
+              <ToolOutput
+                label={errorText ? "Error" : "Result"}
+                output={part.output}
+                errorText={errorText}
+              />
+            )}
+          </>
         )}
       </ToolContent>
     </Tool>

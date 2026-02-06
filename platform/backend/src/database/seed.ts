@@ -457,4 +457,61 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();
+  await seedBountyCatalogs();
+}
+
+/**
+ * Seeds catalog items for the MCP UI bounty
+ */
+async function seedBountyCatalogs(): Promise<void> {
+  const catalogs = [
+    {
+      name: "Tinybird Analytics",
+      description:
+        "Real-time analytics dashboards and insights from your Tinybird workspace.",
+      serverType: "remote" as const,
+      serverUrl: "https://api.tinybird.co/mcp",
+      requiresAuth: true,
+      authDescription: "Provide your Tinybird Admin Token.",
+      authFields: [
+        {
+          name: "access_token",
+          label: "Admin Token",
+          type: "password",
+          required: true,
+        },
+      ],
+      isGloballyAvailable: true,
+    },
+    {
+      name: "Linear Project Management",
+      description:
+        "Interact with Linear issues and projects with rich UI board views.",
+      serverType: "local" as const,
+      requiresAuth: true,
+      authDescription: "Provide your Linear API Key.",
+      authFields: [
+        {
+          name: "LINEAR_API_KEY",
+          label: "API Key",
+          type: "password",
+          required: true,
+        },
+      ],
+      isGloballyAvailable: true,
+      localConfig: {
+        command: "npx",
+        arguments: ["-y", "@linear/mcp-server"],
+        transportType: "stdio" as const,
+      },
+    },
+  ];
+
+  for (const catalog of catalogs) {
+    const existing = await InternalMcpCatalogModel.findByName(catalog.name);
+    if (!existing) {
+      await InternalMcpCatalogModel.create(catalog);
+      logger.info({ name: catalog.name }, "Seeded bounty catalog item");
+    }
+  }
 }

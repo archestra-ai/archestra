@@ -124,6 +124,14 @@ archestra:
   #         optional: true
   envFrom: []
 
+  # Init containers configuration
+  initContainers:
+    # Wait for PostgreSQL to be ready before starting the application
+    # Disable this if your database is always available (e.g., managed cloud database)
+    # or if you handle readiness checks in another way
+    waitForPostgres:
+      enabled: true
+
   # Resource requests and limits for the Archestra container
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
   resources:

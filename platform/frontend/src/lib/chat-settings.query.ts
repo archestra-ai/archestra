@@ -35,12 +35,21 @@ export function useChatApiKeys() {
   });
 }
 
-export function useAvailableChatApiKeys(provider?: SupportedChatProvider) {
+export function useAvailableChatApiKeys(params?: {
+  provider?: SupportedChatProvider;
+  includeKeyId?: string | null;
+}) {
+  const provider = params?.provider;
+  const includeKeyId = params?.includeKeyId;
   return useQuery({
-    queryKey: ["available-chat-api-keys", provider],
+    queryKey: ["available-chat-api-keys", provider, includeKeyId],
     queryFn: async () => {
+      const query: { provider?: SupportedChatProvider; includeKeyId?: string } =
+        {};
+      if (provider) query.provider = provider;
+      if (includeKeyId) query.includeKeyId = includeKeyId;
       const { data, error } = await getAvailableChatApiKeys({
-        query: provider ? { provider } : undefined,
+        query: Object.keys(query).length > 0 ? query : undefined,
       });
       if (error) {
         handleApiError(error);

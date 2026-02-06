@@ -300,6 +300,38 @@ export class McpServerRuntimeManager {
         }
       }
 
+      // Merge non-prompted secrets from catalog
+      // These come from catalog.localConfigSecretId via expandSecrets()
+      // Critical for restarts/reinstalls after catalog was updated with new secrets
+      if (catalogItem?.localConfig?.environment) {
+        for (const envDef of catalogItem.localConfig.environment) {
+          if (
+            envDef.type === "secret" &&
+            !envDef.promptOnInstallation &&
+            envDef.value
+          ) {
+            // Add non-prompted secret from catalog if not already in secretData
+            if (!secretData) {
+              secretData = {};
+            }
+            if (!(envDef.key in secretData)) {
+              secretData[envDef.key] = envDef.value;
+              logger.info(
+                { mcpServerId: id, key: envDef.key },
+                "Adding non-prompted secret from catalog to secretData",
+              );
+            }
+            // Also add to effectiveEnvironmentValues for createContainerEnvFromConfig()
+            if (!effectiveEnvironmentValues) {
+              effectiveEnvironmentValues = {};
+            }
+            if (!(envDef.key in effectiveEnvironmentValues)) {
+              effectiveEnvironmentValues[envDef.key] = envDef.value;
+            }
+          }
+        }
+      }
+
       const k8sDeployment = new K8sDeployment(
         mcpServer,
         this.k8sApi,

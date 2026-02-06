@@ -263,7 +263,64 @@ describe("ChatOpsManager security validation", () => {
     );
   });
 
-  test("rejects when getUserEmail returns null (Graph API permission missing)", async ({
+  test("resolves user via senderEmail without calling getUserEmail", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+
+    // Setup
+    const user = await makeUser({ email: "preresolved@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+      allowedChatops: ["ms-teams"],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    // getUserEmail should NOT be called when senderEmail is provided
+    const getUserEmailSpy = vi
+      .fn()
+      .mockResolvedValue("should-not-be-used@example.com");
+    const mockProvider = createMockProvider({
+      getUserEmail: getUserEmailSpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    // Message with pre-resolved senderEmail (from TeamsInfo)
+    const message = createMockMessage({
+      senderEmail: "preresolved@example.com",
+    });
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.agentResponse).toBe("Agent response");
+    // getUserEmail should NOT have been called since senderEmail was provided
+    expect(getUserEmailSpy).not.toHaveBeenCalled();
+  });
+
+  test("rejects when both senderEmail and getUserEmail return null", async ({
     makeUser,
     makeOrganization,
     makeTeam,
@@ -292,7 +349,7 @@ describe("ChatOpsManager security validation", () => {
       agentId: agent.id,
     });
 
-    // Provider returns null for getUserEmail (simulating missing Graph permission)
+    // No senderEmail on message AND provider returns null for getUserEmail
     const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
     const mockProvider = createMockProvider({
       getUserEmail: async () => null,
@@ -311,11 +368,11 @@ describe("ChatOpsManager security validation", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("User.ReadBasic.All permission");
+    expect(result.error).toContain("Could not resolve user email");
     // Should send error reply to user
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: expect.stringContaining("User.ReadBasic.All"),
+        text: expect.stringContaining("Could not verify your identity"),
       }),
     );
   });
@@ -482,5 +539,137 @@ describe("ChatOpsManager security validation", () => {
         userId: user.id, // Real user ID, not "chatops-ms-teams-xxx"
       }),
     );
+  });
+});
+
+describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
+  test("returns only agents the user has team access to", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "teamuser@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    // Agent the user HAS access to
+    const accessibleAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Accessible Agent",
+      allowedChatops: ["ms-teams"],
+    });
+    await AgentTeamModel.assignTeamsToAgent(accessibleAgent.id, [team.id]);
+
+    // Agent the user does NOT have access to (different team)
+    const otherUser = await makeUser({ email: "other@example.com" });
+    const otherTeam = await makeTeam(org.id, otherUser.id);
+    const inaccessibleAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Inaccessible Agent",
+      allowedChatops: ["ms-teams"],
+    });
+    await AgentTeamModel.assignTeamsToAgent(inaccessibleAgent.id, [
+      otherTeam.id,
+    ]);
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      provider: "ms-teams",
+      senderEmail: "teamuser@example.com",
+    });
+
+    expect(agents).toHaveLength(1);
+    expect(agents[0].id).toBe(accessibleAgent.id);
+    expect(agents[0].name).toBe("Accessible Agent");
+  });
+
+  test("returns all agents when senderEmail is not provided", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "admin@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Some Agent",
+      allowedChatops: ["ms-teams"],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      provider: "ms-teams",
+    });
+
+    expect(agents.length).toBeGreaterThanOrEqual(1);
+    expect(agents.some((a) => a.id === agent.id)).toBe(true);
+  });
+
+  test("returns all agents when senderEmail does not match any user", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "admin@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Some Agent",
+      allowedChatops: ["ms-teams"],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      provider: "ms-teams",
+      senderEmail: "nonexistent@example.com",
+    });
+
+    // Falls back to all agents when user can't be resolved
+    expect(agents.length).toBeGreaterThanOrEqual(1);
+    expect(agents.some((a) => a.id === agent.id)).toBe(true);
+  });
+
+  test("admin user sees all agents regardless of team membership", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeInternalAgent,
+    makeMember,
+  }) => {
+    const adminUser = await makeUser({ email: "fulladmin@example.com" });
+    const org = await makeOrganization();
+    // Make user an admin (admins have all permissions including profile:admin)
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+
+    // Agent NOT in any of admin's teams
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Unassigned Agent",
+      allowedChatops: ["ms-teams"],
+    });
+    // Agent has a team but admin is NOT a member of it
+    const otherUser = await makeUser({ email: "otheruser@example.com" });
+    const otherTeam = await makeTeam(org.id, otherUser.id);
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [otherTeam.id]);
+
+    const manager = new ChatOpsManager();
+    const agents = await manager.getAccessibleChatopsAgents({
+      provider: "ms-teams",
+      senderEmail: "fulladmin@example.com",
+    });
+
+    // Admin should see all agents
+    expect(agents.some((a) => a.id === agent.id)).toBe(true);
   });
 });

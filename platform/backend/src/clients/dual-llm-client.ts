@@ -1177,6 +1177,68 @@ Return only the JSON object, no other text.`;
   }
 }
 
+type DualLlmClientFactory = (
+  apiKey: string | undefined,
+  model: string | undefined,
+) => DualLlmClient;
+
+/**
+ * Maps each provider to its DualLlmClient factory.
+ * Using Record<SupportedProvider, ...> ensures TypeScript enforces adding new providers here.
+ */
+const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
+  {
+    anthropic: (apiKey) => {
+      if (!apiKey) throw new Error("API key required for Anthropic dual LLM");
+      return new AnthropicDualLlmClient(apiKey);
+    },
+    cerebras: (apiKey) => {
+      if (!apiKey) throw new Error("API key required for Cerebras dual LLM");
+      return new CerebrasDualLlmClient(apiKey);
+    },
+    cohere: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for Cohere dual LLM");
+      return new CohereDualLlmClient(apiKey, model);
+    },
+    mistral: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for Mistral dual LLM");
+      return new MistralDualLlmClient(apiKey, model);
+    },
+    gemini: (apiKey) => {
+      // Gemini supports Vertex AI mode where apiKey may be undefined
+      return new GeminiDualLlmClient(apiKey);
+    },
+    openai: (apiKey) => {
+      if (!apiKey) throw new Error("API key required for OpenAI dual LLM");
+      return new OpenAiDualLlmClient(apiKey);
+    },
+    vllm: (apiKey, model) => {
+      if (!model) throw new Error("Model name required for vLLM dual LLM");
+      return new VllmDualLlmClient(apiKey, model);
+    },
+    ollama: (apiKey, model) => {
+      if (!model) throw new Error("Model name required for Ollama dual LLM");
+      return new OllamaDualLlmClient(apiKey, model);
+    },
+    zhipuai: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for Zhipuai dual LLM");
+      return new ZhipuaiDualLlmClient(apiKey, model);
+    },
+    bedrock: (apiKey, model) => {
+      if (!model) throw new Error("Model name required for Bedrock dual LLM");
+      if (!config.llm.bedrock.baseUrl) {
+        throw new Error(
+          "Bedrock base URL not configured (ARCHESTRA_BEDROCK_BASE_URL)",
+        );
+      }
+      return new BedrockDualLlmClient(
+        apiKey,
+        model,
+        config.llm.bedrock.baseUrl,
+      );
+    },
+  };
+
 /**
  * Factory function to create the appropriate LLM client
  *
@@ -1194,71 +1256,9 @@ export function createDualLlmClient(
     { provider },
     "[dualLlmClient] createDualLlmClient: creating client",
   );
-  switch (provider) {
-    case "anthropic":
-      if (!apiKey) {
-        throw new Error("API key required for Anthropic dual LLM");
-      }
-      return new AnthropicDualLlmClient(apiKey);
-    case "cerebras":
-      if (!apiKey) {
-        throw new Error("API key required for Cerebras dual LLM");
-      }
-      return new CerebrasDualLlmClient(apiKey);
-    case "cohere":
-      if (!apiKey) {
-        throw new Error("API key required for Cohere dual LLM");
-      }
-      return new CohereDualLlmClient(apiKey, model);
-    case "mistral":
-      if (!apiKey) {
-        throw new Error("API key required for Mistral dual LLM");
-      }
-      return new MistralDualLlmClient(apiKey, model);
-    case "gemini":
-      // Gemini supports Vertex AI mode where apiKey may be undefined
-      return new GeminiDualLlmClient(apiKey);
-    case "openai":
-      if (!apiKey) {
-        throw new Error("API key required for OpenAI dual LLM");
-      }
-      return new OpenAiDualLlmClient(apiKey);
-    case "vllm":
-      // vLLM typically doesn't require API keys
-      if (!model) {
-        throw new Error("Model name required for vLLM dual LLM");
-      }
-      return new VllmDualLlmClient(apiKey, model);
-    case "ollama":
-      // Ollama typically doesn't require API keys
-      if (!model) {
-        throw new Error("Model name required for Ollama dual LLM");
-      }
-      return new OllamaDualLlmClient(apiKey, model);
-    case "zhipuai":
-      if (!apiKey) {
-        throw new Error("API key required for Zhipuai dual LLM");
-      }
-      return new ZhipuaiDualLlmClient(apiKey, model);
-    case "bedrock":
-      if (!model) {
-        throw new Error("Model name required for Bedrock dual LLM");
-      }
-      if (!config.llm.bedrock.baseUrl) {
-        throw new Error(
-          "Bedrock base URL not configured (ARCHESTRA_BEDROCK_BASE_URL)",
-        );
-      }
-      return new BedrockDualLlmClient(
-        apiKey,
-        model,
-        config.llm.bedrock.baseUrl,
-      );
-    default:
-      logger.debug(
-        { provider },
-        "[dualLlmClient] createDualLlmClient: unsupported provider",
-      );
-      throw new Error(`Unsupported provider for Dual LLM: ${provider}`);
+  const factory = dualLlmClientFactories[provider];
+  if (!factory) {
+    throw new Error(`Unsupported provider for Dual LLM: ${provider}`);
   }
+  return factory(apiKey, model);
 }

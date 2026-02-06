@@ -3,7 +3,7 @@
   "description": "Node.js dependencies for MCP server base image",
   "private": true,
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.3",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "typescript": "^5.9.3",
     "zod": "^4.3.6",
     "express": "^5.2.1"
@@ -16,6 +16,7 @@
     "lodash": ">=4.17.23",
     "lodash-es": ">=4.17.23",
     "diff": ">=5.2.2",
-    "brace-expansion": ">=2.0.2"
+    "brace-expansion": ">=2.0.2",
+    "@isaacs/brace-expansion": ">=5.0.1"
   }
 }

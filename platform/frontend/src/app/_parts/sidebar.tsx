@@ -127,7 +127,7 @@ const userItems: MenuItem[] = [
   // Sign up is disabled - users must use invitation links to join
 ];
 
-const CommunitySideBarSection = ({ starCount }: { starCount: number }) => (
+const CommunitySideBarSection = ({ starCount }: { starCount: string }) => (
   <SidebarGroup className="px-4 py-0">
     <SidebarGroupLabel>Community</SidebarGroupLabel>
     <SidebarGroupContent>
@@ -200,7 +200,7 @@ const MainSideBarSection = ({
   isAuthenticated: boolean;
   pathname: string;
   searchParams: URLSearchParams;
-  starCount: number;
+  starCount: string;
 }) => {
   const allItems = getNavigationItems(isAuthenticated);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
@@ -300,6 +300,7 @@ export function AppSidebar() {
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
   const { data: starCount } = useGithubStars();
+  const formattedStarCount = starCount ?? "";
   const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
 
   const logoToShow = logo ? (
@@ -341,10 +342,10 @@ export function AppSidebar() {
             isAuthenticated={isAuthenticated}
             pathname={pathname}
             searchParams={searchParams}
-            starCount={starCount}
+            starCount={formattedStarCount}
           />
         ) : (
-          <CommunitySideBarSection starCount={starCount} />
+          <CommunitySideBarSection starCount={formattedStarCount} />
         )}
       </SidebarContent>
       <FooterSideBarSection pathname={pathname} />

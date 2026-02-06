@@ -14,13 +14,18 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { PersistedBrowserState } from "@/features/browser-stream/services/browser-stream.state.types";
+import type {
+  LegacyPersistedBrowserState,
+  SimpleBrowserState,
+} from "@/features/browser-stream/services/browser-stream.state.types";
 import type {
   Conversation,
   InsertConversation,
   UpdateConversation,
 } from "@/types";
 import ConversationEnabledToolModel from "./conversation-enabled-tool";
+import InternalMcpCatalogModel from "./internal-mcp-catalog";
+import McpServerModel from "./mcp-server";
 import ToolModel from "./tool";
 
 class ConversationModel {
@@ -54,12 +59,14 @@ class ConversationModel {
       )
       .map((tool) => tool.id);
 
+    const globalToolIds = await getGlobalToolIdsForUser(data.userId);
+
     // Set enabled tools to non-Archestra tools plus default Archestra tools
     // This creates a custom tool selection with most Archestra tools disabled
-    await ConversationEnabledToolModel.setEnabledTools(
-      conversation.id,
-      nonArchestraToolIds,
-    );
+    await ConversationEnabledToolModel.setEnabledTools(conversation.id, [
+      ...nonArchestraToolIds,
+      ...globalToolIds,
+    ]);
 
     const conversationWithAgent = (await ConversationModel.findById({
       id: conversation.id,
@@ -162,6 +169,7 @@ class ConversationModel {
             systemPrompt: schema.agentsTable.systemPrompt,
             userPrompt: schema.agentsTable.userPrompt,
             agentType: schema.agentsTable.agentType,
+            llmApiKeyId: schema.agentsTable.llmApiKeyId,
           },
         })
         .from(schema.conversationsTable)
@@ -245,6 +253,7 @@ class ConversationModel {
             systemPrompt: schema.agentsTable.systemPrompt,
             userPrompt: schema.agentsTable.userPrompt,
             agentType: schema.agentsTable.agentType,
+            llmApiKeyId: schema.agentsTable.llmApiKeyId,
           },
         })
         .from(schema.conversationsTable)
@@ -282,6 +291,7 @@ class ConversationModel {
           systemPrompt: schema.agentsTable.systemPrompt,
           userPrompt: schema.agentsTable.userPrompt,
           agentType: schema.agentsTable.agentType,
+          llmApiKeyId: schema.agentsTable.llmApiKeyId,
         },
       })
       .from(schema.conversationsTable)
@@ -414,10 +424,11 @@ class ConversationModel {
   /**
    * Get the browser state for a conversation.
    * Returns null if no browser state is stored.
+   * May return legacy format (multi-tab) or new format (simple URL + tabIndex).
    */
   static async getBrowserState(
     conversationId: string,
-  ): Promise<PersistedBrowserState | null> {
+  ): Promise<SimpleBrowserState | LegacyPersistedBrowserState | null> {
     const result = await db
       .select({ browserState: schema.conversationsTable.browserState })
       .from(schema.conversationsTable)
@@ -433,7 +444,7 @@ class ConversationModel {
    */
   static async updateBrowserState(
     conversationId: string,
-    state: PersistedBrowserState | null,
+    state: SimpleBrowserState | null,
   ): Promise<void> {
     await db
       .update(schema.conversationsTable)
@@ -462,6 +473,61 @@ class ConversationModel {
 
     return result.map((r) => r.id);
   }
+
+  /**
+   * Get the oldest conversation with browser state for a specific agent and user.
+   * Used for tab cleanup when at the maximum tab limit.
+   * Returns the conversation with the oldest updatedAt timestamp.
+   */
+  static async getOldestConversationWithBrowserState(
+    agentId: string,
+    userId: string,
+  ): Promise<{ id: string } | null> {
+    const result = await db
+      .select({ id: schema.conversationsTable.id })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.agentId, agentId),
+          eq(schema.conversationsTable.userId, userId),
+          isNotNull(schema.conversationsTable.browserState),
+        ),
+      )
+      .orderBy(schema.conversationsTable.updatedAt) // Oldest first (ascending)
+      .limit(1);
+
+    return result[0] ?? null;
+  }
+}
+
+// =============================================================================
+// Internal Helpers (not exported)
+// =============================================================================
+
+async function getGlobalToolIdsForUser(userId: string): Promise<string[]> {
+  const globalCatalogs =
+    await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
+  if (globalCatalogs.length === 0) {
+    return [];
+  }
+
+  const catalogIds = globalCatalogs.map((c) => c.id);
+
+  // Batch load: get all user's personal servers for these catalogs
+  const userServersByCatalog =
+    await McpServerModel.getUserPersonalServersForCatalogs(userId, catalogIds);
+
+  // Filter to catalogs where user has a personal server
+  const catalogsWithUserServer = catalogIds.filter((id) =>
+    userServersByCatalog.has(id),
+  );
+
+  if (catalogsWithUserServer.length === 0) {
+    return [];
+  }
+
+  // Batch load: get all tool IDs for these catalogs
+  return ToolModel.getToolIdsByCatalogIds(catalogsWithUserServer);
 }
 
 export default ConversationModel;

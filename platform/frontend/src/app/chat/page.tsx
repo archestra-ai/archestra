@@ -109,6 +109,10 @@ export default function ChatPage() {
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
+  // Store pending URL for browser navigation after conversation is created
+  const [pendingBrowserUrl, setPendingBrowserUrl] = useState<
+    string | undefined
+  >(undefined);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -148,9 +152,11 @@ export default function ChatPage() {
     (typeof internalAgents)[number] | null
   >(null);
 
-  // Set initial agent from URL param, localStorage, or default when data loads
+  // Resolve which agent to use on page load (URL param > localStorage > first available).
+  // Stores the resolved agent in a ref so the model init effect can read it synchronously.
+  const resolvedAgentRef = useRef<(typeof internalAgents)[number] | null>(null);
+
   useEffect(() => {
-    // Wait for internal agents to load - these are the chat-compatible agents
     if (internalAgents.length === 0) return;
 
     // Only process URL params once (don't re-apply after user clears selection)
@@ -160,6 +166,7 @@ export default function ChatPage() {
         const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
         if (matchingAgent) {
           setInitialAgentId(urlAgentId);
+          resolvedAgentRef.current = matchingAgent;
           urlParamsConsumedRef.current = true;
           return;
         }
@@ -167,44 +174,63 @@ export default function ChatPage() {
     }
 
     // Try to restore from localStorage, then default to first internal agent
-    // Internal agents are the chat-compatible agents shown in the InitialAgentSelector
     if (!initialAgentId) {
       const savedAgentId = localStorage.getItem("selected-chat-agent");
-      if (savedAgentId && internalAgents.some((a) => a.id === savedAgentId)) {
+      const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
+      if (savedAgent) {
         setInitialAgentId(savedAgentId);
+        resolvedAgentRef.current = savedAgent;
         return;
       }
       setInitialAgentId(internalAgents[0].id);
+      resolvedAgentRef.current = internalAgents[0];
     }
   }, [initialAgentId, searchParams, internalAgents]);
 
-  // Initialize model from localStorage or default to first available
+  // Initialize model and API key once agent is resolved.
+  // Priority: agent config > localStorage > first available model.
+  // Separated from agent resolution but uses ref to avoid race conditions —
+  // the ref is written synchronously in the same render cycle, so this effect
+  // always sees the correct agent even when both effects fire together.
   useEffect(() => {
-    if (!initialModel) {
-      const allModels = Object.values(modelsByProvider).flat();
-      if (allModels.length === 0) return;
+    if (!initialAgentId) return;
+    if (initialModel) return; // Already initialized
 
-      // Try to restore from localStorage
-      const savedModelId = localStorage.getItem(
-        LocalStorageKeys.selectedChatModel,
-      );
-      if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
-        setInitialModel(savedModelId);
-        return;
+    const agent = resolvedAgentRef.current;
+    const agentData = agent as Record<string, unknown> | undefined;
+
+    // 1. Agent-configured model takes priority
+    if (agentData?.llmModel) {
+      setInitialModel(agentData.llmModel as string);
+      if (agentData.llmApiKeyId) {
+        setInitialApiKeyId(agentData.llmApiKeyId as string);
       }
+      return;
+    }
 
-      // Fall back to first available model
-      const providers = Object.keys(modelsByProvider);
-      if (providers.length > 0) {
-        const firstProvider = providers[0];
-        const models =
-          modelsByProvider[firstProvider as keyof typeof modelsByProvider];
-        if (models && models.length > 0) {
-          setInitialModel(models[0].id);
-        }
+    // 2. Fall back to localStorage / first available (needs models loaded)
+    const allModels = Object.values(modelsByProvider).flat();
+    if (allModels.length === 0) return;
+
+    const savedModelId = localStorage.getItem(
+      LocalStorageKeys.selectedChatModel,
+    );
+    if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
+      setInitialModel(savedModelId);
+      return;
+    }
+
+    // 3. Fall back to first available model
+    const providers = Object.keys(modelsByProvider);
+    if (providers.length > 0) {
+      const firstProvider = providers[0];
+      const models =
+        modelsByProvider[firstProvider as keyof typeof modelsByProvider];
+      if (models && models.length > 0) {
+        setInitialModel(models[0].id);
       }
     }
-  }, [modelsByProvider, initialModel]);
+  }, [initialAgentId, initialModel, modelsByProvider]);
 
   // Save model to localStorage when changed
   const handleInitialModelChange = useCallback((modelId: string) => {
@@ -214,7 +240,7 @@ export default function ChatPage() {
 
   // Handle provider change from API key selector - auto-select a model from new provider
   const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedChatProvider) => {
+    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
       const providerModels = modelsByProvider[newProvider];
       if (providerModels && providerModels.length > 0) {
         // Try to restore from localStorage for this provider
@@ -378,7 +404,7 @@ export default function ChatPage() {
 
   // Handle provider change from API key selector - auto-select a model from new provider
   const handleProviderChange = useCallback(
-    (newProvider: SupportedChatProvider) => {
+    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
       if (!conversation) return;
 
       const providerModels = modelsByProvider[newProvider];
@@ -406,33 +432,15 @@ export default function ChatPage() {
     ? (conversation?.agentId ?? conversation?.agent?.id)
     : (initialAgentId ?? undefined);
 
-  // Check if Playwright MCP is available for browser panel
-  const { hasPlaywrightMcp, isLoading: isLoadingPlaywrightMcp } =
-    useHasPlaywrightMcpTools(browserToolsAgentId);
+  // Check if Playwright MCP is available for browser panel and get install function
+  const {
+    hasPlaywrightMcp,
+    isInstalling: isInstallingBrowser,
+    installBrowser,
+  } = useHasPlaywrightMcpTools(browserToolsAgentId);
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
-
-  // Close browser panel when switching to a profile without Playwright tools
-  useEffect(() => {
-    // Only close if we have an agentId and tools have finished loading
-    // When agentId is undefined, the query is disabled and isLoading is false,
-    // so we must also check that browserToolsAgentId exists
-    if (
-      browserToolsAgentId &&
-      !isLoadingPlaywrightMcp &&
-      !hasPlaywrightMcp &&
-      isBrowserPanelOpen
-    ) {
-      setIsBrowserPanelOpen(false);
-      localStorage.setItem(LocalStorageKeys.browserOpen, "false");
-    }
-  }, [
-    browserToolsAgentId,
-    hasPlaywrightMcp,
-    isBrowserPanelOpen,
-    isLoadingPlaywrightMcp,
-  ]);
 
   // Clear MCP Gateway sessions when opening a NEW conversation
   useEffect(() => {
@@ -770,7 +778,7 @@ export default function ChatPage() {
     });
   };
 
-  // Persist browser panel state
+  // Persist browser panel state - just opens panel, installation happens inside if needed
   const toggleBrowserPanel = useCallback(() => {
     const newValue = !isBrowserPanelOpen;
     setIsBrowserPanelOpen(newValue);
@@ -783,11 +791,77 @@ export default function ChatPage() {
     localStorage.setItem(LocalStorageKeys.browserOpen, "false");
   }, []);
 
-  // Handle initial agent change (when no conversation exists)
-  const handleInitialAgentChange = useCallback((agentId: string) => {
-    setInitialAgentId(agentId);
-    localStorage.setItem("selected-chat-agent", agentId);
+  // Handle creating conversation from browser URL input (when no conversation exists)
+  const handleCreateConversationWithUrl = useCallback(
+    (url: string) => {
+      if (!initialAgentId || createConversationMutation.isPending) {
+        return;
+      }
+
+      // Store the URL to navigate to after conversation is created
+      setPendingBrowserUrl(url);
+
+      // Find the provider for the initial model
+      const modelInfo = chatModels.find((m) => m.id === initialModel);
+      const selectedProvider = modelInfo?.provider as
+        | SupportedChatProvider
+        | undefined;
+
+      // Create conversation with the selected agent
+      createConversationMutation.mutate(
+        {
+          agentId: initialAgentId,
+          selectedModel: initialModel,
+          selectedProvider,
+          chatApiKeyId: initialApiKeyId,
+        },
+        {
+          onSuccess: (newConversation) => {
+            if (newConversation) {
+              newlyCreatedConversationRef.current = newConversation.id;
+              selectConversation(newConversation.id);
+              // URL navigation will happen via useBrowserStream after conversation connects
+            }
+          },
+        },
+      );
+    },
+    [
+      initialAgentId,
+      initialModel,
+      initialApiKeyId,
+      chatModels,
+      createConversationMutation,
+      selectConversation,
+    ],
+  );
+
+  // Callback to clear pending browser URL after navigation completes
+  const handleInitialNavigateComplete = useCallback(() => {
+    setPendingBrowserUrl(undefined);
   }, []);
+
+  // Handle initial agent change (when no conversation exists)
+  const handleInitialAgentChange = useCallback(
+    (agentId: string) => {
+      setInitialAgentId(agentId);
+      localStorage.setItem("selected-chat-agent", agentId);
+
+      // Apply agent's LLM config if present
+      const selectedAgent = internalAgents.find((a) => a.id === agentId);
+      if (selectedAgent) {
+        resolvedAgentRef.current = selectedAgent;
+        const agentData = selectedAgent as Record<string, unknown>;
+        if (agentData.llmModel) {
+          setInitialModel(agentData.llmModel as string);
+        }
+        if (agentData.llmApiKeyId) {
+          setInitialApiKeyId(agentData.llmApiKeyId as string);
+        }
+      }
+    },
+    [internalAgents],
+  );
 
   // Handle initial submit (when no conversation exists)
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
@@ -1081,7 +1155,7 @@ export default function ChatPage() {
                   <FileText className="h-3 w-3 mr-1" />
                   Artifact
                 </Button>
-                {hasPlaywrightMcp && isBrowserStreamingEnabled && (
+                {isBrowserStreamingEnabled && (
                   <>
                     <div className="w-px h-4 bg-border" />
                     <Button
@@ -1240,6 +1314,16 @@ export default function ChatPage() {
                   tokensUsed={tokensUsed}
                   maxContextLength={selectedModelContextLength}
                   inputModalities={selectedModelInputModalities}
+                  agentLlmApiKeyId={
+                    conversationId && conversation?.agent.id
+                      ? ((conversation.agent as Record<string, unknown>)
+                          .llmApiKeyId as string | null)
+                      : ((
+                          internalAgents.find((a) => a.id === initialAgentId) as
+                            | Record<string, unknown>
+                            | undefined
+                        )?.llmApiKeyId as string | null)
+                  }
                 />
                 <div className="text-center">
                   <Version inline />
@@ -1279,11 +1363,16 @@ export default function ChatPage() {
         artifact={conversation?.artifact}
         isArtifactOpen={isArtifactOpen}
         onArtifactToggle={toggleArtifactPanel}
-        isBrowserOpen={
-          isBrowserPanelOpen && isBrowserStreamingEnabled && hasPlaywrightMcp
-        }
+        isBrowserOpen={isBrowserPanelOpen && isBrowserStreamingEnabled}
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
+        isInstallingBrowser={isInstallingBrowser}
+        hasPlaywrightMcp={hasPlaywrightMcp}
+        onInstallBrowser={installBrowser}
+        onCreateConversationWithUrl={handleCreateConversationWithUrl}
+        isCreatingConversation={createConversationMutation.isPending}
+        initialNavigateUrl={pendingBrowserUrl}
+        onInitialNavigateComplete={handleInitialNavigateComplete}
       />
 
       <PromptVersionHistoryDialog

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useLatestGitHubRelease } from "@/lib/github-release.query";
 import { useHealth } from "@/lib/health.query";
+import { hasNewerVersion } from "@/lib/version-utils";
 
 interface VersionProps {
   inline?: boolean;
@@ -16,16 +17,7 @@ export function Version({ inline = false }: VersionProps) {
 
   const hasNewVersion = useMemo(() => {
     if (!data?.version || !latestRelease?.tag_name) return false;
-
-    // Clean version strings (remove 'v' prefix if present)
-    const currentVersion = data.version.replace(/^v/, "");
-    const latestVersion = latestRelease.tag_name
-      .replace(/^v/, "")
-      .replace(/^platform-/, "");
-
-    // Simple string comparison - works for semantic versioning if formatted consistently
-    // For more robust comparison, we could parse and compare version parts
-    return currentVersion !== latestVersion && currentVersion < latestVersion;
+    return hasNewerVersion(data.version, latestRelease.tag_name);
   }, [data?.version, latestRelease?.tag_name]);
 
   useEffect(() => {

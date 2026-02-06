@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { ChatOpsProviderType } from "@/types/chatops";
+import chatApiKeysTable from "./chat-api-key";
 
 /**
  * Represents a historical version of an agent's prompt stored in the prompt_history JSONB array.
@@ -102,6 +103,14 @@ const agentsTable = pgTable(
       .default("private"),
     /** Allowed domain for 'internal' security mode (e.g., 'example.com') */
     incomingEmailAllowedDomain: text("incoming_email_allowed_domain"),
+
+    // LLM configuration (allows per-agent model selection)
+    /** API key ID for LLM calls */
+    llmApiKeyId: uuid("llm_api_key_id").references(() => chatApiKeysTable.id, {
+      onDelete: "set null",
+    }),
+    /** Model ID for LLM calls */
+    llmModel: text("llm_model"),
 
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

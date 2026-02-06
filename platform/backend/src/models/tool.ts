@@ -647,11 +647,15 @@ class ToolModel {
   }
 
   /**
-   * Get names of all MCP tools assigned to an agent
-   * Used to prevent autodiscovery of tools already available via MCP servers
+   * Get names of all MCP tools assigned to an agent or available via globally available catalogs.
+   * Used to prevent autodiscovery of tools already available via MCP servers.
+   * Includes both:
+   * 1. Tools explicitly assigned via agent_tools junction table
+   * 2. Tools from globally available catalogs (discovered dynamically via findGlobalCatalogTool)
    */
   static async getMcpToolNamesByAgent(agentId: string): Promise<string[]> {
-    const mcpTools = await db
+    // 1. Get tools assigned via agent_tools with mcpServerId
+    const assignedMcpTools = await db
       .select({
         name: schema.toolsTable.name,
       })
@@ -667,7 +671,25 @@ class ToolModel {
         ),
       );
 
-    return mcpTools.map((tool) => tool.name);
+    // 2. Get tools from globally available catalogs
+    // These tools are discovered dynamically via findGlobalCatalogTool() and should
+    // not be recreated as proxy tools with null mcp_server_id
+    const globalCatalogTools = await db
+      .select({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(eq(schema.internalMcpCatalogTable.isGloballyAvailable, true));
+
+    // 3. Return combined unique tool names
+    const allToolNames = new Set([
+      ...assignedMcpTools.map((t) => t.name),
+      ...globalCatalogTools.map((t) => t.name),
+    ]);
+
+    return [...allToolNames];
   }
 
   /**
@@ -888,6 +910,50 @@ class ToolModel {
     });
 
     return toolsWithAgents;
+  }
+
+  /**
+   * Get basic tool info (name and catalogId) for multiple catalogs in a single query.
+   * Used for batch loading tools across multiple catalogs.
+   */
+  static async getToolNamesByCatalogIds(
+    catalogIds: string[],
+  ): Promise<Array<{ name: string; catalogId: string }>> {
+    if (catalogIds.length === 0) {
+      return [];
+    }
+
+    const tools = await db
+      .select({
+        name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
+      })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.catalogId, catalogIds));
+
+    // Filter out any nulls (catalogId is nullable in schema)
+    return tools.filter(
+      (t): t is { name: string; catalogId: string } => t.catalogId !== null,
+    );
+  }
+
+  /**
+   * Get tool IDs for multiple catalogs in a single query.
+   * Used for batch loading tool IDs across multiple catalogs.
+   */
+  static async getToolIdsByCatalogIds(catalogIds: string[]): Promise<string[]> {
+    if (catalogIds.length === 0) {
+      return [];
+    }
+
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+      })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.catalogId, catalogIds));
+
+    return tools.map((t) => t.id);
   }
 
   /**

@@ -18,7 +18,8 @@ export function useGithubStars() {
         }
 
         const data = await response.json();
-        return data?.stargazers_count ?? null;
+        const count = data?.stargazers_count ?? null;
+        return count !== null ? formatStarCount(count) : null;
       } catch (error) {
         console.error("Failed to fetch GitHub stars:", error);
         return null;
@@ -28,4 +29,14 @@ export function useGithubStars() {
     staleTime: 60 * 60 * 1000, // 1 hour
     gcTime: 24 * 60 * 60 * 1000, // 24 hours (formerly cacheTime)
   });
+}
+
+export function formatStarCount(count: number): string {
+  if (count < 1000) {
+    return String(count);
+  }
+  const thousands = count / 1000;
+  return thousands % 1 === 0
+    ? `${thousands}k`
+    : `${parseFloat(thousands.toFixed(1))}k`;
 }

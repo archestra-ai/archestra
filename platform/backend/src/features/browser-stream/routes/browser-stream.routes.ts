@@ -70,6 +70,7 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     );
     return {
       userId: request.user.id,
+      organizationId: request.organizationId,
       userIsProfileAdmin,
     };
   }
@@ -100,7 +101,10 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      const result = await browserStreamFeature.checkAvailability(agentId);
+      const result = await browserStreamFeature.checkAvailability(
+        agentId,
+        request.user.id,
+      );
       return reply.send(result);
     },
   );

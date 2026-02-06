@@ -302,6 +302,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteInternalMcpCatalogItemByName]: {
     internalMcpCatalog: ["delete"],
   },
+  [RouteId.GetDeploymentYamlPreview]: {
+    internalMcpCatalog: ["read"],
+  },
+  [RouteId.ValidateDeploymentYaml]: {
+    internalMcpCatalog: ["read"],
+  },
+  [RouteId.ResetDeploymentYaml]: {
+    internalMcpCatalog: ["update"],
+  },
   [RouteId.GetMcpServers]: {
     mcpServer: ["read"],
   },
@@ -442,6 +451,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetChatAgentMcpTools]: {
     profile: ["read"],
+  },
+  [RouteId.GetChatGlobalTools]: {
+    conversation: ["read"],
   },
   [RouteId.CreateChatConversation]: {
     conversation: ["create"],

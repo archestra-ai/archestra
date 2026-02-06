@@ -44,6 +44,9 @@ export const RouteId = {
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
+  GetDeploymentYamlPreview: "getDeploymentYamlPreview",
+  ValidateDeploymentYaml: "validateDeploymentYaml",
+  ResetDeploymentYaml: "resetDeploymentYaml",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -196,6 +199,7 @@ export const RouteId = {
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
+  GetChatGlobalTools: "getChatGlobalTools",
   CreateChatConversation: "createChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",

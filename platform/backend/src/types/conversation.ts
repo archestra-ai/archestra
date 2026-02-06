@@ -27,6 +27,7 @@ export const SelectConversationSchema = createSelectSchema(
     systemPrompt: z.string().nullable(),
     userPrompt: z.string().nullable(),
     agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
+    llmApiKeyId: z.string().nullable(),
   }),
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   ...selectExtendedFields,

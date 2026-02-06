@@ -528,6 +528,62 @@ class McpServerModel {
   }
 
   /**
+   * Get a user's personal server for a specific catalog.
+   * Personal servers have no teamId and are owned by the user.
+   */
+  static async getUserPersonalServerForCatalog(
+    userId: string,
+    catalogId: string,
+  ): Promise<McpServer | null> {
+    const [result] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          eq(schema.mcpServersTable.ownerId, userId),
+          isNull(schema.mcpServersTable.teamId), // Personal = no team
+        ),
+      )
+      .limit(1);
+
+    return result || null;
+  }
+
+  /**
+   * Get a user's personal servers for multiple catalogs in a single query.
+   * Returns a Map of catalogId -> McpServer for catalogs where the user has a personal server.
+   */
+  static async getUserPersonalServersForCatalogs(
+    userId: string,
+    catalogIds: string[],
+  ): Promise<Map<string, McpServer>> {
+    if (catalogIds.length === 0) {
+      return new Map();
+    }
+
+    const results = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.catalogId, catalogIds),
+          eq(schema.mcpServersTable.ownerId, userId),
+          isNull(schema.mcpServersTable.teamId), // Personal = no team
+        ),
+      );
+
+    const serversByCatalog = new Map<string, McpServer>();
+    for (const server of results) {
+      if (server.catalogId) {
+        serversByCatalog.set(server.catalogId, server);
+      }
+    }
+
+    return serversByCatalog;
+  }
+
+  /**
    * Validate that an MCP server can be connected to with given secretId
    */
   static async validateConnection(

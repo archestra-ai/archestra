@@ -18,6 +18,10 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   repository: text("repository"),
   installationCommand: text("installation_command"),
   requiresAuth: boolean("requires_auth").notNull().default(false),
+  // When true, tools from this catalog are globally available for all agents (e.g., Playwright browser preview)
+  isGloballyAvailable: boolean("is_globally_available")
+    .notNull()
+    .default(false),
   authDescription: text("auth_description"),
   authFields: jsonb("auth_fields")
     .$type<
@@ -47,6 +51,8 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   ), // For local config secret env vars storage
   // Local server configuration - uses LocalConfig type from @/types
   localConfig: jsonb("local_config").$type<LocalConfig>(),
+  // Custom Kubernetes deployment spec YAML (if null, generated from localConfig)
+  deploymentSpecYaml: text("deployment_spec_yaml"),
   userConfig: jsonb("user_config")
     .$type<
       Record<

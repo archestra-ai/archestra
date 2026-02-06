@@ -1,6 +1,7 @@
 import type { ServerWebSocketMessage } from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS } from "ws";
+import { closeChatMcpClient } from "@/clients/chat-mcp-client";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
 import { browserStateManager } from "@/features/browser-stream/services/browser-stream.state-manager";
@@ -8,18 +9,6 @@ import logger from "@/logging";
 import { ConversationModel } from "@/models";
 
 const SCREENSHOT_INTERVAL_MS = 2_000; // Stream at ~0.5 FPS (every 2 seconds)
-
-/**
- * Debounce interval for orphan tab cleanup.
- * Only run cleanup once per minute per agent to avoid excessive overhead.
- */
-const ORPHAN_CLEANUP_DEBOUNCE_MS = 60_000;
-
-/**
- * Maximum number of entries in the lastOrphanCleanupTime map.
- * When exceeded, oldest entries are removed.
- */
-const MAX_CLEANUP_TIME_ENTRIES = 100;
 
 export type BrowserStreamSubscription = {
   conversationId: string;
@@ -42,8 +31,6 @@ export class BrowserStreamSocketClientContext {
   >();
   private sendToClient: BrowserStreamClientContextParams["sendToClient"];
   private screenshotIntervalMs = SCREENSHOT_INTERVAL_MS;
-  /** Track last orphan cleanup time per agent to debounce cleanup calls */
-  private lastOrphanCleanupTime = new Map<string, number>();
 
   constructor(params: BrowserStreamClientContextParams) {
     this.wss = params.wss;
@@ -112,6 +99,9 @@ export class BrowserStreamSocketClientContext {
           ws,
           conversationId,
           clientContext,
+          typeof payload?.initialUrl === "string"
+            ? payload.initialUrl
+            : undefined,
         );
         return true;
 
@@ -129,10 +119,6 @@ export class BrowserStreamSocketClientContext {
 
       case "browser_navigate_back":
         await this.handleBrowserNavigateBack(ws, conversationId);
-        return true;
-
-      case "browser_navigate_forward":
-        await this.handleBrowserNavigateForward(ws, conversationId);
         return true;
 
       case "browser_click":
@@ -202,12 +188,21 @@ export class BrowserStreamSocketClientContext {
     if (subscription) {
       clearInterval(subscription.intervalId);
       this.browserSubscriptions.delete(ws);
+
+      // Close the MCP client connection for this conversation to free resources.
+      // Each conversation has its own MCP client and browser instance.
+      closeChatMcpClient(
+        subscription.agentId,
+        subscription.userContext.userId,
+        subscription.conversationId,
+      );
+
       logger.info(
         {
           conversationId: subscription.conversationId,
           agentId: subscription.agentId,
         },
-        "Browser stream client unsubscribed",
+        "Browser stream client unsubscribed and MCP client closed",
       );
     }
   }
@@ -220,6 +215,7 @@ export class BrowserStreamSocketClientContext {
       organizationId: string;
       userIsProfileAdmin: boolean;
     },
+    initialUrl?: string,
   ): Promise<void> {
     // Unsubscribe from any existing stream first (for this WebSocket)
     this.unsubscribeBrowserStream(ws);
@@ -249,34 +245,10 @@ export class BrowserStreamSocketClientContext {
       return;
     }
 
-    // Unsubscribe any OTHER WebSocket that's subscribed to a DIFFERENT conversation for this agent
-    // This prevents multiple conversations competing for the same browser (tab switching/flickering)
-    // Same conversation can have multiple viewers (e.g., side panel + new tab) - those are fine
-    const subscriptionsToUnsubscribe: WebSocket[] = [];
-    for (const [
-      existingWs,
-      existingSub,
-    ] of this.browserSubscriptions.entries()) {
-      if (
-        existingSub.agentId === agentId &&
-        existingSub.conversationId !== conversationId &&
-        existingWs !== ws
-      ) {
-        subscriptionsToUnsubscribe.push(existingWs);
-      }
-    }
-    for (const existingWs of subscriptionsToUnsubscribe) {
-      const existingSub = this.browserSubscriptions.get(existingWs);
-      logger.info(
-        {
-          agentId,
-          oldConversationId: existingSub?.conversationId,
-          newConversationId: conversationId,
-        },
-        "Unsubscribing previous browser stream for agent (new conversation taking over)",
-      );
-      this.unsubscribeBrowserStream(existingWs);
-    }
+    // NOTE: Previously this code unsubscribed other conversations for the same agent
+    // to prevent tab switching/flickering in a shared browser. This is no longer needed
+    // because each conversation now has its own MCP client connection and browser instance,
+    // providing proper per-conversation isolation.
 
     logger.info(
       { conversationId, agentId },
@@ -285,14 +257,17 @@ export class BrowserStreamSocketClientContext {
 
     const userContext: BrowserUserContext = {
       userId: clientContext.userId,
+      organizationId: clientContext.organizationId,
       userIsProfileAdmin: clientContext.userIsProfileAdmin,
     };
 
     // Select or create the tab for this conversation
+    // This also restores the conversation's URL if it had one
     const tabResult = await browserStreamFeature.selectOrCreateTab(
       agentId,
       conversationId,
       userContext,
+      initialUrl,
     );
     if (!tabResult.success) {
       logger.warn(
@@ -335,50 +310,6 @@ export class BrowserStreamSocketClientContext {
     });
 
     void sendTick();
-
-    // Trigger background orphan cleanup (debounced, fire-and-forget)
-    this.maybeCleanupOrphanedTabs(agentId, userContext);
-  }
-
-  /**
-   * Trigger orphan tab cleanup if enough time has passed since last cleanup.
-   * This is fire-and-forget - errors are logged but don't affect the caller.
-   */
-  private maybeCleanupOrphanedTabs(
-    agentId: string,
-    userContext: BrowserUserContext,
-  ): void {
-    const lastCleanup = this.lastOrphanCleanupTime.get(agentId) ?? 0;
-    const now = Date.now();
-
-    if (now - lastCleanup < ORPHAN_CLEANUP_DEBOUNCE_MS) {
-      // Skip - cleaned up recently
-      return;
-    }
-
-    // Limit map size to prevent unbounded growth
-    if (this.lastOrphanCleanupTime.size >= MAX_CLEANUP_TIME_ENTRIES) {
-      // Remove oldest entries (first entries in map iteration order)
-      const entriesToRemove = Math.ceil(MAX_CLEANUP_TIME_ENTRIES / 4);
-      let removed = 0;
-      for (const key of this.lastOrphanCleanupTime.keys()) {
-        if (removed >= entriesToRemove) break;
-        this.lastOrphanCleanupTime.delete(key);
-        removed++;
-      }
-    }
-
-    this.lastOrphanCleanupTime.set(agentId, now);
-
-    // Fire and forget - don't await
-    void browserStreamFeature
-      .cleanupOrphanedTabs(agentId, userContext)
-      .catch((error) => {
-        logger.warn(
-          { agentId, error },
-          "Background orphan tab cleanup failed (non-fatal)",
-        );
-      });
   }
 
   async handleBrowserNavigate(
@@ -478,59 +409,6 @@ export class BrowserStreamSocketClientContext {
           success: false,
           error:
             error instanceof Error ? error.message : "Navigate back failed",
-        },
-      });
-    }
-  }
-
-  async handleBrowserNavigateForward(
-    ws: WebSocket,
-    conversationId: string,
-  ): Promise<void> {
-    const subscription = this.browserSubscriptions.get(ws);
-    if (!subscription || subscription.conversationId !== conversationId) {
-      this.sendToClient(ws, {
-        type: "browser_navigate_forward_result",
-        payload: {
-          conversationId,
-          success: false,
-          error: "Not subscribed to this conversation's browser stream",
-        },
-      });
-      return;
-    }
-
-    try {
-      const result = await browserStreamFeature.navigateForward(
-        subscription.agentId,
-        conversationId,
-        subscription.userContext,
-      );
-
-      this.sendToClient(ws, {
-        type: "browser_navigate_forward_result",
-        payload: {
-          conversationId,
-          success: result.success,
-          error: result.error,
-        },
-      });
-
-      if (result.success) {
-        await this.sendImmediateScreenshot(ws, conversationId);
-      }
-    } catch (error) {
-      logger.error(
-        { error, conversationId },
-        "Browser navigate forward failed",
-      );
-      this.sendToClient(ws, {
-        type: "browser_navigate_forward_result",
-        payload: {
-          conversationId,
-          success: false,
-          error:
-            error instanceof Error ? error.message : "Navigate forward failed",
         },
       });
     }
@@ -755,25 +633,22 @@ export class BrowserStreamSocketClientContext {
       );
 
       if (result.screenshot) {
-        // Get navigation state for back/forward buttons
-        let canGoBack = false;
-        let canGoForward = false;
-
-        const stateResult = await browserStateManager.getOrLoad({
-          agentId,
-          userId: userContext.userId,
-          conversationId,
-        });
-
-        if (stateResult.tag === "Ok" && stateResult.value) {
-          const state = stateResult.value;
-          const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
-          if (activeTab) {
-            canGoBack = activeTab.historyCursor > 0;
-            canGoForward =
-              activeTab.historyCursor < activeTab.history.length - 1;
-          }
+        // Sync URL to conversation state, but ONLY if subscription is still active
+        // for the same conversation. This prevents race conditions where screenshot
+        // completes after user switched conversations.
+        const currentSubscription = this.browserSubscriptions.get(ws);
+        if (
+          currentSubscription &&
+          currentSubscription.conversationId === conversationId &&
+          result.url &&
+          !this.isBlankUrl(result.url)
+        ) {
+          await browserStateManager.updateUrl(conversationId, result.url);
         }
+
+        // Determine canGoBack based on current URL
+        // If on about:blank, there's nowhere useful to go back to
+        const canGoBack = result.url ? !this.isBlankUrl(result.url) : false;
 
         this.sendToClient(ws, {
           type: "browser_screenshot",
@@ -784,7 +659,6 @@ export class BrowserStreamSocketClientContext {
             viewportWidth: result.viewportWidth,
             viewportHeight: result.viewportHeight,
             canGoBack,
-            canGoForward,
           },
         });
       } else {
@@ -812,6 +686,10 @@ export class BrowserStreamSocketClientContext {
         },
       });
     }
+  }
+
+  private isBlankUrl(url: string): boolean {
+    return url === "about:blank" || url === "about:newtab" || url === "";
   }
 
   private async sendImmediateScreenshot(

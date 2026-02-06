@@ -88,10 +88,29 @@ export function ToolDetailsDialog({
       <DialogContent className="w-[90vw] max-w-[1600px] max-h-[85vh] flex flex-col">
         <DialogHeader className="shrink-0">
           <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <DialogTitle className="text-xl font-semibold tracking-tight">
-                {tool.name}
-              </DialogTitle>
+            <div className="flex-1 min-w-0">
+              {tool.description ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DialogTitle className="text-xl font-semibold tracking-tight truncate cursor-help">
+                        {tool.name}
+                      </DialogTitle>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="bottom"
+                      align="start"
+                      className="max-w-md"
+                    >
+                      <p>{tool.description}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <DialogTitle className="text-xl font-semibold tracking-tight truncate">
+                  {tool.name}
+                </DialogTitle>
+              )}
               {tool.description && (
                 <TruncatedText
                   message={tool.description}

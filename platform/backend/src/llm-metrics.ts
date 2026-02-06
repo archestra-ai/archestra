@@ -19,6 +19,29 @@ import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapterV2/opena
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapterV2/zhipuai";
 import type { Agent } from "@/types";
 
+type UsageExtractor =
+  // biome-ignore lint/suspicious/noExplicitAny: usage comes from parsed JSON (cloned.json())
+  ((usage: any) => { input?: number; output?: number }) | null;
+
+/**
+ * Maps each provider to its usage token extraction function for fetch-based observability.
+ * Providers mapped to `null` use their own observability wrappers (e.g. Gemini uses getObservableGenAI,
+ * Bedrock uses its own client) and should not extract tokens here to avoid double-reporting.
+ * Using Record<SupportedProvider, ...> ensures TypeScript enforces adding new providers here.
+ */
+const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
+  openai: getOpenAIUsage,
+  cerebras: getOpenAIUsage,
+  vllm: getOpenAIUsage,
+  ollama: getOpenAIUsage,
+  mistral: getOpenAIUsage,
+  anthropic: getAnthropicUsage,
+  cohere: getCohereUsage,
+  zhipuai: getZhipuaiUsage,
+  gemini: null,
+  bedrock: null,
+};
+
 type Fetch = (
   input: string | URL | Request,
   init?: RequestInit,
@@ -446,14 +469,9 @@ export function getObservableFetch(
         if (!data.usage) {
           return response;
         }
-        if (
-          provider === "openai" ||
-          provider === "cerebras" ||
-          provider === "vllm" ||
-          provider === "ollama"
-        ) {
-          // Cerebras, vLLM and Ollama use OpenAI-compatible API format
-          const { input, output } = getOpenAIUsage(data.usage);
+        const extractor = fetchUsageExtractors[provider];
+        if (extractor) {
+          const { input, output } = extractor(data.usage);
           reportLLMTokens(
             provider,
             profile,
@@ -461,35 +479,6 @@ export function getObservableFetch(
             model,
             externalAgentId,
           );
-        } else if (provider === "anthropic") {
-          const { input, output } = getAnthropicUsage(data.usage);
-          reportLLMTokens(
-            provider,
-            profile,
-            { input, output },
-            model,
-            externalAgentId,
-          );
-        } else if (provider === "cohere") {
-          const { input, output } = getCohereUsage(data.usage);
-          reportLLMTokens(
-            provider,
-            profile,
-            { input, output },
-            model,
-            externalAgentId,
-          );
-        } else if (provider === "zhipuai") {
-          const { input, output } = getZhipuaiUsage(data.usage);
-          reportLLMTokens(
-            provider,
-            profile,
-            { input, output },
-            model,
-            externalAgentId,
-          );
-        } else {
-          throw new Error("Unknown provider when logging usage token metrics");
         }
       } catch (_parseError) {
         logger.error("Error parsing LLM response JSON for tokens");

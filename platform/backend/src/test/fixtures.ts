@@ -412,6 +412,7 @@ async function makeInternalMcpCatalog(
       | "localConfig"
       | "userConfig"
       | "oauthConfig"
+      | "isGloballyAvailable"
     >
   > = {},
 ) {

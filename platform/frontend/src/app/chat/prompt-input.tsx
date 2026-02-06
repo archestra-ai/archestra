@@ -10,7 +10,7 @@ import {
 import type { ChatStatus } from "ai";
 import { PaperclipIcon, Plus } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   PromptInput,
   PromptInputAttachment,
@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useProfileToolsWithIds } from "@/lib/chat.query";
+import { useGlobalChatTools, useProfileToolsWithIds } from "@/lib/chat.query";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -66,7 +66,10 @@ interface ArchestraPromptInputProps {
   /** Callback for API key change in initial chat mode (no conversation) */
   onApiKeyChange?: (apiKeyId: string) => void;
   /** Callback when user selects an API key with a different provider */
-  onProviderChange?: (provider: SupportedChatProvider) => void;
+  onProviderChange?: (
+    provider: SupportedChatProvider,
+    apiKeyId: string,
+  ) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Whether file uploads are allowed (controlled by organization setting) */
@@ -81,6 +84,8 @@ interface ArchestraPromptInputProps {
   maxContextLength?: number | null;
   /** Input modalities supported by the selected model (for file type filtering) */
   inputModalities?: ModelInputModality[] | null;
+  /** Agent's configured LLM API key ID - passed to ChatApiKeySelector */
+  agentLlmApiKeyId?: string | null;
 }
 
 // Inner component that has access to the controller context
@@ -104,6 +109,7 @@ const PromptInputContent = ({
   tokensUsed = 0,
   maxContextLength,
   inputModalities,
+  agentLlmApiKeyId,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -120,12 +126,48 @@ const PromptInputContent = ({
 
   // Check if agent has tools or delegations
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
+  const { data: globalTools = [] } = useGlobalChatTools();
   const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
 
   // Check if user can update organization settings (to show settings link in tooltip)
   const { data: canUpdateOrganization } = useHasPermissions({
     organization: ["update"],
   });
+
+  const storageKey = conversationId
+    ? `archestra_chat_draft_${conversationId}`
+    : `archestra_chat_draft_new_${agentId}`;
+
+  const isRestored = useRef(false);
+
+  // Restore draft on mount or conversation change
+  useEffect(() => {
+    isRestored.current = false;
+    const savedDraft = localStorage.getItem(storageKey);
+    if (savedDraft) {
+      controller.textInput.setInput(savedDraft);
+    } else {
+      controller.textInput.setInput("");
+    }
+
+    // Set restored bit after a tick to ensure state update propagates
+    const timeout = setTimeout(() => {
+      isRestored.current = true;
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [storageKey, controller.textInput.setInput]);
+
+  // Save draft on change
+  useEffect(() => {
+    if (!isRestored.current) return;
+
+    const value = controller.textInput.value;
+    if (value) {
+      localStorage.setItem(storageKey, value);
+    } else {
+      localStorage.removeItem(storageKey);
+    }
+  }, [controller.textInput.value, storageKey]);
 
   // Handle speech transcription by updating controller state
   const handleTranscriptionChange = useCallback(
@@ -135,8 +177,8 @@ const PromptInputContent = ({
     [controller.textInput],
   );
 
-  // Check if there are tools or delegated agents
-  const hasTools = tools.length > 0;
+  // Check if there are tools or delegated agents (including global tools like Playwright)
+  const hasTools = tools.length > 0 || globalTools.length > 0;
   const hasDelegatedAgents = delegatedAgents.length > 0;
   const hasContent = hasTools || hasDelegatedAgents;
 
@@ -145,11 +187,19 @@ const PromptInputContent = ({
   // 2. Model must support at least one file type (modelSupportsFiles)
   const showFileUploadButton = allowFileUploads && modelSupportsFiles;
 
+  const handleWrappedSubmit = useCallback(
+    (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
+      localStorage.removeItem(storageKey);
+      onSubmit(message, e);
+    },
+    [onSubmit, storageKey],
+  );
+
   return (
     <PromptInput
       globalDrop
       multiple
-      onSubmit={onSubmit}
+      onSubmit={handleWrappedSubmit}
       accept={acceptedFileTypes}
     >
       {agentId && (
@@ -287,6 +337,7 @@ const PromptInputContent = ({
               onApiKeyChange={onApiKeyChange}
               onProviderChange={onProviderChange}
               isModelsLoading={isModelsLoading}
+              agentLlmApiKeyId={agentLlmApiKeyId}
               onOpenChange={(open) => {
                 if (!open) {
                   setTimeout(() => {
@@ -332,6 +383,7 @@ const ArchestraPromptInput = ({
   tokensUsed = 0,
   maxContextLength,
   inputModalities,
+  agentLlmApiKeyId,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -356,6 +408,7 @@ const ArchestraPromptInput = ({
           tokensUsed={tokensUsed}
           maxContextLength={maxContextLength}
           inputModalities={inputModalities}
+          agentLlmApiKeyId={agentLlmApiKeyId}
         />
       </PromptInputProvider>
     </div>

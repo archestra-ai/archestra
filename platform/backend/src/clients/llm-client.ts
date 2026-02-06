@@ -87,6 +87,9 @@ const envApiKeyGetters: Record<
   openai: () => config.chat.openai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  groq: () => config.chat.groq.apiKey,
+  xai: () => config.chat.xai.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
 };
 
 /**
@@ -169,6 +172,9 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
+  groq: "llama-3.3-70b-versatile", // Groq's fast model
+  xai: "grok-beta", // x.AI's model
+  deepseek: "deepseek-chat", // DeepSeek's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
   mistral: "mistral-small-latest", // Mistral's fast model
 };
@@ -312,6 +318,48 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.zhipuai.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure GROQ_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  xai: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "x.AI API key is required. Please configure XAI_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.xai.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  deepseek: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.deepseek.baseUrl,
     });
     return client(modelName);
   },

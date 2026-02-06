@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.38](https://github.com/archestra-ai/archestra/compare/platform-v1.0.37...platform-v1.0.38) (2026-02-06)
+
+
+### Bug Fixes
+
+* running migrations when ext vault secret is used ([#2630](https://github.com/archestra-ai/archestra/issues/2630)) ([d23af35](https://github.com/archestra-ai/archestra/commit/d23af35b5ca9927c7967b363d29fbda2d41fb31d))
+
 ## [1.0.37](https://github.com/archestra-ai/archestra/compare/platform-v1.0.34...platform-v1.0.37) (2026-02-02)
 
 

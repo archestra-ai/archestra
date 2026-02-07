@@ -6,7 +6,7 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
-import { ChatApiKeyModel, TeamModel } from "@/models";
+import { ApiKeyModelModel, ChatApiKeyModel, TeamModel } from "@/models";
 import { testProviderApiKey } from "@/routes/chat/routes.models";
 import {
   assertByosEnabled,
@@ -71,6 +71,8 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat API Keys"],
         querystring: z.object({
           provider: SupportedChatProviderSchema.optional(),
+          /** Include a specific key by ID even if user doesn't have direct access (e.g. agent's configured key) */
+          includeKeyId: z.string().uuid().optional(),
         }),
         response: constructResponseSchema(
           z.array(ChatApiKeyWithScopeInfoSchema),
@@ -86,7 +88,35 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         query.provider,
       );
-      return reply.send(apiKeys);
+
+      // If includeKeyId is provided and not already in results, fetch it separately
+      if (
+        query.includeKeyId &&
+        !apiKeys.some((k) => k.id === query.includeKeyId)
+      ) {
+        const agentKey = await ChatApiKeyModel.findById(query.includeKeyId);
+        if (agentKey && agentKey.organizationId === organizationId) {
+          apiKeys.push({
+            ...agentKey,
+            teamName: null,
+            userName: null,
+            isAgentKey: true,
+          });
+        }
+      }
+
+      // Compute bestModelId for each key
+      const apiKeysWithBestModel = await Promise.all(
+        apiKeys.map(async (key) => {
+          const bestModel = await ApiKeyModelModel.getBestModel(key.id);
+          return {
+            ...key,
+            bestModelId: bestModel?.modelId ?? null,
+          };
+        }),
+      );
+
+      return reply.send(apiKeysWithBestModel);
     },
   );
 

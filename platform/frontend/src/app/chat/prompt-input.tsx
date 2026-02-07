@@ -66,7 +66,10 @@ interface ArchestraPromptInputProps {
   /** Callback for API key change in initial chat mode (no conversation) */
   onApiKeyChange?: (apiKeyId: string) => void;
   /** Callback when user selects an API key with a different provider */
-  onProviderChange?: (provider: SupportedChatProvider) => void;
+  onProviderChange?: (
+    provider: SupportedChatProvider,
+    apiKeyId: string,
+  ) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Whether file uploads are allowed (controlled by organization setting) */
@@ -81,6 +84,8 @@ interface ArchestraPromptInputProps {
   maxContextLength?: number | null;
   /** Input modalities supported by the selected model (for file type filtering) */
   inputModalities?: ModelInputModality[] | null;
+  /** Agent's configured LLM API key ID - passed to ChatApiKeySelector */
+  agentLlmApiKeyId?: string | null;
 }
 
 // Inner component that has access to the controller context
@@ -104,6 +109,7 @@ const PromptInputContent = ({
   tokensUsed = 0,
   maxContextLength,
   inputModalities,
+  agentLlmApiKeyId,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -331,6 +337,7 @@ const PromptInputContent = ({
               onApiKeyChange={onApiKeyChange}
               onProviderChange={onProviderChange}
               isModelsLoading={isModelsLoading}
+              agentLlmApiKeyId={agentLlmApiKeyId}
               onOpenChange={(open) => {
                 if (!open) {
                   setTimeout(() => {
@@ -376,6 +383,7 @@ const ArchestraPromptInput = ({
   tokensUsed = 0,
   maxContextLength,
   inputModalities,
+  agentLlmApiKeyId,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -400,6 +408,7 @@ const ArchestraPromptInput = ({
           tokensUsed={tokensUsed}
           maxContextLength={maxContextLength}
           inputModalities={inputModalities}
+          agentLlmApiKeyId={agentLlmApiKeyId}
         />
       </PromptInputProvider>
     </div>

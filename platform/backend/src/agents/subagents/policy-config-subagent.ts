@@ -97,6 +97,8 @@ Examples:
     tools: [],
     teams: [],
     labels: [],
+    llmApiKeyId: null,
+    llmModel: null,
   };
 
   /**

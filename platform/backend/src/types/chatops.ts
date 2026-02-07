@@ -21,6 +21,8 @@ export interface IncomingChatMessage {
   threadId?: string;
   /** The sender's ID in the provider's system */
   senderId: string;
+  /** Pre-resolved sender email (from Bot Framework TeamsInfo, avoids Graph API call) */
+  senderEmail?: string;
   /** The sender's display name */
   senderName: string;
   /** The message text (with bot mentions cleaned) */

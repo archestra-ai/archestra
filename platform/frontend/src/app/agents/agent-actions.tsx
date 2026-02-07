@@ -32,20 +32,25 @@ export function AgentActions({
 }: AgentActionsProps) {
   return (
     <ButtonGroup>
-      <PermissionButton
-        permissions={{ profile: ["update"] }}
-        aria-label="Connect"
-        tooltip="Connect"
-        variant="outline"
-        size="icon-sm"
-        data-testid={`${E2eTestId.ConnectAgentButton}-${agent.name}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onConnect(agent);
-        }}
-      >
-        <Plug className="h-4 w-4" />
-      </PermissionButton>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label="Connect"
+              variant="outline"
+              size="icon-sm"
+              data-testid={`${E2eTestId.ConnectAgentButton}-${agent.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onConnect(agent);
+              }}
+            >
+              <Plug className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Connect</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>

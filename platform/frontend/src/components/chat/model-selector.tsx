@@ -83,6 +83,8 @@ interface ModelSelectorProps {
   disabled?: boolean;
   /** Callback when the selector opens or closes */
   onOpenChange?: (open: boolean) => void;
+  /** Optional callback to clear selection - shows X button inside the trigger when provided and a model is selected */
+  onClear?: () => void;
 }
 
 /** Map our provider names to logo provider names
@@ -531,6 +533,7 @@ export function ModelSelector({
   onModelChange,
   disabled = false,
   onOpenChange: onOpenChangeProp,
+  onClear,
 }: ModelSelectorProps) {
   const { modelsByProvider, isPending: isLoading } = useModelsByProvider();
   const syncMutation = useSyncChatModels();
@@ -683,6 +686,19 @@ export function ModelSelector({
             <ModelSelectorName className="truncate flex-1 text-left">
               {selectedModelDisplayName || "Select model"}
             </ModelSelectorName>
+            {onClear && selectedModel && (
+              <button
+                type="button"
+                aria-label="Clear model"
+                className="ml-1 shrink-0 rounded-sm opacity-50 hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClear();
+                }}
+              >
+                <XIcon className="size-3" />
+              </button>
+            )}
           </PromptInputButton>
         </ModelSelectorTrigger>
         <ModelSelectorContent

@@ -21402,6 +21402,16 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "llmApiKeyId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "llmModel": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -21566,6 +21576,8 @@
                           "incomingEmailEnabled",
                           "incomingEmailSecurityMode",
                           "incomingEmailAllowedDomain",
+                          "llmApiKeyId",
+                          "llmModel",
                           "createdAt",
                           "updatedAt",
                           "tools",
@@ -21933,6 +21945,16 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "llmApiKeyId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "llmModel": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "teams": {
                     "type": "array",
                     "items": {
@@ -22113,6 +22135,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "llmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "llmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -22277,6 +22309,8 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "llmApiKeyId",
+                    "llmModel",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -22681,6 +22715,16 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "llmApiKeyId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "llmModel": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -22845,6 +22889,8 @@
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
                       "incomingEmailAllowedDomain",
+                      "llmApiKeyId",
+                      "llmModel",
                       "createdAt",
                       "updatedAt",
                       "tools",
@@ -23213,6 +23259,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "llmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "llmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -23377,6 +23433,8 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "llmApiKeyId",
+                    "llmModel",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -23744,6 +23802,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "llmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "llmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -23908,6 +23976,8 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "llmApiKeyId",
+                    "llmModel",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -24287,6 +24357,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "llmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "llmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -24451,6 +24531,8 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "llmApiKeyId",
+                    "llmModel",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -24770,6 +24852,16 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "llmApiKeyId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "llmModel": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "teams": {
                     "type": "array",
                     "items": {
@@ -24957,6 +25049,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "llmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "llmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -25121,6 +25223,8 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "llmApiKeyId",
+                    "llmModel",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -25753,6 +25857,16 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "llmModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -25917,6 +26031,8 @@
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
                         "incomingEmailAllowedDomain",
+                        "llmApiKeyId",
+                        "llmModel",
                         "createdAt",
                         "updatedAt",
                         "tools",
@@ -26353,6 +26469,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "llmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "llmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -26517,6 +26643,8 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "llmApiKeyId",
+                    "llmModel",
                     "createdAt",
                     "updatedAt",
                     "tools",
@@ -41953,6 +42081,13 @@
                           "database",
                           "none"
                         ]
+                      },
+                      "bestModelId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "isAgentKey": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -42577,6 +42712,16 @@
             "in": "query",
             "name": "provider",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "includeKeyId",
+            "required": false
           }
         ],
         "responses": {
@@ -42672,6 +42817,13 @@
                           "database",
                           "none"
                         ]
+                      },
+                      "bestModelId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "isAgentKey": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -43016,6 +43168,13 @@
                         "database",
                         "none"
                       ]
+                    },
+                    "bestModelId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "isAgentKey": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -45313,6 +45472,10 @@
                               "llm_proxy",
                               "agent"
                             ]
+                          },
+                          "llmApiKeyId": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -45320,7 +45483,8 @@
                           "name",
                           "systemPrompt",
                           "userPrompt",
-                          "agentType"
+                          "agentType",
+                          "llmApiKeyId"
                         ],
                         "additionalProperties": false
                       },
@@ -45778,6 +45942,10 @@
                             "llm_proxy",
                             "agent"
                           ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -45785,7 +45953,8 @@
                         "name",
                         "systemPrompt",
                         "userPrompt",
-                        "agentType"
+                        "agentType",
+                        "llmApiKeyId"
                       ],
                       "additionalProperties": false
                     },
@@ -46208,6 +46377,10 @@
                             "llm_proxy",
                             "agent"
                           ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -46215,7 +46388,8 @@
                         "name",
                         "systemPrompt",
                         "userPrompt",
-                        "agentType"
+                        "agentType",
+                        "llmApiKeyId"
                       ],
                       "additionalProperties": false
                     },
@@ -46684,6 +46858,10 @@
                             "llm_proxy",
                             "agent"
                           ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -46691,7 +46869,8 @@
                         "name",
                         "systemPrompt",
                         "userPrompt",
-                        "agentType"
+                        "agentType",
+                        "llmApiKeyId"
                       ],
                       "additionalProperties": false
                     },
@@ -47904,6 +48083,10 @@
                             "llm_proxy",
                             "agent"
                           ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -47911,7 +48094,8 @@
                         "name",
                         "systemPrompt",
                         "userPrompt",
-                        "agentType"
+                        "agentType",
+                        "llmApiKeyId"
                       ],
                       "additionalProperties": false
                     },
@@ -48362,6 +48546,10 @@
                             "llm_proxy",
                             "agent"
                           ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -48369,7 +48557,8 @@
                         "name",
                         "systemPrompt",
                         "userPrompt",
-                        "agentType"
+                        "agentType",
+                        "llmApiKeyId"
                       ],
                       "additionalProperties": false
                     },

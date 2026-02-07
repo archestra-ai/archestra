@@ -152,9 +152,11 @@ export default function ChatPage() {
     (typeof internalAgents)[number] | null
   >(null);
 
-  // Set initial agent from URL param, localStorage, or default when data loads
+  // Resolve which agent to use on page load (URL param > localStorage > first available).
+  // Stores the resolved agent in a ref so the model init effect can read it synchronously.
+  const resolvedAgentRef = useRef<(typeof internalAgents)[number] | null>(null);
+
   useEffect(() => {
-    // Wait for internal agents to load - these are the chat-compatible agents
     if (internalAgents.length === 0) return;
 
     // Only process URL params once (don't re-apply after user clears selection)
@@ -164,6 +166,7 @@ export default function ChatPage() {
         const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
         if (matchingAgent) {
           setInitialAgentId(urlAgentId);
+          resolvedAgentRef.current = matchingAgent;
           urlParamsConsumedRef.current = true;
           return;
         }
@@ -171,44 +174,63 @@ export default function ChatPage() {
     }
 
     // Try to restore from localStorage, then default to first internal agent
-    // Internal agents are the chat-compatible agents shown in the InitialAgentSelector
     if (!initialAgentId) {
       const savedAgentId = localStorage.getItem("selected-chat-agent");
-      if (savedAgentId && internalAgents.some((a) => a.id === savedAgentId)) {
+      const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
+      if (savedAgent) {
         setInitialAgentId(savedAgentId);
+        resolvedAgentRef.current = savedAgent;
         return;
       }
       setInitialAgentId(internalAgents[0].id);
+      resolvedAgentRef.current = internalAgents[0];
     }
   }, [initialAgentId, searchParams, internalAgents]);
 
-  // Initialize model from localStorage or default to first available
+  // Initialize model and API key once agent is resolved.
+  // Priority: agent config > localStorage > first available model.
+  // Separated from agent resolution but uses ref to avoid race conditions —
+  // the ref is written synchronously in the same render cycle, so this effect
+  // always sees the correct agent even when both effects fire together.
   useEffect(() => {
-    if (!initialModel) {
-      const allModels = Object.values(modelsByProvider).flat();
-      if (allModels.length === 0) return;
+    if (!initialAgentId) return;
+    if (initialModel) return; // Already initialized
 
-      // Try to restore from localStorage
-      const savedModelId = localStorage.getItem(
-        LocalStorageKeys.selectedChatModel,
-      );
-      if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
-        setInitialModel(savedModelId);
-        return;
+    const agent = resolvedAgentRef.current;
+    const agentData = agent as Record<string, unknown> | undefined;
+
+    // 1. Agent-configured model takes priority
+    if (agentData?.llmModel) {
+      setInitialModel(agentData.llmModel as string);
+      if (agentData.llmApiKeyId) {
+        setInitialApiKeyId(agentData.llmApiKeyId as string);
       }
+      return;
+    }
 
-      // Fall back to first available model
-      const providers = Object.keys(modelsByProvider);
-      if (providers.length > 0) {
-        const firstProvider = providers[0];
-        const models =
-          modelsByProvider[firstProvider as keyof typeof modelsByProvider];
-        if (models && models.length > 0) {
-          setInitialModel(models[0].id);
-        }
+    // 2. Fall back to localStorage / first available (needs models loaded)
+    const allModels = Object.values(modelsByProvider).flat();
+    if (allModels.length === 0) return;
+
+    const savedModelId = localStorage.getItem(
+      LocalStorageKeys.selectedChatModel,
+    );
+    if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
+      setInitialModel(savedModelId);
+      return;
+    }
+
+    // 3. Fall back to first available model
+    const providers = Object.keys(modelsByProvider);
+    if (providers.length > 0) {
+      const firstProvider = providers[0];
+      const models =
+        modelsByProvider[firstProvider as keyof typeof modelsByProvider];
+      if (models && models.length > 0) {
+        setInitialModel(models[0].id);
       }
     }
-  }, [modelsByProvider, initialModel]);
+  }, [initialAgentId, initialModel, modelsByProvider]);
 
   // Save model to localStorage when changed
   const handleInitialModelChange = useCallback((modelId: string) => {
@@ -218,7 +240,7 @@ export default function ChatPage() {
 
   // Handle provider change from API key selector - auto-select a model from new provider
   const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedChatProvider) => {
+    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
       const providerModels = modelsByProvider[newProvider];
       if (providerModels && providerModels.length > 0) {
         // Try to restore from localStorage for this provider
@@ -382,7 +404,7 @@ export default function ChatPage() {
 
   // Handle provider change from API key selector - auto-select a model from new provider
   const handleProviderChange = useCallback(
-    (newProvider: SupportedChatProvider) => {
+    (newProvider: SupportedChatProvider, _apiKeyId: string) => {
       if (!conversation) return;
 
       const providerModels = modelsByProvider[newProvider];
@@ -820,10 +842,26 @@ export default function ChatPage() {
   }, []);
 
   // Handle initial agent change (when no conversation exists)
-  const handleInitialAgentChange = useCallback((agentId: string) => {
-    setInitialAgentId(agentId);
-    localStorage.setItem("selected-chat-agent", agentId);
-  }, []);
+  const handleInitialAgentChange = useCallback(
+    (agentId: string) => {
+      setInitialAgentId(agentId);
+      localStorage.setItem("selected-chat-agent", agentId);
+
+      // Apply agent's LLM config if present
+      const selectedAgent = internalAgents.find((a) => a.id === agentId);
+      if (selectedAgent) {
+        resolvedAgentRef.current = selectedAgent;
+        const agentData = selectedAgent as Record<string, unknown>;
+        if (agentData.llmModel) {
+          setInitialModel(agentData.llmModel as string);
+        }
+        if (agentData.llmApiKeyId) {
+          setInitialApiKeyId(agentData.llmApiKeyId as string);
+        }
+      }
+    },
+    [internalAgents],
+  );
 
   // Handle initial submit (when no conversation exists)
   const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
@@ -1276,6 +1314,16 @@ export default function ChatPage() {
                   tokensUsed={tokensUsed}
                   maxContextLength={selectedModelContextLength}
                   inputModalities={selectedModelInputModalities}
+                  agentLlmApiKeyId={
+                    conversationId && conversation?.agent.id
+                      ? ((conversation.agent as Record<string, unknown>)
+                          .llmApiKeyId as string | null)
+                      : ((
+                          internalAgents.find((a) => a.id === initialAgentId) as
+                            | Record<string, unknown>
+                            | undefined
+                        )?.llmApiKeyId as string | null)
+                  }
                 />
                 <div className="text-center">
                   <Version inline />

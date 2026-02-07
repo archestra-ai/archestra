@@ -91,26 +91,29 @@ const envApiKeyGetters: Record<
 
 /**
  * Resolve API key for a provider using priority:
- * conversation > personal > team > org_wide > environment variable
+ * agent's configured key > conversation > personal > team > org_wide > environment variable
  */
 export async function resolveProviderApiKey(params: {
   organizationId: string;
   userId: string;
   provider: SupportedChatProvider;
   conversationId?: string | null;
+  agentLlmApiKeyId?: string | null;
 }): Promise<{ apiKey: string | undefined; source: string }> {
-  const { organizationId, userId, provider, conversationId } = params;
+  const { organizationId, userId, provider, conversationId, agentLlmApiKeyId } =
+    params;
 
   // Get user's team IDs for API key resolution
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
 
-  // Try scope-based resolution (checks conversation's chatApiKeyId first, then personal > team > org_wide)
+  // Try scope-based resolution (checks agent key, conversation key, then personal > team > org_wide)
   const resolvedApiKey = await ChatApiKeyModel.getCurrentApiKey({
     organizationId,
     userId,
     userTeamIds,
     provider,
     conversationId: conversationId ?? null,
+    agentLlmApiKeyId,
   });
 
   if (resolvedApiKey?.secretId) {
@@ -560,6 +563,7 @@ export async function createLLMModelForAgent(params: {
   conversationId?: string | null;
   externalAgentId?: string;
   sessionId?: string;
+  agentLlmApiKeyId?: string | null;
 }): Promise<{
   model: LLMModel;
   provider: SupportedChatProvider;
@@ -574,6 +578,7 @@ export async function createLLMModelForAgent(params: {
     conversationId,
     externalAgentId,
     sessionId,
+    agentLlmApiKeyId,
   } = params;
 
   const { apiKey, source } = await resolveProviderApiKey({
@@ -581,6 +586,7 @@ export async function createLLMModelForAgent(params: {
     userId,
     provider,
     conversationId,
+    agentLlmApiKeyId,
   });
 
   // Check if Gemini with Vertex AI (doesn't require API key)

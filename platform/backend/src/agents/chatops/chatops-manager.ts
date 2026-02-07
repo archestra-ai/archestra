@@ -6,6 +6,7 @@ import {
   AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsProcessedMessageModel,
+  OrganizationModel,
   UserModel,
 } from "@/models";
 import {
@@ -42,6 +43,48 @@ export class ChatOpsManager {
       case "ms-teams":
         return this.getMSTeamsProvider();
     }
+  }
+
+  /**
+   * Get agents available for a chatops provider, filtered by user access.
+   * If senderEmail is provided and resolves to a user, only returns agents
+   * the user has team-based access to. Falls back to all agents if user
+   * cannot be resolved (access check still happens at message processing time).
+   */
+  async getAccessibleChatopsAgents(params: {
+    provider: ChatOpsProviderType;
+    senderEmail?: string;
+  }): Promise<{ id: string; name: string }[]> {
+    const agents = await AgentModel.findByAllowedChatopsProvider(
+      params.provider,
+    );
+
+    if (!params.senderEmail || agents.length === 0) {
+      return agents;
+    }
+
+    const user = await UserModel.findByEmail(params.senderEmail.toLowerCase());
+    if (!user) {
+      return agents;
+    }
+
+    const org = await OrganizationModel.getFirst();
+    if (!org) {
+      return agents;
+    }
+
+    const isProfileAdmin = await userHasPermission(
+      user.id,
+      org.id,
+      "profile",
+      "admin",
+    );
+    const accessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
+      user.id,
+      isProfileAdmin,
+    );
+    const accessibleSet = new Set(accessibleIds);
+    return agents.filter((a) => accessibleSet.has(a.id));
   }
 
   /**
@@ -350,7 +393,7 @@ export class ChatOpsManager {
 
   /**
    * Validate that the MS Teams user has access to the agent.
-   * 1. Resolve user email from MS Teams (requires User.ReadBasic.All Graph permission)
+   * 1. Use pre-resolved email from TeamsInfo (Bot Framework), or fall back to Graph API
    * 2. Look up Archestra user by email
    * 3. Check user has team-based access to the agent
    */
@@ -365,12 +408,16 @@ export class ChatOpsManager {
   > {
     const { message, provider, agentId, agentName, organizationId } = params;
 
-    // Resolve user's email from the chat provider
-    logger.debug(
-      { senderId: message.senderId },
-      "[ChatOps] Resolving user email from provider",
-    );
-    const userEmail = await provider.getUserEmail(message.senderId);
+    // Try pre-resolved email first (from Bot Framework TeamsInfo, no Graph API needed)
+    let userEmail = message.senderEmail || null;
+    if (!userEmail) {
+      // Fall back to Graph API (requires User.Read.All permission)
+      logger.debug(
+        { senderId: message.senderId },
+        "[ChatOps] No pre-resolved email, falling back to Graph API",
+      );
+      userEmail = await provider.getUserEmail(message.senderId);
+    }
     logger.debug(
       { senderId: message.senderId, userEmail },
       "[ChatOps] User email resolved",
@@ -379,17 +426,16 @@ export class ChatOpsManager {
     if (!userEmail) {
       logger.warn(
         { senderId: message.senderId },
-        "[ChatOps] Could not resolve user email - Graph API User.ReadBasic.All permission may be missing",
+        "[ChatOps] Could not resolve user email via TeamsInfo or Graph API",
       );
       await this.sendSecurityErrorReply(
         provider,
         message,
-        "Could not verify your identity. The bot requires the `User.ReadBasic.All` Microsoft Graph API permission to be configured. Please contact your administrator.",
+        "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.",
       );
       return {
         success: false,
-        error:
-          "Could not resolve user email for security validation - User.ReadBasic.All permission may be missing",
+        error: "Could not resolve user email for security validation",
       };
     }
 

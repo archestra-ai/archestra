@@ -259,6 +259,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Create LLM model using shared service
       // Pass conversationId as sessionId to group all requests in this chat session
+      // Pass agent's llmApiKeyId so it can be used without user access check
       const { model } = await createLLMModelForAgent({
         organizationId,
         userId: user.id,
@@ -268,6 +269,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationId,
         externalAgentId,
         sessionId: conversationId,
+        agentLlmApiKeyId: conversation.agent.llmApiKeyId,
       });
 
       // Strip images and large browser tool results from messages before sending to LLM
@@ -286,7 +288,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         model,
         messages: modelMessages,
         tools: mcpTools,
-        stopWhen: stepCountIs(20),
+        stopWhen: stepCountIs(500),
         onFinish: async ({ usage, finishReason }) => {
           logger.info(
             {
@@ -719,7 +721,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Validate chatApiKeyId if provided
-      if (chatApiKeyId) {
+      // Skip validation if it matches the agent's configured key (permission flows through agent access)
+      if (chatApiKeyId && chatApiKeyId !== agent.llmApiKeyId) {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
@@ -787,12 +790,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, body, user, organizationId, headers }, reply) => {
       // Validate chatApiKeyId if provided
+      // Skip validation if it matches the agent's configured key (permission flows through agent access)
       if (body.chatApiKeyId) {
-        await validateChatApiKeyAccess(
-          body.chatApiKeyId,
-          user.id,
+        const currentConversation = await ConversationModel.findById({
+          id,
+          userId: user.id,
           organizationId,
-        );
+        });
+
+        if (
+          !currentConversation ||
+          body.chatApiKeyId !== currentConversation.agent.llmApiKeyId
+        ) {
+          await validateChatApiKeyAccess(
+            body.chatApiKeyId,
+            user.id,
+            organizationId,
+          );
+        }
       }
 
       // Validate agentId if provided

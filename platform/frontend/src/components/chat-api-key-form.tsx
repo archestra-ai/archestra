@@ -139,6 +139,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
   },
+  groq: {
+    name: "Groq",
+    icon: "/icons/groq.png",
+    placeholder: "gsk-...",
+    enabled: true,
+    consoleUrl: "https://console.groq.com/keys",
+    consoleName: "Groq Console",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

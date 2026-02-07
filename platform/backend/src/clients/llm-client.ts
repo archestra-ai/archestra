@@ -87,6 +87,7 @@ const envApiKeyGetters: Record<
   openai: () => config.chat.openai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  groq: () => config.chat.groq.apiKey,
 };
 
 /**
@@ -165,6 +166,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   openai: "gpt-4o-mini",
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
+  groq: "llama-3.3-70b-versatile",
   cohere: "command-light", // Cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
@@ -339,6 +341,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     });
     return client(modelName);
   },
+
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure ARCHESTRA_CHAT_GROQ_API_KEY.",
+      );
+    }
+    // Groq uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
+    });
+    return client(modelName);
+  },
 };
 
 /**
@@ -504,6 +521,18 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       return client(modelName);
+    },
+
+    groq: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+      // Groq is OpenAI-compatible
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("groq", agentId),
+        headers,
+      });
+      // Use .chat() to force Chat Completions API
+      return client.chat(modelName);
     },
   };
 

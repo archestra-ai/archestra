@@ -64,6 +64,13 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "zhipuai";
   }
 
+  if (lowerModel.includes("llama") || lowerModel.includes("mixtral") || lowerModel.includes("gemma")) {
+    // Note: This is ambiguous as many providers serve these models.
+    // Prioritize Groq for Llama if not specified, but this logic is brittle.
+    // ideally user selects provider.
+    return "groq";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -87,6 +94,7 @@ const envApiKeyGetters: Record<
   openai: () => config.chat.openai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  groq: () => config.chat.groq.apiKey,
 };
 
 /**
@@ -126,7 +134,8 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.openaiApiKey ??
       secret?.secret?.zhipuaiApiKey ??
       secret?.secret?.cohereApiKey ??
-      secret?.secret?.bedrockApiKey;
+      secret?.secret?.bedrockApiKey ??
+      secret?.secret?.groqApiKey;
     if (secretValue) {
       return { apiKey: secretValue as string, source: resolvedApiKey.scope };
     }
@@ -169,6 +178,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
+  groq: "llama3-8b-8192", // Groq's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
   mistral: "mistral-small-latest", // Mistral's fast model
 };
@@ -312,6 +322,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createOpenAI({
       apiKey,
       baseURL: config.llm.zhipuai.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure ARCHESTRA_CHAT_GROQ_API_KEY.",
+      );
+    }
+    // Groq uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
     });
     return client(modelName);
   },
@@ -485,6 +510,17 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("zhipuai", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    groq: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+      // Groq is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("groq", agentId),
         headers,
       });
       return client.chat(modelName);

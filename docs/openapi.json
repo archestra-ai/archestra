@@ -31590,6 +31590,16 @@
         "tags": [
           "auth"
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Default Response"

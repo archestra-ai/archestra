@@ -353,10 +353,6 @@ export async function validateTeamToken(
   // Validate the token itself
   const token = await TeamTokenModel.validateToken(tokenValue);
   if (!token) {
-    // logger.debug(
-    //   { profileId, tokenPrefix: tokenValue.substring(0, 14) },
-    //   "validateTeamToken: token not found in team_token table",
-    // );
     return null;
   }
 

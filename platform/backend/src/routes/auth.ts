@@ -193,6 +193,58 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+  // OAuth 2.1 Token — strip the `resource` parameter before forwarding to
+  // better-auth. MCP clients (e.g. Cursor, Claude Code) include `resource`
+  // with dynamic per-profile URLs like `/v1/mcp/{profileId}`. better-auth's
+  // `validAudiences` only supports exact-match strings so there is no way to
+  // whitelist a dynamic path. Stripping `resource` causes better-auth to
+  // issue opaque tokens instead of JWTs, which our MCP Gateway token
+  // validator already handles.
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/oauth2/token",
+    schema: {
+      tags: ["auth"],
+    },
+    async handler(request, reply) {
+      const body = request.body as Record<string, unknown> | undefined;
+      if (body?.resource) {
+        logger.debug(
+          { resource: body.resource },
+          "[auth:oauth2/token] Stripping resource parameter from token request",
+        );
+        delete body.resource;
+      }
+
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const headers = new Headers();
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (value) headers.append(key, value.toString());
+      });
+
+      const contentType = request.headers["content-type"] || "";
+      const serializedBody = contentType.includes(
+        "application/x-www-form-urlencoded",
+      )
+        ? new URLSearchParams(body as Record<string, string>).toString()
+        : JSON.stringify(body);
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+        body: serializedBody,
+      });
+
+      const response = await betterAuth.handler(req);
+
+      reply.status(response.status);
+      response.headers.forEach((value: string, key: string) => {
+        reply.header(key, value);
+      });
+      reply.send(response.body ? await response.text() : null);
+    },
+  });
+
   // OAuth 2.1 Consent — intercept better-auth redirect and return JSON
   // Browser fetch with redirect:"manual" produces opaque redirect responses
   // where Location header is inaccessible. Convert redirect to JSON so the
@@ -266,9 +318,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     url: "/api/auth/oauth2/register",
     schema: {
       tags: ["auth"],
+      body: z.record(z.string(), z.unknown()),
     },
     async handler(request, reply) {
-      const body = (request.body as Record<string, unknown> | undefined) ?? {};
+      const body = request.body;
       // Force public client for unauthenticated DCR (MCP spec requires PKCE,
       // not client_secret). Open WebUI may send client_secret_post but MCP
       // clients must be public for unauthenticated registration to work.

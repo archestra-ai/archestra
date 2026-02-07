@@ -256,7 +256,14 @@ export const submitOAuthConsent = <ThrowOnError extends boolean = false>(options
     }
 });
 
-export const postApiAuthOauth2Register = <ThrowOnError extends boolean = false>(options?: Options<PostApiAuthOauth2RegisterData, ThrowOnError>) => (options?.client ?? client).post<PostApiAuthOauth2RegisterResponses, unknown, ThrowOnError>({ url: '/api/auth/oauth2/register', ...options });
+export const postApiAuthOauth2Register = <ThrowOnError extends boolean = false>(options?: Options<PostApiAuthOauth2RegisterData, ThrowOnError>) => (options?.client ?? client).post<PostApiAuthOauth2RegisterResponses, unknown, ThrowOnError>({
+    url: '/api/auth/oauth2/register',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+    }
+});
 
 export const getApiAuthBy__ = <ThrowOnError extends boolean = false>(options: Options<GetApiAuthBy__Data, ThrowOnError>) => (options.client ?? client).get<GetApiAuthBy__Responses, unknown, ThrowOnError>({ url: '/api/auth/{*}', ...options });
 

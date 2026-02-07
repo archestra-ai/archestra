@@ -9153,7 +9153,9 @@ export type SubmitOAuthConsentResponses = {
 export type SubmitOAuthConsentResponse = SubmitOAuthConsentResponses[keyof SubmitOAuthConsentResponses];
 
 export type PostApiAuthOauth2RegisterData = {
-    body?: never;
+    body?: {
+        [key: string]: unknown;
+    };
     path?: never;
     query?: never;
     url: '/api/auth/oauth2/register';

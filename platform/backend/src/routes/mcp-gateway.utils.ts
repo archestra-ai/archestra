@@ -480,6 +480,15 @@ export async function validateOAuthToken(
       return null;
     }
 
+    // Check if associated refresh token has been revoked
+    if (accessToken.refreshTokenRevoked) {
+      logger.debug(
+        { profileId },
+        "validateOAuthToken: associated refresh token is revoked",
+      );
+      return null;
+    }
+
     // Check token expiry
     if (accessToken.expiresAt < new Date()) {
       logger.debug({ profileId }, "validateOAuthToken: token expired");

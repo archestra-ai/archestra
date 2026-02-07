@@ -75,6 +75,7 @@ interface TestFixtures {
   makeSsoProvider: typeof makeSsoProvider;
   makeOAuthClient: typeof makeOAuthClient;
   makeOAuthAccessToken: typeof makeOAuthAccessToken;
+  makeOAuthRefreshToken: typeof makeOAuthRefreshToken;
   seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
 }
 
@@ -766,6 +767,7 @@ async function makeOAuthAccessToken(
     token?: string;
     expiresAt?: Date;
     scopes?: string[];
+    refreshId?: string;
   } = {},
 ) {
   const id = crypto.randomUUID();
@@ -778,10 +780,41 @@ async function makeOAuthAccessToken(
       userId,
       expiresAt: overrides.expiresAt ?? new Date(Date.now() + 3600000),
       scopes: overrides.scopes ?? ["mcp"],
+      refreshId: overrides.refreshId ?? null,
       createdAt: new Date(),
     })
     .returning();
   return accessToken;
+}
+
+/**
+ * Creates a test OAuth refresh token
+ */
+async function makeOAuthRefreshToken(
+  clientId: string,
+  userId: string,
+  overrides: {
+    token?: string;
+    expiresAt?: Date;
+    scopes?: string[];
+    revoked?: Date | null;
+  } = {},
+) {
+  const id = crypto.randomUUID();
+  const [refreshToken] = await db
+    .insert(schema.oauthRefreshTokensTable)
+    .values({
+      id,
+      token: overrides.token ?? `refresh-token-hash-${id.substring(0, 8)}`,
+      clientId,
+      userId,
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 86400000),
+      scopes: overrides.scopes ?? ["mcp"],
+      revoked: overrides.revoked ?? null,
+      createdAt: new Date(),
+    })
+    .returning();
+  return refreshToken;
 }
 
 /**
@@ -891,6 +924,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeOAuthAccessToken: async ({}, use) => {
     await use(makeOAuthAccessToken);
+  },
+  makeOAuthRefreshToken: async ({}, use) => {
+    await use(makeOAuthRefreshToken);
   },
   seedAndAssignArchestraTools: async ({}, use) => {
     await use(seedAndAssignArchestraTools);

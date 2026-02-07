@@ -712,10 +712,7 @@ test.describe("MCP Gateway - OAuth 2.1 Full Flow", () => {
       if (authorizeResult.url?.includes("/oauth/consent")) {
         // --- Step 4: Submit consent ---
         // Parse the consent URL to extract the OAuth query params (includes signed state)
-        const consentUrl = new URL(
-          authorizeResult.url,
-          `${API_BASE_URL}`,
-        );
+        const consentUrl = new URL(authorizeResult.url, `${API_BASE_URL}`);
         const oauthQuery = consentUrl.searchParams.toString();
 
         const consentResponse = await request.post(
@@ -740,11 +737,15 @@ test.describe("MCP Gateway - OAuth 2.1 Full Flow", () => {
         expect(redirectUri).toBeDefined();
 
         const redirectUrl = new URL(redirectUri);
-        code = redirectUrl.searchParams.get("code")!;
+        const extractedCode = redirectUrl.searchParams.get("code");
+        expect(extractedCode).toBeDefined();
+        code = extractedCode as string;
       } else if (authorizeResult.url) {
         // Code returned directly (consent already given or skipConsent)
         const redirectUrl = new URL(authorizeResult.url);
-        code = redirectUrl.searchParams.get("code")!;
+        const extractedCode = redirectUrl.searchParams.get("code");
+        expect(extractedCode).toBeDefined();
+        code = extractedCode as string;
       } else {
         throw new Error(
           `Unexpected authorize JSON response: ${JSON.stringify(authorizeResult)}`,
@@ -753,7 +754,8 @@ test.describe("MCP Gateway - OAuth 2.1 Full Flow", () => {
     } else {
       // Followed redirect - extract code from the final URL
       const finalUrl = new URL(authorizeResponse.url());
-      code = finalUrl.searchParams.get("code")!;
+      const extractedCode = finalUrl.searchParams.get("code");
+      code = extractedCode as string;
 
       // If we ended up at the consent page, submit consent and re-authorize
       if (finalUrl.pathname.includes("/oauth/consent")) {
@@ -779,7 +781,9 @@ test.describe("MCP Gateway - OAuth 2.1 Full Flow", () => {
         const redirectUri =
           consentResult.uri || consentResult.url || consentResult.redirectTo;
         const redirectUrl = new URL(redirectUri);
-        code = redirectUrl.searchParams.get("code")!;
+        const consentCode = redirectUrl.searchParams.get("code");
+        expect(consentCode).toBeDefined();
+        code = consentCode as string;
       }
     }
 
@@ -863,8 +867,7 @@ test.describe("MCP Gateway - OAuth 2.1 Full Flow", () => {
     // Verify Archestra tools are accessible via the OAuth JWT token
     const archestraWhoami = listResult.result.tools.find(
       // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
-      (t: any) =>
-        t.name === `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
+      (t: any) => t.name === `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
     );
     expect(archestraWhoami).toBeDefined();
   });

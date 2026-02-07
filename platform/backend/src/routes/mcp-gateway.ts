@@ -134,7 +134,6 @@ async function handleMcpPostRequest(
         error: {
           code: -32603,
           message: "Internal server error",
-          data: error instanceof Error ? error.message : "Unknown error",
         },
         id: null,
       };

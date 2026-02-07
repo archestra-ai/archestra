@@ -1,6 +1,6 @@
 "use client";
 
-import { OAUTH_SCOPE_DESCRIPTIONS } from "@shared";
+import { OAUTH_SCOPE_DESCRIPTIONS, OAUTH_SCOPES } from "@shared";
 import { Shield } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -31,7 +31,7 @@ export function ConsentForm() {
   const clientName =
     queryClientName || clientInfo?.client_name || "Application";
 
-  const scope = searchParams.get("scope") || "mcp";
+  const scope = searchParams.get("scope") || OAUTH_SCOPES[0];
   const scopes = scope.split(" ").filter(Boolean);
 
   // Reconstruct the original OAuth query from search params

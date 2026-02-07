@@ -416,6 +416,47 @@ describe("getTrustedOrigins", () => {
         "http://idp.example.com:8080",
       ]);
     });
+
+    test("should add 127.0.0.1 equivalent when localhost is configured", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsProd();
+
+      expect(result).toContain("http://localhost:3000");
+      expect(result).toContain("http://127.0.0.1:3000");
+    });
+
+    test("should add localhost equivalent when 127.0.0.1 is configured", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "http://127.0.0.1:3000";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsProd();
+
+      expect(result).toContain("http://127.0.0.1:3000");
+      expect(result).toContain("http://localhost:3000");
+    });
+
+    test("should not add loopback equivalents for non-localhost origins", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsProd();
+
+      expect(result).toEqual(["https://app.example.com"]);
+    });
   });
 
   describe("quickstart mode (ARCHESTRA_QUICKSTART=true)", () => {
@@ -917,6 +958,30 @@ describe("getCorsOrigins", () => {
         "https://app.example.com",
         "http://idp.example.com:8080",
       ]);
+    });
+
+    test("should add 127.0.0.1 equivalent when localhost is configured", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const { getCorsOrigins: getCorsOriginsProd } = await import("./config");
+      const result = getCorsOriginsProd();
+
+      expect(result).toContain("http://localhost:3000");
+      expect(result).toContain("http://127.0.0.1:3000");
+    });
+
+    test("should add localhost equivalent when 127.0.0.1 is configured", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "http://127.0.0.1:3000";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const { getCorsOrigins: getCorsOriginsProd } = await import("./config");
+      const result = getCorsOriginsProd();
+
+      expect(result).toContain("http://127.0.0.1:3000");
+      expect(result).toContain("http://localhost:3000");
     });
   });
 

@@ -127,6 +127,24 @@ const parseAllowedOrigins = (): string[] => {
   return [];
 };
 
+/**
+ * For each origin containing "localhost", add the equivalent "127.0.0.1" origin (and vice versa).
+ * localhost and 127.0.0.1 resolve to the same loopback interface, so both should be trusted
+ * when either is configured. This prevents origin validation failures when users access
+ * the app via 127.0.0.1 but only localhost is configured (or vice versa).
+ */
+const addLoopbackEquivalents = (origins: string[]): string[] => {
+  const result = new Set(origins);
+  for (const origin of origins) {
+    if (origin.includes("localhost")) {
+      result.add(origin.replace("localhost", "127.0.0.1"));
+    } else if (origin.includes("127.0.0.1")) {
+      result.add(origin.replace("127.0.0.1", "localhost"));
+    }
+  }
+  return [...result];
+};
+
 /** Matches http(s)://localhost or http(s)://127.0.0.1 with any port */
 export const LOCALHOST_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
@@ -149,7 +167,7 @@ export const getCorsOrigins = (): (string | RegExp)[] => {
   }
 
   // Production: use configured origins plus additional origins
-  return [...origins, ...additionalOrigins];
+  return [...addLoopbackEquivalents(origins), ...additionalOrigins];
 };
 
 /**
@@ -204,7 +222,7 @@ export const getTrustedOrigins = (): string[] => {
   }
 
   // Production: use configured origins plus additional origins
-  return [...origins, ...additionalOrigins];
+  return [...addLoopbackEquivalents(origins), ...additionalOrigins];
 };
 
 /**

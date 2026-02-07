@@ -345,7 +345,6 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     if [ -z "$ARCHESTRA_FRONTEND_URL" ]; then
         export ARCHESTRA_FRONTEND_URL="http://localhost:3000"
         echo "Set ARCHESTRA_FRONTEND_URL to $ARCHESTRA_FRONTEND_URL (required for HTTP connections)"
-        echo "TIP: If accessing from another device on your network, set ARCHESTRA_FRONTEND_URL=http://<your-ip>:3000"
     fi
     if [ ! -S /var/run/docker.sock ]; then
         echo "Quickstart mode is on but Docker socket is not mounted"

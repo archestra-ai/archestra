@@ -34,6 +34,7 @@ const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
+const isQuickstart = process.env.ARCHESTRA_QUICKSTART === "true";
 
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
@@ -111,8 +112,9 @@ const getPortFromUrl = (): number => {
 };
 
 const parseAllowedOrigins = (): string[] => {
-  // Development: use empty array to signal "use defaults" (localhost regex)
-  if (isDevelopment) {
+  // Development or quickstart: use empty array to signal "use defaults" (localhost + private IPs)
+  // Quickstart users often access from LAN IPs and need the same relaxed origin checking
+  if (isDevelopment || isQuickstart) {
     return [];
   }
 

@@ -417,6 +417,56 @@ describe("getTrustedOrigins", () => {
       ]);
     });
   });
+
+  describe("quickstart mode (ARCHESTRA_QUICKSTART=true)", () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    test("should return localhost and private IP wildcards in quickstart mode even with production NODE_ENV", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_QUICKSTART = "true";
+      process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const { getTrustedOrigins: getTrustedOriginsQs } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsQs();
+
+      expect(result).toEqual([
+        "http://localhost:*",
+        "https://localhost:*",
+        "http://127.0.0.1:*",
+        "https://127.0.0.1:*",
+        "http://0.0.0.0:*",
+        "https://0.0.0.0:*",
+        "http://10.*:*",
+        "https://10.*:*",
+        "http://172.*:*",
+        "https://172.*:*",
+        "http://192.168.*:*",
+        "https://192.168.*:*",
+      ]);
+    });
+
+    test("should include additional trusted origins in quickstart mode", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_QUICKSTART = "true";
+      process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+        "http://keycloak:8080";
+
+      const { getTrustedOrigins: getTrustedOriginsQs } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsQs();
+
+      expect(result).toContain("http://localhost:*");
+      expect(result).toContain("http://192.168.*:*");
+      expect(result).toContain("http://keycloak:8080");
+    });
+  });
 });
 
 describe("getAdditionalTrustedSsoProviderIds", () => {
@@ -867,6 +917,49 @@ describe("getCorsOrigins", () => {
         "https://app.example.com",
         "http://idp.example.com:8080",
       ]);
+    });
+  });
+
+  describe("quickstart mode (ARCHESTRA_QUICKSTART=true)", () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    test("should return LOCALHOST_REGEX and PRIVATE_IP_REGEX in quickstart mode even with production NODE_ENV", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_QUICKSTART = "true";
+      process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const {
+        getCorsOrigins: getCorsOriginsQs,
+        LOCALHOST_REGEX: localhostRegex,
+        PRIVATE_IP_REGEX: privateIpRegex,
+      } = await import("./config");
+      const result = getCorsOriginsQs();
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toContain(localhostRegex);
+      expect(result).toContain(privateIpRegex);
+    });
+
+    test("should include additional trusted origins in quickstart mode", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_QUICKSTART = "true";
+      process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+        "http://keycloak:8080";
+
+      const {
+        getCorsOrigins: getCorsOriginsQs,
+        LOCALHOST_REGEX: localhostRegex,
+        PRIVATE_IP_REGEX: privateIpRegex,
+      } = await import("./config");
+      const result = getCorsOriginsQs();
+
+      expect(result).toContain(localhostRegex);
+      expect(result).toContain(privateIpRegex);
+      expect(result).toContain("http://keycloak:8080");
     });
   });
 });

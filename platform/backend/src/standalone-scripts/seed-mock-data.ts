@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
-import db, { schema } from "@/database";
+import db, { initializeDatabase, schema } from "@/database";
 import { seedDefaultUserAndOrg } from "@/database/seed";
 import logger from "@/logging";
 import { AgentModel, OrganizationModel, TeamModel } from "@/models";
@@ -16,6 +16,9 @@ const CREATE_TOOLS_AND_INTERACTIONS = false;
 
 async function seedMockData() {
   logger.info("\n🌱 Starting mock data seed...\n");
+
+  // Step -1: Initialize database
+  await initializeDatabase();
 
   // Step 0: Clean existing mock data (in correct order due to foreign keys)
   logger.info("Cleaning existing data...");

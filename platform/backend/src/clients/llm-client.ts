@@ -113,8 +113,11 @@ export async function resolveProviderApiKey(params: {
     conversationId: conversationId ?? null,
   });
 
+  console.log(">>> resolveProviderApiKey: resolvedApiKey", { secretId: resolvedApiKey?.secretId, scope: resolvedApiKey?.scope });
+
   if (resolvedApiKey?.secretId) {
     const secret = await secretManager().getSecret(resolvedApiKey.secretId);
+    console.log(">>> resolveProviderApiKey: secret fetched", { secret: JSON.stringify(secret) });
     // Support both old format (anthropicApiKey) and new format (apiKey)
     const secretValue =
       secret?.secret?.apiKey ??
@@ -124,6 +127,7 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.zhipuaiApiKey ??
       secret?.secret?.cohereApiKey ??
       secret?.secret?.bedrockApiKey;
+    console.log(">>> resolveProviderApiKey: secretValue", secretValue);
     if (secretValue) {
       return { apiKey: secretValue as string, source: resolvedApiKey.scope };
     }
@@ -599,6 +603,96 @@ export async function createLLMModelForAgent(params: {
       400,
       "LLM Provider API key not configured. Please configure it in Chat Settings.",
     );
+  }
+
+  // MOCK FOR DEMO
+  if (apiKey === "sk-mock-key" && provider === "openai") {
+    console.log(">>> MOCK LLM: sk-mock-key detected, using mock fetch");
+    const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      console.log(">>> MOCK LLM: mockFetch called", { url: input.toString() });
+      const mockId = "chatcmpl-mock-" + Date.now();
+      const created = Math.floor(Date.now() / 1000);
+      
+      // Parse prompt to decide on response
+      let userMessage = "";
+      if (init?.body) {
+         try {
+            const body = JSON.parse(init.body as string);
+            const messages = body.messages || [];
+            for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].role === 'user') {
+                    userMessage = typeof messages[i].content === 'string' 
+                      ? messages[i].content 
+                      : JSON.stringify(messages[i].content);
+                    break;
+                }
+            }
+         } catch (e) { console.error("Mock fetch parse error", e); }
+      }
+
+      // Create chunks for streaming - return tool calls for specific queries
+      let chunks: any[] = [];
+      
+      if (userMessage.toLowerCase().includes("who am i")) {
+        // Return a tool call for who_am_i
+        const toolCallId = "call_" + Date.now();
+        chunks = [
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { role: "assistant", content: null } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: toolCallId, type: "function", function: { name: "archestra__whoami", arguments: "" } }] } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: "{}" } }] } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+        ];
+      } else if (userMessage.toLowerCase().includes("demo 2")) {
+        // Return a tool call for showRawHtml (ts_demo_2)
+        const toolCallId = "call_" + Date.now();
+        chunks = [
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { role: "assistant", content: null } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: toolCallId, type: "function", function: { name: "ts_demo_2__showrawhtml", arguments: "" } }] } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: "{}" } }] } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+        ];
+      } else if (userMessage.toLowerCase().includes("demo 1") || userMessage.toLowerCase().includes("raw html")) {
+        // Return a tool call for showRawHtml (ts_demo)
+        const toolCallId = "call_" + Date.now();
+        chunks = [
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { role: "assistant", content: null } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: toolCallId, type: "function", function: { name: "ts_demo__showrawhtml", arguments: "" } }] } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: "{}" } }] } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+        ];
+      } else {
+        // Default text response
+        const responseText = "I am a mock AI for demonstration purposes. Ask me 'Who am I?' or 'Show me the demo app' to see tool calls in action.";
+        chunks = [
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { role: "assistant", content: "" } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: { content: responseText } }] },
+          { id: mockId, object: "chat.completion.chunk", created, model: "gpt-4o", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+        ];
+      }
+      
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    };
+
+    const client = createOpenAI({
+      apiKey,
+      fetch: mockFetch as any,
+    });
+    // Use .chat() to force Chat Completions API (not Responses API)
+    const model = client.chat(modelName);
+    return { model, provider, apiKeySource: source };
   }
 
   const model = createLLMModel({

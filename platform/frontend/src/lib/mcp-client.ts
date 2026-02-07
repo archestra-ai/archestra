@@ -1,8 +1,22 @@
+/**
+ * ArchestraMcpClient acts as a bridge between the @mcp-ui/client components
+ * and the Archestra MCP Gateway.
+ * 
+ * It translates JSON-RPC requests from the UI into HTTP POST requests
+ * targeting the profile-specific MCP gateway endpoint.
+ */
 export class ArchestraMcpClient {
   constructor(private profileId: string | undefined) {}
 
-  // biome-ignore lint/suspicious/noExplicitAny: Generic request structure
-  async request(request: { method: string; params?: any }, _options?: any) {
+  /**
+   * Executes an MCP request via the Archestra Gateway.
+   * @param request The JSON-RPC request containing method and parameters.
+   * @returns The result of the MCP operation.
+   */
+  async request<T = unknown>(
+    request: { method: string; params?: Record<string, unknown> },
+    _options?: unknown
+  ): Promise<T> {
     if (!this.profileId) {
       console.warn("ArchestraMcpClient: No profileId provided, cannot fetch resources");
       throw new Error("No profile context for MCP request");
@@ -29,9 +43,8 @@ export class ArchestraMcpClient {
           const json = JSON.parse(text);
           throw new Error(json.error?.message || `HTTP Error ${response.status}`);
         } catch (e) {
-            // if we threw above, rethrow, otherwise generic error
-            if (e instanceof Error && e.message.includes("HTTP Error")) throw e;
-            throw new Error(`MCP Gateway Error: ${response.status}`);
+          if (e instanceof Error && e.message.includes("HTTP Error")) throw e;
+          throw new Error(`MCP Gateway Error: ${response.status}`);
         }
       }
 
@@ -39,7 +52,7 @@ export class ArchestraMcpClient {
       if (data.error) {
         throw new Error(data.error.message);
       }
-      return data.result;
+      return data.result as T;
     } catch (error) {
       console.error("MCP Client Request Error:", error);
       throw error;

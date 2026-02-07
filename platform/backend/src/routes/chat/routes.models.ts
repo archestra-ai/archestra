@@ -88,6 +88,17 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.llm.openai.baseUrl;
   const url = `${baseUrl}/models`;
 
+  if (apiKey === "sk-mock-key") {
+    return [
+      {
+        id: "gpt-4o",
+        displayName: "GPT-4o (Mock)",
+        provider: "openai",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  }
+
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${apiKey}`,

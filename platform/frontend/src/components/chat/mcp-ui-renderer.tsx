@@ -1,15 +1,19 @@
 "use client";
 
-import { AppRenderer } from "@mcp-ui/client";
+import { AppRenderer, type AppRendererProps } from "@mcp-ui/client";
 import { useMemo } from "react";
 import { ArchestraMcpClient } from "@/lib/mcp-client";
 
 interface ChatMcpUiRendererProps {
   toolName: string;
-  // biome-ignore lint/suspicious/noExplicitAny: Tool input is dynamic
-  toolInput: any;
-  // biome-ignore lint/suspicious/noExplicitAny: Tool result is dynamic
-  toolResult: any;
+  /** Input parameters provided to the tool */
+  toolInput: Record<string, unknown>;
+  /** 
+   * The result returned from tool execution. 
+   * Handled as unknown as tool results are dynamic objects whose structure 
+   * depends on the specific tool being called.
+   */
+  toolResult: unknown;
   agentId?: string;
 }
 
@@ -26,20 +30,23 @@ export function ChatMcpUiRenderer({
   return (
     <div className="border rounded-md my-2 overflow-hidden bg-background">
       <AppRenderer
+        // ArchestraMcpClient fulfills the bridge interface for request handling.
         client={client as any}
         toolName={toolName}
         toolInput={toolInput}
-        toolResult={toolResult}
-        // biome-ignore lint/suspicious/noExplicitAny: library types are strict
+        toolResult={toolResult as AppRendererProps["toolResult"]}
         onOpenLink={async ({ url }) => {
           window.open(url, "_blank");
-          return {} as any;
+          return {
+            // Return empty result as requested by bridge spec
+          };
         }}
         sandbox={{ url: new URL("about:blank") }}
-        // biome-ignore lint/suspicious/noExplicitAny: library types are strict
         onMessage={async (params) => {
           console.log("MCP UI Message:", params);
-          return {} as any;
+          return {
+            // Return empty result as requested by bridge spec
+          };
         }}
       />
     </div>

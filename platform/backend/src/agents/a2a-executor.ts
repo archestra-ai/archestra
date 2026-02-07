@@ -70,7 +70,7 @@ export async function executeA2AMessage(
   // Generate isolation key for browser tab isolation.
   // When called from chat delegation, conversationId is provided.
   // When called directly (A2A route), generate a unique execution ID.
-  const isOwnedExecution = !params.conversationId;
+  const isDirectExecutionOutsideConversation = !params.conversationId;
   const isolationKey = params.conversationId ?? crypto.randomUUID();
 
   // Build delegation chain: append current agentId to parent chain
@@ -138,7 +138,7 @@ export async function executeA2AMessage(
         model: selectedModel,
         hasSystemPrompt: !!systemPrompt,
         isolationKey,
-        isOwnedExecution,
+        isDirectExecutionOutsideConversation,
       },
       "Starting A2A execution",
     );
@@ -206,7 +206,7 @@ export async function executeA2AMessage(
       userId,
       organizationId,
       isolationKey,
-      isOwnedExecution,
+      isDirectExecutionOutsideConversation,
     });
   }
 }
@@ -224,10 +224,15 @@ async function cleanupBrowserTab(params: {
   userId: string;
   organizationId: string;
   isolationKey: string;
-  isOwnedExecution: boolean;
+  isDirectExecutionOutsideConversation: boolean;
 }): Promise<void> {
-  const { agentId, userId, organizationId, isolationKey, isOwnedExecution } =
-    params;
+  const {
+    agentId,
+    userId,
+    organizationId,
+    isolationKey,
+    isDirectExecutionOutsideConversation,
+  } = params;
 
   try {
     // Close the browser tab via the feature service
@@ -251,7 +256,7 @@ async function cleanupBrowserTab(params: {
 
   // For direct A2A calls (not delegated from chat), also close MCP client
   // to free the cache slot. For delegated calls, keep client alive for reuse.
-  if (isOwnedExecution) {
+  if (isDirectExecutionOutsideConversation) {
     try {
       closeChatMcpClient(agentId, userId, isolationKey);
     } catch (error) {

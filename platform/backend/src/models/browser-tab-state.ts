@@ -121,12 +121,6 @@ class BrowserTabStateModel {
 
     return result[0] ?? null;
   }
-
-  static async deleteByIsolationKey(isolationKey: string): Promise<void> {
-    await db
-      .delete(schema.browserTabStatesTable)
-      .where(eq(schema.browserTabStatesTable.isolationKey, isolationKey));
-  }
 }
 
 export default BrowserTabStateModel;

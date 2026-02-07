@@ -643,7 +643,12 @@ export class BrowserStreamSocketClientContext {
           result.url &&
           !this.isBlankUrl(result.url)
         ) {
-          await browserStateManager.updateUrl(conversationId, result.url);
+          await browserStateManager.updateUrl(
+            agentId,
+            userContext.userId,
+            conversationId,
+            result.url,
+          );
         }
 
         // Determine canGoBack based on current URL

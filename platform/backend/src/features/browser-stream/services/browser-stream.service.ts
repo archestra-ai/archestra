@@ -9,7 +9,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import { getChatMcpClient } from "@/clients/chat-mcp-client";
 import logger from "@/logging";
 import {
-  ConversationModel,
+  BrowserTabStateModel,
   InternalMcpCatalogModel,
   McpServerModel,
   ToolModel,
@@ -471,8 +471,12 @@ export class BrowserStreamService {
     }
 
     try {
-      // Load stored state for this conversation
-      const state = await browserStateManager.get(conversationId);
+      // Load stored state for this agent+user+conversation
+      const state = await browserStateManager.get(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
       const storedTabIndex = state?.tabIndex;
       const storedUrl = state?.url;
 
@@ -605,10 +609,15 @@ export class BrowserStreamService {
       }
 
       // Save state
-      await browserStateManager.set(conversationId, {
-        url: urlToLoad ?? "",
-        tabIndex: newTabIndex,
-      });
+      await browserStateManager.set(
+        agentId,
+        userContext.userId,
+        conversationId,
+        {
+          url: urlToLoad ?? "",
+          tabIndex: newTabIndex,
+        },
+      );
 
       return { success: true, tabIndex: newTabIndex };
     } catch (error) {
@@ -652,43 +661,43 @@ export class BrowserStreamService {
       return;
     }
 
-    // Get oldest conversation with browser state
-    const oldest =
-      await ConversationModel.getOldestConversationWithBrowserState(
-        agentId,
-        userContext.userId,
-      );
+    // Get oldest tab state for this user across all agents
+    const oldest = await BrowserTabStateModel.getOldestForUser(
+      userContext.userId,
+    );
 
     if (!oldest) {
       return;
     }
 
-    const state = await browserStateManager.get(oldest.id);
-
-    if (state?.tabIndex !== undefined && state.tabIndex > 0) {
+    if (oldest.tabIndex !== null && oldest.tabIndex > 0) {
       logger.info(
         {
-          agentId,
+          agentId: oldest.agentId,
           userId: userContext.userId,
-          oldestConversationId: oldest.id,
-          tabIndex: state.tabIndex,
+          oldestIsolationKey: oldest.isolationKey,
+          tabIndex: oldest.tabIndex,
         },
         "[BrowserTabs] Closing oldest tab to make room for new conversation",
       );
 
       await this.callTabsTool({
         agentId,
-        conversationId: oldest.id,
+        conversationId: oldest.isolationKey,
         userContext,
         client,
         tabsTool,
         action: "close",
-        index: state.tabIndex,
+        index: oldest.tabIndex,
       });
     }
 
-    // Clear state for the closed conversation
-    await browserStateManager.clear(oldest.id);
+    // Clear state for the closed tab
+    await browserStateManager.clear(
+      oldest.agentId,
+      userContext.userId,
+      oldest.isolationKey,
+    );
   }
 
   /**
@@ -907,7 +916,12 @@ export class BrowserStreamService {
       (await this.getCurrentUrl(agentId, conversationId, userContext)) ?? url;
 
     // Update URL in state
-    await browserStateManager.updateUrl(conversationId, resolvedUrl);
+    await browserStateManager.updateUrl(
+      agentId,
+      userContext.userId,
+      conversationId,
+      resolvedUrl,
+    );
 
     logTabSyncInfo(
       { agentId, conversationId, url: resolvedUrl },
@@ -1011,7 +1025,12 @@ export class BrowserStreamService {
 
     // Update the current URL in state (for page restoration when switching conversations)
     if (actualUrl && !this.isBlankUrl(actualUrl)) {
-      await browserStateManager.updateUrl(conversationId, actualUrl);
+      await browserStateManager.updateUrl(
+        agentId,
+        userContext.userId,
+        conversationId,
+        actualUrl,
+      );
 
       logTabSyncInfo(
         { agentId, conversationId, url: actualUrl },
@@ -1101,7 +1120,11 @@ export class BrowserStreamService {
   ): Promise<TabResult> {
     const tabsTool = await this.findTabsTool(agentId, userContext.userId);
     if (!tabsTool) {
-      await browserStateManager.clear(conversationId);
+      await browserStateManager.clear(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
       return { success: true };
     }
 
@@ -1113,12 +1136,20 @@ export class BrowserStreamService {
       conversationId,
     );
     if (!client) {
-      await browserStateManager.clear(conversationId);
+      await browserStateManager.clear(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
       return { success: true };
     }
 
     // Load state to get tab index
-    const state = await browserStateManager.get(conversationId);
+    const state = await browserStateManager.get(
+      agentId,
+      userContext.userId,
+      conversationId,
+    );
     const tabIndex = state?.tabIndex;
 
     if (tabIndex === undefined || tabIndex === 0) {
@@ -1126,7 +1157,11 @@ export class BrowserStreamService {
         { agentId, conversationId, tabIndex },
         "[BrowserTabs] No tab to close (undefined or tab 0)",
       );
-      await browserStateManager.clear(conversationId);
+      await browserStateManager.clear(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
       return { success: true };
     }
 
@@ -1147,7 +1182,11 @@ export class BrowserStreamService {
       });
 
       // Clear the state for this conversation
-      await browserStateManager.clear(conversationId);
+      await browserStateManager.clear(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
 
       logTabSyncInfo(
         { agentId, conversationId, closedTabIndex: tabIndex },
@@ -1158,7 +1197,11 @@ export class BrowserStreamService {
     } catch (error) {
       logger.error({ error, agentId, conversationId }, "Failed to close tab");
       // Clear state anyway to prevent stale data, but report failure
-      await browserStateManager.clear(conversationId);
+      await browserStateManager.clear(
+        agentId,
+        userContext.userId,
+        conversationId,
+      );
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to close tab",
@@ -1176,7 +1219,7 @@ export class BrowserStreamService {
     userContext: BrowserUserContext;
     toolResultContent: unknown;
   }): Promise<void> {
-    const { conversationId, toolResultContent } = params;
+    const { agentId, conversationId, userContext, toolResultContent } = params;
 
     // Extract URL from tool result
     // The Playwright MCP tool result contains the goto() call with the actual URL
@@ -1200,10 +1243,15 @@ export class BrowserStreamService {
     }
 
     // Update URL in state
-    await browserStateManager.updateUrl(conversationId, navigatedUrl);
+    await browserStateManager.updateUrl(
+      agentId,
+      userContext.userId,
+      conversationId,
+      navigatedUrl,
+    );
 
     logger.info(
-      { conversationId, url: navigatedUrl },
+      { agentId, conversationId, url: navigatedUrl },
       "[BrowserNavigate] Updated current URL from AI navigate action",
     );
   }

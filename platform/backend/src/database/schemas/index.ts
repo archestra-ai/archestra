@@ -8,6 +8,7 @@ export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
 export { default as apiKeyModelsTable } from "./api-key-model";
+export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
   type ChatApiKeyScope,
   default as chatApiKeysTable,

@@ -1,5 +1,6 @@
+import crypto from "node:crypto";
 import { stepCountIs, streamText } from "ai";
-import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import {
   createLLMModelForAgent,
   detectProviderFromModel,
@@ -29,6 +30,14 @@ export interface A2AExecuteParams {
    * The current agentId will be appended to form the new chain.
    */
   parentDelegationChain?: string;
+  /**
+   * Conversation ID for browser tab isolation.
+   * When provided (e.g., from chat delegation), sub-agents get their own tab
+   * keyed by (agentId, userId, conversationId).
+   * When not provided (direct A2A call), a unique execution ID is generated
+   * and cleaned up after execution.
+   */
+  conversationId?: string;
 }
 
 export interface A2AExecuteResult {
@@ -57,6 +66,12 @@ export async function executeA2AMessage(
     sessionId,
     parentDelegationChain,
   } = params;
+
+  // Generate isolation key for browser tab isolation.
+  // When called from chat delegation, conversationId is provided.
+  // When called directly (A2A route), generate a unique execution ID.
+  const isOwnedExecution = !params.conversationId;
+  const isolationKey = params.conversationId ?? crypto.randomUUID();
 
   // Build delegation chain: append current agentId to parent chain
   const delegationChain = parentDelegationChain
@@ -100,91 +115,153 @@ export async function executeA2AMessage(
     systemPrompt = allParts.join("\n\n");
   }
 
-  // Fetch MCP tools for the agent (including delegation tools)
-  // Pass sessionId and delegationChain so nested agent calls are grouped together
-  const mcpTools = await getChatMcpTools({
-    agentName: agent.name,
-    agentId: agent.id,
-    userId,
-    userIsProfileAdmin: true, // A2A agents have full access
-    organizationId,
-    sessionId,
-    delegationChain,
-  });
-
-  logger.info(
-    {
+  try {
+    // Fetch MCP tools for the agent (including delegation tools)
+    // Pass sessionId, delegationChain, and conversationId for browser tab isolation
+    const mcpTools = await getChatMcpTools({
+      agentName: agent.name,
       agentId: agent.id,
       userId,
-      orgId: organizationId,
-      toolCount: Object.keys(mcpTools).length,
-      model: selectedModel,
-      hasSystemPrompt: !!systemPrompt,
-    },
-    "Starting A2A execution",
-  );
+      userIsProfileAdmin: true, // A2A agents have full access
+      organizationId,
+      sessionId,
+      delegationChain,
+      conversationId: isolationKey,
+    });
 
-  // Create LLM model using shared service
-  // Pass sessionId to group A2A requests with the calling session
-  // Pass delegationChain as externalAgentId so agent names appear in logs
-  // Pass agent's llmApiKeyId so it can be used without user access check
-  const { model } = await createLLMModelForAgent({
-    organizationId,
-    userId,
-    agentId: agent.id,
-    model: selectedModel,
-    provider,
-    sessionId,
-    externalAgentId: delegationChain,
-    agentLlmApiKeyId: agent.llmApiKeyId,
-  });
+    logger.info(
+      {
+        agentId: agent.id,
+        userId,
+        orgId: organizationId,
+        toolCount: Object.keys(mcpTools).length,
+        model: selectedModel,
+        hasSystemPrompt: !!systemPrompt,
+        isolationKey,
+        isOwnedExecution,
+      },
+      "Starting A2A execution",
+    );
 
-  // Execute with AI SDK using streamText (required for long-running requests)
-  // We stream internally but collect the full result
-  const stream = streamText({
-    model,
-    system: systemPrompt,
-    prompt: message,
-    tools: mcpTools,
-    stopWhen: stepCountIs(500),
-  });
-
-  // Wait for the stream to complete and get the final text
-  const finalText = await stream.text;
-  const usage = await stream.usage;
-  const finishReason = await stream.finishReason;
-
-  // Generate message ID
-  const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-  logger.info(
-    {
+    // Create LLM model using shared service
+    // Pass sessionId to group A2A requests with the calling session
+    // Pass delegationChain as externalAgentId so agent names appear in logs
+    // Pass agent's llmApiKeyId so it can be used without user access check
+    const { model } = await createLLMModelForAgent({
+      organizationId,
+      userId,
       agentId: agent.id,
+      model: selectedModel,
       provider,
-      finishReason,
-      usage,
-      messageId,
-    },
-    "A2A execution finished",
-  );
+      sessionId,
+      externalAgentId: delegationChain,
+      agentLlmApiKeyId: agent.llmApiKeyId,
+    });
 
-  return {
-    messageId,
-    text: finalText,
-    finishReason: finishReason ?? "unknown",
-    usage: usage
-      ? {
-          promptTokens: usage.inputTokens ?? 0,
-          completionTokens: usage.outputTokens ?? 0,
-          totalTokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-        }
-      : undefined,
-  };
+    // Execute with AI SDK using streamText (required for long-running requests)
+    // We stream internally but collect the full result
+    const stream = streamText({
+      model,
+      system: systemPrompt,
+      prompt: message,
+      tools: mcpTools,
+      stopWhen: stepCountIs(500),
+    });
+
+    // Wait for the stream to complete and get the final text
+    const finalText = await stream.text;
+    const usage = await stream.usage;
+    const finishReason = await stream.finishReason;
+
+    // Generate message ID
+    const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    logger.info(
+      {
+        agentId: agent.id,
+        provider,
+        finishReason,
+        usage,
+        messageId,
+      },
+      "A2A execution finished",
+    );
+
+    return {
+      messageId,
+      text: finalText,
+      finishReason: finishReason ?? "unknown",
+      usage: usage
+        ? {
+            promptTokens: usage.inputTokens ?? 0,
+            completionTokens: usage.outputTokens ?? 0,
+            totalTokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
+          }
+        : undefined,
+    };
+  } finally {
+    // Clean up browser tab state to prevent tab accumulation
+    await cleanupBrowserTab({
+      agentId,
+      userId,
+      organizationId,
+      isolationKey,
+      isOwnedExecution,
+    });
+  }
 }
 
 // ============================================================================
 // Helper functions
 // ============================================================================
+
+/**
+ * Clean up browser tab state after A2A execution.
+ * Closes the browser tab and optionally the MCP client.
+ */
+async function cleanupBrowserTab(params: {
+  agentId: string;
+  userId: string;
+  organizationId: string;
+  isolationKey: string;
+  isOwnedExecution: boolean;
+}): Promise<void> {
+  const { agentId, userId, organizationId, isolationKey, isOwnedExecution } =
+    params;
+
+  try {
+    // Close the browser tab via the feature service
+    const { browserStreamFeature } = await import(
+      "@/features/browser-stream/services/browser-stream.feature"
+    );
+
+    if (browserStreamFeature.isEnabled()) {
+      await browserStreamFeature.closeTab(agentId, isolationKey, {
+        userId,
+        organizationId,
+        userIsProfileAdmin: true,
+      });
+    }
+  } catch (error) {
+    logger.warn(
+      { agentId, userId, isolationKey, error },
+      "Failed to close browser tab during A2A cleanup (non-fatal)",
+    );
+  }
+
+  // For direct A2A calls (not delegated from chat), also close MCP client
+  // to free the cache slot. For delegated calls, keep client alive for reuse.
+  if (isOwnedExecution) {
+    try {
+      closeChatMcpClient(agentId, userId, isolationKey);
+    } catch (error) {
+      logger.warn(
+        { agentId, userId, isolationKey, error },
+        "Failed to close MCP client during A2A cleanup (non-fatal)",
+      );
+    }
+  }
+}
 
 /**
  * Resolve the model and provider to use for an agent.

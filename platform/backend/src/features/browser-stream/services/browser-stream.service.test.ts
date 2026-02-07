@@ -768,6 +768,8 @@ describe("BrowserStreamService URL handling", () => {
     });
 
     expect(updateUrlSpy).toHaveBeenCalledWith(
+      "test-agent",
+      "test-user",
       conversationId,
       "https://navigated.example.com",
     );
@@ -801,6 +803,8 @@ describe("BrowserStreamService URL handling", () => {
     });
 
     expect(updateUrlSpy).toHaveBeenCalledWith(
+      "test-agent",
+      "test-user",
       conversationId,
       "https://page-url.example.com",
     );

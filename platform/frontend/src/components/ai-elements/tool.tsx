@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import { MCPUIRenderer, detectMCPUIResource } from "@/components/chat/mcp-ui-renderer";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -209,6 +210,10 @@ export type ToolOutputProps = ComponentProps<"div"> & {
     role: "user" | "assistant";
     content: string | unknown;
   }>;
+  /** Optional callback when a tool is called from MCP UI */
+  onToolCall?: (toolName: string, params: Record<string, unknown>) => Promise<unknown>;
+  /** Optional callback when a link is opened from MCP UI */
+  onOpenLink?: (url: string) => void;
 };
 
 export const ToolOutput = ({
@@ -217,12 +222,35 @@ export const ToolOutput = ({
   errorText,
   label,
   conversations,
+  onToolCall,
+  onOpenLink,
   ...props
 }: ToolOutputProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!(output || errorText || conversations)) {
     return null;
+  }
+
+  // Check if output contains an MCP UI resource
+  const mcpUIResource = output ? detectMCPUIResource(output) : null;
+
+  if (mcpUIResource) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {label ?? "Interactive UI"}
+        </h4>
+        <MCPUIRenderer
+          resource={mcpUIResource}
+          onToolCall={onToolCall}
+          onOpenLink={onOpenLink ?? ((url) => window.open(url, "_blank"))}
+          className="rounded-md"
+          minHeight={150}
+          maxHeight={500}
+        />
+      </div>
+    );
   }
 
   // Render conversations as chat bubbles if provided

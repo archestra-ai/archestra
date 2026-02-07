@@ -144,6 +144,35 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - Usage of the llama models in the chat ⚠️ Not yet supported ([GitHub Issue #2058](https://github.com/archestra-ai/archestra/issues/2058)) 
 
+## Groq
+
+[Groq](https://groq.com/) provides ultra-fast inference for open-source LLMs using their custom LPU (Language Processing Unit) hardware. Groq offers an OpenAI-compatible API.
+
+### Supported Groq APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Groq Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/groq/{agent-id}`
+- **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Getting an API Key
+
+1. Go to [Groq Console](https://console.groq.com/)
+2. Create an account or sign in
+3. Navigate to API Keys section
+4. Create a new API key
+
+### Supported Models
+
+- `llama-3.3-70b-versatile` - Latest Llama 3.3 70B model
+- `llama-3.1-70b-versatile` - Llama 3.1 70B model
+- `llama-3.1-8b-instant` - Fast Llama 3.1 8B model
+- `mixtral-8x7b-32768` - Mixtral 8x7B with 32k context
+- `gemma2-9b-it` - Google Gemma 2 9B
+- See [Groq Models](https://console.groq.com/docs/models) for the full list
+
 ## Cohere
 
 [Cohere](https://www.cohere.ai/) provides enterprise-grade LLMs designed for safe, controllable, and efficient AI applications. The platform offers features like safety guardrails, function calling, and both synchronous and streaming APIs.

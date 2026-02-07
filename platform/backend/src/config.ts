@@ -523,12 +523,6 @@ export default {
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
     },
-    mcp: {
-      remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
-      remoteServerHeaders: process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS
-        ? JSON.parse(process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS)
-        : undefined,
-    },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
     defaultProvider: ((): SupportedProvider => {

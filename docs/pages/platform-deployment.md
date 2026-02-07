@@ -43,7 +43,7 @@ This will start the platform with:
 
 **Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
 
-> **Accessing from another device on your network?** In quickstart mode, private network IPs (e.g., `192.168.x.x`, `10.x.x.x`) are automatically trusted, so authentication works without extra configuration.
+> **Accessing from another device on your network?** By default, the quick-start binds to `http://localhost:3000`. If you access it from a different host (e.g., `http://192.168.1.5:3000`), add `-e ARCHESTRA_FRONTEND_URL=http://<your-ip>:3000` to the `docker run` command. Without this, authentication will fail.
 
 If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 

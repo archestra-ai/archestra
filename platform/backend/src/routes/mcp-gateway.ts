@@ -20,6 +20,21 @@ import {
 // =============================================================================
 
 /**
+ * Sets the WWW-Authenticate header with the OAuth protected resource metadata URL.
+ * Per RFC 9728, this tells clients where to discover the authorization server.
+ */
+function setWWWAuthenticateHeader(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const resourceMetadataUrl = `${request.protocol}://${request.headers.host}/.well-known/oauth-protected-resource${request.url}`;
+  reply.header(
+    "WWW-Authenticate",
+    `Bearer resource_metadata="${resourceMetadataUrl}"`,
+  );
+}
+
+/**
  * Handle MCP POST requests in stateless mode
  * Creates a fresh Server and Transport for each request
  */
@@ -200,11 +215,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         extractProfileIdAndTokenFromRequest(request) ?? {};
 
       if (!profileId || !token) {
-        const resourceMetadataUrl = `${request.protocol}://${request.headers.host}/.well-known/oauth-protected-resource${request.url}`;
-        reply.header(
-          "WWW-Authenticate",
-          `Bearer resource_metadata="${resourceMetadataUrl}"`,
-        );
+        setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
           error: "Unauthorized",
@@ -255,11 +266,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         extractProfileIdAndTokenFromRequest(request) ?? {};
 
       if (!profileId || !token) {
-        const resourceMetadataUrl = `${request.protocol}://${request.headers.host}/.well-known/oauth-protected-resource${request.url}`;
-        reply.header(
-          "WWW-Authenticate",
-          `Bearer resource_metadata="${resourceMetadataUrl}"`,
-        );
+        setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
           jsonrpc: "2.0",
@@ -274,11 +281,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const tokenAuth = await validateMCPGatewayToken(profileId, token);
       if (!tokenAuth) {
-        const resourceMetadataUrl = `${request.protocol}://${request.headers.host}/.well-known/oauth-protected-resource${request.url}`;
-        reply.header(
-          "WWW-Authenticate",
-          `Bearer resource_metadata="${resourceMetadataUrl}"`,
-        );
+        setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
           jsonrpc: "2.0",

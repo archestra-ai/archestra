@@ -31529,6 +31529,18 @@
         }
       }
     },
+    "/api/auth/oauth2/token": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/auth/oauth2/consent": {
       "post": {
         "operationId": "submitOAuthConsent",

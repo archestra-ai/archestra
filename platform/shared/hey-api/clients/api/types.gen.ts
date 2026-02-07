@@ -9130,6 +9130,20 @@ export type GetOAuthClientInfoResponses = {
 
 export type GetOAuthClientInfoResponse = GetOAuthClientInfoResponses[keyof GetOAuthClientInfoResponses];
 
+export type PostApiAuthOauth2TokenData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oauth2/token';
+};
+
+export type PostApiAuthOauth2TokenResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type SubmitOAuthConsentData = {
     body: {
         accept: boolean;

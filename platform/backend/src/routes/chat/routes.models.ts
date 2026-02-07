@@ -421,6 +421,44 @@ async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Groq API (OpenAI-compatible)
+ */
+async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.groq.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Groq models",
+    );
+    throw new Error(`Failed to fetch Groq models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "groq" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from Zhipuai API
  */
 async function fetchZhipuaiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -733,6 +771,7 @@ async function getProviderApiKey({
     vllm: () => config.chat.vllm.apiKey || "", // vLLM typically doesn't require API keys
     zhipuai: () => config.chat.zhipuai?.apiKey || null,
     bedrock: () => config.chat.bedrock.apiKey || null,
+    groq: () => config.chat.groq.apiKey || null,
   };
 
   return envApiKeyFallbacks[provider]();
@@ -753,6 +792,7 @@ const modelFetchers: Record<
   ollama: fetchOllamaModels,
   cohere: fetchCohereModels,
   zhipuai: fetchZhipuaiModels,
+  groq: fetchGroqModels,
 };
 
 // Register all model fetchers with the sync service
@@ -840,7 +880,7 @@ export async function fetchModelsForProvider({
     } else if (provider === "ollama" && isOllamaEnabled) {
       // Ollama doesn't require API key, pass empty or configured key
       models = await modelFetchers[provider](apiKey || "EMPTY");
-    } else if (provider === "zhipuai") {
+    } else if (provider === "zhipuai" || provider === "groq") {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

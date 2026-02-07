@@ -68,6 +68,7 @@ import {
   OpenAi,
   Vllm,
   Zhipuai,
+  Groq,
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
@@ -153,6 +154,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
+    id: "GroqChatCompletionRequest",
+  });
+  z.globalRegistry.add(OpenAi.API.ChatCompletionResponseSchema, {
+    id: "GroqChatCompletionResponse",
   });
 }
 

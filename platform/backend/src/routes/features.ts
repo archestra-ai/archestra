@@ -36,6 +36,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             vllmEnabled: z.boolean(),
             /** Ollama mode - when enabled, no API key is typically needed */
             ollamaEnabled: z.boolean(),
+            /** Groq mode - when enabled, Groq AI provider is available */
+            groqEnabled: z.boolean(),
             /** Mistral mode - when enabled, Mistral AI provider is available */
             mistralEnabled: z.boolean(),
             /** Global tool policy - permissive bypasses policy checks, restrictive enforces them */
@@ -77,6 +79,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         geminiVertexAiEnabled: isVertexAiEnabled(),
         vllmEnabled: config.llm.vllm.enabled,
         ollamaEnabled: config.llm.ollama.enabled,
+        groqEnabled: true, // Groq is always enabled (has default base URL)
         mistralEnabled: true, // Mistral is always enabled (has default base URL)
         globalToolPolicy,
         incomingEmail: getEmailProviderInfo(),

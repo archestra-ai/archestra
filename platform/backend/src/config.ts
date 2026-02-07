@@ -447,6 +447,10 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
     },
+    groq: {
+      baseUrl:
+        process.env.ARCHESTRA_GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+    },
     mistral: {
       baseUrl:
         process.env.ARCHESTRA_MISTRAL_BASE_URL || "https://api.mistral.ai/v1",
@@ -484,6 +488,9 @@ export default {
     },
     cerebras: {
       apiKey: process.env.ARCHESTRA_CHAT_CEREBRAS_API_KEY || "",
+    },
+    groq: {
+      apiKey: process.env.ARCHESTRA_CHAT_GROQ_API_KEY || "",
     },
     mistral: {
       apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",

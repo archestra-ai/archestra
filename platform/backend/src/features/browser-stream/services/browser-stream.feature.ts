@@ -112,8 +112,12 @@ class BrowserStreamFeature {
     return this.getService().activateTab(agentId, conversationId, userContext);
   }
 
-  listTabs(agentId: string, userContext: BrowserUserContext) {
-    return this.getService().listTabs(agentId, userContext);
+  listTabs(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+  ) {
+    return this.getService().listTabs(agentId, conversationId, userContext);
   }
 
   closeTab(

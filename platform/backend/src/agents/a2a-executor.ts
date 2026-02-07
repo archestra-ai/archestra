@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
 import { stepCountIs, streamText } from "ai";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -6,12 +7,14 @@ import {
   createLLMModelForAgent,
   detectProviderFromModel,
 } from "@/clients/llm-client";
+import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
   ApiKeyModelModel,
   ChatApiKeyModel,
+  McpServerModel,
   TeamModel,
 } from "@/models";
 import type { SupportedChatProvider } from "@/types";
@@ -265,6 +268,29 @@ async function cleanupBrowserTab(params: {
     logger.warn(
       { agentId, userId, isolationKey, error },
       "Failed to close browser tab during A2A cleanup (non-fatal)",
+    );
+  }
+
+  // Close the subagent's cached MCP session so the Playwright pod cleans up
+  // the browser context. This is needed for both direct and delegated calls
+  // since each (agentId, conversationId) gets its own session.
+  try {
+    const userServer = await McpServerModel.getUserPersonalServerForCatalog(
+      userId,
+      PLAYWRIGHT_MCP_CATALOG_ID,
+    );
+    if (userServer) {
+      mcpClient.closeSession(
+        PLAYWRIGHT_MCP_CATALOG_ID,
+        userServer.id,
+        agentId,
+        isolationKey,
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      { agentId, userId, isolationKey, error },
+      "Failed to close MCP session during A2A cleanup (non-fatal)",
     );
   }
 

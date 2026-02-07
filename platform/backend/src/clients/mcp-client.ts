@@ -130,12 +130,39 @@ class McpClient {
   private connectionLimiter = new ConnectionLimiter();
 
   /**
+   * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
+   * Should be called when a subagent finishes to free the browser context.
+   */
+  closeSession(
+    catalogId: string,
+    targetMcpServerId: string,
+    agentId: string,
+    conversationId: string,
+  ): void {
+    const connectionKey = `${catalogId}:${targetMcpServerId}:${agentId}:${conversationId}`;
+    const client = this.activeConnections.get(connectionKey);
+    if (client) {
+      try {
+        client.close();
+      } catch (error) {
+        logger.warn(
+          { connectionKey, error },
+          "Error closing MCP session (non-fatal)",
+        );
+      }
+      this.activeConnections.delete(connectionKey);
+      logger.info({ connectionKey }, "Closed cached MCP session");
+    }
+  }
+
+  /**
    * Execute a single tool call against its assigned MCP server
    */
   async executeToolCall(
     toolCall: CommonToolCall,
     agentId: string,
     tokenAuth?: TokenAuthContext,
+    options?: { conversationId?: string },
   ): Promise<CommonToolResult> {
     // Validate and get tool metadata
     const validationResult = await this.validateAndGetTool(
@@ -170,9 +197,12 @@ class McpClient {
     }
     const { secrets, secretId } = secretsResult;
 
-    // Build connection cache key using the resolved target server ID
-    // This ensures each user gets their own connection for dynamic credentials
-    const connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
+    // Build connection cache key using the resolved target server ID.
+    // When conversationId is provided, each (agent, conversation) gets its own connection
+    // to enable per-session browser context isolation with streamable-http transport.
+    const connectionKey = options?.conversationId
+      ? `${catalogItem.id}:${targetMcpServerId}:${agentId}:${options.conversationId}`
+      : `${catalogItem.id}:${targetMcpServerId}`;
 
     const executeToolCall = async (
       getTransport: () => Promise<Transport>,

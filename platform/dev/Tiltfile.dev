@@ -119,6 +119,39 @@ local_resource(
   auto_init=False,
 )
 
+# Port-forward for MCP servers using streamable-http transport
+# Docker Desktop / kind K8s don't expose NodePorts on localhost, so we use
+# kubectl port-forward (which goes through the K8s API server) to make them accessible.
+# Discovers MCP server services by label and forwards NodePort -> container port.
+# Dead port-forwards are automatically restarted (checked every 5s).
+local_resource(
+  'mcp-http-port-forward',
+  serve_cmd='''
+    trap "kill 0" EXIT INT TERM
+    echo "Watching for MCP server NodePort services..."
+    while true; do
+      SERVICES=$(kubectl get svc -l app=mcp-server -n default -o jsonpath='{range .items[*]}{.metadata.name}:{.spec.ports[0].nodePort}:{.spec.ports[0].port} {end}' 2>/dev/null)
+      for ENTRY in $SERVICES; do
+        SVC_NAME=$(echo "$ENTRY" | cut -d: -f1)
+        NODE_PORT=$(echo "$ENTRY" | cut -d: -f2)
+        CONTAINER_PORT=$(echo "$ENTRY" | cut -d: -f3)
+        if [ "$NODE_PORT" != "null" ] && [ -n "$NODE_PORT" ] && [ -n "$SVC_NAME" ]; then
+          if ! lsof -i :"$NODE_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+            # Check that service has ready endpoints before attempting port-forward
+            ENDPOINTS=$(kubectl get endpoints "$SVC_NAME" -n default -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)
+            if [ -n "$ENDPOINTS" ]; then
+              echo "Port-forwarding $SVC_NAME: localhost:$NODE_PORT -> $CONTAINER_PORT"
+              kubectl port-forward "svc/$SVC_NAME" "$NODE_PORT:$CONTAINER_PORT" -n default &
+            fi
+          fi
+        fi
+      done
+      sleep 5
+    done
+  ''',
+  labels=['dev'],
+)
+
 # Codegen depends on backend being up (for API schema generation)                                                    
 codegen_backend_dep = dev_resource_name if is_prod else dev_resource_name + '-backend' 
 local_resource(

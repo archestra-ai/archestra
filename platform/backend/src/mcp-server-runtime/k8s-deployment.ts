@@ -1135,9 +1135,10 @@ export default class K8sDeployment {
     const catalogItem = await this.getCatalogItem();
     const httpPort = catalogItem?.localConfig?.httpPort || 8080;
     const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
+    const configuredNodePort = catalogItem?.localConfig?.nodePort;
 
-    // Ensure Service exists
-    await this.createServiceForHttpServer(httpPort);
+    // Ensure Service exists (pass fixed nodePort if configured)
+    await this.createServiceForHttpServer(httpPort, configuredNodePort);
 
     // Resolve HTTP Endpoint URL
     let baseUrl: string;
@@ -1145,6 +1146,9 @@ export default class K8sDeployment {
       // In-cluster: use service DNS name
       const serviceName = `${this.deploymentName}-service`;
       baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
+    } else if (configuredNodePort) {
+      // Local dev with fixed nodePort: use it directly (no need to read from service)
+      baseUrl = `http://localhost:${configuredNodePort}`;
     } else {
       // Local dev: get NodePort from service
       const serviceName = `${this.deploymentName}-service`;
@@ -1658,7 +1662,10 @@ export default class K8sDeployment {
   /**
    * Create a K8s Service for HTTP-based MCP servers
    */
-  private async createServiceForHttpServer(httpPort: number): Promise<void> {
+  private async createServiceForHttpServer(
+    httpPort: number,
+    nodePort?: number,
+  ): Promise<void> {
     const serviceName = `${this.deploymentName}-service`;
 
     try {
@@ -1702,6 +1709,8 @@ export default class K8sDeployment {
               protocol: "TCP",
               port: httpPort,
               targetPort: httpPort as unknown as k8s.IntOrString,
+              // Use fixed nodePort if configured (local dev only, ignored for ClusterIP)
+              ...(nodePort && serviceType === "NodePort" ? { nodePort } : {}),
             },
           ],
           type: serviceType,

@@ -249,6 +249,12 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Browser fetch with redirect:"manual" produces opaque redirect responses
   // where Location header is inaccessible. Convert redirect to JSON so the
   // consent form can read the URL and navigate.
+  //
+  // CSRF protection is handled by better-auth internally:
+  //   1. Origin header validation against `trustedOrigins` config
+  //   2. The `oauth_query` contains a cryptographically-signed state parameter
+  //      that better-auth verifies, preventing replay and tampering
+  //   3. Session cookie ties consent to the authenticated user
   fastify.route({
     method: "POST",
     url: "/api/auth/oauth2/consent",
@@ -309,10 +315,15 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
-  // OAuth 2.1 Dynamic Client Registration
-  // MCP clients are public OAuth clients (RFC 8252) but may not send
-  // token_endpoint_auth_method. Default to "none" so better-auth allows
-  // unauthenticated registration for these clients.
+  // OAuth 2.1 Dynamic Client Registration (RFC 7591)
+  //
+  // IMPORTANT: All dynamically registered clients are forced to public
+  // (token_endpoint_auth_method = "none"), regardless of what the client
+  // sends. This is intentional:
+  //   - MCP OAuth spec requires PKCE, not client_secret
+  //   - better-auth only allows unauthenticated DCR for public clients
+  //   - Some clients (e.g. Open WebUI) send client_secret_post which would
+  //     cause registration to fail without this override
   fastify.route({
     method: "POST",
     url: "/api/auth/oauth2/register",
@@ -322,9 +333,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const body = request.body;
-      // Force public client for unauthenticated DCR (MCP spec requires PKCE,
-      // not client_secret). Open WebUI may send client_secret_post but MCP
-      // clients must be public for unauthenticated registration to work.
+      // Override any client-provided value — see route comment above
       body.token_endpoint_auth_method = "none";
 
       const url = new URL(request.url, `http://${request.headers.host}`);

@@ -19538,38 +19538,6 @@ export type PostV1McpByProfileIdResponses = {
     200: unknown;
 };
 
-export type DeleteV1McpCacheByProfileIdData = {
-    body?: never;
-    path: {
-        profileId: string;
-    };
-    query?: never;
-    url: '/v1/mcp/cache/{profileId}';
-};
-
-export type DeleteV1McpCacheByProfileIdErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type DeleteV1McpCacheByProfileIdError = DeleteV1McpCacheByProfileIdErrors[keyof DeleteV1McpCacheByProfileIdErrors];
-
-export type DeleteV1McpCacheByProfileIdResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        message: string;
-    };
-};
-
-export type DeleteV1McpCacheByProfileIdResponse = DeleteV1McpCacheByProfileIdResponses[keyof DeleteV1McpCacheByProfileIdResponses];
-
 export type GetMcpServerInstallationRequestsData = {
     body?: never;
     path?: never;

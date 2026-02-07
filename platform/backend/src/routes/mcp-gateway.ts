@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { clearChatMcpClient } from "@/clients/chat-mcp-client";
+
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import { McpToolCallModel } from "@/models";
@@ -140,31 +140,6 @@ async function handleMcpPostRequest(
       };
     }
   }
-}
-
-/**
- * Handle DELETE cache request for a profile
- * Clears cached MCP client for the profile
- */
-async function handleDeleteCache(
-  fastify: FastifyInstance,
-  reply: FastifyReply,
-  profileId: string,
-): Promise<{ message: string }> {
-  fastify.log.info({ profileId }, "DELETE cache - Request received");
-
-  // Clear cached MCP client
-  clearChatMcpClient(profileId);
-
-  fastify.log.info(
-    { profileId },
-    "DELETE cache - ✅ Client cache cleared successfully",
-  );
-
-  reply.type("application/json");
-  return {
-    message: "Cache cleared successfully",
-  };
 }
 
 // =============================================================================
@@ -309,42 +284,6 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         profileId,
         tokenAuthContext,
       );
-    },
-  );
-
-  // DELETE endpoint to clear cache for a profile
-  fastify.delete(
-    `${endpoint}/cache/:profileId`,
-    {
-      schema: {
-        tags: ["mcp-gateway"],
-        params: z.object({
-          profileId: UuidIdSchema,
-        }),
-        response: {
-          200: z.object({
-            message: z.string(),
-          }),
-          401: z.object({
-            error: z.string(),
-            message: z.string(),
-          }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { profileId } = extractProfileIdAndTokenFromRequest(request) ?? {};
-
-      if (!profileId) {
-        reply.status(401);
-        return {
-          error: "Unauthorized",
-          message:
-            "Missing or invalid Authorization header. Expected: Bearer <archestra_token>",
-        };
-      }
-
-      return handleDeleteCache(fastify, reply, profileId);
     },
   );
 };

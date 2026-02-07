@@ -32,6 +32,7 @@ const oauthClient = pgTable("oauth_client", {
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
+    .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
 });

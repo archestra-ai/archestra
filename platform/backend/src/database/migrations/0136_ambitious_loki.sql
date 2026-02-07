@@ -48,7 +48,7 @@ CREATE TABLE "oauth_client" (
 	"type" text,
 	"metadata" jsonb,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "oauth_client_client_id_unique" UNIQUE("client_id")
 );
 --> statement-breakpoint
@@ -59,7 +59,7 @@ CREATE TABLE "oauth_consent" (
 	"reference_id" text,
 	"scopes" text[],
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp NOT NULL
+	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "oauth_refresh_token" (

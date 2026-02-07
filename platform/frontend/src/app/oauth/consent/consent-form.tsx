@@ -61,7 +61,8 @@ export function ConsentForm() {
       }
 
       setError("Unexpected response from server");
-    } catch {
+    } catch (err) {
+      console.error("[OAuth Consent] Failed to process consent:", err);
       setError("Failed to process consent. Please try again.");
     }
   };

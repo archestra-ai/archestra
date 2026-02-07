@@ -17,13 +17,3 @@ export type SimpleBrowserState = {
   url: string;
   tabIndex?: number;
 };
-
-/**
- * Legacy persisted state format for migration.
- * Used to detect and convert old multi-tab format to new simple format.
- */
-export type LegacyPersistedBrowserState = {
-  activeTabId: string;
-  tabOrder: string[];
-  tabs: Record<string, { current: string }>;
-};

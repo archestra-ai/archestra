@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.64",
-    "@better-auth/sso": "1.4.18",
+    "@better-auth/sso": "1.4.17",
     "@daveyplate/better-auth-ui": "github:archestra-ai/better-auth-ui#d2ca7c6",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",
@@ -50,7 +50,7 @@
     "@uidotdev/usehooks": "^2.4.1",
     "@xyflow/react": "^12.10.0",
     "ai": "^6.0.62",
-    "better-auth": "1.4.18",
+    "better-auth": "1.4.17",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

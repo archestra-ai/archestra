@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { stepCountIs, streamText } from "ai";
+import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import {
   createLLMModelForAgent,
@@ -115,6 +116,13 @@ export async function executeA2AMessage(
     systemPrompt = allParts.join("\n\n");
   }
 
+  // Track subagent execution so the browser preview can skip screenshots
+  // while subagents are active (prevents flickering from tab switching).
+  // Only track delegated calls — direct A2A calls have no browser preview.
+  if (!isDirectExecutionOutsideConversation) {
+    subagentExecutionTracker.increment(isolationKey);
+  }
+
   try {
     // Fetch MCP tools for the agent (including delegation tools)
     // Pass sessionId, delegationChain, and conversationId for browser tab isolation
@@ -200,7 +208,9 @@ export async function executeA2AMessage(
         : undefined,
     };
   } finally {
-    // Clean up browser tab state to prevent tab accumulation
+    // Clean up browser tab BEFORE decrementing the tracker.
+    // This ensures screenshots remain paused while the subagent's tab is
+    // being closed, preventing the preview from capturing the wrong tab.
     await cleanupBrowserTab({
       agentId,
       userId,
@@ -208,6 +218,10 @@ export async function executeA2AMessage(
       isolationKey,
       isDirectExecutionOutsideConversation,
     });
+
+    if (!isDirectExecutionOutsideConversation) {
+      subagentExecutionTracker.decrement(isolationKey);
+    }
   }
 }
 

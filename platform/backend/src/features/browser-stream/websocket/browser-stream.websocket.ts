@@ -1,6 +1,7 @@
 import type { ServerWebSocketMessage } from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS } from "ws";
+import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient } from "@/clients/chat-mcp-client";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
@@ -16,6 +17,8 @@ export type BrowserStreamSubscription = {
   userContext: BrowserUserContext;
   intervalId: NodeJS.Timeout;
   isSending: boolean;
+  /** Set when screenshots were skipped due to active subagents */
+  wasBlockedBySubagent: boolean;
 };
 
 type BrowserStreamClientContextParams = {
@@ -283,6 +286,26 @@ export class BrowserStreamSocketClientContext {
       if (!subscription) return;
       if (subscription.isSending) return;
 
+      // Skip screenshot while subagents are using the browser to prevent
+      // flickering — the preview holds the last good screenshot instead.
+      if (
+        subagentExecutionTracker.hasActiveSubagents(subscription.conversationId)
+      ) {
+        subscription.wasBlockedBySubagent = true;
+        return;
+      }
+
+      // After subagents finish, re-select the parent's tab before resuming
+      // screenshots. The subagent may have switched to a different tab.
+      if (subscription.wasBlockedBySubagent) {
+        subscription.wasBlockedBySubagent = false;
+        await browserStreamFeature.selectOrCreateTab(
+          agentId,
+          conversationId,
+          userContext,
+        );
+      }
+
       subscription.isSending = true;
       try {
         await this.sendScreenshot(ws, agentId, conversationId, userContext);
@@ -307,6 +330,7 @@ export class BrowserStreamSocketClientContext {
       userContext,
       intervalId,
       isSending: false,
+      wasBlockedBySubagent: false,
     });
 
     void sendTick();

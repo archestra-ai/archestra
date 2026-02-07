@@ -31360,6 +31360,115 @@
         }
       }
     },
+    "/api/auth/oauth2/client-info": {
+      "get": {
+        "operationId": "getOAuthClientInfo",
+        "tags": [
+          "auth"
+        ],
+        "description": "Get OAuth client name by client_id",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "client_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client_name": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "client_name"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth2/consent": {
+      "post": {
+        "operationId": "submitOAuthConsent",
+        "tags": [
+          "auth"
+        ],
+        "description": "Submit OAuth consent decision (accept or deny)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accept": {
+                    "type": "boolean"
+                  },
+                  "scope": {
+                    "type": "string"
+                  },
+                  "oauth_query": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "accept",
+                  "scope",
+                  "oauth_query"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "redirectTo": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "redirectTo"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth2/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/auth/{*}": {
       "get": {
         "tags": [
@@ -78389,9 +78498,27 @@
                           "toolResult": {
                             "nullable": true
                           },
+                          "userId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "authMethod": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "oauth",
+                              "user_token",
+                              "org_token",
+                              "team_token"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "userName": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -78401,7 +78528,10 @@
                           "method",
                           "toolCall",
                           "toolResult",
-                          "createdAt"
+                          "userId",
+                          "authMethod",
+                          "createdAt",
+                          "userName"
                         ],
                         "additionalProperties": false
                       }
@@ -78740,9 +78870,27 @@
                     "toolResult": {
                       "nullable": true
                     },
+                    "userId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authMethod": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "oauth",
+                        "user_token",
+                        "org_token",
+                        "team_token"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "userName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -78752,7 +78900,10 @@
                     "method",
                     "toolCall",
                     "toolResult",
-                    "createdAt"
+                    "userId",
+                    "authMethod",
+                    "createdAt",
+                    "userName"
                   ],
                   "additionalProperties": false
                 }

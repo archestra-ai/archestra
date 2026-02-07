@@ -6,7 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { isBrowserMcpTool } from "@shared";
+import { isBrowserMcpTool, OAUTH_TOKEN_ID_PREFIX } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
@@ -25,6 +25,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   InternalMcpCatalog,
+  MCPGatewayAuthMethod,
 } from "@/types";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
@@ -137,6 +138,14 @@ class McpClient {
     agentId: string,
     tokenAuth?: TokenAuthContext,
   ): Promise<CommonToolResult> {
+    // Derive auth info for logging
+    const authInfo = tokenAuth
+      ? {
+          userId: tokenAuth.userId,
+          authMethod: deriveAuthMethodFromTokenAuth(tokenAuth),
+        }
+      : undefined;
+
     // Validate and get tool metadata
     const validationResult = await this.validateAndGetTool(
       toolCall,
@@ -215,6 +224,7 @@ class McpClient {
           result.content,
           !!result.isError,
           tool.responseModifierTemplate,
+          authInfo,
         );
       } catch (error) {
         const errorMessage =
@@ -280,6 +290,7 @@ class McpClient {
           agentId,
           errorMessage,
           tool.mcpServerName || "unknown",
+          authInfo,
         );
       }
     };
@@ -913,6 +924,7 @@ class McpClient {
     agentId: string,
     error: string,
     mcpServerName: string = "unknown",
+    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
   ): Promise<CommonToolResult> {
     const errorResult: CommonToolResult = {
       id: toolCall.id,
@@ -922,7 +934,13 @@ class McpClient {
       error,
     };
 
-    await this.persistToolCall(agentId, mcpServerName, toolCall, errorResult);
+    await this.persistToolCall(
+      agentId,
+      mcpServerName,
+      toolCall,
+      errorResult,
+      authInfo,
+    );
     return errorResult;
   }
 
@@ -936,6 +954,7 @@ class McpClient {
     content: unknown,
     isError: boolean,
     template: string | null,
+    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
   ): Promise<CommonToolResult> {
     const modifiedContent = this.applyTemplate(
       content,
@@ -950,7 +969,13 @@ class McpClient {
       isError,
     };
 
-    await this.persistToolCall(agentId, mcpServerName, toolCall, toolResult);
+    await this.persistToolCall(
+      agentId,
+      mcpServerName,
+      toolCall,
+      toolResult,
+      authInfo,
+    );
     return toolResult;
   }
 
@@ -1073,6 +1098,7 @@ class McpClient {
     mcpServerName: string,
     toolCall: CommonToolCall,
     toolResult: CommonToolResult,
+    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
   ): Promise<void> {
     // Skip browser tool logging to prevent DB bloat
     if (isBrowserMcpTool(toolCall.name)) {
@@ -1086,6 +1112,8 @@ class McpClient {
         method: "tools/call",
         toolCall,
         toolResult,
+        userId: authInfo?.userId ?? null,
+        authMethod: authInfo?.authMethod ?? null,
       });
 
       const logData: {
@@ -1248,6 +1276,19 @@ class McpClient {
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
     this.activeConnections.clear();
   }
+}
+
+/**
+ * Derive a human-readable auth method string from token auth context.
+ * Kept here to avoid circular imports with mcp-gateway.utils.ts.
+ */
+function deriveAuthMethodFromTokenAuth(
+  tokenAuth: TokenAuthContext,
+): MCPGatewayAuthMethod {
+  if (tokenAuth.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)) return "oauth";
+  if (tokenAuth.isUserToken) return "user_token";
+  if (tokenAuth.isOrganizationToken) return "org_token";
+  return "team_token";
 }
 
 // Singleton instance

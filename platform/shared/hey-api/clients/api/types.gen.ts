@@ -9088,6 +9088,62 @@ export type PostApiAuthOrganizationRemoveMemberResponses = {
     200: unknown;
 };
 
+export type GetOAuthClientInfoData = {
+    body?: never;
+    path?: never;
+    query: {
+        client_id: string;
+    };
+    url: '/api/auth/oauth2/client-info';
+};
+
+export type GetOAuthClientInfoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        client_name: string | null;
+    };
+};
+
+export type GetOAuthClientInfoResponse = GetOAuthClientInfoResponses[keyof GetOAuthClientInfoResponses];
+
+export type SubmitOAuthConsentData = {
+    body: {
+        accept: boolean;
+        scope: string;
+        oauth_query: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auth/oauth2/consent';
+};
+
+export type SubmitOAuthConsentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        redirectTo: string;
+    };
+};
+
+export type SubmitOAuthConsentResponse = SubmitOAuthConsentResponses[keyof SubmitOAuthConsentResponses];
+
+export type PostApiAuthOauth2RegisterData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oauth2/register';
+};
+
+export type PostApiAuthOauth2RegisterResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type GetApiAuthBy__Data = {
     body?: never;
     path: {
@@ -21692,7 +21748,10 @@ export type GetMcpToolCallsResponses = {
                 };
             } | null;
             toolResult: unknown;
+            userId: string | null;
+            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token';
             createdAt: string;
+            userName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -21795,7 +21854,10 @@ export type GetMcpToolCallResponses = {
             };
         } | null;
         toolResult: unknown;
+        userId: string | null;
+        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token';
         createdAt: string;
+        userName: string | null;
     };
 };
 

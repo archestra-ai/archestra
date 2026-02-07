@@ -1,11 +1,17 @@
+import { OAUTH_ENDPOINTS, OAUTH_SCOPES } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 
 /**
  * OAuth 2.1 well-known discovery endpoints.
  *
- * These use the request Host header for URL construction so they work
- * across Docker networking (host.docker.internal:9000) and local dev (localhost:9000).
+ * Server-to-server endpoints (token, registration, jwks) use the request Host header
+ * so they work from Docker containers (host.docker.internal:9000).
+ *
+ * The authorization_endpoint uses the frontend base URL (e.g. http://localhost:3000)
+ * because it's browser-facing — the browser needs to reach it AND have session cookies
+ * available. The frontend's catch-all /api/auth proxy forwards to the backend.
  */
 const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -82,13 +88,27 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const protocol = request.protocol;
       const baseUrl = `${protocol}://${host}`;
 
+      // authorization_endpoint must be browser-facing (for session cookies).
+      // Use the frontend URL so the browser sends its session cookie via
+      // the catch-all /api/auth proxy. Server-to-server endpoints use the
+      // request Host so Docker containers can reach them directly.
+      const browserBaseUrl = config.frontendBaseUrl;
+
+      // The issuer MUST match the JWT "iss" claim exactly. Pydantic's AnyHttpUrl
+      // (used by MCP clients like Open WebUI) normalizes URLs by appending a
+      // trailing slash when the path is empty. We include the trailing slash so
+      // the JWT iss claim, the well-known issuer, and the normalized URL all match.
+      const issuer = browserBaseUrl.endsWith("/")
+        ? browserBaseUrl
+        : `${browserBaseUrl}/`;
+
       reply.type("application/json");
       return {
-        issuer: baseUrl,
-        authorization_endpoint: `${baseUrl}/api/auth/oauth2/authorize`,
-        token_endpoint: `${baseUrl}/api/auth/oauth2/token`,
-        registration_endpoint: `${baseUrl}/api/auth/oauth2/register`,
-        jwks_uri: `${baseUrl}/api/auth/jwks`,
+        issuer,
+        authorization_endpoint: `${browserBaseUrl}${OAUTH_ENDPOINTS.authorize}`,
+        token_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.token}`,
+        registration_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.register}`,
+        jwks_uri: `${baseUrl}${OAUTH_ENDPOINTS.jwks}`,
         response_types_supported: ["code"],
         grant_types_supported: ["authorization_code", "refresh_token"],
         token_endpoint_auth_methods_supported: [
@@ -97,13 +117,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "none",
         ],
         code_challenge_methods_supported: ["S256"],
-        scopes_supported: [
-          "mcp",
-          "openid",
-          "profile",
-          "email",
-          "offline_access",
-        ],
+        scopes_supported: [...OAUTH_SCOPES],
       };
     },
   );

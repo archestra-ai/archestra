@@ -1,7 +1,7 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
-import { SSO_TRUSTED_PROVIDER_IDS } from "@shared";
+import { OAUTH_PAGES, OAUTH_SCOPES, SSO_TRUSTED_PROVIDER_IDS } from "@shared";
 import {
   allAvailableActions,
   editorPermissions,
@@ -148,12 +148,24 @@ export const auth: any = betterAuth({
       issuer: APP_NAME,
     }),
     ...(ssoConfig ? [sso(ssoConfig)] : []),
-    jwt(),
+    jwt({
+      jwt: {
+        // Pydantic's AnyHttpUrl (used by MCP/Open WebUI OAuthMetadata model)
+        // normalizes URLs by appending a trailing slash when the path is empty.
+        // The JWT iss claim must match the normalized issuer from the well-known
+        // metadata to pass authlib's claim validation.
+        issuer: `${frontendBaseUrl}/`,
+      },
+      jwks: {
+        keyPairConfig: { alg: "RS256", modulusLength: 2048 },
+      },
+    }),
     oauthProvider({
-      loginPage: "/auth/sign-in",
-      consentPage: "/oauth/consent",
+      loginPage: OAUTH_PAGES.login,
+      consentPage: OAUTH_PAGES.consent,
       allowDynamicClientRegistration: true,
       allowUnauthenticatedClientRegistration: true,
+      scopes: [...OAUTH_SCOPES],
     }),
   ],
 

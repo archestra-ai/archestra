@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+import { OAUTH_ENDPOINTS } from "@shared";
 import {
   API_BASE_URL,
   MCP_GATEWAY_URL_SUFFIX,
@@ -350,10 +352,10 @@ test.describe("MCP Gateway - OAuth 2.1 Discovery", () => {
 
     // Verify all required OAuth 2.1 fields
     expect(body.issuer).toBeDefined();
-    expect(body.authorization_endpoint).toContain("/api/auth/oauth2/authorize");
-    expect(body.token_endpoint).toContain("/api/auth/oauth2/token");
-    expect(body.registration_endpoint).toContain("/api/auth/oauth2/register");
-    expect(body.jwks_uri).toContain("/api/auth/jwks");
+    expect(body.authorization_endpoint).toContain(OAUTH_ENDPOINTS.authorize);
+    expect(body.token_endpoint).toContain(OAUTH_ENDPOINTS.token);
+    expect(body.registration_endpoint).toContain(OAUTH_ENDPOINTS.register);
+    expect(body.jwks_uri).toContain(OAUTH_ENDPOINTS.jwks);
     expect(body.response_types_supported).toContain("code");
     expect(body.grant_types_supported).toContain("authorization_code");
     expect(body.grant_types_supported).toContain("refresh_token");
@@ -617,5 +619,253 @@ test.describe("MCP Gateway - External MCP Server Tests", () => {
       expect(callResult.error).toHaveProperty("code");
       expect(callResult.error).toHaveProperty("message");
     }
+  });
+});
+
+test.describe("MCP Gateway - OAuth 2.1 Full Flow", () => {
+  let profileId: string;
+
+  test.beforeAll(async ({ request, createAgent }) => {
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const createResponse = await createAgent(
+      request,
+      `OAuth Full Flow Test ${uniqueSuffix}`,
+    );
+    const profile = await createResponse.json();
+    profileId = profile.id;
+
+    // Assign Archestra tools to the profile
+    await assignArchestraToolsToProfile(request, profileId);
+  });
+
+  test.afterAll(async ({ request, deleteAgent }) => {
+    await deleteAgent(request, profileId);
+  });
+
+  test("full OAuth 2.1 flow: DCR → authorize → consent → token → MCP tools/list", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    // --- Step 1: Dynamic Client Registration (RFC 7591) ---
+    // Origin header is required for all better-auth endpoints (CSRF protection)
+    const dcrResponse = await request.post(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.register}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
+        data: {
+          client_name: "E2E OAuth Test Client",
+          redirect_uris: ["http://127.0.0.1:12345/callback"],
+          grant_types: ["authorization_code", "refresh_token"],
+          response_types: ["code"],
+          scope: "mcp",
+          token_endpoint_auth_method: "none",
+        },
+      },
+    );
+
+    expect(dcrResponse.status()).toBe(200);
+    const dcrResult = await dcrResponse.json();
+    const clientId = dcrResult.client_id;
+    expect(clientId).toBeDefined();
+
+    // --- Step 2: Generate PKCE code verifier and challenge ---
+    const codeVerifier = crypto.randomBytes(32).toString("base64url");
+    const codeChallenge = crypto
+      .createHash("sha256")
+      .update(codeVerifier)
+      .digest("base64url");
+    const state = crypto.randomBytes(16).toString("hex");
+
+    // --- Step 3: Authorize (with admin session cookies) ---
+    const authorizeParams = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: "http://127.0.0.1:12345/callback",
+      scope: "mcp",
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+    });
+
+    const authorizeResponse = await request.get(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.authorize}?${authorizeParams}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    // The authorize endpoint returns JSON when Accept: application/json is set
+    // It may redirect to the consent page or return the code directly
+    let code: string;
+    const authorizeContentType =
+      authorizeResponse.headers()["content-type"] || "";
+
+    if (authorizeContentType.includes("application/json")) {
+      const authorizeResult = await authorizeResponse.json();
+
+      if (authorizeResult.url?.includes("/oauth/consent")) {
+        // --- Step 4: Submit consent ---
+        // Parse the consent URL to extract the OAuth query params (includes signed state)
+        const consentUrl = new URL(
+          authorizeResult.url,
+          `${API_BASE_URL}`,
+        );
+        const oauthQuery = consentUrl.searchParams.toString();
+
+        const consentResponse = await request.post(
+          `${API_BASE_URL}${OAUTH_ENDPOINTS.consent}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Origin: UI_BASE_URL,
+            },
+            data: {
+              accept: true,
+              scope: "mcp",
+              oauth_query: oauthQuery,
+            },
+          },
+        );
+
+        const consentResult = await consentResponse.json();
+        const redirectUri =
+          consentResult.uri || consentResult.url || consentResult.redirectTo;
+        expect(redirectUri).toBeDefined();
+
+        const redirectUrl = new URL(redirectUri);
+        code = redirectUrl.searchParams.get("code")!;
+      } else if (authorizeResult.url) {
+        // Code returned directly (consent already given or skipConsent)
+        const redirectUrl = new URL(authorizeResult.url);
+        code = redirectUrl.searchParams.get("code")!;
+      } else {
+        throw new Error(
+          `Unexpected authorize JSON response: ${JSON.stringify(authorizeResult)}`,
+        );
+      }
+    } else {
+      // Followed redirect - extract code from the final URL
+      const finalUrl = new URL(authorizeResponse.url());
+      code = finalUrl.searchParams.get("code")!;
+
+      // If we ended up at the consent page, submit consent and re-authorize
+      if (finalUrl.pathname.includes("/oauth/consent")) {
+        const oauthQuery = finalUrl.searchParams.toString();
+
+        const consentResponse = await request.post(
+          `${API_BASE_URL}${OAUTH_ENDPOINTS.consent}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Origin: UI_BASE_URL,
+            },
+            data: {
+              accept: true,
+              scope: "mcp",
+              oauth_query: oauthQuery,
+            },
+          },
+        );
+
+        const consentResult = await consentResponse.json();
+        const redirectUri =
+          consentResult.uri || consentResult.url || consentResult.redirectTo;
+        const redirectUrl = new URL(redirectUri);
+        code = redirectUrl.searchParams.get("code")!;
+      }
+    }
+
+    expect(code).toBeDefined();
+    expect(code.length).toBeGreaterThan(0);
+
+    // --- Step 5: Token exchange ---
+    const tokenResponse = await request.post(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.token}`,
+      {
+        headers: {
+          Origin: UI_BASE_URL,
+        },
+        form: {
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: "http://127.0.0.1:12345/callback",
+          code_verifier: codeVerifier,
+          client_id: clientId,
+        },
+      },
+    );
+
+    expect(tokenResponse.status()).toBe(200);
+    const tokenResult = await tokenResponse.json();
+    const accessToken = tokenResult.access_token;
+    expect(accessToken).toBeDefined();
+    expect(tokenResult.token_type.toLowerCase()).toBe("bearer");
+
+    // --- Step 6: Use JWT to initialize MCP Gateway session ---
+    const initResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          clientInfo: { name: "oauth-e2e-client", version: "1.0.0" },
+        },
+      },
+    });
+
+    expect(initResponse.status()).toBe(200);
+    const initResult = await initResponse.json();
+    expect(initResult).toHaveProperty("result");
+    expect(initResult.result).toHaveProperty("serverInfo");
+
+    // --- Step 7: List tools via MCP Gateway with OAuth JWT ---
+    const toolsResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/list",
+        params: {},
+      },
+    });
+
+    expect(toolsResponse.status()).toBe(200);
+    const listResult = await toolsResponse.json();
+    expect(listResult).toHaveProperty("result");
+    expect(listResult.result).toHaveProperty("tools");
+    expect(listResult.result.tools.length).toBeGreaterThan(0);
+
+    // Verify Archestra tools are accessible via the OAuth JWT token
+    const archestraWhoami = listResult.result.tools.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (t: any) =>
+        t.name === `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
+    );
+    expect(archestraWhoami).toBeDefined();
   });
 });

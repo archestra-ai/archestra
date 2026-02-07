@@ -10,6 +10,7 @@ import { UuidIdSchema } from "@/types";
 import {
   createAgentServer,
   createStatelessTransport,
+  deriveAuthMethod,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
 } from "./mcp-gateway.utils";
@@ -88,6 +89,8 @@ async function handleMcpPostRequest(
             },
             // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
           } as any,
+          userId: tokenAuthContext?.userId ?? null,
+          authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
         });
         fastify.log.info({ profileId }, "✅ Saved initialize request");
       } catch (dbError) {

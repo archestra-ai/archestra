@@ -70,10 +70,12 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
 
-      expect(body.issuer).toBe("http://localhost:9000");
+      // issuer and authorization_endpoint use the frontend base URL (browser-facing)
+      expect(body.issuer).toBe("http://localhost:3000/");
       expect(body.authorization_endpoint).toBe(
-        "http://localhost:9000/api/auth/oauth2/authorize",
+        "http://localhost:3000/api/auth/oauth2/authorize",
       );
+      // token, registration, and jwks use the request Host (server-to-server)
       expect(body.token_endpoint).toBe(
         "http://localhost:9000/api/auth/oauth2/token",
       );
@@ -125,10 +127,13 @@ describe("OAuth Server - Well-Known Endpoints", () => {
 
       const body = response.json();
 
-      expect(body.issuer).toBe("http://host.docker.internal:9000");
+      // issuer and authorization_endpoint use the frontend base URL (browser-facing)
+      // regardless of the Host header
+      expect(body.issuer).toBe("http://localhost:3000/");
       expect(body.authorization_endpoint).toBe(
-        "http://host.docker.internal:9000/api/auth/oauth2/authorize",
+        "http://localhost:3000/api/auth/oauth2/authorize",
       );
+      // token endpoint uses the request Host (server-to-server)
       expect(body.token_endpoint).toBe(
         "http://host.docker.internal:9000/api/auth/oauth2/token",
       );

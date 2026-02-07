@@ -1,5 +1,6 @@
 "use client";
 
+import { OAUTH_SCOPE_DESCRIPTIONS } from "@shared";
 import { Shield } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -13,66 +14,44 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-const SCOPE_DESCRIPTIONS: Record<string, string> = {
-  mcp: "Access MCP tools and resources",
-  openid: "Verify your identity",
-  profile: "Access your profile information",
-  email: "Access your email address",
-  offline_access: "Maintain access when you're not present",
-};
+import { useOAuthClientInfo, useSubmitOAuthConsent } from "@/lib/oauth.query";
 
 export function ConsentForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const clientName = searchParams.get("client_name") || "Unknown Application";
+  const clientId = searchParams.get("client_id");
+  const queryClientName = searchParams.get("client_name");
+
+  // Fetch client name from OAuth client registration if not in query params
+  const { data: clientInfo } = useOAuthClientInfo(
+    queryClientName ? null : clientId,
+  );
+  const clientName =
+    queryClientName || clientInfo?.client_name || "Application";
+
   const scope = searchParams.get("scope") || "mcp";
   const scopes = scope.split(" ").filter(Boolean);
 
   // Reconstruct the original OAuth query from search params
-  // The consent page receives the full OAuth authorize query params
   const oauthQuery = searchParams.toString();
 
+  const consentMutation = useSubmitOAuthConsent();
+
   const handleConsent = async (accept: boolean) => {
-    setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/oauth2/consent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        redirect: "manual",
-        body: JSON.stringify({
-          accept,
-          scope,
-          oauth_query: oauthQuery,
-        }),
+      const data = await consentMutation.mutateAsync({
+        accept,
+        scope,
+        oauth_query: oauthQuery,
       });
 
-      // Follow redirect from server (authorization code redirect)
-      if (response.status === 302 || response.status === 301) {
-        const location = response.headers.get("location");
-        if (location) {
-          window.location.href = location;
-          return;
-        }
-      }
-
-      // If the response is a JSON with a redirect URL
-      if (response.ok) {
-        const data = await response.json();
-        if (data?.url) {
-          window.location.href = data.url;
-          return;
-        }
-        if (data?.redirectTo) {
-          window.location.href = data.redirectTo;
-          return;
-        }
+      if (data?.redirectTo) {
+        window.location.href = data.redirectTo;
+        return;
       }
 
       // If rejected, redirect to home
@@ -84,8 +63,6 @@ export function ConsentForm() {
       setError("Unexpected response from server");
     } catch {
       setError("Failed to process consent. Please try again.");
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -116,7 +93,11 @@ export function ConsentForm() {
                 <Badge variant="secondary" className="shrink-0">
                   {s}
                 </Badge>
-                <span className="text-sm">{SCOPE_DESCRIPTIONS[s] || s}</span>
+                <span className="text-sm">
+                  {OAUTH_SCOPE_DESCRIPTIONS[
+                    s as keyof typeof OAUTH_SCOPE_DESCRIPTIONS
+                  ] || s}
+                </span>
               </div>
             ))}
           </div>
@@ -129,16 +110,16 @@ export function ConsentForm() {
           variant="outline"
           className="flex-1"
           onClick={() => handleConsent(false)}
-          disabled={isLoading}
+          disabled={consentMutation.isPending}
         >
           Deny
         </Button>
         <Button
           className="flex-1"
           onClick={() => handleConsent(true)}
-          disabled={isLoading}
+          disabled={consentMutation.isPending}
         >
-          {isLoading ? "Processing..." : "Allow"}
+          {consentMutation.isPending ? "Processing..." : "Allow"}
         </Button>
       </CardFooter>
     </Card>

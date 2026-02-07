@@ -5,7 +5,13 @@ import { z } from "zod";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import { AccountModel, MemberModel, UserModel, UserTokenModel } from "@/models";
+import {
+  AccountModel,
+  MemberModel,
+  OAuthClientModel,
+  UserModel,
+  UserTokenModel,
+} from "@/models";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -163,6 +169,129 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.header(key, value);
       });
 
+      reply.send(response.body ? await response.text() : null);
+    },
+  });
+
+  // OAuth client info lookup (for consent page to display client name)
+  fastify.route({
+    method: "GET",
+    url: "/api/auth/oauth2/client-info",
+    schema: {
+      operationId: RouteId.GetOAuthClientInfo,
+      description: "Get OAuth client name by client_id",
+      tags: ["auth"],
+      querystring: z.object({ client_id: z.string() }),
+      response: {
+        200: z.object({ client_name: z.string().nullable() }),
+      },
+    },
+    async handler(request, reply) {
+      const { client_id } = request.query as { client_id: string };
+      const clientName = await OAuthClientModel.getNameByClientId(client_id);
+      return reply.send({ client_name: clientName });
+    },
+  });
+
+  // OAuth 2.1 Consent — intercept better-auth redirect and return JSON
+  // Browser fetch with redirect:"manual" produces opaque redirect responses
+  // where Location header is inaccessible. Convert redirect to JSON so the
+  // consent form can read the URL and navigate.
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/oauth2/consent",
+    schema: {
+      operationId: RouteId.SubmitOAuthConsent,
+      description: "Submit OAuth consent decision (accept or deny)",
+      tags: ["auth"],
+      body: z.object({
+        accept: z.boolean(),
+        scope: z.string(),
+        oauth_query: z.string(),
+      }),
+      response: {
+        200: z.object({ redirectTo: z.string() }),
+      },
+    },
+    async handler(request, reply) {
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const headers = new Headers();
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (value) headers.append(key, value.toString());
+      });
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+        body: JSON.stringify(request.body),
+      });
+
+      const response = await betterAuth.handler(req);
+
+      // Forward any set-cookie headers from better-auth
+      response.headers.forEach((value: string, key: string) => {
+        if (key.toLowerCase() === "set-cookie") {
+          reply.header(key, value);
+        }
+      });
+
+      // Convert HTTP redirect to JSON so the consent form can navigate
+      if (response.status === 302 || response.status === 301) {
+        const location = response.headers.get("location");
+        if (location) {
+          return reply.send({ redirectTo: location });
+        }
+      }
+
+      // better-auth may return 200 JSON with { redirect: true, uri } instead
+      // of an HTTP redirect. Normalize to { redirectTo } for the frontend.
+      if (response.ok && response.body) {
+        const body = await response.json().catch(() => null);
+        if (body?.uri) {
+          return reply.send({ redirectTo: body.uri });
+        }
+      }
+
+      reply.status(response.status);
+      reply.send(response.body ? await response.text() : undefined);
+    },
+  });
+
+  // OAuth 2.1 Dynamic Client Registration
+  // MCP clients are public OAuth clients (RFC 8252) but may not send
+  // token_endpoint_auth_method. Default to "none" so better-auth allows
+  // unauthenticated registration for these clients.
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/oauth2/register",
+    schema: {
+      tags: ["auth"],
+    },
+    async handler(request, reply) {
+      const body = (request.body as Record<string, unknown> | undefined) ?? {};
+      // Force public client for unauthenticated DCR (MCP spec requires PKCE,
+      // not client_secret). Open WebUI may send client_secret_post but MCP
+      // clients must be public for unauthenticated registration to work.
+      body.token_endpoint_auth_method = "none";
+
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const headers = new Headers();
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (value) headers.append(key, value.toString());
+      });
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      const response = await betterAuth.handler(req);
+
+      reply.status(response.status);
+      response.headers.forEach((value: string, key: string) => {
+        reply.header(key, value);
+      });
       reply.send(response.body ? await response.text() : null);
     },
   });

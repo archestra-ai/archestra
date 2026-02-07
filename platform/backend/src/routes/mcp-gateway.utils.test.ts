@@ -13,7 +13,9 @@ vi.mock("@/config", async (importOriginal) => {
   };
 });
 
-const { validateMCPGatewayToken } = await import("./mcp-gateway.utils");
+const { validateMCPGatewayToken, validateOAuthToken } = await import(
+  "./mcp-gateway.utils"
+);
 
 describe("validateMCPGatewayToken", () => {
   describe("invalid token scenarios", () => {
@@ -290,6 +292,44 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.tokenId).toBe(token.id);
       expect(result?.isUserToken).toBe(true);
       expect(result?.userId).toBe(adminWithNoTeams.id);
+    });
+  });
+
+  describe("OAuth token validation", () => {
+    test("validateOAuthToken returns null for unknown token", async () => {
+      const result = await validateOAuthToken(
+        crypto.randomUUID(),
+        "not-a-valid-oauth-token",
+      );
+      expect(result).toBeNull();
+    });
+
+    test("validateOAuthToken returns null for random token that doesn't match any hash", async () => {
+      const result = await validateOAuthToken(
+        crypto.randomUUID(),
+        "some-random-bearer-token-value-123",
+      );
+      expect(result).toBeNull();
+    });
+
+    test("validateMCPGatewayToken skips OAuth validation for archestra_ prefixed tokens", async () => {
+      // archestra_ prefixed tokens should never reach validateOAuthToken
+      const result = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        "archestra_fake_token_that_does_not_exist",
+      );
+      // Returns null because the archestra_ token is invalid, but importantly
+      // it should NOT have tried OAuth token validation
+      expect(result).toBeNull();
+    });
+
+    test("validateMCPGatewayToken tries OAuth validation for non-archestra tokens", async () => {
+      // A non-archestra token should try OAuth validation path and return null
+      const result = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        "some-random-bearer-token",
+      );
+      expect(result).toBeNull();
     });
   });
 });

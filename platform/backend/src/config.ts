@@ -125,19 +125,29 @@ const parseAllowedOrigins = (): string[] => {
   return [];
 };
 
+/** Matches http(s)://localhost or http(s)://127.0.0.1 with any port */
+export const LOCALHOST_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+/** Matches private/link-local IPs: 0.0.0.0, 10.x.x.x, 172.16-31.x.x, 192.168.x.x with any port */
+export const PRIVATE_IP_REGEX =
+  /^https?:\/\/(0\.0\.0\.0|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
 /**
  * Get CORS origin configuration for Fastify.
- * Returns RegExp for localhost (development) or string[] for specific origins.
+ * Returns an array of strings and RegExp patterns that fastify-cors accepts.
+ * Includes additional trusted origins to stay in sync with better-auth's trustedOrigins.
  */
-const getCorsOrigins = (): RegExp | boolean | string[] => {
+export const getCorsOrigins = (): (string | RegExp)[] => {
   const origins = parseAllowedOrigins();
+  const additionalOrigins = getAdditionalTrustedOrigins();
 
-  // Default: allow localhost on any port for development
+  // Development: allow localhost and private IPs on any port
   if (origins.length === 0) {
-    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+    return [LOCALHOST_REGEX, PRIVATE_IP_REGEX, ...additionalOrigins];
   }
 
-  return origins;
+  // Production: use configured origins plus additional origins
+  return [...origins, ...additionalOrigins];
 };
 
 /**
@@ -172,13 +182,21 @@ export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
   const additionalOrigins = getAdditionalTrustedOrigins();
 
-  // Default: allow localhost wildcards for development
+  // Default: allow localhost and private IP wildcards for development
   if (origins.length === 0) {
     return [
       "http://localhost:*",
       "https://localhost:*",
       "http://127.0.0.1:*",
       "https://127.0.0.1:*",
+      "http://0.0.0.0:*",
+      "https://0.0.0.0:*",
+      "http://10.*:*",
+      "https://10.*:*",
+      "http://172.*:*",
+      "https://172.*:*",
+      "http://192.168.*:*",
+      "https://192.168.*:*",
       ...additionalOrigins,
     ];
   }

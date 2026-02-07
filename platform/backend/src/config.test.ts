@@ -3,10 +3,13 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   getAdditionalTrustedOrigins,
   getAdditionalTrustedSsoProviderIds,
+  getCorsOrigins,
   getDatabaseUrl,
   getOtelExporterOtlpEndpoint,
   getOtlpAuthHeaders,
   getTrustedOrigins,
+  LOCALHOST_REGEX,
+  PRIVATE_IP_REGEX,
   parseBodyLimit,
 } from "./config";
 
@@ -331,7 +334,7 @@ describe("getTrustedOrigins", () => {
     // Note: NODE_ENV is determined at module load time, so tests run in development mode
     // since the test environment is not production
 
-    test("should return localhost wildcards in development", () => {
+    test("should return localhost and private IP wildcards in development", () => {
       delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
       const result = getTrustedOrigins();
@@ -341,6 +344,14 @@ describe("getTrustedOrigins", () => {
         "https://localhost:*",
         "http://127.0.0.1:*",
         "https://127.0.0.1:*",
+        "http://0.0.0.0:*",
+        "https://0.0.0.0:*",
+        "http://10.*:*",
+        "https://10.*:*",
+        "http://172.*:*",
+        "https://172.*:*",
+        "http://192.168.*:*",
+        "https://192.168.*:*",
       ]);
     });
 
@@ -355,6 +366,14 @@ describe("getTrustedOrigins", () => {
         "https://localhost:*",
         "http://127.0.0.1:*",
         "https://127.0.0.1:*",
+        "http://0.0.0.0:*",
+        "https://0.0.0.0:*",
+        "http://10.*:*",
+        "https://10.*:*",
+        "http://172.*:*",
+        "https://172.*:*",
+        "http://192.168.*:*",
+        "https://192.168.*:*",
         "http://keycloak:8080",
       ]);
     });
@@ -730,6 +749,124 @@ describe("getOtelExporterOtlpEndpoint", () => {
         "http://otel-collector:4318/v1/trace",
       );
       expect(result).toBe("http://otel-collector:4318/v1/traces");
+    });
+  });
+});
+
+describe("PRIVATE_IP_REGEX", () => {
+  test.each([
+    "http://192.168.1.5:3000",
+    "http://192.168.0.1:8080",
+    "https://192.168.100.200:443",
+    "http://10.0.0.1:3000",
+    "http://10.255.255.255:9000",
+    "http://172.16.0.1:3000",
+    "http://172.31.255.255:3000",
+    "http://0.0.0.0:3000",
+    "https://0.0.0.0:443",
+    "http://192.168.1.5",
+  ])("should match private IP: %s", (url) => {
+    expect(PRIVATE_IP_REGEX.test(url)).toBe(true);
+  });
+
+  test.each([
+    "http://8.8.8.8:3000",
+    "http://1.1.1.1:3000",
+    "http://172.32.0.1:3000",
+    "http://172.15.0.1:3000",
+    "http://localhost:3000",
+    "http://example.com:3000",
+  ])("should NOT match non-private IP: %s", (url) => {
+    expect(PRIVATE_IP_REGEX.test(url)).toBe(false);
+  });
+});
+
+describe("LOCALHOST_REGEX", () => {
+  test.each([
+    "http://localhost:3000",
+    "https://localhost:9000",
+    "http://127.0.0.1:3000",
+    "https://127.0.0.1:443",
+    "http://localhost",
+    "http://127.0.0.1",
+  ])("should match localhost: %s", (url) => {
+    expect(LOCALHOST_REGEX.test(url)).toBe(true);
+  });
+
+  test.each([
+    "http://192.168.1.5:3000",
+    "http://example.com:3000",
+    "http://0.0.0.0:3000",
+  ])("should NOT match non-localhost: %s", (url) => {
+    expect(LOCALHOST_REGEX.test(url)).toBe(false);
+  });
+});
+
+describe("getCorsOrigins", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  describe("development mode", () => {
+    test("should return array with LOCALHOST_REGEX and PRIVATE_IP_REGEX", () => {
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const result = getCorsOrigins();
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toContain(LOCALHOST_REGEX);
+      expect(result).toContain(PRIVATE_IP_REGEX);
+    });
+
+    test("should include additional trusted origins", () => {
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+        "http://keycloak:8080";
+
+      const result = getCorsOrigins();
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toContain(LOCALHOST_REGEX);
+      expect(result).toContain(PRIVATE_IP_REGEX);
+      expect(result).toContain("http://keycloak:8080");
+    });
+  });
+
+  describe("production mode", () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    test("should return frontend URL", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+      const { getCorsOrigins: getCorsOriginsProd } = await import("./config");
+      const result = getCorsOriginsProd();
+
+      expect(result).toEqual(["https://app.example.com"]);
+    });
+
+    test("should include additional trusted origins in production", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+        "http://idp.example.com:8080";
+
+      const { getCorsOrigins: getCorsOriginsProd } = await import("./config");
+      const result = getCorsOriginsProd();
+
+      expect(result).toEqual([
+        "https://app.example.com",
+        "http://idp.example.com:8080",
+      ]);
     });
   });
 });

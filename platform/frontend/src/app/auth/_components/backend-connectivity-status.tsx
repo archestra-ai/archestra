@@ -39,7 +39,8 @@ interface BackendConnectivityStatusProps {
 export function BackendConnectivityStatus({
   children,
 }: BackendConnectivityStatusProps) {
-  const { status, attemptCount, retry } = useBackendConnectivity();
+  const { status, attemptCount, estimatedTotalAttempts, retry } =
+    useBackendConnectivity();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
   const [showConnectedMessage, setShowConnectedMessage] = useState(false);
@@ -98,6 +99,7 @@ export function BackendConnectivityStatus({
     <ConnectionStatusView
       status={status}
       attemptCount={attemptCount}
+      estimatedTotalAttempts={estimatedTotalAttempts}
       retry={retry}
     />
   );
@@ -128,10 +130,12 @@ function ConnectedSuccessView({ hasRedirectTo }: { hasRedirectTo: boolean }) {
 function ConnectionStatusView({
   status,
   attemptCount,
+  estimatedTotalAttempts,
   retry,
 }: {
   status: "connecting" | "unreachable";
   attemptCount: number;
+  estimatedTotalAttempts: number;
   retry: () => void;
 }) {
   const isUnreachable = status === "unreachable";
@@ -187,7 +191,8 @@ function ConnectionStatusView({
               )}
               {attemptCount > 0 && (
                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  Still trying to connect, attempt {attemptCount}...
+                  Still trying to connect, attempt {attemptCount} /{" "}
+                  {estimatedTotalAttempts}...
                 </div>
               )}
             </>

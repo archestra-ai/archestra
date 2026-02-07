@@ -397,6 +397,39 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const response = await betterAuth.handler(req);
 
+      // Check for "Invalid origin" errors and enhance with helpful guidance
+      if (response.status === 403 && response.body) {
+        const responseText = await response.text();
+        if (responseText.includes("Invalid origin")) {
+          const requestOrigin = request.headers.origin || "unknown";
+          logger.warn(
+            {
+              origin: requestOrigin,
+              trustedOrigins: config.auth.trustedOrigins,
+            },
+            `Origin "${requestOrigin}" is not trusted. Set ARCHESTRA_FRONTEND_URL or ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS to allow it.`,
+          );
+
+          reply.status(403);
+          response.headers.forEach((value: string, key: string) => {
+            reply.header(key, value);
+          });
+          return reply.send(
+            JSON.stringify({
+              message: `Invalid origin: ${requestOrigin} is not in the list of trusted origins. Set ARCHESTRA_FRONTEND_URL=${requestOrigin} or add it to ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS.`,
+              trustedOrigins: config.auth.trustedOrigins,
+            }),
+          );
+        }
+
+        // Not an origin error — forward the already-consumed body
+        reply.status(response.status);
+        response.headers.forEach((value: string, key: string) => {
+          reply.header(key, value);
+        });
+        return reply.send(responseText);
+      }
+
       reply.status(response.status);
 
       response.headers.forEach((value: string, key: string) => {

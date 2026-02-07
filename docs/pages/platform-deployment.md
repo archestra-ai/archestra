@@ -43,7 +43,7 @@ This will start the platform with:
 
 **Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
 
-> **Accessing from another device on your network?** By default, the quick-start binds to `http://localhost:3000`. If you access it from a different host (e.g., `http://192.168.1.5:3000`), add `-e ARCHESTRA_FRONTEND_URL=http://<your-ip>:3000` to the `docker run` command. Without this, authentication will fail with an "Invalid origin" error.
+> **Accessing from another device on your network?** By default, the quick-start binds to `http://localhost:3000`. If you access it from a different host (e.g., `http://192.168.1.5:3000`), add `-e ARCHESTRA_FRONTEND_URL=http://<your-ip>:3000` to the `docker run` command. Without this, authentication will fail.
 
 If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 
@@ -560,7 +560,7 @@ The following environment variables can be used to configure Archestra Platform.
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
-- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for both CORS and authentication flows. These origins are added to both the Fastify CORS allow-list and better-auth's trusted origins.
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for both CORS and authentication flows.
 
   - Default: None
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)

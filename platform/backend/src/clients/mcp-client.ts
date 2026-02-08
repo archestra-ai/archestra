@@ -448,7 +448,6 @@ class McpClient {
       if (tokenAuth?.userId) {
         const globalToolResult = await this.findGlobalCatalogTool(
           toolCall,
-          agentId,
           tokenAuth.userId,
         );
         if (globalToolResult) {
@@ -499,7 +498,6 @@ class McpClient {
    */
   private async findGlobalCatalogTool(
     toolCall: CommonToolCall,
-    _agentId: string,
     userId: string,
   ): Promise<{
     tool: McpToolWithServerMetadata;
@@ -965,7 +963,7 @@ class McpClient {
         this.toolNameCache.set(connectionKey, nameMap);
       } catch (error) {
         logger.warn(
-          { connectionKey, error },
+          { connectionKey, err: error },
           "Failed to list tools for name resolution, using stripped name as-is",
         );
         return strippedToolName;

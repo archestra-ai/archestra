@@ -1290,9 +1290,7 @@ describe("McpClient", () => {
 
         // Remote server reports tool with PascalCase name
         mockListTools.mockResolvedValueOnce({
-          tools: [
-            { name: "GetRepository", inputSchema: { type: "object" } },
-          ],
+          tools: [{ name: "GetRepository", inputSchema: { type: "object" } }],
         });
 
         mockCallTool.mockResolvedValueOnce({
@@ -1365,9 +1363,7 @@ describe("McpClient", () => {
 
         // Server returns tools, but not the one we're looking for
         mockListTools.mockResolvedValueOnce({
-          tools: [
-            { name: "otherTool", inputSchema: { type: "object" } },
-          ],
+          tools: [{ name: "otherTool", inputSchema: { type: "object" } }],
         });
 
         mockCallTool.mockResolvedValueOnce({
@@ -1405,9 +1401,7 @@ describe("McpClient", () => {
 
         // Server also uses lowercase (snake_case)
         mockListTools.mockResolvedValueOnce({
-          tools: [
-            { name: "search_issues", inputSchema: { type: "object" } },
-          ],
+          tools: [{ name: "search_issues", inputSchema: { type: "object" } }],
         });
 
         mockCallTool.mockResolvedValueOnce({

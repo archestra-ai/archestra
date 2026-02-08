@@ -3,6 +3,7 @@ export { default as Bedrock } from "./bedrock";
 export { default as Cerebras } from "./cerebras";
 export { default as Cohere } from "./cohere";
 export { default as Gemini } from "./gemini";
+export { default as Groq } from "./groq";
 export { default as Mistral } from "./mistral";
 export { default as Ollama } from "./ollama";
 export { default as OpenAi } from "./openai";

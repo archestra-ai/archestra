@@ -46,11 +46,11 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   "google-vertex": "gemini",
   cohere: "cohere",
   cerebras: "cerebras",
+  groq: "groq",
   mistral: "mistral",
   // These providers use OpenAI-compatible API in Archestra
   llama: "openai",
   deepseek: "openai",
-  groq: "openai",
   "fireworks-ai": "openai",
   togetherai: "openai",
   // Explicitly unsupported providers (return null to skip)
@@ -406,6 +406,7 @@ class ModelsDevClient {
       anthropic: ["anthropic/"],
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
+      groq: ["groq/"],
       mistral: ["mistral/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],

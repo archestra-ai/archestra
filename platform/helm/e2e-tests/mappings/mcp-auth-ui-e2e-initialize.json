@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp/auth-ui-e2e",
+    "bodyPatterns": [
+      { "matchesJsonPath": "$[?(@.method == 'initialize')]" }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":{{jsonPath request.body '$.id'}},\"result\":{\"protocolVersion\":\"2024-11-05\",\"serverInfo\":{\"name\":\"auth-ui-e2e\",\"version\":\"1.0.0\"},\"capabilities\":{\"tools\":{\"listChanged\":false}}}}"
+  }
+}

@@ -89,6 +89,9 @@ const envApiKeyGetters: Record<
   zhipuai: () => config.chat.zhipuai.apiKey,
   deepseek: () => config.chat.deepseek.apiKey,
   groq: () => config.chat.groq.apiKey,
+  xai: () => config.chat.xai.apiKey,
+  perplexity: () => config.chat.perplexity.apiKey,
+  minimax: () => config.chat.minimax.apiKey,
 };
 
 /**
@@ -175,6 +178,9 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   mistral: "mistral-small-latest", // Mistral's fast model
   deepseek: "deepseek-chat",
   groq: "llama-3.1-8b-instant",
+  xai: "grok-4-1-fast",
+  perplexity: "llama-3.1-8b",
+  minimax: "abab6.5s",
 };
 
 /**
@@ -371,6 +377,48 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     });
     return client(modelName);
   },
+
+  xai: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "x.AI API key is required. Please configure XAI_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.xai.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  perplexity: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.perplexity.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  minimax: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "MiniMax API key is required. Please configure MINIMAX_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.minimax.baseUrl,
+    });
+    return client(modelName);
+  },
 };
 
 /**
@@ -553,6 +601,36 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
       const client = createOpenAI({
         apiKey,
         baseURL: buildProxyBaseUrl("groq", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    xai: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/xai/:agentId (SDK appends /chat/completions)
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("xai", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    perplexity: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/perplexity/:agentId (SDK appends /chat/completions)
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("perplexity", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    minimax: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/minimax/:agentId (SDK appends /chat/completions)
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("minimax", agentId),
         headers,
       });
       return client.chat(modelName);

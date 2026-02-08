@@ -10,3 +10,6 @@ export { vllmAdapterFactory } from "./vllm";
 export { zhipuaiAdapterFactory } from "./zhipuai";
 export { deepseekAdapterFactory } from "./deepseek";
 export { groqAdapterFactory } from "./groq";
+export { xaiAdapterFactory } from "./xai";
+export { perplexityAdapterFactory } from "./perplexity";
+export { minimaxAdapterFactory } from "./minimax";

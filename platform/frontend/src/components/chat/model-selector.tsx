@@ -104,6 +104,9 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   zhipuai: "zhipuai",
   deepseek: "deepseek",
   groq: "groq",
+  xai: "xai",
+  perplexity: "perplexity",
+  minimax: "minimax",
 };
 
 /**

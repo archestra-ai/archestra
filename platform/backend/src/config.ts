@@ -512,6 +512,21 @@ export default {
         process.env.ARCHESTRA_GROQ_BASE_URL ||
         "https://api.groq.com/openai/v1",
     },
+    xai: {
+      baseUrl:
+        process.env.ARCHESTRA_XAI_BASE_URL ||
+        "https://api.x.ai/v1",
+    },
+    perplexity: {
+      baseUrl:
+        process.env.ARCHESTRA_PERPLEXITY_BASE_URL ||
+        "https://api.perplexity.ai",
+    },
+    minimax: {
+      baseUrl:
+        process.env.ARCHESTRA_MINIMAX_BASE_URL ||
+        "https://api.minimax.chat/v1",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -553,6 +568,15 @@ export default {
     },
     groq: {
       apiKey: process.env.ARCHESTRA_CHAT_GROQ_API_KEY || "",
+    },
+    xai: {
+      apiKey: process.env.ARCHESTRA_CHAT_XAI_API_KEY || "",
+    },
+    perplexity: {
+      apiKey: process.env.ARCHESTRA_CHAT_PERPLEXITY_API_KEY || "",
+    },
+    minimax: {
+      apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",

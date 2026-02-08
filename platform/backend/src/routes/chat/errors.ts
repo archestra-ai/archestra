@@ -1113,6 +1113,9 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   zhipuai: parseZhipuaiError,
   deepseek: parseOpenAIError,
   groq: parseOpenAIError,
+  xai: parseOpenAIError,
+  perplexity: parseOpenAIError,
+  minimax: parseOpenAIError,
 };
 
 /**
@@ -1133,6 +1136,9 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   zhipuai: mapZhipuaiErrorWrapper,
   deepseek: mapOpenAIErrorWrapper,
   groq: mapOpenAIErrorWrapper,
+  xai: mapOpenAIErrorWrapper,
+  perplexity: mapOpenAIErrorWrapper,
+  minimax: mapOpenAIErrorWrapper,
 };
 
 // =============================================================================

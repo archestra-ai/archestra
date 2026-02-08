@@ -59,6 +59,15 @@ const MODELS_WITHOUT_IMAGE_SUPPORT = [
   "mixtral-8x7b-32768",
   "gemma-7b-it",
   "gemma2-9b-it",
+  // x.AI text models
+  "grok-4-1-fast",
+  // Perplexity text models
+  "llama-3.1-8b",
+  "llama-3.1-70b",
+  "sonar-reasoning",
+  // MiniMax text models
+  "abab6.5s",
+  "abab6.5t",
 ];
 
 /**

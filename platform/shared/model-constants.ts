@@ -16,6 +16,9 @@ export const SupportedProvidersSchema = z.enum([
   "zhipuai",
   "deepseek",
   "groq",
+  "xai",
+  "perplexity",
+  "minimax",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -31,6 +34,9 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "zhipuai:chatCompletions",
   "deepseek:chatCompletions",
   "groq:chatCompletions",
+  "xai:chatCompletions",
+  "perplexity:chatCompletions",
+  "minimax:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -52,6 +58,9 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   zhipuai: "Zhipu AI",
   deepseek: "DeepSeek",
   groq: "Groq",
+  xai: "x.AI (Grok)",
+  perplexity: "Perplexity",
+  minimax: "MiniMax",
 };
 
 /**
@@ -119,5 +128,17 @@ export const MODEL_MARKER_PATTERNS: Record<
   groq: {
     fastest: ["llama-3.1-8b", "mixtral-8x7b"],
     best: ["llama-3.3-70b", "llama-3.1-70b"],
+  },
+  xai: {
+    fastest: ["grok-4-1-fast"],
+    best: ["grok-4"],
+  },
+  perplexity: {
+    fastest: ["llama-3.1-8b"],
+    best: ["llama-3.1-70b", "sonar-reasoning"],
+  },
+  minimax: {
+    fastest: ["abab6.5s"],
+    best: ["abab6.5t"],
   },
 };

@@ -106,6 +106,12 @@ async function getSmartDefaultModel(
             return { model: "deepseek-chat", provider: "deepseek" };
           case "groq":
             return { model: "llama-3.3-70b-versatile", provider: "groq" };
+          case "xai":
+            return { model: "grok-4", provider: "xai" };
+          case "perplexity":
+            return { model: "sonar-reasoning", provider: "perplexity" };
+          case "minimax":
+            return { model: "abab6.5t", provider: "minimax" };
         }
       }
     }
@@ -129,6 +135,15 @@ async function getSmartDefaultModel(
   }
   if (config.chat.groq?.apiKey) {
     return { model: "llama-3.3-70b-versatile", provider: "groq" };
+  }
+  if (config.chat.xai?.apiKey) {
+    return { model: "grok-4", provider: "xai" };
+  }
+  if (config.chat.perplexity?.apiKey) {
+    return { model: "sonar-reasoning", provider: "perplexity" };
+  }
+  if (config.chat.minimax?.apiKey) {
+    return { model: "abab6.5t", provider: "minimax" };
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key

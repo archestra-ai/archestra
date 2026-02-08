@@ -24,6 +24,9 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   bedrock: () => new TiktokenTokenizer(),
   deepseek: () => new TiktokenTokenizer(),
   groq: () => new TiktokenTokenizer(),
+  xai: () => new TiktokenTokenizer(),
+  perplexity: () => new TiktokenTokenizer(),
+  minimax: () => new TiktokenTokenizer(),
 };
 
 /**

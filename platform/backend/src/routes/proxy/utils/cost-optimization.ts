@@ -30,6 +30,9 @@ type ProviderMessages = {
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
   deepseek: OpenAi.Types.ChatCompletionsRequest["messages"];
   groq: OpenAi.Types.ChatCompletionsRequest["messages"];
+  xai: OpenAi.Types.ChatCompletionsRequest["messages"];
+  perplexity: OpenAi.Types.ChatCompletionsRequest["messages"];
+  minimax: OpenAi.Types.ChatCompletionsRequest["messages"];
 };
 
 /**

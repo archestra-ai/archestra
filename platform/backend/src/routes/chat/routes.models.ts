@@ -584,6 +584,120 @@ async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from x.AI API
+ */
+async function fetchXaiModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.xai.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch x.AI models",
+    );
+    throw new Error(`Failed to fetch x.AI models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "xai" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
+ * Fetch models from Perplexity API
+ */
+async function fetchPerplexityModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.perplexity.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Perplexity models",
+    );
+    throw new Error(`Failed to fetch Perplexity models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "perplexity" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
+ * Fetch models from MiniMax API
+ */
+async function fetchMinimaxModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.minimax.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch MiniMax models",
+    );
+    throw new Error(`Failed to fetch MiniMax models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "minimax" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from AWS Bedrock API
  * Uses Bearer token authentication (proxy handles AWS credentials)
  */
@@ -831,6 +945,9 @@ const modelFetchers: Record<
   zhipuai: fetchZhipuaiModels,
   deepseek: fetchDeepSeekModels,
   groq: fetchGroqModels,
+  xai: fetchXaiModels,
+  perplexity: fetchPerplexityModels,
+  minimax: fetchMinimaxModels,
 };
 
 // Register all model fetchers with the sync service
@@ -897,7 +1014,7 @@ export async function fetchModelsForProvider({
   try {
     let models: ModelInfo[] = [];
     if (
-      ["anthropic", "cerebras", "cohere", "mistral", "openai", "deepseek", "groq"].includes(
+      ["anthropic", "cerebras", "cohere", "mistral", "openai", "deepseek", "groq", "xai", "perplexity", "minimax"].includes(
         provider,
       )
     ) {

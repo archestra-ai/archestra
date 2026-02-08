@@ -272,6 +272,248 @@ export class GroqDualLlmClient implements DualLlmClient {
 }
 
 /**
+ * x.AI implementation of DualLlmClient
+ */
+export class XaiDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "grok-4") {
+    logger.debug({ model }, "[dualLlmClient] x.AI: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.xai.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] x.AI: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] x.AI: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] x.AI: starting chat with schema",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: schema,
+      },
+      temperature,
+    });
+
+    const content = response.choices[0].message.content || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] x.AI: chat with schema complete, parsing response",
+    );
+    return JSON.parse(content) as T;
+  }
+}
+
+/**
+ * Perplexity implementation of DualLlmClient
+ */
+export class PerplexityDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "sonar-reasoning") {
+    logger.debug({ model }, "[dualLlmClient] Perplexity: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.perplexity.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] Perplexity: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Perplexity: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] Perplexity: starting chat with schema",
+    );
+    // Perplexity might not support json_schema, using prompt fallback
+    const systemPrompt = `You must respond with valid JSON matching this schema:
+${JSON.stringify(schema.schema, null, 2)}
+
+Return only the JSON object, no other text.`;
+
+    const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
+      if (idx === 0 && msg.role === "user") {
+        return {
+          ...msg,
+          content: `${systemPrompt}\n\n${msg.content}`,
+        };
+      }
+      return msg;
+    });
+
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: enhancedMessages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content || "";
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
+      null,
+      content,
+    ];
+    const jsonText = jsonMatch[1].trim();
+
+    return JSON.parse(jsonText) as T;
+  }
+}
+
+/**
+ * MiniMax implementation of DualLlmClient
+ */
+export class MinimaxDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "abab6.5t") {
+    logger.debug({ model }, "[dualLlmClient] MiniMax: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.minimax.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] MiniMax: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] MiniMax: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] MiniMax: starting chat with schema",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: schema,
+      },
+      temperature,
+    });
+
+    const content = response.choices[0].message.content || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] MiniMax: chat with schema complete, parsing response",
+    );
+    return JSON.parse(content) as T;
+  }
+}
+
+/**
  * Anthropic implementation of DualLlmClient
  */
 export class AnthropicDualLlmClient implements DualLlmClient {
@@ -1383,6 +1625,18 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
     groq: (apiKey, model) => {
       if (!apiKey) throw new Error("API key required for Groq dual LLM");
       return new GroqDualLlmClient(apiKey, model);
+    },
+    xai: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for x.AI dual LLM");
+      return new XaiDualLlmClient(apiKey, model);
+    },
+    perplexity: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for Perplexity dual LLM");
+      return new PerplexityDualLlmClient(apiKey, model);
+    },
+    minimax: (apiKey, model) => {
+      if (!apiKey) throw new Error("API key required for MiniMax dual LLM");
+      return new MinimaxDualLlmClient(apiKey, model);
     },
     bedrock: (apiKey, model) => {
       if (!model) throw new Error("Model name required for Bedrock dual LLM");

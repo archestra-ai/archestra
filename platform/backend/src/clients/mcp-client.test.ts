@@ -4,6 +4,7 @@ import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
+  McpHttpSessionModel,
   McpServerModel,
   ToolModel,
 } from "@/models";
@@ -99,6 +100,20 @@ describe("McpClient", () => {
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
     mockGetOrLoadDeployment.mockReset();
+
+    // Spy on McpHttpSessionModel to prevent real DB writes during mcp-client tests
+    // and to avoid errors from session persistence in the background
+    vi.spyOn(McpHttpSessionModel, "findByConnectionKey").mockResolvedValue(
+      null,
+    );
+    vi.spyOn(McpHttpSessionModel, "upsert").mockResolvedValue(undefined);
+    vi.spyOn(McpHttpSessionModel, "deleteByConnectionKey").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(McpHttpSessionModel, "deleteStaleSession").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(McpHttpSessionModel, "deleteExpired").mockResolvedValue(0);
   });
 
   describe("executeToolCall", () => {

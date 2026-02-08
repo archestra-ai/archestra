@@ -18,6 +18,7 @@ import {
   ChatApiKeyModel,
   DualLlmConfigModel,
   InternalMcpCatalogModel,
+  McpHttpSessionModel,
   McpServerModel,
   MemberModel,
   OrganizationModel,
@@ -506,4 +507,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();
+  // Clean up orphaned MCP HTTP sessions (older than 24h)
+  await McpHttpSessionModel.deleteExpired();
 }

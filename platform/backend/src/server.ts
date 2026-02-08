@@ -636,6 +636,16 @@ const start = async () => {
       credentials: true,
     });
 
+    logger.info(
+      {
+        corsOrigins: corsOrigins.map((o) =>
+          o instanceof RegExp ? o.toString() : o,
+        ),
+        trustedOrigins: config.auth.trustedOrigins,
+      },
+      "CORS and trusted origins configured",
+    );
+
     // Register formbody plugin to parse application/x-www-form-urlencoded bodies
     // This is required for SAML callbacks which use form POST binding
     await fastify.register(fastifyFormbody);

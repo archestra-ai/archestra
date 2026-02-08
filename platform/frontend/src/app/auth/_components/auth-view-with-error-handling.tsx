@@ -1,7 +1,13 @@
 "use client";
 
 import { AuthView } from "@daveyplate/better-auth-ui";
-import { AlertCircle, ExternalLink, KeyRound, XCircle } from "lucide-react";
+import {
+  AlertCircle,
+  ExternalLink,
+  KeyRound,
+  ShieldAlert,
+  XCircle,
+} from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -121,6 +127,7 @@ export function AuthViewWithErrorHandling({
 }: AuthViewWithErrorHandlingProps) {
   const searchParams = useSearchParams();
   const [serverError, setServerError] = useState(false);
+  const [originError, setOriginError] = useState<string | null>(null);
   const [ssoError, setSsoError] = useState<{
     title: string;
     message: string;
@@ -172,15 +179,32 @@ export function AuthViewWithErrorHandling({
         const url =
           typeof args[0] === "string" ? args[0] : (args[0] as Request)?.url;
 
+        const isAuthEndpoint =
+          url?.includes("/api/auth/sign-in") ||
+          url?.includes("/api/auth/sign-up") ||
+          url?.includes("/api/auth/forgot-password") ||
+          url?.includes("/api/auth/reset-password");
+
+        // Check for 403 "Invalid origin" errors
+        if (isAuthEndpoint && response.status === 403) {
+          try {
+            const cloned = response.clone();
+            const body = await cloned.json();
+            if (
+              typeof body?.message === "string" &&
+              (body.message.includes("Invalid origin") ||
+                body.message.includes("not trusted"))
+            ) {
+              setOriginError(window.location.origin);
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
         // Check if this is a sign-in/sign-up request and if it's a server error
         // Only show error for actual auth attempts, not status checks
-        if (
-          (url?.includes("/api/auth/sign-in") ||
-            url?.includes("/api/auth/sign-up") ||
-            url?.includes("/api/auth/forgot-password") ||
-            url?.includes("/api/auth/reset-password")) &&
-          response.status >= 500
-        ) {
+        if (isAuthEndpoint && response.status >= 500) {
           console.error(
             `Server error (${response.status}) from auth endpoint:`,
             url,
@@ -297,9 +321,43 @@ export function AuthViewWithErrorHandling({
     );
   }
 
+  const originErrorAlert = originError && isSignInPage && (
+    <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950 max-w-sm">
+      <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+      <AlertTitle className="text-amber-900 dark:text-amber-100">
+        Origin Not Allowed
+      </AlertTitle>
+      <AlertDescription className="text-amber-700 dark:text-amber-300">
+        <p className="text-sm mb-2">
+          You are accessing Archestra from <code>{originError}</code>, which is
+          not in the list of trusted origins.
+        </p>
+        <p className="text-sm mb-2">
+          To fix this, set the environment variable:
+        </p>
+        <pre className="text-xs bg-amber-100 dark:bg-amber-900 p-2 rounded mb-2 overflow-x-auto">
+          ARCHESTRA_FRONTEND_URL={originError}
+        </pre>
+        <p className="text-sm">
+          For multiple origins, use{" "}
+          <code>ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS</code>.
+        </p>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setOriginError(null)}
+          className="mt-2 hover:bg-amber-100 dark:hover:bg-amber-900"
+        >
+          Dismiss
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+
   return (
     <>
       {ssoErrorAlert}
+      {originErrorAlert}
       {serverError && isSignInPage && (
         <Alert className="mb-4 border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 max-w-sm">
           <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />

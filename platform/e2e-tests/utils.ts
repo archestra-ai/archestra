@@ -525,6 +525,24 @@ export async function loginViaApi(
 }
 
 /**
+ * Login via UI form (fills email/password fields and clicks submit).
+ * Assumes the page is already on the sign-in page.
+ *
+ * @param page - Playwright page already on the sign-in page
+ * @param email - User email
+ * @param password - User password
+ */
+export async function loginViaUi(
+  page: Page,
+  email: string,
+  password: string,
+): Promise<void> {
+  await page.getByLabel(/email/i).fill(email);
+  await page.getByLabel(/password/i).fill(password);
+  await page.getByRole("button", { name: /sign in|login/i }).click();
+}
+
+/**
  * Find a catalog item by name
  */
 export async function findCatalogItem(

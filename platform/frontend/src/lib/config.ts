@@ -148,6 +148,28 @@ export default {
     config: {
       api_host: "https://eu.i.posthog.com",
       person_profiles: "identified_only",
+      session_recording: {
+        recordHeaders: true,
+        recordBody: true,
+        maskCapturedNetworkRequestFn: (data) => {
+          const sensitiveHeaders = ["authorization", "cookie", "set-cookie"];
+          if (data.requestHeaders) {
+            for (const header of sensitiveHeaders) {
+              if (header in data.requestHeaders) {
+                data.requestHeaders[header] = "***REDACTED***";
+              }
+            }
+          }
+          if (data.responseHeaders) {
+            for (const header of sensitiveHeaders) {
+              if (header in data.responseHeaders) {
+                data.responseHeaders[header] = "***REDACTED***";
+              }
+            }
+          }
+          return data;
+        },
+      },
     } satisfies Partial<PostHogConfig>,
   },
   /**

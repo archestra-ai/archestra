@@ -1,8 +1,5 @@
 import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import {
-  MARKETING_TEAM_NAME,
-  WIREMOCK_INTERNAL_URL,
-} from "../../consts";
+import { MARKETING_TEAM_NAME, WIREMOCK_INTERNAL_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
 import { getTeamByName } from "../api/fixtures";
 import { makeApiRequest } from "../api/mcp-gateway-utils";
@@ -189,8 +186,25 @@ test.describe("Chat - Auth Required Tool", () => {
     await expect(profileOption).toBeVisible({ timeout: 5_000 });
     await profileOption.click();
 
-    // The default model (Claude Sonnet / anthropic) routes through WireMock
-    // via ARCHESTRA_ANTHROPIC_BASE_URL, so no model selection needed.
+    // Select an Anthropic model — the member's default may be a different
+    // provider (e.g. Cohere in CI) whose WireMock stubs won't return our
+    // tool_use response. Only the Anthropic stubs are configured for this test.
+    const modelTrigger = memberPage.getByTestId(
+      E2eTestId.ChatModelSelectorTrigger,
+    );
+    await expect(modelTrigger).toBeVisible({ timeout: 5_000 });
+    await modelTrigger.click();
+
+    const modelSearch = memberPage.getByPlaceholder("Search models...");
+    await expect(modelSearch).toBeVisible({ timeout: 3_000 });
+    await modelSearch.fill("claude");
+
+    // Pick the first Anthropic Claude model from the results
+    const claudeOption = memberPage
+      .getByRole("option", { name: /claude/i })
+      .first();
+    await expect(claudeOption).toBeVisible({ timeout: 5_000 });
+    await claudeOption.click();
 
     // Send a message containing the unique tag for WireMock matching
     const testMessage = `Test message ${TEST_MESSAGE_TAG}: Please use the test tool.`;
@@ -199,9 +213,9 @@ test.describe("Chat - Auth Required Tool", () => {
 
     // Wait for the AuthRequiredTool component to render
     // The flow: LLM returns tool_use -> MCP Gateway returns auth-required error -> UI renders AuthRequiredTool
-    await expect(
-      memberPage.getByText("Authentication Required"),
-    ).toBeVisible({ timeout: 30_000 });
+    await expect(memberPage.getByText("Authentication Required")).toBeVisible({
+      timeout: 30_000,
+    });
 
     // Verify the catalog name is displayed in the alert description
     await expect(

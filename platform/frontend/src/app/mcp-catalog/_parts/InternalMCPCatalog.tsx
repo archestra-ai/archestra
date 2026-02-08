@@ -1,6 +1,10 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID, PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  MCP_CATALOG_INSTALL_QUERY_PARAM,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, Plus, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -237,6 +241,33 @@ export function InternalMCPCatalog({
       sessionStorage.removeItem("oauth_installation_complete_catalog_id");
     }
   }, []);
+
+  // Deep-link: auto-open install dialog when ?install={catalogId} is present
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams/catalogItems changes, other deps are stable callbacks
+  useEffect(() => {
+    const installCatalogId = searchParams.get(MCP_CATALOG_INSTALL_QUERY_PARAM);
+    if (!installCatalogId || !catalogItems) return;
+
+    const catalogItem = catalogItems.find(
+      (item) => item.id === installCatalogId,
+    );
+    if (!catalogItem) return;
+
+    // Clear the install param from URL to prevent re-triggering on refresh
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(MCP_CATALOG_INSTALL_QUERY_PARAM);
+    const newUrl = params.toString()
+      ? `${pathname}?${params.toString()}`
+      : pathname;
+    router.replace(newUrl, { scroll: false });
+
+    // Trigger the appropriate install dialog
+    if (catalogItem.serverType === "local") {
+      handleInstallLocalServer(catalogItem);
+    } else {
+      handleInstallRemoteServer(catalogItem, false);
+    }
+  }, [searchParams, catalogItems]);
 
   const handleInstallRemoteServer = async (
     catalogItem: CatalogItem,

@@ -6,7 +6,12 @@ import {
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { isBrowserMcpTool, OAUTH_TOKEN_ID_PREFIX } from "@shared";
+import {
+  isBrowserMcpTool,
+  MCP_CATALOG_INSTALL_PATH,
+  MCP_CATALOG_INSTALL_QUERY_PARAM,
+  OAUTH_TOKEN_ID_PREFIX,
+} from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
@@ -129,6 +134,8 @@ class McpClient {
   private clients = new Map<string, Client>();
   private activeConnections = new Map<string, Client>();
   private connectionLimiter = new ConnectionLimiter();
+  // Cache of actual tool names per connection key: lowercased name -> original cased name
+  private toolNameCache = new Map<string, Map<string, string>>();
 
   /**
    * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
@@ -152,6 +159,7 @@ class McpClient {
         );
       }
       this.activeConnections.delete(connectionKey);
+      this.toolNameCache.delete(connectionKey);
       logger.info({ connectionKey }, "Closed cached MCP session");
     }
   }
@@ -240,6 +248,15 @@ class McpClient {
             tool.mcpServerName,
           );
         }
+
+        // Resolve the actual tool name from the server (preserving original casing).
+        // Tool names in the DB are lowercased by slugifyName(), but remote MCP servers
+        // may use camelCase or mixed-case names (e.g., "atlassianUserInfo" vs "atlassianuserinfo").
+        targetToolName = await this.resolveActualToolName(
+          client,
+          connectionKey,
+          targetToolName,
+        );
 
         const result = await client.callTool({
           name: targetToolName,
@@ -383,6 +400,7 @@ class McpClient {
           "Client ping failed, creating fresh client",
         );
         this.activeConnections.delete(connectionKey);
+        this.toolNameCache.delete(connectionKey);
         // Fall through to create new client
       }
     }
@@ -780,17 +798,19 @@ class McpClient {
       return { targetMcpServerId: allServers[0].id };
     }
 
-    // No server found, throw an error
+    // No server found - return an actionable error with install link
     const context = tokenAuth.userId
       ? `user: ${tokenAuth.userId}`
       : tokenAuth.teamId
         ? `team: ${tokenAuth.teamId}`
         : "organization";
+    const catalogDisplayName = tool.catalogName || tool.catalogId;
+    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${tool.catalogId}`;
     return {
       error: await this.createErrorResult(
         toolCall,
         agentId,
-        `No installation found for catalog ${tool.catalogName || tool.catalogId} with ${context}. Ensure an MCP server installation exists.`,
+        `Authentication required for "${catalogDisplayName}".\n\nNo credentials were found for your account (${context}).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`,
         tool.mcpServerName || "unknown",
       ),
     };
@@ -924,6 +944,37 @@ class McpClient {
   }
 
   /**
+   * Resolve the actual tool name from the remote MCP server.
+   * Tool names in our DB are lowercased by slugifyName(), but remote servers may use
+   * different casing (e.g., camelCase). This method queries the server's tool list
+   * and matches case-insensitively to find the correct name.
+   */
+  private async resolveActualToolName(
+    client: Client,
+    connectionKey: string,
+    strippedToolName: string,
+  ): Promise<string> {
+    let nameMap = this.toolNameCache.get(connectionKey);
+    if (!nameMap) {
+      try {
+        const toolsResult = await client.listTools();
+        nameMap = new Map<string, string>();
+        for (const tool of toolsResult.tools) {
+          nameMap.set(tool.name.toLowerCase(), tool.name);
+        }
+        this.toolNameCache.set(connectionKey, nameMap);
+      } catch (error) {
+        logger.warn(
+          { connectionKey, error },
+          "Failed to list tools for name resolution, using stripped name as-is",
+        );
+        return strippedToolName;
+      }
+    }
+    return nameMap.get(strippedToolName.toLowerCase()) ?? strippedToolName;
+  }
+
+  /**
    * Apply response modifier template with fallback
    */
   private applyTemplate(
@@ -959,7 +1010,7 @@ class McpClient {
     const errorResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
-      content: null,
+      content: [{ type: "text", text: error }],
       isError: true,
       error,
     };

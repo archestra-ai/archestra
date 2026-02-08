@@ -128,3 +128,34 @@ export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
 
   return null;
 }
+
+export interface AuthRequiredResult {
+  catalogName: string;
+  installUrl: string;
+}
+
+/**
+ * Parse error text to detect "Authentication required" errors from MCP tool calls.
+ * The error can arrive as:
+ * - Direct text: `Authentication required for "jira-atlassian-remote".\n\nNo credentials...visit: <URL>\n\n...`
+ * - Wrapped JSON: `{"code":"unknown",...,"originalError":{"message":"Authentication required..."}}`
+ */
+export function parseAuthRequired(
+  errorText: string,
+): AuthRequiredResult | null {
+  let message = errorText;
+  try {
+    const json = JSON.parse(errorText);
+    message = json?.originalError?.message || json?.message || errorText;
+  } catch {
+    /* not JSON, use raw text */
+  }
+
+  if (!message.includes("Authentication required for")) return null;
+
+  const nameMatch = message.match(/Authentication required for "([^"]+)"/);
+  const urlMatch = message.match(/visit:\s*(https?:\/\/\S+)/);
+  if (!nameMatch || !urlMatch) return null;
+
+  return { catalogName: nameMatch[1], installUrl: urlMatch[1] };
+}

@@ -1,6 +1,5 @@
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { loginViaUi } from "../../utils";
 
 test.describe(
   "Authentication redirect flows",
@@ -45,8 +44,10 @@ test.describe(
         });
         expect(page.url()).toContain("redirectTo");
 
-        // Sign in via UI form
-        await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+        // Fill in sign-in form
+        await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
+        await page.getByLabel(/password/i).fill(ADMIN_PASSWORD);
+        await page.getByRole("button", { name: /login/i }).click();
 
         // After sign-in, should be redirected back to the original URL
         await page.waitForURL(`**${targetPath}**`, { timeout: 15000 });
@@ -72,8 +73,10 @@ test.describe(
           `${UI_BASE_URL}/auth/sign-in?redirectTo=${maliciousRedirect}`,
         );
 
-        // Sign in via UI form
-        await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+        // Fill in sign-in form
+        await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
+        await page.getByLabel(/password/i).fill(ADMIN_PASSWORD);
+        await page.getByRole("button", { name: /login/i }).click();
 
         // Wait for navigation away from sign-in page (login success redirects)
         await page.waitForURL(

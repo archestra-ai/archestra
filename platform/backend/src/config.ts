@@ -34,7 +34,6 @@ const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
-const isQuickstart = process.env.ARCHESTRA_QUICKSTART === "true";
 
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
@@ -112,9 +111,8 @@ const getPortFromUrl = (): number => {
 };
 
 const parseAllowedOrigins = (): string[] => {
-  // Development or quickstart: use empty array to signal "use defaults" (localhost + private IPs)
-  // Quickstart users often access from LAN IPs and need the same relaxed origin checking
-  if (isDevelopment || isQuickstart) {
+  // Development: use empty array to signal "use defaults" (localhost regex)
+  if (isDevelopment) {
     return [];
   }
 
@@ -128,46 +126,18 @@ const parseAllowedOrigins = (): string[] => {
 };
 
 /**
- * For each origin containing "localhost", add the equivalent "127.0.0.1" origin (and vice versa).
- * localhost and 127.0.0.1 resolve to the same loopback interface, so both should be trusted
- * when either is configured. This prevents origin validation failures when users access
- * the app via 127.0.0.1 but only localhost is configured (or vice versa).
- */
-const addLoopbackEquivalents = (origins: string[]): string[] => {
-  const result = new Set(origins);
-  for (const origin of origins) {
-    if (origin.includes("localhost")) {
-      result.add(origin.replace("localhost", "127.0.0.1"));
-    } else if (origin.includes("127.0.0.1")) {
-      result.add(origin.replace("127.0.0.1", "localhost"));
-    }
-  }
-  return [...result];
-};
-
-/** Matches http(s)://localhost or http(s)://127.0.0.1 with any port */
-export const LOCALHOST_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-
-/** Matches private/link-local IPs: 0.0.0.0, 10.x.x.x, 172.16-31.x.x, 192.168.x.x with any port */
-export const PRIVATE_IP_REGEX =
-  /^https?:\/\/(0\.0\.0\.0|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$/;
-
-/**
  * Get CORS origin configuration for Fastify.
- * Returns an array of strings and RegExp patterns that fastify-cors accepts.
- * Includes additional trusted origins to stay in sync with better-auth's trustedOrigins.
+ * Returns RegExp for localhost (development) or string[] for specific origins.
  */
-export const getCorsOrigins = (): (string | RegExp)[] => {
+const getCorsOrigins = (): RegExp | boolean | string[] => {
   const origins = parseAllowedOrigins();
-  const additionalOrigins = getAdditionalTrustedOrigins();
 
-  // Development: allow localhost and private IPs on any port
+  // Default: allow localhost on any port for development
   if (origins.length === 0) {
-    return [LOCALHOST_REGEX, PRIVATE_IP_REGEX, ...additionalOrigins];
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
   }
 
-  // Production: use configured origins plus additional origins
-  return [...addLoopbackEquivalents(origins), ...additionalOrigins];
+  return origins;
 };
 
 /**
@@ -202,27 +172,19 @@ export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
   const additionalOrigins = getAdditionalTrustedOrigins();
 
-  // Default: allow localhost and private IP wildcards for development
+  // Default: allow localhost wildcards for development
   if (origins.length === 0) {
     return [
       "http://localhost:*",
       "https://localhost:*",
       "http://127.0.0.1:*",
       "https://127.0.0.1:*",
-      "http://0.0.0.0:*",
-      "https://0.0.0.0:*",
-      "http://10.*:*",
-      "https://10.*:*",
-      "http://172.*:*",
-      "https://172.*:*",
-      "http://192.168.*:*",
-      "https://192.168.*:*",
       ...additionalOrigins,
     ];
   }
 
   // Production: use configured origins plus additional origins
-  return [...addLoopbackEquivalents(origins), ...additionalOrigins];
+  return [...origins, ...additionalOrigins];
 };
 
 /**
@@ -540,6 +502,12 @@ export default {
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
+    },
+    mcp: {
+      remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
+      remoteServerHeaders: process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS
+        ? JSON.parse(process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS)
+        : undefined,
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",

@@ -8,6 +8,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
+import usersTable from "./user";
 
 const browserTabStatesTable = pgTable(
   "browser_tab_states",
@@ -16,7 +17,9 @@ const browserTabStatesTable = pgTable(
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
-    userId: text("user_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
     isolationKey: text("isolation_key").notNull(),
     url: text("url"),
     tabIndex: integer("tab_index"),

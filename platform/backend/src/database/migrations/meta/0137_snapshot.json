@@ -1,5 +1,5 @@
 {
-  "id": "0238d76c-2606-4151-a78b-4654ee9371c6",
+  "id": "2d024a40-7066-4e86-8191-4b4c9ace8825",
   "prevId": "5d7fdd5b-b82a-406f-aed1-c7f25755a480",
   "version": "7",
   "dialect": "postgresql",
@@ -972,6 +972,19 @@
           "tableTo": "agents",
           "columnsFrom": [
             "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "browser_tab_states_user_id_user_id_fk": {
+          "name": "browser_tab_states_user_id_user_id_fk",
+          "tableFrom": "browser_tab_states",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
           ],
           "columnsTo": [
             "id"

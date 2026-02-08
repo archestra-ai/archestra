@@ -7,6 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { authClient } from "./clients/auth/auth-client";
 import { useMcpServers } from "./mcp-server.query";
 import { handleApiError } from "./utils";
 
@@ -517,7 +518,12 @@ export function useHasPlaywrightMcpTools(agentId: string | undefined) {
   const playwrightServersQuery = useMcpServers({
     catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
   });
-  const playwrightServer = playwrightServersQuery.data?.[0];
+  const { data: session } = authClient.useSession();
+  const currentUserId = session?.user?.id;
+  // Find the server owned by the current user (admins see all servers)
+  const playwrightServer = playwrightServersQuery.data?.find(
+    (s) => s.ownerId === currentUserId,
+  );
 
   // Only check global tools with PLAYWRIGHT_MCP_CATALOG_ID
   // Profile tools (e.g., microsoft__playwright-mcp) should NOT enable browser preview

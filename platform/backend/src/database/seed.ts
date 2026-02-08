@@ -211,8 +211,6 @@ async function seedPlaywrightCatalog(): Promise<void> {
       "--isolated",
     ],
     httpPort: 8080,
-    // Fixed NodePort for reliable local dev port-forwarding (avoids dynamic K8s assignment)
-    nodePort: 30880,
   };
 
   // Read current catalog config before upsert to detect changes

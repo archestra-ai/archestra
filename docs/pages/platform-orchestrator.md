@@ -7,7 +7,7 @@ description: How Archestra orchestrates MCP servers in Kubernetes
 lastUpdated: 2025-10-31
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -48,12 +48,52 @@ graph TB
 
 ## How It Works
 
+### Pods
+
 Each MCP server runs as a dedicated pod in your Kubernetes cluster:
 
 - **One Pod Per Server**: Each MCP server gets its own isolated pod
 - **Automatic Lifecycle**: Pods are automatically created, restarted, and managed
 - **Custom Images**: Supports both standard and custom Docker images for MCP servers
-- **Secret Management**: The orchestrator injects credentials and configuration.
+- **Secret Management**: The orchestrator injects credentials and configuration
+
+### Credentials
+
+When you install an MCP server from the [Private Registry](/docs/platform-private-registry), you authenticate with the external service (OAuth, API key, etc.). This creates a **credential** — a stored set of authentication tokens tied to your user account.
+
+Multiple users can each install their own credentials for the same MCP server. For example, three team members can each authenticate with their own GitHub accounts, creating three separate credentials for the same GitHub MCP server.
+
+Credentials can be **personal** (owned by a single user) or **team-scoped** (shared by all members of a team).
+
+> **Note:** For local MCP servers (running as K8s pods), the "credential" is the pod itself. The orchestrator routes tool calls to the correct pod rather than injecting API tokens.
+
+### Credential Assignment
+
+When assigning MCP server tools to an MCP Gateway or Agent, you choose which credential to use. There are two modes:
+
+**Static credential** — Select a specific user's or team's credential. Every tool call through this MCP Gateway or Agent uses that exact credential, regardless of who is calling.
+
+**Resolve at call time** — The system picks the credential dynamically based on who is making the request. This is useful when multiple team members each have their own credentials and you want each person's tool calls to authenticate as themselves.
+
+```mermaid
+flowchart LR
+    A["Tool Call"] --> B{"Credential Mode?"}
+    B -->|Static| C["Use pre-selected credential"]
+    B -->|Resolve at call time| D{"Who is calling?"}
+    D -->|User token| E["Use caller's personal credential"]
+    D -->|Team token| F["Use a team member's credential"]
+    D -->|Org token| G["Use first available credential"]
+```
+
+When "Resolve at call time" is selected, the system applies the following priority to find a credential:
+
+1. **Caller's personal credential** — if the caller has their own credential installed, use it
+2. **Team member's credential** — if the request uses a team token, look for a credential owned by any member of that team
+3. **First available** — for organization-wide tokens, use the first available credential
+
+### Missing Credentials
+
+If no matching credential is found at call time, the system returns a helpful message, with a direct link to the MCP Registry, for the user to authenticate for that particular MCP server.
 
 ## How to Run
 

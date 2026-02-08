@@ -12951,9 +12951,6 @@ export type GetChatConversationsResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        browserState: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         artifact: string | null;
         createdAt: string;
         updatedAt: string;
@@ -13058,9 +13055,6 @@ export type CreateChatConversationResponses = {
         selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        browserState: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
@@ -13244,9 +13238,6 @@ export type GetChatConversationResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        browserState: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         artifact: string | null;
         createdAt: string;
         updatedAt: string;
@@ -13354,9 +13345,6 @@ export type UpdateChatConversationResponses = {
         selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        browserState: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
@@ -13629,9 +13617,6 @@ export type GenerateChatConversationTitleResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        browserState: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         artifact: string | null;
         createdAt: string;
         updatedAt: string;
@@ -13736,9 +13721,6 @@ export type UpdateChatMessageResponses = {
         selectedProvider: 'anthropic' | 'bedrock' | 'cerebras' | 'cohere' | 'gemini' | 'mistral' | 'openai' | 'vllm' | 'ollama' | 'zhipuai';
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        browserState: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
@@ -17783,6 +17765,7 @@ export type GetInternalMcpCatalogResponses = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            nodePort?: number;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -17868,6 +17851,7 @@ export type CreateInternalMcpCatalogItemData = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            nodePort?: number;
             serviceAccount?: string;
         } | null;
         deploymentSpecYaml?: string | null;
@@ -18020,6 +18004,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            nodePort?: number;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -18256,6 +18241,7 @@ export type GetInternalMcpCatalogItemResponses = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            nodePort?: number;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -18340,6 +18326,7 @@ export type UpdateInternalMcpCatalogItemData = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            nodePort?: number;
             serviceAccount?: string;
         } | null;
         deploymentSpecYaml?: string | null;
@@ -18494,6 +18481,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            nodePort?: number;
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -19691,6 +19679,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                nodePort?: number;
                 serviceAccount?: string;
             };
         } | null;
@@ -19771,6 +19760,7 @@ export type CreateMcpServerInstallationRequestData = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                nodePort?: number;
                 serviceAccount?: string;
             };
         } | null;
@@ -19905,6 +19895,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                nodePort?: number;
                 serviceAccount?: string;
             };
         } | null;
@@ -20138,6 +20129,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                nodePort?: number;
                 serviceAccount?: string;
             };
         } | null;
@@ -20218,6 +20210,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                nodePort?: number;
                 serviceAccount?: string;
             };
         } | null;
@@ -20364,6 +20357,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                nodePort?: number;
                 serviceAccount?: string;
             };
         } | null;
@@ -20520,6 +20514,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                nodePort?: number;
                 serviceAccount?: string;
             };
         } | null;
@@ -20676,6 +20671,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                nodePort?: number;
                 serviceAccount?: string;
             };
         } | null;
@@ -20832,6 +20828,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                nodePort?: number;
                 serviceAccount?: string;
             };
         } | null;

@@ -45424,39 +45424,6 @@
                           }
                         ]
                       },
-                      "browserState": {
-                        "nullable": true,
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "string",
-                                "nullable": true,
-                                "enum": [
-                                  null
-                                ]
-                              }
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "additionalProperties": {}
-                          },
-                          {
-                            "type": "array",
-                            "items": {}
-                          }
-                        ]
-                      },
                       "artifact": {
                         "nullable": true,
                         "type": "string"
@@ -45526,7 +45493,6 @@
                       "selectedProvider",
                       "hasCustomToolSelection",
                       "todoList",
-                      "browserState",
                       "artifact",
                       "createdAt",
                       "updatedAt",
@@ -45894,39 +45860,6 @@
                         }
                       ]
                     },
-                    "browserState": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "artifact": {
                       "nullable": true,
                       "type": "string"
@@ -45996,7 +45929,6 @@
                     "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
-                    "browserState",
                     "artifact",
                     "createdAt",
                     "updatedAt",
@@ -46329,39 +46261,6 @@
                         }
                       ]
                     },
-                    "browserState": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "artifact": {
                       "nullable": true,
                       "type": "string"
@@ -46431,7 +46330,6 @@
                     "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
-                    "browserState",
                     "artifact",
                     "createdAt",
                     "updatedAt",
@@ -46810,39 +46708,6 @@
                         }
                       ]
                     },
-                    "browserState": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "artifact": {
                       "nullable": true,
                       "type": "string"
@@ -46912,7 +46777,6 @@
                     "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
-                    "browserState",
                     "artifact",
                     "createdAt",
                     "updatedAt",
@@ -48035,39 +47899,6 @@
                         }
                       ]
                     },
-                    "browserState": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "artifact": {
                       "nullable": true,
                       "type": "string"
@@ -48137,7 +47968,6 @@
                     "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
-                    "browserState",
                     "artifact",
                     "createdAt",
                     "updatedAt",
@@ -48498,39 +48328,6 @@
                         }
                       ]
                     },
-                    "browserState": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
                     "artifact": {
                       "nullable": true,
                       "type": "string"
@@ -48600,7 +48397,6 @@
                     "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
-                    "browserState",
                     "artifact",
                     "createdAt",
                     "updatedAt",
@@ -63921,6 +63717,9 @@
                           },
                           "httpPath": {
                             "type": "string"
+                          },
+                          "nodePort": {
+                            "type": "number"
                           }
                         },
                         "additionalProperties": false
@@ -64522,6 +64321,9 @@
                       "httpPath": {
                         "type": "string"
                       },
+                      "nodePort": {
+                        "type": "number"
+                      },
                       "serviceAccount": {
                         "type": "string"
                       }
@@ -64891,6 +64693,9 @@
                         },
                         "httpPath": {
                           "type": "string"
+                        },
+                        "nodePort": {
+                          "type": "number"
                         }
                       },
                       "additionalProperties": false
@@ -65509,6 +65314,9 @@
                         },
                         "httpPath": {
                           "type": "string"
+                        },
+                        "nodePort": {
+                          "type": "number"
                         }
                       },
                       "additionalProperties": false
@@ -66104,6 +65912,9 @@
                       "httpPath": {
                         "type": "string"
                       },
+                      "nodePort": {
+                        "type": "number"
+                      },
                       "serviceAccount": {
                         "type": "string"
                       }
@@ -66480,6 +66291,9 @@
                         },
                         "httpPath": {
                           "type": "string"
+                        },
+                        "nodePort": {
+                          "type": "number"
                         }
                       },
                       "additionalProperties": false
@@ -70858,6 +70672,9 @@
                                   "httpPath": {
                                     "type": "string"
                                   },
+                                  "nodePort": {
+                                    "type": "number"
+                                  },
                                   "serviceAccount": {
                                     "type": "string"
                                   }
@@ -71413,6 +71230,9 @@
                               "httpPath": {
                                 "type": "string"
                               },
+                              "nodePort": {
+                                "type": "number"
+                              },
                               "serviceAccount": {
                                 "type": "string"
                               }
@@ -71698,6 +71518,9 @@
                                 },
                                 "httpPath": {
                                   "type": "string"
+                                },
+                                "nodePort": {
+                                  "type": "number"
                                 },
                                 "serviceAccount": {
                                   "type": "string"
@@ -72283,6 +72106,9 @@
                                 "httpPath": {
                                   "type": "string"
                                 },
+                                "nodePort": {
+                                  "type": "number"
+                                },
                                 "serviceAccount": {
                                   "type": "string"
                                 }
@@ -72841,6 +72667,9 @@
                               "httpPath": {
                                 "type": "string"
                               },
+                              "nodePort": {
+                                "type": "number"
+                              },
                               "serviceAccount": {
                                 "type": "string"
                               }
@@ -73176,6 +73005,9 @@
                                 },
                                 "httpPath": {
                                   "type": "string"
+                                },
+                                "nodePort": {
+                                  "type": "number"
                                 },
                                 "serviceAccount": {
                                   "type": "string"
@@ -74025,6 +73857,9 @@
                                 "httpPath": {
                                   "type": "string"
                                 },
+                                "nodePort": {
+                                  "type": "number"
+                                },
                                 "serviceAccount": {
                                   "type": "string"
                                 }
@@ -74622,6 +74457,9 @@
                                 },
                                 "httpPath": {
                                   "type": "string"
+                                },
+                                "nodePort": {
+                                  "type": "number"
                                 },
                                 "serviceAccount": {
                                   "type": "string"
@@ -75225,6 +75063,9 @@
                                 },
                                 "httpPath": {
                                   "type": "string"
+                                },
+                                "nodePort": {
+                                  "type": "number"
                                 },
                                 "serviceAccount": {
                                   "type": "string"

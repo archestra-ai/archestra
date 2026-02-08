@@ -733,52 +733,46 @@ class McpClient {
       }
     }
 
-    // Priority 2: Team token used - we check try to use token without teamId first to prioritize personal credential
+    // Priority 2 & 3: Team token used - batch-load team members once to avoid N+1 queries
     if (tokenAuth.teamId) {
+      const teamMembers = await TeamModel.getTeamMembers(tokenAuth.teamId);
+      const teamMemberIds = new Set(teamMembers.map((m) => m.userId));
+
+      // Priority 2: Personal credential owned by a team member (no teamId on server)
       for (const server of allServers) {
-        if (server.ownerId && !server.teamId) {
-          const ownerInTeam = await TeamModel.isUserInTeam(
-            tokenAuth.teamId,
-            server.ownerId,
+        if (
+          server.ownerId &&
+          !server.teamId &&
+          teamMemberIds.has(server.ownerId)
+        ) {
+          logger.info(
+            {
+              toolName: toolCall.name,
+              catalogId: tool.catalogId,
+              serverId: server.id,
+              ownerId: server.ownerId,
+              teamId: tokenAuth.teamId,
+            },
+            `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
           );
-          if (ownerInTeam) {
-            logger.info(
-              {
-                toolName: toolCall.name,
-                catalogId: tool.catalogId,
-                serverId: server.id,
-                ownerId: server.ownerId,
-                teamId: tokenAuth.teamId,
-              },
-              `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-            );
-            return { targetMcpServerId: server.id };
-          }
+          return { targetMcpServerId: server.id };
         }
       }
-    }
 
-    // Priority 3: Team token used - we try to find any token from team
-    if (tokenAuth.teamId) {
+      // Priority 3: Any server owned by a team member
       for (const server of allServers) {
-        if (server.ownerId) {
-          const ownerInTeam = await TeamModel.isUserInTeam(
-            tokenAuth.teamId,
-            server.ownerId,
+        if (server.ownerId && teamMemberIds.has(server.ownerId)) {
+          logger.info(
+            {
+              toolName: toolCall.name,
+              catalogId: tool.catalogId,
+              serverId: server.id,
+              ownerId: server.ownerId,
+              teamId: tokenAuth.teamId,
+            },
+            `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
           );
-          if (ownerInTeam) {
-            logger.info(
-              {
-                toolName: toolCall.name,
-                catalogId: tool.catalogId,
-                serverId: server.id,
-                ownerId: server.ownerId,
-                teamId: tokenAuth.teamId,
-              },
-              `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-            );
-            return { targetMcpServerId: server.id };
-          }
+          return { targetMcpServerId: server.id };
         }
       }
     }

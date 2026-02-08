@@ -1,9 +1,6 @@
-import crypto from "node:crypto";
-import type { APIRequestContext } from "@playwright/test";
 import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import {
   MARKETING_TEAM_NAME,
-  WIREMOCK_BASE_URL,
   WIREMOCK_INTERNAL_URL,
 } from "../../consts";
 import { expect, test } from "../../fixtures";
@@ -19,96 +16,34 @@ import { makeApiRequest } from "../api/mcp-gateway-utils";
  *
  * Flow:
  * 1. Admin installs a remote MCP server (owns the credential)
- * 2. A tool is assigned to a profile with useDynamicTeamCredential: true
+ * 2. A tool is assigned to an agent with useDynamicTeamCredential: true
  * 3. Member user (in Marketing Team, but admin is NOT) uses the chat
  * 4. LLM (WireMock) returns a tool_use block for the test tool
  * 5. MCP Gateway resolves dynamic credential -> no match -> auth-required error
  * 6. Chat UI renders AuthRequiredTool with "Authentication Required" alert
  *
- * Uses WireMock for both the mock MCP server (tool discovery) and mock LLM (Anthropic SSE).
+ * Uses static WireMock mappings:
+ * - helm/e2e-tests/mappings/mcp-auth-ui-e2e-*.json (mock MCP server)
+ * - helm/e2e-tests/mappings/anthropic-chat-auth-ui-e2e-*.json (mock LLM responses)
  */
 test.describe.configure({ mode: "serial" });
 
 test.describe("Chat - Auth Required Tool", () => {
   test.setTimeout(120_000);
 
-  const uniqueId = crypto.randomUUID().slice(0, 8);
-  const CATALOG_NAME = `auth-ui-${uniqueId}`;
+  const CATALOG_NAME = "auth-ui-e2e";
   const MCP_TOOL_BASE_NAME = "test_ui_auth_tool";
   const FULL_TOOL_NAME = `${CATALOG_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${MCP_TOOL_BASE_NAME}`;
-  const WIREMOCK_MCP_PATH = `/mcp/auth-ui-${uniqueId}`;
-  const TEST_MESSAGE_TAG = `auth-calltime-ui-${uniqueId}`;
+  const WIREMOCK_MCP_PATH = `/mcp/${CATALOG_NAME}`;
+  const TEST_MESSAGE_TAG = "auth-calltime-ui-e2e";
 
   let catalogItemId: string;
   let serverId: string;
   let profileId: string;
   let profileName: string;
-  const wiremockStubIds: string[] = [];
-
-  async function registerWiremockStub(
-    request: APIRequestContext,
-    stub: object,
-  ) {
-    const response = await request.post(
-      `${WIREMOCK_BASE_URL}/__admin/mappings`,
-      { data: stub },
-    );
-    const result = await response.json();
-    if (result.id) {
-      wiremockStubIds.push(result.id);
-    }
-  }
 
   test.beforeAll(async ({ request }) => {
-    // 1. Register WireMock stubs for mock remote MCP server
-
-    // Initialize handler
-    await registerWiremockStub(request, {
-      request: {
-        method: "POST",
-        urlPath: WIREMOCK_MCP_PATH,
-        bodyPatterns: [
-          { matchesJsonPath: "$[?(@.method == 'initialize')]" },
-        ],
-      },
-      response: {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-        body: `{"jsonrpc":"2.0","id":{{jsonPath request.body '$.id'}},"result":{"protocolVersion":"2024-11-05","serverInfo":{"name":"${CATALOG_NAME}","version":"1.0.0"},"capabilities":{"tools":{"listChanged":false}}}}`,
-      },
-    });
-
-    // Tools list handler
-    await registerWiremockStub(request, {
-      request: {
-        method: "POST",
-        urlPath: WIREMOCK_MCP_PATH,
-        bodyPatterns: [
-          { matchesJsonPath: "$[?(@.method == 'tools/list')]" },
-        ],
-      },
-      response: {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-        body: `{"jsonrpc":"2.0","id":{{jsonPath request.body '$.id'}},"result":{"tools":[{"name":"${MCP_TOOL_BASE_NAME}","description":"Test tool for auth-at-call-time UI testing","inputSchema":{"type":"object","properties":{}}}]}}`,
-      },
-    });
-
-    // Catch-all for notifications and other methods (lower priority)
-    await registerWiremockStub(request, {
-      priority: 10,
-      request: {
-        method: "POST",
-        urlPath: WIREMOCK_MCP_PATH,
-      },
-      response: {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-        body: "",
-      },
-    });
-
-    // 2. Create remote catalog item pointing to WireMock
+    // 1. Create remote catalog item pointing to WireMock (static stubs pre-loaded)
     const catalogResponse = await makeApiRequest({
       request,
       method: "post",
@@ -123,7 +58,7 @@ test.describe("Chat - Auth Required Tool", () => {
     const catalog = await catalogResponse.json();
     catalogItemId = catalog.id;
 
-    // 3. Install server as admin (personal install, no team)
+    // 2. Install server as admin (personal install, no team)
     const installResponse = await makeApiRequest({
       request,
       method: "post",
@@ -133,7 +68,7 @@ test.describe("Chat - Auth Required Tool", () => {
     const server = await installResponse.json();
     serverId = server.id;
 
-    // 4. Wait for tool discovery (poll for the tool to appear)
+    // 3. Wait for tool discovery (poll for the tool to appear)
     let discoveredTool: { id: string; name: string } | undefined;
     for (let attempt = 0; attempt < 30; attempt++) {
       const toolsResponse = await makeApiRequest({
@@ -159,11 +94,12 @@ test.describe("Chat - Auth Required Tool", () => {
       );
     }
 
-    // 5. Get Marketing Team (admin is NOT a member of this team)
+    // 4. Get Marketing Team (admin is NOT a member of this team)
     const marketingTeam = await getTeamByName(request, MARKETING_TEAM_NAME);
 
-    // 6. Create profile and assign Marketing Team so the member can access it
-    profileName = `Auth UI Test ${uniqueId}`;
+    // 5. Create agent (agentType: "agent" so it appears in chat selector)
+    //    and assign Marketing Team so the member can access it
+    profileName = "Auth UI Test E2E";
     const profileResponse = await makeApiRequest({
       request,
       method: "post",
@@ -180,99 +116,12 @@ test.describe("Chat - Auth Required Tool", () => {
       data: { teams: [marketingTeam.id] },
     });
 
-    // 7. Assign tool to profile with useDynamicTeamCredential: true
+    // 6. Assign tool to agent with useDynamicTeamCredential: true
     await makeApiRequest({
       request,
       method: "post",
       urlSuffix: `/api/agents/${profileId}/tools/${discoveredTool.id}`,
       data: { useDynamicTeamCredential: true },
-    });
-
-    // 8. Register Anthropic WireMock stubs for chat LLM responses
-    // Uses WireMock scenarios to handle the two-step flow:
-    // 1st call: LLM returns tool_use for the auth test tool
-    // 2nd call: LLM returns follow-up text after receiving the tool error result
-
-    const toolUseSseBody = [
-      "event: message_start",
-      'data: {"type":"message_start","message":{"id":"msg_auth_ui_test","type":"message","role":"assistant","model":"claude-3-5-sonnet-20241022","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":50,"output_tokens":0}}}',
-      "",
-      "event: content_block_start",
-      `data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_auth_ui_01","name":"${FULL_TOOL_NAME}","input":{}}}`,
-      "",
-      "event: content_block_delta",
-      'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}',
-      "",
-      "event: content_block_stop",
-      'data: {"type":"content_block_stop","index":0}',
-      "",
-      "event: message_delta",
-      'data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":20}}',
-      "",
-      "event: message_stop",
-      'data: {"type":"message_stop"}',
-      "",
-    ].join("\n");
-
-    await registerWiremockStub(request, {
-      scenarioName: `auth-ui-${uniqueId}`,
-      requiredScenarioState: "Started",
-      newScenarioState: "tool_result_received",
-      priority: 1,
-      request: {
-        method: "POST",
-        urlPath: "/anthropic/v1/messages",
-        bodyPatterns: [{ contains: TEST_MESSAGE_TAG }],
-      },
-      response: {
-        status: 200,
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-        },
-        body: toolUseSseBody,
-      },
-    });
-
-    // Follow-up response after tool result is sent back to LLM
-    const followUpSseBody = [
-      "event: message_start",
-      'data: {"type":"message_start","message":{"id":"msg_auth_ui_followup","type":"message","role":"assistant","model":"claude-3-5-sonnet-20241022","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":0}}}',
-      "",
-      "event: content_block_start",
-      'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
-      "",
-      "event: content_block_delta",
-      'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"It seems you need to set up credentials first."}}',
-      "",
-      "event: content_block_stop",
-      'data: {"type":"content_block_stop","index":0}',
-      "",
-      "event: message_delta",
-      'data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":15}}',
-      "",
-      "event: message_stop",
-      'data: {"type":"message_stop"}',
-      "",
-    ].join("\n");
-
-    await registerWiremockStub(request, {
-      scenarioName: `auth-ui-${uniqueId}`,
-      requiredScenarioState: "tool_result_received",
-      priority: 1,
-      request: {
-        method: "POST",
-        urlPath: "/anthropic/v1/messages",
-        bodyPatterns: [{ contains: TEST_MESSAGE_TAG }],
-      },
-      response: {
-        status: 200,
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-        },
-        body: followUpSseBody,
-      },
     });
   });
 
@@ -302,12 +151,6 @@ test.describe("Chat - Auth Required Tool", () => {
         ignoreStatusCheck: true,
       }).catch(() => {});
     }
-    // Remove WireMock stubs
-    for (const stubId of wiremockStubIds) {
-      await request
-        .delete(`${WIREMOCK_BASE_URL}/__admin/mappings/${stubId}`)
-        .catch(() => {});
-    }
   });
 
   test("renders AuthRequiredTool when tool call fails due to missing credentials", async ({
@@ -329,25 +172,24 @@ test.describe("Chat - Auth Required Tool", () => {
     const textarea = memberPage.getByTestId(E2eTestId.ChatPromptTextarea);
     await expect(textarea).toBeVisible({ timeout: 15_000 });
 
-    // Select our test profile via the agent selector
-    // The initial agent selector is a combobox at the top of the chat
+    // Select our test agent via the agent selector
     const agentSelector = memberPage.getByRole("combobox").first();
     await expect(agentSelector).toBeVisible({ timeout: 5_000 });
     await agentSelector.click();
 
-    // Search for our test profile
+    // Search for our test agent
     const searchInput = memberPage.getByPlaceholder("Search agent...");
     await expect(searchInput).toBeVisible({ timeout: 3_000 });
     await searchInput.fill(profileName);
 
-    // Select the test profile from the dropdown
+    // Select the test agent from the dropdown
     const profileOption = memberPage.getByRole("option", {
       name: profileName,
     });
     await expect(profileOption).toBeVisible({ timeout: 5_000 });
     await profileOption.click();
 
-    // The default model (Claude Sonnet 4.5 / anthropic) routes through WireMock
+    // The default model (Claude Sonnet / anthropic) routes through WireMock
     // via ARCHESTRA_ANTHROPIC_BASE_URL, so no model selection needed.
 
     // Send a message containing the unique tag for WireMock matching

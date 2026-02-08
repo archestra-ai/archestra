@@ -1230,6 +1230,89 @@ describe("McpClient", () => {
           `${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
         );
       });
+
+      test("returns auth-required error with team context when servers exist but no owner is in team", async ({
+        makeUser,
+        makeTeam,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        // Two users: one owns the server, the other is in the team
+        const serverOwner = await makeUser({
+          email: "server-owner@example.com",
+        });
+        const teamMember = await makeUser({
+          email: "team-member@example.com",
+        });
+        const team = await makeTeam(org.id, teamMember.id, {
+          name: "Marketing Team",
+        });
+        // serverOwner is NOT added to the team
+
+        // Create catalog + server owned by serverOwner
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "slack-mcp-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.slack.com/v1/mcp",
+        });
+
+        const ownerSecret = await secretManager().createSecret(
+          { access_token: "owner-slack-token" },
+          "slack-owner-secret",
+        );
+
+        await McpServerModel.create({
+          name: "slack-mcp-server",
+          catalogId: dynCatalog.id,
+          secretId: ownerSecret.id,
+          serverType: "remote",
+          ownerId: serverOwner.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "slack-mcp-server__send_message",
+          description: "Send a Slack message",
+          parameters: {},
+          catalogId: dynCatalog.id,
+          mcpServerId: mcpServerId,
+        });
+
+        await AgentToolModel.createOrUpdateCredentials(
+          agentId,
+          tool.id,
+          null,
+          null,
+          true,
+        );
+
+        const toolCall = {
+          id: "call_team_no_member_cred",
+          name: "slack-mcp-server__send_message",
+          arguments: { channel: "#general", text: "hello" },
+        };
+
+        // Call with teamMember's team token - serverOwner is NOT in this team
+        const result = await mcpClient.executeToolCall(toolCall, agentId, {
+          tokenId: "team-token-no-cred",
+          teamId: team.id,
+          isOrganizationToken: false,
+        });
+
+        expect(result).toMatchObject({ isError: true });
+        expect(result?.error).toContain(
+          `Authentication required for "slack-mcp-server"`,
+        );
+        expect(result?.error).toContain(`team: ${team.id}`);
+        expect(result?.error).toContain(
+          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
+        );
+        expect(result?.error).toContain(
+          "Once you have completed authentication, retry this tool call.",
+        );
+        expect(result?.content).toEqual([
+          { type: "text", text: result?.error },
+        ]);
+      });
     });
 
     describe("Tool name casing resolution", () => {

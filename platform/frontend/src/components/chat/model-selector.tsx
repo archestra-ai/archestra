@@ -102,6 +102,8 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   vllm: "vllm",
   ollama: "ollama-cloud", // models.dev uses ollama-cloud for the Ollama provider
   zhipuai: "zhipuai",
+  deepseek: "deepseek",
+  groq: "groq",
 };
 
 /**

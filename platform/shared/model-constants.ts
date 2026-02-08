@@ -14,6 +14,8 @@ export const SupportedProvidersSchema = z.enum([
   "vllm",
   "ollama",
   "zhipuai",
+  "deepseek",
+  "groq",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -27,6 +29,8 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "vllm:chatCompletions",
   "ollama:chatCompletions",
   "zhipuai:chatCompletions",
+  "deepseek:chatCompletions",
+  "groq:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -46,6 +50,8 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   vllm: "vLLM",
   ollama: "Ollama",
   zhipuai: "Zhipu AI",
+  deepseek: "DeepSeek",
+  groq: "Groq",
 };
 
 /**
@@ -105,5 +111,13 @@ export const MODEL_MARKER_PATTERNS: Record<
   bedrock: {
     fastest: ["nova-lite", "nova-micro", "haiku"],
     best: ["nova-pro", "sonnet", "opus"],
+  },
+  deepseek: {
+    fastest: ["deepseek-chat"],
+    best: ["deepseek-reasoner"],
+  },
+  groq: {
+    fastest: ["llama-3.1-8b", "mixtral-8x7b"],
+    best: ["llama-3.3-70b", "llama-3.1-70b"],
   },
 };

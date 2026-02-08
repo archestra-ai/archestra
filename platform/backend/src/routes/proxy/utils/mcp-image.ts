@@ -44,6 +44,21 @@ const MODELS_WITHOUT_IMAGE_SUPPORT = [
   "gpt-3.5-turbo-0125",
   "gpt-3.5-turbo-1106",
   "gpt-3.5-turbo-16k",
+  // DeepSeek reasoning models
+  "deepseek-reasoner",
+  // DeepSeek chat models (currently text only)
+  "deepseek-chat",
+  "deepseek-v3",
+  // Groq text models
+  "llama-3.3-70b-versatile",
+  "llama-3.3-70b-specdec",
+  "llama-3.1-70b-versatile",
+  "llama-3.1-8b-instant",
+  "llama3-70b-8192",
+  "llama3-8b-8192",
+  "mixtral-8x7b-32768",
+  "gemma-7b-it",
+  "gemma2-9b-it",
 ];
 
 /**

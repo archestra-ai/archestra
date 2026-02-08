@@ -26,6 +26,20 @@ export const OpenAIErrorTypes = {
 } as const;
 
 /**
+ * DeepSeek API error types
+ * DeepSeek uses OpenAI-compatible error format.
+ * @see https://api-docs.deepseek.com/quick_start/error_codes
+ */
+export const DeepSeekErrorTypes = OpenAIErrorTypes;
+
+/**
+ * Groq API error types
+ * Groq uses OpenAI-compatible error format.
+ * @see https://console.groq.com/docs/errors
+ */
+export const GroqErrorTypes = OpenAIErrorTypes;
+
+/**
  * Anthropic API error types (from response body `error.type` field)
  * @see https://docs.anthropic.com/en/api/errors
  */

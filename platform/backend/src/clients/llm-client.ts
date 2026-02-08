@@ -87,6 +87,8 @@ const envApiKeyGetters: Record<
   openai: () => config.chat.openai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  deepseek: () => config.chat.deepseek.apiKey,
+  groq: () => config.chat.groq.apiKey,
 };
 
 /**
@@ -171,6 +173,8 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   zhipuai: "glm-4-flash", // Zhipu's fast model
   bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
   mistral: "mistral-small-latest", // Mistral's fast model
+  deepseek: "deepseek-chat",
+  groq: "llama-3.1-8b-instant",
 };
 
 /**
@@ -339,6 +343,34 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     });
     return client(modelName);
   },
+
+  deepseek: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.deepseek.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure GROQ_API_KEY.",
+      );
+    }
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.groq.baseUrl,
+    });
+    return client(modelName);
+  },
 };
 
 /**
@@ -504,6 +536,26 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       return client(modelName);
+    },
+
+    deepseek: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/deepseek/:agentId (SDK appends /chat/completions)
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("deepseek", agentId),
+        headers,
+      });
+      return client.chat(modelName);
+    },
+
+    groq: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("groq", agentId),
+        headers,
+      });
+      return client.chat(modelName);
     },
   };
 

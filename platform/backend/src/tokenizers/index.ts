@@ -22,6 +22,8 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   zhipuai: () => new TiktokenTokenizer(),
   gemini: () => new TiktokenTokenizer(),
   bedrock: () => new TiktokenTokenizer(),
+  deepseek: () => new TiktokenTokenizer(),
+  groq: () => new TiktokenTokenizer(),
 };
 
 /**

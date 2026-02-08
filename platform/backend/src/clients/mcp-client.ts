@@ -12,6 +12,7 @@ import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   InternalMcpCatalogModel,
+  McpHttpSessionModel,
   McpServerModel,
   McpToolCallModel,
   TeamModel,
@@ -154,6 +155,14 @@ class McpClient {
       this.activeConnections.delete(connectionKey);
       logger.info({ connectionKey }, "Closed cached MCP session");
     }
+
+    // Clean up the stored session ID so other pods don't try to reuse it
+    McpHttpSessionModel.deleteByConnectionKey(connectionKey).catch((err) =>
+      logger.warn(
+        { connectionKey, err },
+        "Failed to delete stored MCP HTTP session (non-fatal)",
+      ),
+    );
   }
 
   /**
@@ -327,7 +336,13 @@ class McpClient {
 
     if (!this.shouldLimitConcurrency()) {
       return executeToolCall(
-        () => this.getTransport(catalogItem, targetMcpServerId, secrets),
+        () =>
+          this.getTransport(
+            catalogItem,
+            targetMcpServerId,
+            secrets,
+            connectionKey,
+          ),
         secrets,
       );
     }
@@ -349,6 +364,7 @@ class McpClient {
               targetMcpServerId,
               secrets,
               transportKind,
+              connectionKey,
             ),
           secrets,
         ),
@@ -399,7 +415,38 @@ class McpClient {
       },
     );
 
-    await client.connect(transport);
+    // Track whether we're using a stored session ID (for stale session cleanup)
+    const usedStoredSession =
+      transport instanceof StreamableHTTPClientTransport &&
+      !!transport.sessionId;
+
+    try {
+      await client.connect(transport);
+    } catch (error) {
+      // If we used a stored session ID and connection failed, the session is
+      // likely stale (e.g. Playwright pod restarted).  Delete it so the next
+      // retry creates a fresh session.
+      if (usedStoredSession) {
+        McpHttpSessionModel.deleteStaleSession(connectionKey).catch(() => {});
+      }
+      throw error;
+    }
+
+    // Persist the MCP session ID so other backend pods can reuse it.
+    // With --isolated, each Mcp-Session-Id maps to a separate browser context;
+    // storing the ID in the database lets every pod connect to the same context.
+    if (
+      transport instanceof StreamableHTTPClientTransport &&
+      transport.sessionId
+    ) {
+      McpHttpSessionModel.upsert(connectionKey, transport.sessionId).catch(
+        (err) =>
+          logger.warn(
+            { connectionKey, err },
+            "Failed to persist MCP HTTP session ID (non-fatal)",
+          ),
+      );
+    }
 
     // Store the connection for reuse
     this.activeConnections.set(connectionKey, client);
@@ -825,6 +872,7 @@ class McpClient {
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
     transportKind: TransportKind,
+    connectionKey?: string,
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
@@ -836,7 +884,25 @@ class McpClient {
           );
         }
 
+        // Look up stored session ID for multi-replica support.
+        // When multiple backend pods connect to the same Playwright pod with
+        // --isolated, they need to share the same Mcp-Session-Id to use the
+        // same browser context.
+        let sessionId: string | undefined;
+        if (connectionKey) {
+          const stored =
+            await McpHttpSessionModel.findByConnectionKey(connectionKey);
+          if (stored) {
+            sessionId = stored;
+            logger.debug(
+              { connectionKey, sessionId },
+              "Using stored MCP HTTP session ID",
+            );
+          }
+        }
+
         return new StreamableHTTPClientTransport(new URL(url), {
+          sessionId,
           requestInit: { headers: new Headers({}) },
         });
       }
@@ -896,6 +962,7 @@ class McpClient {
     catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
+    connectionKey?: string,
   ): Promise<Transport> {
     const transportKind = await this.getTransportKind(
       catalogItem,
@@ -906,6 +973,7 @@ class McpClient {
       targetMcpServerId,
       secrets,
       transportKind,
+      connectionKey,
     );
   }
 

@@ -269,3 +269,59 @@ export const BROWSER_PREVIEW_HEADER_HEIGHT = 77;
  * Using about:blank ensures no automatic navigation happens until user requests it.
  */
 export const DEFAULT_BROWSER_PREVIEW_URL = "about:blank";
+
+// =============================================================================
+// OAuth 2.1 Authorization Server
+// =============================================================================
+
+/**
+ * Scopes supported by the OAuth 2.1 authorization server.
+ * Used by better-auth oauthProvider config, well-known endpoints, and consent UI.
+ */
+export const OAUTH_SCOPES = [
+  "mcp",
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+] as const;
+export type OAuthScope = (typeof OAUTH_SCOPES)[number];
+
+/**
+ * Human-readable descriptions for each OAuth scope.
+ * Used by the consent page to explain what each scope grants.
+ */
+export const OAUTH_SCOPE_DESCRIPTIONS: Record<OAuthScope, string> = {
+  mcp: "Access MCP tools and resources",
+  openid: "Verify your identity",
+  profile: "Access your profile information",
+  email: "Access your email address",
+  offline_access: "Maintain access when you're not present",
+};
+
+/**
+ * OAuth 2.1 endpoint paths (relative to base URL).
+ * These are served by better-auth and proxied through the frontend catch-all.
+ */
+export const OAUTH_ENDPOINTS = {
+  authorize: "/api/auth/oauth2/authorize",
+  token: "/api/auth/oauth2/token",
+  register: "/api/auth/oauth2/register",
+  jwks: "/api/auth/jwks",
+  consent: "/api/auth/oauth2/consent",
+} as const;
+
+/**
+ * OAuth 2.1 page paths (frontend routes).
+ */
+export const OAUTH_PAGES = {
+  login: "/auth/sign-in",
+  consent: "/oauth/consent",
+} as const;
+
+/**
+ * Prefix for OAuth-derived token IDs in TokenAuthResult.
+ * Used when constructing tokenId from OAuth access tokens (e.g. `oauth-${accessToken.id}`)
+ * and when detecting OAuth auth method from tokenId.
+ */
+export const OAUTH_TOKEN_ID_PREFIX = "oauth-";

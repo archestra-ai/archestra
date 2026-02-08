@@ -31488,6 +31488,137 @@
         }
       }
     },
+    "/api/auth/oauth2/client-info": {
+      "get": {
+        "operationId": "getOAuthClientInfo",
+        "tags": [
+          "auth"
+        ],
+        "description": "Get OAuth client name by client_id",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "client_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client_name": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "client_name"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth2/token": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/auth/oauth2/consent": {
+      "post": {
+        "operationId": "submitOAuthConsent",
+        "tags": [
+          "auth"
+        ],
+        "description": "Submit OAuth consent decision (accept or deny)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accept": {
+                    "type": "boolean"
+                  },
+                  "scope": {
+                    "type": "string"
+                  },
+                  "oauth_query": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "accept",
+                  "scope",
+                  "oauth_query"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "redirectTo": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "redirectTo"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth2/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/auth/{*}": {
       "get": {
         "tags": [
@@ -70441,69 +70572,6 @@
         }
       }
     },
-    "/v1/mcp/cache/{profileId}": {
-      "delete": {
-        "tags": [
-          "mcp-gateway"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "profileId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "message"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "message"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/mcp_server_installation_requests": {
       "get": {
         "operationId": "getMcpServerInstallationRequests",
@@ -78578,9 +78646,27 @@
                           "toolResult": {
                             "nullable": true
                           },
+                          "userId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "authMethod": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "oauth",
+                              "user_token",
+                              "org_token",
+                              "team_token"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "userName": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -78590,7 +78676,10 @@
                           "method",
                           "toolCall",
                           "toolResult",
-                          "createdAt"
+                          "userId",
+                          "authMethod",
+                          "createdAt",
+                          "userName"
                         ],
                         "additionalProperties": false
                       }
@@ -78929,9 +79018,27 @@
                     "toolResult": {
                       "nullable": true
                     },
+                    "userId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authMethod": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "oauth",
+                        "user_token",
+                        "org_token",
+                        "team_token"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "userName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -78941,7 +79048,10 @@
                     "method",
                     "toolCall",
                     "toolResult",
-                    "createdAt"
+                    "userId",
+                    "authMethod",
+                    "createdAt",
+                    "userName"
                   ],
                   "additionalProperties": false
                 }
@@ -80240,6 +80350,144 @@
                   },
                   "required": [
                     "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-protected-resource/{*}": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "*",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "resource": {
+                      "type": "string"
+                    },
+                    "authorization_servers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "scopes_supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "bearer_methods_supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "resource",
+                    "authorization_servers",
+                    "scopes_supported",
+                    "bearer_methods_supported"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-authorization-server": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "issuer": {
+                      "type": "string"
+                    },
+                    "authorization_endpoint": {
+                      "type": "string"
+                    },
+                    "token_endpoint": {
+                      "type": "string"
+                    },
+                    "registration_endpoint": {
+                      "type": "string"
+                    },
+                    "jwks_uri": {
+                      "type": "string"
+                    },
+                    "response_types_supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "grant_types_supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "token_endpoint_auth_methods_supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "code_challenge_methods_supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "scopes_supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "issuer",
+                    "authorization_endpoint",
+                    "token_endpoint",
+                    "registration_endpoint",
+                    "jwks_uri",
+                    "response_types_supported",
+                    "grant_types_supported",
+                    "token_endpoint_auth_methods_supported",
+                    "code_challenge_methods_supported",
+                    "scopes_supported"
                   ],
                   "additionalProperties": false
                 }

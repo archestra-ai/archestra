@@ -29,7 +29,7 @@
     "zod": "^4.3.4"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.90.3",
+    "@hey-api/openapi-ts": "^0.91.1",
     "@types/node": "^25",
     "knip": "^5.81.0",
     "tsx": "^4.21.0",

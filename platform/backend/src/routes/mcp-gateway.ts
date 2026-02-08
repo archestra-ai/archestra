@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { clearChatMcpClient } from "@/clients/chat-mcp-client";
+
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import { McpToolCallModel } from "@/models";
@@ -10,6 +10,7 @@ import { UuidIdSchema } from "@/types";
 import {
   createAgentServer,
   createStatelessTransport,
+  deriveAuthMethod,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
 } from "./mcp-gateway.utils";
@@ -17,6 +18,21 @@ import {
 // =============================================================================
 // MCP Gateway request handling (stateless mode)
 // =============================================================================
+
+/**
+ * Sets the WWW-Authenticate header with the OAuth protected resource metadata URL.
+ * Per RFC 9728, this tells clients where to discover the authorization server.
+ */
+function setWWWAuthenticateHeader(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const resourceMetadataUrl = `${request.protocol}://${request.headers.host}/.well-known/oauth-protected-resource${request.url}`;
+  reply.header(
+    "WWW-Authenticate",
+    `Bearer resource_metadata="${resourceMetadataUrl}"`,
+  );
+}
 
 /**
  * Handle MCP POST requests in stateless mode
@@ -88,6 +104,8 @@ async function handleMcpPostRequest(
             },
             // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
           } as any,
+          userId: tokenAuthContext?.userId ?? null,
+          authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
         });
         fastify.log.info({ profileId }, "✅ Saved initialize request");
       } catch (dbError) {
@@ -116,37 +134,11 @@ async function handleMcpPostRequest(
         error: {
           code: -32603,
           message: "Internal server error",
-          data: error instanceof Error ? error.message : "Unknown error",
         },
         id: null,
       };
     }
   }
-}
-
-/**
- * Handle DELETE cache request for a profile
- * Clears cached MCP client for the profile
- */
-async function handleDeleteCache(
-  fastify: FastifyInstance,
-  reply: FastifyReply,
-  profileId: string,
-): Promise<{ message: string }> {
-  fastify.log.info({ profileId }, "DELETE cache - Request received");
-
-  // Clear cached MCP client
-  clearChatMcpClient(profileId);
-
-  fastify.log.info(
-    { profileId },
-    "DELETE cache - ✅ Client cache cleared successfully",
-  );
-
-  reply.type("application/json");
-  return {
-    message: "Cache cleared successfully",
-  };
 }
 
 // =============================================================================
@@ -197,6 +189,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         extractProfileIdAndTokenFromRequest(request) ?? {};
 
       if (!profileId || !token) {
+        setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
           error: "Unauthorized",
@@ -247,6 +240,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         extractProfileIdAndTokenFromRequest(request) ?? {};
 
       if (!profileId || !token) {
+        setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
           jsonrpc: "2.0",
@@ -261,6 +255,7 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const tokenAuth = await validateMCPGatewayToken(profileId, token);
       if (!tokenAuth) {
+        setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
           jsonrpc: "2.0",
@@ -288,42 +283,6 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         profileId,
         tokenAuthContext,
       );
-    },
-  );
-
-  // DELETE endpoint to clear cache for a profile
-  fastify.delete(
-    `${endpoint}/cache/:profileId`,
-    {
-      schema: {
-        tags: ["mcp-gateway"],
-        params: z.object({
-          profileId: UuidIdSchema,
-        }),
-        response: {
-          200: z.object({
-            message: z.string(),
-          }),
-          401: z.object({
-            error: z.string(),
-            message: z.string(),
-          }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const { profileId } = extractProfileIdAndTokenFromRequest(request) ?? {};
-
-      if (!profileId) {
-        reply.status(401);
-        return {
-          error: "Unauthorized",
-          message:
-            "Missing or invalid Authorization header. Expected: Bearer <archestra_token>",
-        };
-      }
-
-      return handleDeleteCache(fastify, reply, profileId);
     },
   );
 };

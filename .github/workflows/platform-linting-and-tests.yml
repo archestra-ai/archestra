@@ -468,8 +468,6 @@ jobs:
           docker volume create archestra-ci-app-data || true
 
           # Start the platform container
-          # Note: ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS allows e2e tests to use 127.0.0.1
-          # while the default ARCHESTRA_FRONTEND_URL=http://localhost:3000 stays unchanged
           # Note: Uses the public MCP server base image with 'latest' tag because:
           # 1. The embedded Kind cluster cannot easily access images loaded on the host Docker daemon
           # 2. Release-please bumps the version in config.ts before the image is published,
@@ -480,7 +478,6 @@ jobs:
             -p 9000:9000 \
             -p 3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
-            -e ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3000 \
             -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v archestra-ci-postgres-data:/var/lib/postgresql/data \
@@ -541,15 +538,15 @@ jobs:
           echo "E2E_API_BASE_URL=http://127.0.0.1:9000" >> /tmp/quickstart-e2e.env
           cat /tmp/quickstart-e2e.env
 
-      - name: Run MCP Install E2E tests
+      - name: Run quickstart E2E tests
         id: e2e
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/run-e2e-tests
         with:
           projects: chromium
-          # Run only the reliable "Self-hosted from catalog" test for quickstart validation
-          # Other tests have flakiness issues with parallel execution and retries
-          extra_args: "tests/ui/mcp-install.spec.ts --grep Self-hosted"
+          # Self-hosted: MCP install from catalog test (other mcp-install tests have flakiness issues)
+          # Origin error handling: auth origin validation and error UX tests
+          extra_args: "tests/ui/mcp-install.spec.ts tests/ui/auth-origin.spec.ts --grep 'Self-hosted|Origin error handling'"
           env_file: /tmp/quickstart-e2e.env
 
       - name: Upload blob report

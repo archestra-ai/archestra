@@ -239,14 +239,16 @@ export async function handleLLMProxy<
     }
 
     // Set SSE headers early if streaming
+    // Use reply.raw.writeHead() to commit headers on the raw stream without
+    // hijacking Fastify's lifecycle. reply.hijack() breaks onResponse hooks
+    // and causes reply.sent to be true immediately, which interferes with
+    // error handling and interaction logging.
     if (requestAdapter.isStreaming()) {
       logger.debug(
         `[${providerName}Proxy] Setting up streaming response headers`,
       );
       const sseHeaders = streamAdapter.getSSEHeaders();
-      for (const [key, value] of Object.entries(sseHeaders)) {
-        reply.header(key, value);
-      }
+      reply.raw.writeHead(200, sseHeaders);
     }
 
     // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
@@ -919,7 +921,9 @@ function handleError(
   // If headers already sent (mid-stream error), write error to stream.
   // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
   // the status after headers are committed - so SSE error event is our only option.
-  if (isStreaming && reply.sent) {
+  // Check reply.raw.headersSent (set after writeHead) rather than reply.sent
+  // (which is only set after hijack or full send).
+  if (isStreaming && reply.raw.headersSent) {
     const errorEvent = {
       type: "error",
       error: {

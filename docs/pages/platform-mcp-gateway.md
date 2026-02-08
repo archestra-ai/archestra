@@ -66,3 +66,34 @@ graph TB
     style GW fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
     style Orch fill:#fff,stroke:#0066cc,stroke-width:1px
 ```
+
+## Authentication
+
+Archestra's MCP Gateways support two authentication methods:
+
+### OAuth 2.1 (Recommended for MCP Clients)
+
+The gateway implements the [MCP Authorization specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization) with OAuth 2.1. MCP clients that support OAuth can authenticate automatically — the client discovers endpoints via standard metadata URLs, performs an authorization code flow with PKCE, and receives an access token.
+
+```
+POST /v1/mcp/<profile_id>
+Authorization: Bearer <access_token>
+```
+
+**Discovery endpoints:**
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /.well-known/oauth-protected-resource/v1/mcp/<profile_id>` | Resource metadata (RFC 9728) |
+| `GET /.well-known/oauth-authorization-server` | Authorization server metadata (RFC 8414) |
+
+### Bearer Token
+
+For direct API integrations, use Archestra-issued tokens in the `Authorization` header. Tokens can be scoped to an individual user, a team, or the entire organization — controlling which MCP Gateways and credentials are accessible.
+
+```
+POST /v1/mcp/<profile_id>
+Authorization: Bearer archestra_<token>
+```
+
+Create tokens in **Settings → Tokens** or via the Archestra API.

@@ -43,6 +43,8 @@ This will start the platform with:
 
 **Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
 
+> **Accessing from another device on your network?** In quickstart mode, private network IPs (e.g., `192.168.x.x`, `10.x.x.x`) are automatically trusted, so authentication works without extra configuration.
+
 If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 
 ```diff
@@ -497,10 +499,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
   - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
 
-- **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
+- **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application. This must match the URL users type in their browser (including protocol and port), as it is used for both CORS validation and authentication origin checks.
 
   - Example: `https://frontend.example.com`
   - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
+  - If users access the platform via a LAN IP (e.g., `http://192.168.1.5:3000`), set this to that URL
 
 - **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
 
@@ -557,12 +560,12 @@ The following environment variables can be used to configure Archestra Platform.
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
-- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for authentication flows.
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for both CORS and authentication flows.
 
   - Default: None
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
-  - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
-  - Required when configuring SSO with external identity providers hosted on different domains
+  - Use this to trust external identity providers (IdPs) for SSO, or to allow access from multiple URLs (e.g., both a LAN IP and a domain name)
+  - Example for LAN access alongside localhost: `http://192.168.1.5:3000,http://192.168.1.5:9000`
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
 

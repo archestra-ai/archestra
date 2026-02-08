@@ -9110,6 +9110,78 @@ export type PostApiAuthOrganizationRemoveMemberResponses = {
     200: unknown;
 };
 
+export type GetOAuthClientInfoData = {
+    body?: never;
+    path?: never;
+    query: {
+        client_id: string;
+    };
+    url: '/api/auth/oauth2/client-info';
+};
+
+export type GetOAuthClientInfoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        client_name: string | null;
+    };
+};
+
+export type GetOAuthClientInfoResponse = GetOAuthClientInfoResponses[keyof GetOAuthClientInfoResponses];
+
+export type PostApiAuthOauth2TokenData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oauth2/token';
+};
+
+export type PostApiAuthOauth2TokenResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type SubmitOAuthConsentData = {
+    body: {
+        accept: boolean;
+        scope: string;
+        oauth_query: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auth/oauth2/consent';
+};
+
+export type SubmitOAuthConsentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        redirectTo: string;
+    };
+};
+
+export type SubmitOAuthConsentResponse = SubmitOAuthConsentResponses[keyof SubmitOAuthConsentResponses];
+
+export type PostApiAuthOauth2RegisterData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auth/oauth2/register';
+};
+
+export type PostApiAuthOauth2RegisterResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type GetApiAuthBy__Data = {
     body?: never;
     path: {
@@ -19482,38 +19554,6 @@ export type PostV1McpByProfileIdResponses = {
     200: unknown;
 };
 
-export type DeleteV1McpCacheByProfileIdData = {
-    body?: never;
-    path: {
-        profileId: string;
-    };
-    query?: never;
-    url: '/v1/mcp/cache/{profileId}';
-};
-
-export type DeleteV1McpCacheByProfileIdErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type DeleteV1McpCacheByProfileIdError = DeleteV1McpCacheByProfileIdErrors[keyof DeleteV1McpCacheByProfileIdErrors];
-
-export type DeleteV1McpCacheByProfileIdResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        message: string;
-    };
-};
-
-export type DeleteV1McpCacheByProfileIdResponse = DeleteV1McpCacheByProfileIdResponses[keyof DeleteV1McpCacheByProfileIdResponses];
-
 export type GetMcpServerInstallationRequestsData = {
     body?: never;
     path?: never;
@@ -21727,7 +21767,10 @@ export type GetMcpToolCallsResponses = {
                 };
             } | null;
             toolResult: unknown;
+            userId: string | null;
+            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token';
             createdAt: string;
+            userName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -21830,7 +21873,10 @@ export type GetMcpToolCallResponses = {
             };
         } | null;
         toolResult: unknown;
+        userId: string | null;
+        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token';
         createdAt: string;
+        userName: string | null;
     };
 };
 
@@ -22174,6 +22220,56 @@ export type HandleOAuthCallbackResponses = {
 };
 
 export type HandleOAuthCallbackResponse = HandleOAuthCallbackResponses[keyof HandleOAuthCallbackResponses];
+
+export type GetWellKnownOauthProtectedResourceBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/.well-known/oauth-protected-resource/{*}';
+};
+
+export type GetWellKnownOauthProtectedResourceBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: {
+        resource: string;
+        authorization_servers: Array<string>;
+        scopes_supported: Array<string>;
+        bearer_methods_supported: Array<string>;
+    };
+};
+
+export type GetWellKnownOauthProtectedResourceBy__Response = GetWellKnownOauthProtectedResourceBy__Responses[keyof GetWellKnownOauthProtectedResourceBy__Responses];
+
+export type GetWellKnownOauthAuthorizationServerData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/.well-known/oauth-authorization-server';
+};
+
+export type GetWellKnownOauthAuthorizationServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        issuer: string;
+        authorization_endpoint: string;
+        token_endpoint: string;
+        registration_endpoint: string;
+        jwks_uri: string;
+        response_types_supported: Array<string>;
+        grant_types_supported: Array<string>;
+        token_endpoint_auth_methods_supported: Array<string>;
+        code_challenge_methods_supported: Array<string>;
+        scopes_supported: Array<string>;
+    };
+};
+
+export type GetWellKnownOauthAuthorizationServerResponse = GetWellKnownOauthAuthorizationServerResponses[keyof GetWellKnownOauthAuthorizationServerResponses];
 
 export type OllamaChatCompletionsWithDefaultAgentData = {
     body?: OllamaChatCompletionRequestInput;

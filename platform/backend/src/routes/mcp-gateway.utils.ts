@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -9,6 +10,7 @@ import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  OAUTH_TOKEN_ID_PREFIX,
 } from "@shared";
 import type { FastifyRequest } from "fastify";
 import {
@@ -23,13 +25,32 @@ import {
   AgentModel,
   AgentTeamModel,
   McpToolCallModel,
+  MemberModel,
+  OAuthAccessTokenModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
-import { type CommonToolCall, UuidIdSchema } from "@/types";
+import {
+  type CommonToolCall,
+  type MCPGatewayAuthMethod,
+  UuidIdSchema,
+} from "@/types";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
+
+/**
+ * Derive a human-readable auth method string from token auth context
+ */
+export function deriveAuthMethod(
+  tokenAuth: TokenAuthResult | TokenAuthContext | undefined,
+): MCPGatewayAuthMethod | undefined {
+  if (!tokenAuth) return undefined;
+  if (tokenAuth.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)) return "oauth";
+  if (tokenAuth.isUserToken) return "user_token";
+  if (tokenAuth.isOrganizationToken) return "org_token";
+  return "team_token";
+}
 
 /**
  * Token authentication result
@@ -109,6 +130,8 @@ export async function createAgentServer(
         toolCall: null,
         // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
         toolResult: { tools: toolsList } as any,
+        userId: tokenAuth?.userId ?? null,
+        authMethod: deriveAuthMethod(tokenAuth) ?? null,
       });
       logger.info(
         { agentId, toolsCount: toolsList.length },
@@ -159,6 +182,28 @@ export async function createAgentServer(
               ? "Agent delegation tool call completed"
               : "Archestra MCP tool call completed",
           );
+
+          // Persist archestra/agent delegation tool call to database
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName: ARCHESTRA_MCP_SERVER_NAME,
+              method: "tools/call",
+              toolCall: {
+                id: `archestra-${Date.now()}`,
+                name,
+                arguments: args || {},
+              },
+              toolResult: response,
+              userId: tokenAuth?.userId ?? null,
+              authMethod: deriveAuthMethod(tokenAuth) ?? null,
+            });
+          } catch (dbError) {
+            logger.info(
+              { err: dbError },
+              "Failed to persist archestra tool call",
+            );
+          }
 
           return response;
         }
@@ -308,10 +353,6 @@ export async function validateTeamToken(
   // Validate the token itself
   const token = await TeamTokenModel.validateToken(tokenValue);
   if (!token) {
-    // logger.debug(
-    //   { profileId, tokenPrefix: tokenValue.substring(0, 14) },
-    //   "validateTeamToken: token not found in team_token table",
-    // );
     return null;
   }
 
@@ -412,8 +453,118 @@ export async function validateUserToken(
 }
 
 /**
+ * Validate an OAuth access token for a specific profile.
+ * Looks up the token by its SHA-256 hash in the oauth_access_token table
+ * (matching better-auth's hashed token storage), then checks user access.
+ *
+ * Returns token auth info if valid, null otherwise.
+ */
+export async function validateOAuthToken(
+  profileId: string,
+  tokenValue: string,
+): Promise<TokenAuthResult | null> {
+  try {
+    // Hash the token the same way better-auth stores it (SHA-256, base64url)
+    const tokenHash = createHash("sha256")
+      .update(tokenValue)
+      .digest("base64url");
+
+    // Look up the hashed token via the model
+    const accessToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+
+    if (!accessToken) {
+      return null;
+    }
+
+    // Check if associated refresh token has been revoked
+    if (accessToken.refreshTokenRevoked) {
+      logger.debug(
+        { profileId },
+        "validateOAuthToken: associated refresh token is revoked",
+      );
+      return null;
+    }
+
+    // Check token expiry
+    if (accessToken.expiresAt < new Date()) {
+      logger.debug({ profileId }, "validateOAuthToken: token expired");
+      return null;
+    }
+
+    const userId = accessToken.userId;
+    if (!userId) {
+      return null;
+    }
+
+    // Look up the user's organization membership
+    const membership = await MemberModel.getFirstMembershipForUser(userId);
+    if (!membership) {
+      logger.warn(
+        { profileId, userId },
+        "validateOAuthToken: user has no organization membership",
+      );
+      return null;
+    }
+
+    const organizationId = membership.organizationId;
+
+    // Check if user has profile admin permission (can access all profiles)
+    const isProfileAdmin = await userHasPermission(
+      userId,
+      organizationId,
+      "profile",
+      "admin",
+    );
+
+    if (isProfileAdmin) {
+      return {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId,
+        isUserToken: true,
+        userId,
+      };
+    }
+
+    // Non-admin: user can access profile if they are a member of any team assigned to the profile
+    const userTeamIds = await TeamModel.getUserTeamIds(userId);
+    const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
+    const hasAccess = userTeamIds.some((teamId) =>
+      profileTeamIds.includes(teamId),
+    );
+
+    if (!hasAccess) {
+      logger.warn(
+        { profileId, userId, userTeamIds, profileTeamIds },
+        "validateOAuthToken: profile not accessible via OAuth token (no shared teams)",
+      );
+      return null;
+    }
+
+    return {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId,
+      isUserToken: true,
+      userId,
+    };
+  } catch (error) {
+    logger.debug(
+      {
+        profileId,
+        error: error instanceof Error ? error.message : "unknown",
+      },
+      "validateOAuthToken: token validation failed",
+    );
+    return null;
+  }
+}
+
+/**
  * Validate any archestra_ prefixed token for a specific profile
- * Tries team/org tokens first, then user tokens
+ * Tries team/org tokens first, then user tokens, then OAuth JWT tokens
  * Returns token auth info if valid, null otherwise
  */
 export async function validateMCPGatewayToken(
@@ -430,6 +581,14 @@ export async function validateMCPGatewayToken(
   const userTokenResult = await validateUserToken(profileId, tokenValue);
   if (userTokenResult) {
     return userTokenResult;
+  }
+
+  // Try OAuth JWT token validation (for MCP clients like Open WebUI)
+  if (!tokenValue.startsWith("archestra_")) {
+    const oauthResult = await validateOAuthToken(profileId, tokenValue);
+    if (oauthResult) {
+      return oauthResult;
+    }
   }
 
   logger.warn(

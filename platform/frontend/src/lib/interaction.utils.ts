@@ -15,6 +15,11 @@ import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
+import DeepseekChatCompletionInteraction from "./llmProviders/deepseek";
+import GroqChatCompletionInteraction from "./llmProviders/groq";
+import XaiChatCompletionInteraction from "./llmProviders/xai";
+import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
+import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 
 export interface CostSavingsInput {
   cost: string | null | undefined;
@@ -140,6 +145,16 @@ export class DynamicInteraction implements InteractionUtils {
       return new CohereChatInteraction(interaction);
     } else if (type === "gemini:generateContent") {
       return new GeminiGenerateContentInteraction(interaction);
+    } else if (type === "deepseek:chatCompletions") {
+      return new DeepseekChatCompletionInteraction(interaction);
+    } else if (type === "groq:chatCompletions") {
+      return new GroqChatCompletionInteraction(interaction);
+    } else if (type === "xai:chatCompletions") {
+      return new XaiChatCompletionInteraction(interaction);
+    } else if (type === "perplexity:chatCompletions") {
+      return new PerplexityChatCompletionInteraction(interaction);
+    } else if (type === "minimax:chatCompletions") {
+      return new MinimaxChatCompletionInteraction(interaction);
     }
     throw new Error(`Unsupported interaction type: ${type}`);
   }

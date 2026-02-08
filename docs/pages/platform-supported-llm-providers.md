@@ -308,3 +308,124 @@ https://bedrock-runtime.{region}.amazonaws.com
 Some Bedrock models, such as Anthropic's Claude, require [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html). Set this variable to enable those models. If not set, only models with on-demand inference support will be available.
 
 For more details, see [how inference works in Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-how.html).
+
+## DeepSeek
+
+[DeepSeek](https://www.deepseek.com/) provides high-performance large language models with an OpenAI-compatible API.
+
+### Supported DeepSeek APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### DeepSeek Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/deepseek/{profile-id}`
+- **Authentication**: Pass your DeepSeek API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                           | Required | Description                                                                     |
+| ---------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| `ARCHESTRA_DEEPSEEK_BASE_URL`      | No       | DeepSeek API base URL (default: `https://api.deepseek.com`)                     |
+| `ARCHESTRA_CHAT_DEEPSEEK_API_KEY`  | No       | Default API key for DeepSeek (can be overridden per conversation/team/org)      |
+
+### Popular Models
+
+- **DeepSeek-V3** (`deepseek-chat`) - High-performance general purpose model
+- **DeepSeek-R1** (`deepseek-reasoner`) - Advanced reasoning model
+
+## Groq
+
+[Groq](https://groq.com/) provides ultra-fast inference for open-source AI models through an OpenAI-compatible API.
+
+### Supported Groq APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Groq Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/groq/{profile-id}`
+- **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                           | Required | Description                                                                     |
+| ---------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| `ARCHESTRA_GROQ_BASE_URL`          | No       | Groq API base URL (default: `https://api.groq.com/openai/v1`)                   |
+| `ARCHESTRA_CHAT_GROQ_API_KEY`      | No       | Default API key for Groq (can be overridden per conversation/team/org)          |
+
+### Popular Models
+
+- **Llama 3.3 70B** (`llama-3.3-70b-versatile`) - High-performance open-source model
+- **Llama 3.1 8B Instant** (`llama-3.1-8b-instant`) - Ultra-fast lightweight model
+- **Mixtral 8x7B** (`mixtral-8x7b-32768`) - High-quality MoE model
+
+## x.AI (Grok)
+
+[x.AI](https://x.ai/) provides the Grok series of large language models through an OpenAI-compatible API.
+
+### Supported x.AI APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### x.AI Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/xai/{profile-id}`
+- **Authentication**: Pass your x.AI API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                           | Required | Description                                                                     |
+| ---------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| `ARCHESTRA_XAI_BASE_URL`           | No       | x.AI API base URL (default: `https://api.x.ai/v1`)                             |
+| `ARCHESTRA_CHAT_XAI_API_KEY`       | No       | Default API key for x.AI (can be overridden per conversation/team/org)          |
+
+### Popular Models
+
+- **Grok-4** (`grok-4`) - Latest advanced reasoning model
+- **Grok-4-1-fast** (`grok-4-1-fast`) - Optimized for speed and responsiveness
+
+## Perplexity
+
+[Perplexity](https://www.perplexity.ai/) provides AI search and discovery models through an OpenAI-compatible API.
+
+### Supported Perplexity APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Perplexity Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/perplexity/{profile-id}`
+- **Authentication**: Pass your Perplexity API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                           | Required | Description                                                                     |
+| ---------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| `ARCHESTRA_PERPLEXITY_BASE_URL`    | No       | Perplexity API base URL (default: `https://api.perplexity.ai`)                 |
+| `ARCHESTRA_CHAT_PERPLEXITY_API_KEY`| No       | Default API key for Perplexity (can be overridden per conversation/team/org)    |
+
+### Popular Models
+
+- **Sonar Reasoning** (`sonar-reasoning`) - Advanced search-focused model
+- **Llama 3.1 70B** (`llama-3.1-70b`) - High-performance general search model
+
+## MiniMax
+
+[MiniMax](https://www.minimax.chat/) provides high-performance large language models through an OpenAI-compatible API.
+
+### Supported MiniMax APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### MiniMax Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/minimax/{profile-id}`
+- **Authentication**: Pass your MiniMax API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                           | Required | Description                                                                     |
+| ---------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| `ARCHESTRA_MINIMAX_BASE_URL`       | No       | MiniMax API base URL (default: `https://api.minimax.chat/v1`)                  |
+| `ARCHESTRA_CHAT_MINIMAX_API_KEY`   | No       | Default API key for MiniMax (can be overridden per conversation/team/org)       |

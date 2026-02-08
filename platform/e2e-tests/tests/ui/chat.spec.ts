@@ -113,6 +113,51 @@ const zhipuaiConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
+const deepseekConfig: ChatProviderTestConfig = {
+  providerName: "deepseek",
+  providerDisplayName: "DeepSeek",
+  modelId: "deepseek-chat",
+  modelDisplayName: "DeepSeek Chat",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
+const groqConfig: ChatProviderTestConfig = {
+  providerName: "groq",
+  providerDisplayName: "Groq",
+  modelId: "llama-3.1-8b-instant",
+  modelDisplayName: "Llama 3.1 8B Instant",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
+const xaiConfig: ChatProviderTestConfig = {
+  providerName: "xai",
+  providerDisplayName: "x.AI (Grok)",
+  modelId: "grok-4-1-fast",
+  modelDisplayName: "Grok 4.1 Fast",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
+const perplexityConfig: ChatProviderTestConfig = {
+  providerName: "perplexity",
+  providerDisplayName: "Perplexity",
+  modelId: "llama-3.1-8b",
+  modelDisplayName: "Llama 3.1 8B",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
+const minimaxConfig: ChatProviderTestConfig = {
+  providerName: "minimax",
+  providerDisplayName: "MiniMax",
+  modelId: "abab6.5s",
+  modelDisplayName: "abab6.5s",
+  wiremockStubId: "chat-ui-e2e-test",
+  expectedResponse: "This is a mocked response for the chat UI e2e test.",
+};
+
 const testConfigs: ChatProviderTestConfig[] = [
   anthropicConfig,
   openaiConfig,
@@ -123,6 +168,11 @@ const testConfigs: ChatProviderTestConfig[] = [
   ollamaConfig,
   vllmConfig,
   zhipuaiConfig,
+  deepseekConfig,
+  groqConfig,
+  xaiConfig,
+  perplexityConfig,
+  minimaxConfig,
 ];
 
 // =============================================================================

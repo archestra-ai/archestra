@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/perplexity/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "perplexity-tool-persistence"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-persistence-test",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "llama-3.1-8b",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Tools received."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 50,
+        "completion_tokens": 5,
+        "total_tokens": 55
+      }
+    }
+  }
+}

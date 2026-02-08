@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/deepseek/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "deepseek-model-optimization-short"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-deepseek-optimized"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-opt-short",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-deepseek-optimized",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Swapped to optimized."
+          },
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  }
+}

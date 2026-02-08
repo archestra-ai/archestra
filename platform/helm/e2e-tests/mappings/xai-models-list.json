@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/xai/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "grok-4",
+          "name": "Grok 4"
+        },
+        {
+          "id": "grok-4-1-fast",
+          "name": "Grok 4.1 Fast"
+        }
+      ]
+    }
+  }
+}

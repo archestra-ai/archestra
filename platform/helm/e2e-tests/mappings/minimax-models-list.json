@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/minimax/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "abab6.5s",
+          "name": "abab6.5s"
+        },
+        {
+          "id": "abab6.5t",
+          "name": "abab6.5t"
+        }
+      ]
+    }
+  }
+}

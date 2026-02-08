@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/minimax/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "minimax-model-optimization-disabled"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-opt-disabled",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-minimax-baseline",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Optimization disabled."
+          },
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/groq/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "groq-model-optimization-long"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-groq-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-opt-long",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-groq-baseline",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Stayed on baseline."
+          },
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  }
+}

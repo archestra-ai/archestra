@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/minimax/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "minimax-model-optimization-with-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-minimax-optimized"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-opt-with-tools",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-minimax-optimized",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "With tools optimization."
+          },
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  }
+}

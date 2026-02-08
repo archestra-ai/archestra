@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/perplexity/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "llama-3.1-8b",
+          "name": "Llama 3.1 8B"
+        },
+        {
+          "id": "sonar-reasoning",
+          "name": "Sonar Reasoning"
+        }
+      ]
+    }
+  }
+}

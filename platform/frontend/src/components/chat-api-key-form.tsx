@@ -139,6 +139,46 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
   },
+  deepseek: {
+    name: "DeepSeek",
+    icon: "/icons/deepseek.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.deepseek.com/api_keys",
+    consoleName: "DeepSeek Platform",
+  },
+  groq: {
+    name: "Groq",
+    icon: "/icons/groq.png",
+    placeholder: "gsk_...",
+    enabled: true,
+    consoleUrl: "https://console.groq.com/keys",
+    consoleName: "Groq Console",
+  },
+  xai: {
+    name: "x.AI (Grok)",
+    icon: "/icons/xai.png",
+    placeholder: "xai-...",
+    enabled: true,
+    consoleUrl: "https://console.x.ai/",
+    consoleName: "x.AI Console",
+  },
+  perplexity: {
+    name: "Perplexity",
+    icon: "/icons/perplexity.png",
+    placeholder: "pplx-...",
+    enabled: true,
+    consoleUrl: "https://www.perplexity.ai/settings/api",
+    consoleName: "Perplexity AI",
+  },
+  minimax: {
+    name: "MiniMax",
+    icon: "/icons/minimax.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://platform.minimax.io/user-center/basic-information/interface-key",
+    consoleName: "MiniMax Platform",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

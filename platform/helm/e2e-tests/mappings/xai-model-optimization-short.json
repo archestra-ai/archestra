@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/xai/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "xai-model-optimization-short"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-xai-optimized"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-opt-short",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-xai-optimized",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Swapped to optimized."
+          },
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  }
+}

@@ -38,6 +38,11 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   anthropic: getAnthropicUsage,
   cohere: getCohereUsage,
   zhipuai: getZhipuaiUsage,
+  deepseek: getOpenAIUsage,
+  groq: getOpenAIUsage,
+  xai: getOpenAIUsage,
+  perplexity: getOpenAIUsage,
+  minimax: getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };

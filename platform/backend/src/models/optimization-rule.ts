@@ -277,6 +277,11 @@ class OptimizationRuleModel {
       ollama: [], // Ollama model pricing varies by deployment, so no defaults
       zhipuai: [],
       bedrock: [], // Bedrock model pricing varies by region and usage, so no defaults
+      deepseek: [],
+      groq: [],
+      xai: [],
+      perplexity: [],
+      minimax: [],
     };
 
     // Define rules per provider
@@ -311,6 +316,11 @@ class OptimizationRuleModel {
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
+        deepseek: [],
+        groq: [],
+        xai: [],
+        perplexity: [],
+        minimax: [],
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

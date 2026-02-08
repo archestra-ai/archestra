@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/xai/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "xai-tool-persistence"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-persistence-test",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "grok-4-1-fast",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Tools received."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 50,
+        "completion_tokens": 5,
+        "total_tokens": 55
+      }
+    }
+  }
+}

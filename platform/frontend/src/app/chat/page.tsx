@@ -279,11 +279,17 @@ export default function ChatPage() {
   const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModels();
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
-  // vLLM/Ollama may not require an API key either
+  // vLLM/Ollama/DeepSeek/Groq/x.AI/Perplexity/MiniMax may not require an API key either
   const hasAnyApiKey =
     chatApiKeys.some((k) => k.secretId) ||
     features?.geminiVertexAiEnabled ||
-    features?.vllmEnabled;
+    features?.vllmEnabled ||
+    features?.ollamaEnabled ||
+    features?.deepseekEnabled ||
+    features?.groqEnabled ||
+    features?.xaiEnabled ||
+    features?.perplexityEnabled ||
+    features?.minimaxEnabled;
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   // Sync conversation ID with URL and reset initial state when navigating to base /chat

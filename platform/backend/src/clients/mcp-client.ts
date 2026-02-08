@@ -455,6 +455,11 @@ class McpClient {
       throw error;
     }
 
+    // Store the connection for reuse BEFORE persisting session ID.
+    // This prevents a race where a second request creates a duplicate connection
+    // while the upsert is in flight.
+    this.activeConnections.set(connectionKey, client);
+
     // Persist the MCP session ID so other backend pods can reuse it.
     // With --isolated, each Mcp-Session-Id maps to a separate browser context;
     // storing the ID in the database lets every pod connect to the same context.
@@ -462,17 +467,15 @@ class McpClient {
       transport instanceof StreamableHTTPClientTransport &&
       transport.sessionId
     ) {
-      McpHttpSessionModel.upsert(connectionKey, transport.sessionId).catch(
-        (err) =>
-          logger.warn(
-            { connectionKey, err },
-            "Failed to persist MCP HTTP session ID (non-fatal)",
-          ),
-      );
+      try {
+        await McpHttpSessionModel.upsert(connectionKey, transport.sessionId);
+      } catch (err) {
+        logger.warn(
+          { connectionKey, err },
+          "Failed to persist MCP HTTP session ID (non-fatal)",
+        );
+      }
     }
-
-    // Store the connection for reuse
-    this.activeConnections.set(connectionKey, client);
 
     return client;
   }

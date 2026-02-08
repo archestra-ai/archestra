@@ -28,6 +28,8 @@ describe("AuthRequiredTool", () => {
 
     const link = screen.getByRole("link", { name: /Set up credentials/i });
     expect(link).toHaveAttribute("href", defaultProps.installUrl);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("renders with different catalog names and URLs", () => {

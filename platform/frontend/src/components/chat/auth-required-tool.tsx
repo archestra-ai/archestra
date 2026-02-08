@@ -32,7 +32,7 @@ export function AuthRequiredTool({
                 your credentials to use this tool.
               </p>
               <Button variant="default" size="sm" asChild>
-                <a href={installUrl}>
+                <a href={installUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="size-3.5" />
                   Set up credentials
                 </a>

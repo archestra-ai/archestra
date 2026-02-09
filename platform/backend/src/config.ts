@@ -543,7 +543,7 @@ export default {
     // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.39", // x-release-please-version
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.40", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,

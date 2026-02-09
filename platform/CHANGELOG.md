@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.40](https://github.com/archestra-ai/archestra/compare/platform-v1.0.39...platform-v1.0.40) (2026-02-09)
+
+
+### Bug Fixes
+
+* wait for secretmanager to init before run  migration ([#2672](https://github.com/archestra-ai/archestra/issues/2672)) ([4614e0b](https://github.com/archestra-ai/archestra/commit/4614e0bb2e9225a6135551655921f7d31e703343))
+
 ## [1.0.39](https://github.com/archestra-ai/archestra/compare/platform-v1.0.38...platform-v1.0.39) (2026-02-06)
 
 

@@ -1156,7 +1156,7 @@ export default class K8sDeployment {
       baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
     } else if (configuredNodePort) {
       // Local dev with fixed nodePort: use it directly (no need to read from service)
-      baseUrl = `http://localhost:${configuredNodePort}`;
+      baseUrl = `http://${config.orchestrator.kubernetes.k8sNodeHost || "localhost"}:${configuredNodePort}`;
     } else {
       // Local dev: get NodePort from service
       const serviceName = `${this.deploymentName}-service`;
@@ -1171,7 +1171,7 @@ export default class K8sDeployment {
           throw new Error(`Service ${serviceName} has no NodePort assigned`);
         }
 
-        baseUrl = `http://localhost:${nodePort}`;
+        baseUrl = `http://${config.orchestrator.kubernetes.k8sNodeHost || "localhost"}:${nodePort}`;
       } catch (error) {
         logger.error(
           { err: error },

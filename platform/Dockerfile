@@ -433,6 +433,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         # Export the kubeconfig path for supervisord to inherit, only if setup succeeded
         export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
         export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
+        export ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST="${CONTROL_PLANE_IP}"
         echo "Kubernetes orchestrator configured with embedded KinD cluster"
     fi
 fi

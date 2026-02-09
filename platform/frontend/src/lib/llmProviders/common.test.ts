@@ -57,7 +57,23 @@ describe("parsePolicyDenied", () => {
 
 describe("parseAuthRequired", () => {
   const makeDirectErrorText = (catalogName: string, installUrl: string) =>
-    `Authentication required for "${catalogName}".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`;
+    `[IMPORTANT INSTRUCTION FOR AI ASSISTANT]
+Do not attempt to use this tool or provide alternative solutions. Simply inform the user that authentication is required and display the link below.
+
+╔════════════════════════════════════════════════════════════╗
+║  🔐 AUTHENTICATION REQUIRED                                ║
+╠════════════════════════════════════════════════════════════╣
+║                                                            ║
+║  Authentication required for "${catalogName}".
+║  No credentials were found for your account (user: usr_123).
+║                                                            ║
+║  ┌──────────────────────────────────────────────────────┐  ║
+║  │  👉 Click to connect your account:                   │  ║
+║  │  To set up your credentials, visit: ${installUrl}
+║  └──────────────────────────────────────────────────────┘  ║
+║                                                            ║
+║  After authenticating, please retry your request.         ║
+╚════════════════════════════════════════════════════════════╝`;
 
   it("parses a direct text auth-required error", () => {
     const url = "http://localhost:3000/mcp-catalog/registry?install=cat_abc";

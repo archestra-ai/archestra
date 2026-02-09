@@ -11,6 +11,7 @@ const config: KnipConfig = {
     "tsc",
     "tsx",
     "knip",
+    "vitest",
   ],
   ignoreDependencies: [
     // tsx is used as a binary in scripts (codegen:api-client, codegen:theme-css)

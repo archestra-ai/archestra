@@ -100,10 +100,98 @@ spec:
               {{- else }}
               echo "Skipping PostgreSQL readiness check"
               {{- end }}
+        {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+        # Vault secret injection init container
+        #
+        # This init container authenticates with Vault, fetches secrets, and writes them
+        # as KEY=VALUE pairs to /vault/secrets/env. The main container sources this file
+        # on startup to load secrets as environment variables (see command override below).
+        #
+        # Security:
+        # - The "vault-secrets" volume is an emptyDir with medium=Memory (tmpfs).
+        #   Secrets are stored in RAM only — never written to disk, never persisted.
+        # - The volume is mounted read-write here (init container writes the env file),
+        #   but read-only in the main container.
+        # - CAUTION: Do not mount this volume in any other container or sidecar.
+        #   The env file contains plaintext secrets and should only be read by the
+        #   main application container.
+        - name: vault-secrets
+          image: {{ include "archestra-platform.image" . }}
+          env:
+            {{- include "archestra-platform.env" . | nindent 12 }}
+          command:
+            - node
+            - -e
+            - |
+              const { readFileSync, writeFileSync } = require('fs');
+
+              const VAULT_ADDR = process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
+              const AUTH_METHOD = process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD || 'TOKEN';
+              const secrets = [
+                {{- range .Values.archestra.initContainers.vaultSecrets.secrets }}
+                { envVar: '{{ .envVar }}', path: '{{ .path }}', key: '{{ .key }}' },
+                {{- end }}
+              ];
+
+              async function main() {
+                let token;
+
+                if (AUTH_METHOD === 'K8S') {
+                  const tokenPath = process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH || '/var/run/secrets/kubernetes.io/serviceaccount/token';
+                  const mountPoint = process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT || 'kubernetes';
+                  const role = process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE;
+
+                  console.log(`Authenticating with Vault at ${VAULT_ADDR} (K8S auth, role: ${role})...`);
+                  const jwt = readFileSync(tokenPath, 'utf8');
+                  const res = await fetch(`${VAULT_ADDR}/v1/auth/${mountPoint}/login`, {
+                    method: 'POST',
+                    headers: { 'X-Vault-Request': 'true' },
+                    body: JSON.stringify({ jwt, role }),
+                  });
+                  if (!res.ok) throw new Error(`Auth failed: ${res.status} ${await res.text()}`);
+                  token = (await res.json()).auth.client_token;
+                } else {
+                  token = process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
+                }
+
+                if (!token) { console.error('ERROR: Failed to obtain Vault token'); process.exit(1); }
+                console.log('Successfully authenticated with Vault');
+
+                const lines = [];
+                for (const { envVar, path, key } of secrets) {
+                  console.log(`Fetching ${envVar} from ${path}...`);
+                  const res = await fetch(`${VAULT_ADDR}/v1/${path}`, {
+                    headers: { 'X-Vault-Token': token, 'X-Vault-Request': 'true' },
+                  });
+                  if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+                  const data = await res.json();
+                  lines.push(`${envVar}=${data.data.data?.[key] || data.data[key] || ''}`);
+                }
+
+                writeFileSync('/vault/secrets/env', lines.join('\n') + '\n');
+                console.log(`Loaded ${lines.length} secret(s)`);
+              }
+
+              main().catch(err => { console.error(err); process.exit(1); });
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /vault/secrets
+        {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "archestra-platform.image" . }}
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              if [ -f /vault/secrets/env ]; then
+                set -a
+                . /vault/secrets/env
+                set +a
+              fi
+              exec {{ .Values.archestra.initContainers.vaultSecrets.entrypoint | default "/docker-entrypoint.sh" }}
+          {{- end }}
           ports:
             - name: backend
               containerPort: 9000
@@ -151,19 +239,33 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-          {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+          {{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled }}
           volumeMounts:
+            {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
             - name: kubeconfig
               mountPath: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath }}
               readOnly: true
+            {{- end }}
+            {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+            - name: vault-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+            {{- end }}
           {{- end }}
       {{- with .Values.archestra.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+      {{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled }}
       volumes:
+        {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
         - name: kubeconfig
           secret:
             secretName: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+        {{- end }}
+        {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory
+        {{- end }}
       {{- end }}

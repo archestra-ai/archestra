@@ -2,7 +2,6 @@ import type { ServerWebSocketMessage } from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS } from "ws";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
-import { closeChatMcpClient } from "@/clients/chat-mcp-client";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
 import { browserStateManager } from "@/features/browser-stream/services/browser-stream.state-manager";
@@ -192,20 +191,18 @@ export class BrowserStreamSocketClientContext {
       clearInterval(subscription.intervalId);
       this.browserSubscriptions.delete(ws);
 
-      // Close the MCP client connection for this conversation to free resources.
-      // Each conversation has its own MCP client and browser instance.
-      closeChatMcpClient(
-        subscription.agentId,
-        subscription.userContext.userId,
-        subscription.conversationId,
-      );
+      // NOTE: We intentionally do NOT close the MCP client connection here.
+      // The browser stream shares the same MCP client (keyed by agentId:userId:conversationId)
+      // as the chat agentic loop. Closing it here would kill in-flight tool calls
+      // from the agentic loop, causing AI_MissingToolResultsError.
+      // The MCP client manages its own lifecycle via the LRU cache in chat-mcp-client.ts.
 
       logger.info(
         {
           conversationId: subscription.conversationId,
           agentId: subscription.agentId,
         },
-        "Browser stream client unsubscribed and MCP client closed",
+        "Browser stream client unsubscribed",
       );
     }
   }

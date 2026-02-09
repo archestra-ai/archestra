@@ -1,4 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { extractInlineMcpUiResource, extractMcpUiResourceUri } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
 import {
@@ -40,6 +41,7 @@ import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import { McpUiRenderer } from "./mcp-ui-renderer";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -927,9 +929,20 @@ function MessageTool({
     );
   }
 
+  // Check for MCP-UI resources in tool output
+  const toolOutput = toolResultPart?.output ?? part.output;
+  const mcpUiResource = toolOutput
+    ? extractInlineMcpUiResource(toolOutput)
+    : undefined;
+  const mcpUiResourceUri = toolOutput
+    ? extractMcpUiResourceUri(toolOutput)
+    : undefined;
+  const hasMcpUi = Boolean(mcpUiResource || mcpUiResourceUri);
+
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
-    hasInput ||
+    hasMcpUi ||
+      hasInput ||
       (toolResultPart && Boolean(toolResultPart.output)) ||
       (!toolResultPart && Boolean(part.output)),
   );
@@ -954,14 +967,19 @@ function MessageTool({
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
-        {toolResultPart && (
+        {/* Render MCP-UI resource if available */}
+        {mcpUiResource && !errorText && (
+          <McpUiRenderer resource={mcpUiResource} />
+        )}
+        {/* Fallback to standard output when no MCP-UI resource */}
+        {!mcpUiResource && toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
           />
         )}
-        {!toolResultPart && Boolean(part.output) && (
+        {!mcpUiResource && !toolResultPart && Boolean(part.output) && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={part.output}

@@ -1,0 +1,19 @@
+{
+    "name": "mcp-ui-github-wrapper",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "MCP-UI wrapper for GitHub API — renders interactive UI for repos, PRs, and issues",
+    "scripts": {
+        "start": "tsx src/index.ts",
+        "dev": "tsx watch src/index.ts"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.12.1",
+        "@octokit/rest": "^21.1.1"
+    },
+    "devDependencies": {
+        "tsx": "^4.19.0",
+        "typescript": "^5.0.0"
+    }
+}

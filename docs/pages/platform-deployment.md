@@ -502,7 +502,7 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_FRONTEND_URL`** - Setting this variable enables origin validation for CORS and authentication. When set, only requests from this origin (and any in `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`) are allowed. When not set, all origins are accepted.
 
   - Example: `https://frontend.example.com`
-  - Optional for local development and quickstart (origin validation is off by default)
+  - Highly recommended for production.
   - If users access the platform via a LAN IP (e.g., `http://192.168.1.5:3000`), set this to that URL
 
 - **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.

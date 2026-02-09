@@ -12,6 +12,9 @@ const config: KnipConfig = {
     "biome",
     // tsc is in root package.json (typescript)
     "tsc",
+    // These are provided by devDependencies and used in scripts
+    "playwright",
+    "knip",
   ],
 };
 

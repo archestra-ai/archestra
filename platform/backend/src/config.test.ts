@@ -269,15 +269,12 @@ describe("getConfiguredOrigins (tested via getCorsOrigins/getTrustedOrigins)", (
     ]);
   });
 
-  test("should parse ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS with trimming and filtering", async () => {
-    vi.resetModules();
-    process.env.NODE_ENV = "production";
+  test("should parse ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS with trimming and filtering", () => {
     process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
       "  http://keycloak:8080 , , https://auth.example.com  ";
     delete process.env.ARCHESTRA_FRONTEND_URL;
 
-    const { getTrustedOrigins: fn } = await import("./config");
-    const result = fn();
+    const result = getTrustedOrigins();
 
     expect(result).toContain("http://keycloak:8080");
     expect(result).toContain("https://auth.example.com");
@@ -313,62 +310,48 @@ describe("getTrustedOrigins", () => {
   });
 
   describe("configured origins (enforce)", () => {
-    beforeEach(() => {
-      vi.resetModules();
-    });
-
-    test("should return frontend URL when set", async () => {
-      process.env.NODE_ENV = "production";
+    test("should return frontend URL when set", () => {
       process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
       delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
-      const { getTrustedOrigins: fn } = await import("./config");
-      expect(fn()).toEqual(["https://app.example.com"]);
+      expect(getTrustedOrigins()).toEqual(["https://app.example.com"]);
     });
 
-    test("should combine frontend URL and additional origins", async () => {
-      process.env.NODE_ENV = "production";
+    test("should combine frontend URL and additional origins", () => {
       process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
       process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
         "http://idp.example.com:8080";
 
-      const { getTrustedOrigins: fn } = await import("./config");
-      expect(fn()).toEqual([
+      expect(getTrustedOrigins()).toEqual([
         "https://app.example.com",
         "http://idp.example.com:8080",
       ]);
     });
 
-    test("should add 127.0.0.1 equivalent for localhost origins", async () => {
-      process.env.NODE_ENV = "production";
+    test("should add 127.0.0.1 equivalent for localhost origins", () => {
       process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
       delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
-      const { getTrustedOrigins: fn } = await import("./config");
-      const result = fn();
+      const result = getTrustedOrigins();
       expect(result).toContain("http://localhost:3000");
       expect(result).toContain("http://127.0.0.1:3000");
     });
 
-    test("should add localhost equivalent for 127.0.0.1 origins", async () => {
-      process.env.NODE_ENV = "production";
+    test("should add localhost equivalent for 127.0.0.1 origins", () => {
       process.env.ARCHESTRA_FRONTEND_URL = "http://127.0.0.1:3000";
       delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
-      const { getTrustedOrigins: fn } = await import("./config");
-      const result = fn();
+      const result = getTrustedOrigins();
       expect(result).toContain("http://127.0.0.1:3000");
       expect(result).toContain("http://localhost:3000");
     });
 
-    test("should enforce only additional origins when frontend URL is not set", async () => {
-      process.env.NODE_ENV = "production";
+    test("should enforce only additional origins when frontend URL is not set", () => {
       delete process.env.ARCHESTRA_FRONTEND_URL;
       process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
         "https://auth.example.com";
 
-      const { getTrustedOrigins: fn } = await import("./config");
-      expect(fn()).toEqual(["https://auth.example.com"]);
+      expect(getTrustedOrigins()).toEqual(["https://auth.example.com"]);
     });
   });
 });

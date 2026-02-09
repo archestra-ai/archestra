@@ -45,7 +45,7 @@ interface ChatMessagesProps {
   agentId?: string;
   messages: UIMessage[];
   hideToolCalls?: boolean;
-  status: ChatStatus;
+  status: ChatStatus | "error";
   isLoadingConversation?: boolean;
   onMessagesUpdate?: (messages: UIMessage[]) => void;
   onUserMessageEdit?: (
@@ -426,7 +426,8 @@ export function ChatMessages({
     return nextMessage.role !== "assistant";
   });
 
-  const isResponseInProgress = status === "streaming" || status === "submitted";
+  const isResponseInProgress =
+    (status === "streaming" || status === "submitted") && !error && !isStreamingStalled;
 
   return (
     <Conversation

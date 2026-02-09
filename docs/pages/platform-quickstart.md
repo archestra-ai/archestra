@@ -49,7 +49,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 2. Gaze at Archestra running the MCP server in Kubernetes cluster! (If you want to make sure: `kubectl get pods`)
 3. Go to **Agents** and create "Archestra Docs Reader Agent" with this system prompt: `You're using playwright to answer questions about Archestra based on https://archestra.ai/docs/`
 4. While editing the agent, make sure to enable all `microsoft__playwright-mcp` tools for it.
-5. Go to **Settings -> LLM API Keys** and add your preferred provider.
+5. Go to **Settings -> LLM API Keys** and add your preferred provider. You can connect commercial providers like OpenAI, Anthropic, or Google Gemini. For a free option, use [Cerebras](https://cerebras.ai/) or a local [Ollama](https://ollama.com/) instance.
 6. Go to **Chat**, choose the "Archestra Docs Reader Agent" and ask "How could I deploy Archestra?"
 ![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.png)
 7. Enjoy Archestra navigating the website for you!

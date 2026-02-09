@@ -148,7 +148,7 @@ export const __test = {
  * @param userIsProfileAdmin - Whether the user has profile admin permission
  * @returns Token value and metadata, or null if no token available
  */
-async function selectMCPGatewayToken(
+export async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   organizationId: string,
@@ -997,6 +997,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
           userId,
         }
       : undefined,
+    { conversationId },
   );
 
   // Check if MCP tool returned an error

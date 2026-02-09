@@ -1,4 +1,4 @@
-# Build KinD from source with Go 1.25.6 to fix CVE-2025-61726
+# Build KinD from source with latest Go 1.25.x to fix CVE-2025-61726
 # (KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability)
 FROM alpine:3.23 AS kind-builder
 ARG TARGETARCH
@@ -6,7 +6,7 @@ RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi
-RUN apk add --no-cache go=1.25.6-r0 git
+RUN apk add --no-cache 'go~=1.25' git
 RUN git clone --depth 1 --branch v0.31.0 https://github.com/kubernetes-sigs/kind.git /kind && \
     cd /kind && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
@@ -139,7 +139,7 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# KinD binary is built from source in kind-builder stage with Go 1.25.6 (CVE-2025-61726 fix)
+# KinD binary is built from source in kind-builder to address CVE-2025-61726
 RUN apk add --no-cache docker-cli
 COPY --from=kind-builder /kind-binary /usr/local/bin/kind
 RUN chmod +x /usr/local/bin/kind
@@ -228,7 +228,7 @@ pidfile=/var/run/supervisord.pid
 
 [program:backend]
 directory=/app/backend
-command=/bin/sh -c "sleep 5 && pnpm db:migrate && node dist/server.mjs"
+command=/bin/sh -c "sleep 5 && node dist/standalone-scripts/run-migrations.mjs && node dist/server.mjs"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -339,13 +339,6 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     echo "ARCHESTRA_QUICKSTART=true detected"
     echo "Quickstart mode enabled - initializing embedded KinD cluster..."
 
-    # Set default frontend URL for quickstart mode if not already set
-    # This is required to disable secure cookies (NODE_ENV=production enables HTTPS-only cookies by default)
-    # Without this, authentication fails over HTTP connections
-    if [ -z "$ARCHESTRA_FRONTEND_URL" ]; then
-        export ARCHESTRA_FRONTEND_URL="http://localhost:3000"
-        echo "Set ARCHESTRA_FRONTEND_URL to $ARCHESTRA_FRONTEND_URL (required for HTTP connections)"
-    fi
     if [ ! -S /var/run/docker.sock ]; then
         echo "Quickstart mode is on but Docker socket is not mounted"
         echo "Add: -v /var/run/docker.sock:/var/run/docker.sock to your docker run command"
@@ -440,6 +433,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         # Export the kubeconfig path for supervisord to inherit, only if setup succeeded
         export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
         export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
+        export ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST="${CONTROL_PLANE_IP}"
         echo "Kubernetes orchestrator configured with embedded KinD cluster"
     fi
 fi

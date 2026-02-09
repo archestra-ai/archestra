@@ -6,12 +6,18 @@ import {
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { isBrowserMcpTool } from "@shared";
+import {
+  isBrowserMcpTool,
+  MCP_CATALOG_INSTALL_PATH,
+  MCP_CATALOG_INSTALL_QUERY_PARAM,
+  OAUTH_TOKEN_ID_PREFIX,
+} from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   InternalMcpCatalogModel,
+  McpHttpSessionModel,
   McpServerModel,
   McpToolCallModel,
   TeamModel,
@@ -25,6 +31,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   InternalMcpCatalog,
+  MCPGatewayAuthMethod,
 } from "@/types";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
@@ -128,6 +135,43 @@ class McpClient {
   private clients = new Map<string, Client>();
   private activeConnections = new Map<string, Client>();
   private connectionLimiter = new ConnectionLimiter();
+  // Cache of actual tool names per connection key: lowercased name -> original cased name
+  private toolNameCache = new Map<string, Map<string, string>>();
+
+  /**
+   * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
+   * Should be called when a subagent finishes to free the browser context.
+   */
+  closeSession(
+    catalogId: string,
+    targetMcpServerId: string,
+    agentId: string,
+    conversationId: string,
+  ): void {
+    const connectionKey = `${catalogId}:${targetMcpServerId}:${agentId}:${conversationId}`;
+    const client = this.activeConnections.get(connectionKey);
+    if (client) {
+      try {
+        client.close();
+      } catch (error) {
+        logger.warn(
+          { connectionKey, error },
+          "Error closing MCP session (non-fatal)",
+        );
+      }
+      this.activeConnections.delete(connectionKey);
+      this.toolNameCache.delete(connectionKey);
+      logger.info({ connectionKey }, "Closed cached MCP session");
+    }
+
+    // Clean up the stored session ID so other pods don't try to reuse it
+    McpHttpSessionModel.deleteByConnectionKey(connectionKey).catch((err) =>
+      logger.warn(
+        { connectionKey, err },
+        "Failed to delete stored MCP HTTP session (non-fatal)",
+      ),
+    );
+  }
 
   /**
    * Execute a single tool call against its assigned MCP server
@@ -136,7 +180,16 @@ class McpClient {
     toolCall: CommonToolCall,
     agentId: string,
     tokenAuth?: TokenAuthContext,
+    options?: { conversationId?: string },
   ): Promise<CommonToolResult> {
+    // Derive auth info for logging
+    const authInfo = tokenAuth
+      ? {
+          userId: tokenAuth.userId,
+          authMethod: deriveAuthMethodFromTokenAuth(tokenAuth),
+        }
+      : undefined;
+
     // Validate and get tool metadata
     const validationResult = await this.validateAndGetTool(
       toolCall,
@@ -170,9 +223,12 @@ class McpClient {
     }
     const { secrets, secretId } = secretsResult;
 
-    // Build connection cache key using the resolved target server ID
-    // This ensures each user gets their own connection for dynamic credentials
-    const connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
+    // Build connection cache key using the resolved target server ID.
+    // When conversationId is provided, each (agent, conversation) gets its own connection
+    // to enable per-session browser context isolation with streamable-http transport.
+    const connectionKey = options?.conversationId
+      ? `${catalogItem.id}:${targetMcpServerId}:${agentId}:${options.conversationId}`
+      : `${catalogItem.id}:${targetMcpServerId}`;
 
     const executeToolCall = async (
       getTransport: () => Promise<Transport>,
@@ -202,6 +258,15 @@ class McpClient {
           );
         }
 
+        // Resolve the actual tool name from the server (preserving original casing).
+        // Tool names in the DB are lowercased by slugifyName(), but remote MCP servers
+        // may use camelCase or mixed-case names (e.g., "atlassianUserInfo" vs "atlassianuserinfo").
+        targetToolName = await this.resolveActualToolName(
+          client,
+          connectionKey,
+          targetToolName,
+        );
+
         const result = await client.callTool({
           name: targetToolName,
           arguments: toolCall.arguments,
@@ -215,6 +280,7 @@ class McpClient {
           result.content,
           !!result.isError,
           tool.responseModifierTemplate,
+          authInfo,
         );
       } catch (error) {
         const errorMessage =
@@ -280,13 +346,20 @@ class McpClient {
           agentId,
           errorMessage,
           tool.mcpServerName || "unknown",
+          authInfo,
         );
       }
     };
 
     if (!this.shouldLimitConcurrency()) {
       return executeToolCall(
-        () => this.getTransport(catalogItem, targetMcpServerId, secrets),
+        () =>
+          this.getTransport(
+            catalogItem,
+            targetMcpServerId,
+            secrets,
+            connectionKey,
+          ),
         secrets,
       );
     }
@@ -308,6 +381,7 @@ class McpClient {
               targetMcpServerId,
               secrets,
               transportKind,
+              connectionKey,
             ),
           secrets,
         ),
@@ -342,6 +416,7 @@ class McpClient {
           "Client ping failed, creating fresh client",
         );
         this.activeConnections.delete(connectionKey);
+        this.toolNameCache.delete(connectionKey);
         // Fall through to create new client
       }
     }
@@ -358,10 +433,49 @@ class McpClient {
       },
     );
 
-    await client.connect(transport);
+    // Track whether we're using a stored session ID (for stale session cleanup)
+    const usedStoredSession =
+      transport instanceof StreamableHTTPClientTransport &&
+      !!transport.sessionId;
 
-    // Store the connection for reuse
+    try {
+      await client.connect(transport);
+    } catch (error) {
+      // If we used a stored session ID and connection failed, the session is
+      // likely stale (e.g. Playwright pod restarted).  Delete it so the next
+      // retry creates a fresh session.
+      if (usedStoredSession) {
+        McpHttpSessionModel.deleteStaleSession(connectionKey).catch((err) =>
+          logger.warn(
+            { connectionKey, err },
+            "Failed to delete stale MCP HTTP session (non-fatal)",
+          ),
+        );
+      }
+      throw error;
+    }
+
+    // Store the connection for reuse BEFORE persisting session ID.
+    // This prevents a race where a second request creates a duplicate connection
+    // while the upsert is in flight.
     this.activeConnections.set(connectionKey, client);
+
+    // Persist the MCP session ID so other backend pods can reuse it.
+    // With --isolated, each Mcp-Session-Id maps to a separate browser context;
+    // storing the ID in the database lets every pod connect to the same context.
+    if (
+      transport instanceof StreamableHTTPClientTransport &&
+      transport.sessionId
+    ) {
+      try {
+        await McpHttpSessionModel.upsert(connectionKey, transport.sessionId);
+      } catch (err) {
+        logger.warn(
+          { connectionKey, err },
+          "Failed to persist MCP HTTP session ID (non-fatal)",
+        );
+      }
+    }
 
     return client;
   }
@@ -389,7 +503,6 @@ class McpClient {
       if (tokenAuth?.userId) {
         const globalToolResult = await this.findGlobalCatalogTool(
           toolCall,
-          agentId,
           tokenAuth.userId,
         );
         if (globalToolResult) {
@@ -440,7 +553,6 @@ class McpClient {
    */
   private async findGlobalCatalogTool(
     toolCall: CommonToolCall,
-    _agentId: string,
     userId: string,
   ): Promise<{
     tool: McpToolWithServerMetadata;
@@ -676,52 +788,46 @@ class McpClient {
       }
     }
 
-    // Priority 2: Team token used - we check try to use token without teamId first to prioritize personal credential
+    // Priority 2 & 3: Team token used - batch-load team members once to avoid N+1 queries
     if (tokenAuth.teamId) {
+      const teamMembers = await TeamModel.getTeamMembers(tokenAuth.teamId);
+      const teamMemberIds = new Set(teamMembers.map((m) => m.userId));
+
+      // Priority 2: Personal credential owned by a team member (no teamId on server)
       for (const server of allServers) {
-        if (server.ownerId && !server.teamId) {
-          const ownerInTeam = await TeamModel.isUserInTeam(
-            tokenAuth.teamId,
-            server.ownerId,
+        if (
+          server.ownerId &&
+          !server.teamId &&
+          teamMemberIds.has(server.ownerId)
+        ) {
+          logger.info(
+            {
+              toolName: toolCall.name,
+              catalogId: tool.catalogId,
+              serverId: server.id,
+              ownerId: server.ownerId,
+              teamId: tokenAuth.teamId,
+            },
+            `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
           );
-          if (ownerInTeam) {
-            logger.info(
-              {
-                toolName: toolCall.name,
-                catalogId: tool.catalogId,
-                serverId: server.id,
-                ownerId: server.ownerId,
-                teamId: tokenAuth.teamId,
-              },
-              `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-            );
-            return { targetMcpServerId: server.id };
-          }
+          return { targetMcpServerId: server.id };
         }
       }
-    }
 
-    // Priority 3: Team token used - we try to find any token from team
-    if (tokenAuth.teamId) {
+      // Priority 3: Any server owned by a team member
       for (const server of allServers) {
-        if (server.ownerId) {
-          const ownerInTeam = await TeamModel.isUserInTeam(
-            tokenAuth.teamId,
-            server.ownerId,
+        if (server.ownerId && teamMemberIds.has(server.ownerId)) {
+          logger.info(
+            {
+              toolName: toolCall.name,
+              catalogId: tool.catalogId,
+              serverId: server.id,
+              ownerId: server.ownerId,
+              teamId: tokenAuth.teamId,
+            },
+            `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
           );
-          if (ownerInTeam) {
-            logger.info(
-              {
-                toolName: toolCall.name,
-                catalogId: tool.catalogId,
-                serverId: server.id,
-                ownerId: server.ownerId,
-                teamId: tokenAuth.teamId,
-              },
-              `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-            );
-            return { targetMcpServerId: server.id };
-          }
+          return { targetMcpServerId: server.id };
         }
       }
     }
@@ -739,17 +845,19 @@ class McpClient {
       return { targetMcpServerId: allServers[0].id };
     }
 
-    // No server found, throw an error
+    // No server found - return an actionable error with install link
     const context = tokenAuth.userId
       ? `user: ${tokenAuth.userId}`
       : tokenAuth.teamId
         ? `team: ${tokenAuth.teamId}`
         : "organization";
+    const catalogDisplayName = tool.catalogName || tool.catalogId;
+    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${tool.catalogId}`;
     return {
       error: await this.createErrorResult(
         toolCall,
         agentId,
-        `No installation found for catalog ${tool.catalogName || tool.catalogId} with ${context}. Ensure an MCP server installation exists.`,
+        `Authentication required for "${catalogDisplayName}".\n\nNo credentials were found for your account (${context}).\nTo set up your credentials, visit: ${installUrl}\n\nOnce you have completed authentication, retry this tool call.`,
         tool.mcpServerName || "unknown",
       ),
     };
@@ -784,6 +892,7 @@ class McpClient {
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
     transportKind: TransportKind,
+    connectionKey?: string,
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
@@ -795,7 +904,25 @@ class McpClient {
           );
         }
 
+        // Look up stored session ID for multi-replica support.
+        // When multiple backend pods connect to the same Playwright pod with
+        // --isolated, they need to share the same Mcp-Session-Id to use the
+        // same browser context.
+        let sessionId: string | undefined;
+        if (connectionKey) {
+          const stored =
+            await McpHttpSessionModel.findByConnectionKey(connectionKey);
+          if (stored) {
+            sessionId = stored;
+            logger.debug(
+              { connectionKey, sessionId },
+              "Using stored MCP HTTP session ID",
+            );
+          }
+        }
+
         return new StreamableHTTPClientTransport(new URL(url), {
+          sessionId,
           requestInit: { headers: new Headers({}) },
         });
       }
@@ -855,6 +982,7 @@ class McpClient {
     catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
+    connectionKey?: string,
   ): Promise<Transport> {
     const transportKind = await this.getTransportKind(
       catalogItem,
@@ -865,6 +993,7 @@ class McpClient {
       targetMcpServerId,
       secrets,
       transportKind,
+      connectionKey,
     );
   }
 
@@ -880,6 +1009,37 @@ class McpClient {
       return toolName.substring(slugifiedPrefix.length);
     }
     return toolName;
+  }
+
+  /**
+   * Resolve the actual tool name from the remote MCP server.
+   * Tool names in our DB are lowercased by slugifyName(), but remote servers may use
+   * different casing (e.g., camelCase). This method queries the server's tool list
+   * and matches case-insensitively to find the correct name.
+   */
+  private async resolveActualToolName(
+    client: Client,
+    connectionKey: string,
+    strippedToolName: string,
+  ): Promise<string> {
+    let nameMap = this.toolNameCache.get(connectionKey);
+    if (!nameMap) {
+      try {
+        const toolsResult = await client.listTools();
+        nameMap = new Map<string, string>();
+        for (const tool of toolsResult.tools) {
+          nameMap.set(tool.name.toLowerCase(), tool.name);
+        }
+        this.toolNameCache.set(connectionKey, nameMap);
+      } catch (error) {
+        logger.warn(
+          { connectionKey, err: error },
+          "Failed to list tools for name resolution, using stripped name as-is",
+        );
+        return strippedToolName;
+      }
+    }
+    return nameMap.get(strippedToolName.toLowerCase()) ?? strippedToolName;
   }
 
   /**
@@ -913,16 +1073,23 @@ class McpClient {
     agentId: string,
     error: string,
     mcpServerName: string = "unknown",
+    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
   ): Promise<CommonToolResult> {
     const errorResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
-      content: null,
+      content: [{ type: "text", text: error }],
       isError: true,
       error,
     };
 
-    await this.persistToolCall(agentId, mcpServerName, toolCall, errorResult);
+    await this.persistToolCall(
+      agentId,
+      mcpServerName,
+      toolCall,
+      errorResult,
+      authInfo,
+    );
     return errorResult;
   }
 
@@ -936,6 +1103,7 @@ class McpClient {
     content: unknown,
     isError: boolean,
     template: string | null,
+    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
   ): Promise<CommonToolResult> {
     const modifiedContent = this.applyTemplate(
       content,
@@ -950,7 +1118,13 @@ class McpClient {
       isError,
     };
 
-    await this.persistToolCall(agentId, mcpServerName, toolCall, toolResult);
+    await this.persistToolCall(
+      agentId,
+      mcpServerName,
+      toolCall,
+      toolResult,
+      authInfo,
+    );
     return toolResult;
   }
 
@@ -1073,6 +1247,7 @@ class McpClient {
     mcpServerName: string,
     toolCall: CommonToolCall,
     toolResult: CommonToolResult,
+    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
   ): Promise<void> {
     // Skip browser tool logging to prevent DB bloat
     if (isBrowserMcpTool(toolCall.name)) {
@@ -1086,6 +1261,8 @@ class McpClient {
         method: "tools/call",
         toolCall,
         toolResult,
+        userId: authInfo?.userId ?? null,
+        authMethod: authInfo?.authMethod ?? null,
       });
 
       const logData: {
@@ -1248,6 +1425,19 @@ class McpClient {
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
     this.activeConnections.clear();
   }
+}
+
+/**
+ * Derive a human-readable auth method string from token auth context.
+ * Kept here to avoid circular imports with mcp-gateway.utils.ts.
+ */
+function deriveAuthMethodFromTokenAuth(
+  tokenAuth: TokenAuthContext,
+): MCPGatewayAuthMethod {
+  if (tokenAuth.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)) return "oauth";
+  if (tokenAuth.isUserToken) return "user_token";
+  if (tokenAuth.isOrganizationToken) return "org_token";
+  return "team_token";
 }
 
 // Singleton instance

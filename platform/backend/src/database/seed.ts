@@ -18,6 +18,8 @@ import {
   ChatApiKeyModel,
   DualLlmConfigModel,
   InternalMcpCatalogModel,
+  McpHttpSessionModel,
+  McpServerModel,
   MemberModel,
   OrganizationModel,
   TeamModel,
@@ -188,6 +190,40 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
  * Each user gets their own personal Playwright server instance when they click the Browser button.
  */
 async function seedPlaywrightCatalog(): Promise<void> {
+  const playwrightLocalConfig = {
+    dockerImage: "mcr.microsoft.com/playwright/mcp",
+    transportType: "streamable-http" as const,
+    // The Docker image ENTRYPOINT is: node cli.js --headless --browser chromium --no-sandbox
+    // K8s args are appended to the ENTRYPOINT (CMD is None), so only specify extra flags here:
+    //   --host 0.0.0.0: bind to all interfaces so K8s Service can route traffic to the pod
+    //   --port 8080: enable HTTP transport mode (without --port, it runs in stdio mode and exits)
+    //   --allowed-hosts *: allow connections from K8s Service DNS (default only allows localhost)
+    //   --isolated: each Mcp-Session-Id gets its own browser context for session isolation
+    //
+    // Multi-replica support: The Mcp-Session-Id is stored in the database after the first
+    // connection and reused by all backend pods so they share the same Playwright browser context.
+    // See mcp-client.ts for session ID persistence logic.
+    arguments: [
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "--allowed-hosts",
+      "*",
+      "--isolated",
+    ],
+    httpPort: 8080,
+  };
+
+  // Read current catalog config before upsert to detect changes
+  const existingCatalog = await InternalMcpCatalogModel.findById(
+    PLAYWRIGHT_MCP_CATALOG_ID,
+  );
+  const configChanged =
+    !existingCatalog ||
+    JSON.stringify(existingCatalog.localConfig) !==
+      JSON.stringify(playwrightLocalConfig);
+
   await db
     .insert(schema.internalMcpCatalogTable)
     .values({
@@ -198,14 +234,28 @@ async function seedPlaywrightCatalog(): Promise<void> {
       serverType: "local",
       requiresAuth: false,
       isGloballyAvailable: true,
-      localConfig: {
-        dockerImage: "mcr.microsoft.com/playwright/mcp",
-        transportType: "stdio",
-        // Reduce logging verbosity from Playwright MCP server
-        arguments: ["--console-level", "error"],
-      },
+      localConfig: playwrightLocalConfig,
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: schema.internalMcpCatalogTable.id,
+      set: { localConfig: playwrightLocalConfig },
+    });
+
+  // If config changed, mark all existing servers for reinstall
+  if (configChanged && existingCatalog) {
+    const servers = await McpServerModel.findByCatalogId(
+      PLAYWRIGHT_MCP_CATALOG_ID,
+    );
+    for (const server of servers) {
+      await McpServerModel.update(server.id, { reinstallRequired: true });
+    }
+    if (servers.length > 0) {
+      logger.info(
+        { serverCount: servers.length },
+        "Marked existing Playwright servers for reinstall after catalog config update",
+      );
+    }
+  }
 
   logger.info("Seeded Playwright browser preview catalog");
 }
@@ -457,4 +507,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();
+  // Clean up orphaned MCP HTTP sessions (older than 24h)
+  await McpHttpSessionModel.deleteExpired();
 }

@@ -105,7 +105,6 @@ export default function ChatPage() {
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
-  const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
@@ -435,43 +434,16 @@ export default function ChatPage() {
   // Check if Playwright MCP is available for browser panel and get install function
   const {
     hasPlaywrightMcp,
+    reinstallRequired,
+    installationFailed,
+    playwrightServerId,
     isInstalling: isInstallingBrowser,
     installBrowser,
+    reinstallBrowser,
   } = useHasPlaywrightMcpTools(browserToolsAgentId);
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
-
-  // Clear MCP Gateway sessions when opening a NEW conversation
-  useEffect(() => {
-    // Only clear sessions if this is a newly created conversation
-    if (
-      currentProfileId &&
-      conversationId &&
-      newlyCreatedConversationRef.current === conversationId
-    ) {
-      // Clear sessions for this agent to ensure fresh MCP state
-      fetch("/v1/mcp/sessions", {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${currentProfileId}`,
-        },
-      })
-        .then(async () => {
-          // Clear the ref after clearing sessions
-          newlyCreatedConversationRef.current = undefined;
-        })
-        .catch((error) => {
-          console.error("[Chat] Failed to clear MCP sessions:", {
-            conversationId,
-            agentId: currentProfileId,
-            error,
-          });
-          // Clear the ref even on error to avoid retry loops
-          newlyCreatedConversationRef.current = undefined;
-        });
-    }
-  }, [conversationId, currentProfileId]);
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
@@ -818,7 +790,6 @@ export default function ChatPage() {
         {
           onSuccess: (newConversation) => {
             if (newConversation) {
-              newlyCreatedConversationRef.current = newConversation.id;
               selectConversation(newConversation.id);
               // URL navigation will happen via useBrowserStream after conversation connects
             }
@@ -933,7 +904,6 @@ export default function ChatPage() {
                 clearPendingActions();
               }
 
-              newlyCreatedConversationRef.current = newConversation.id;
               selectConversation(newConversation.id);
             }
           },
@@ -988,7 +958,6 @@ export default function ChatPage() {
       {
         onSuccess: (newConversation) => {
           if (newConversation) {
-            newlyCreatedConversationRef.current = newConversation.id;
             selectConversation(newConversation.id);
           }
         },
@@ -1369,6 +1338,13 @@ export default function ChatPage() {
         isInstallingBrowser={isInstallingBrowser}
         hasPlaywrightMcp={hasPlaywrightMcp}
         onInstallBrowser={installBrowser}
+        reinstallRequired={reinstallRequired}
+        installationFailed={installationFailed}
+        onReinstallBrowser={
+          playwrightServerId
+            ? () => reinstallBrowser(playwrightServerId)
+            : undefined
+        }
         onCreateConversationWithUrl={handleCreateConversationWithUrl}
         isCreatingConversation={createConversationMutation.isPending}
         initialNavigateUrl={pendingBrowserUrl}

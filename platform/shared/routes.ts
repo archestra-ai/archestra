@@ -72,6 +72,8 @@ export const RouteId = {
   // OAuth Routes
   InitiateOAuth: "initiateOAuth",
   HandleOAuthCallback: "handleOAuthCallback",
+  GetOAuthClientInfo: "getOAuthClientInfo",
+  SubmitOAuthConsent: "submitOAuthConsent",
 
   // Team Routes
   GetTeams: "getTeams",

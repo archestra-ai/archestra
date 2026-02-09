@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
 import { TeamTokenModel, UserTokenModel } from "@/models";
@@ -13,7 +15,9 @@ vi.mock("@/config", async (importOriginal) => {
   };
 });
 
-const { validateMCPGatewayToken } = await import("./mcp-gateway.utils");
+const { validateMCPGatewayToken, validateOAuthToken } = await import(
+  "./mcp-gateway.utils"
+);
 
 describe("validateMCPGatewayToken", () => {
   describe("invalid token scenarios", () => {
@@ -290,6 +294,186 @@ describe("validateMCPGatewayToken", () => {
       expect(result?.tokenId).toBe(token.id);
       expect(result?.isUserToken).toBe(true);
       expect(result?.userId).toBe(adminWithNoTeams.id);
+    });
+  });
+
+  describe("OAuth token validation", () => {
+    test("validateOAuthToken returns null for unknown token", async () => {
+      const result = await validateOAuthToken(
+        crypto.randomUUID(),
+        "not-a-valid-oauth-token",
+      );
+      expect(result).toBeNull();
+    });
+
+    test("validateOAuthToken returns null for random token that doesn't match any hash", async () => {
+      const result = await validateOAuthToken(
+        crypto.randomUUID(),
+        "some-random-bearer-token-value-123",
+      );
+      expect(result).toBeNull();
+    });
+
+    test("validateMCPGatewayToken skips OAuth validation for archestra_ prefixed tokens", async () => {
+      // archestra_ prefixed tokens should never reach validateOAuthToken
+      const result = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        "archestra_fake_token_that_does_not_exist",
+      );
+      // Returns null because the archestra_ token is invalid, but importantly
+      // it should NOT have tried OAuth token validation
+      expect(result).toBeNull();
+    });
+
+    test("validateMCPGatewayToken tries OAuth validation for non-archestra tokens", async () => {
+      // A non-archestra token should try OAuth validation path and return null
+      const result = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        "some-random-bearer-token",
+      );
+      expect(result).toBeNull();
+    });
+
+    test("validateOAuthToken returns null for expired token", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+
+      // Create a raw token and pre-compute its SHA-256 base64url hash
+      const rawToken = `test-expired-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+        expiresAt: new Date(Date.now() - 3600000), // expired 1h ago
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      const result = await validateOAuthToken(agent.id, rawToken);
+
+      expect(result).toBeNull();
+    });
+
+    test("validateOAuthToken returns null when refresh token is revoked", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthRefreshToken,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+
+      // Create a revoked refresh token
+      const refreshToken = await makeOAuthRefreshToken(
+        client.clientId,
+        user.id,
+        { revoked: new Date() },
+      );
+
+      // Create an access token linked to the revoked refresh token
+      const rawToken = `test-revoked-refresh-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+        refreshId: refreshToken.id,
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      const result = await validateOAuthToken(agent.id, rawToken);
+
+      expect(result).toBeNull();
+    });
+
+    test("validateOAuthToken returns valid result for admin user with valid token", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+
+      const rawToken = `test-valid-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      const accessToken = await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      const result = await validateOAuthToken(agent.id, rawToken);
+
+      expect(result).not.toBeNull();
+      expect(result?.tokenId).toBe(`${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`);
+      expect(result?.userId).toBe(user.id);
+      expect(result?.isUserToken).toBe(true);
+      expect(result?.organizationId).toBe(org.id);
+    });
+
+    test("validateOAuthToken returns valid result when refresh token is not revoked", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthRefreshToken,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+
+      // Create a non-revoked refresh token
+      const refreshToken = await makeOAuthRefreshToken(
+        client.clientId,
+        user.id,
+      );
+
+      const rawToken = `test-valid-refresh-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      const accessToken = await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+        refreshId: refreshToken.id,
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      const result = await validateOAuthToken(agent.id, rawToken);
+
+      expect(result).not.toBeNull();
+      expect(result?.tokenId).toBe(`${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`);
+      expect(result?.userId).toBe(user.id);
     });
   });
 });

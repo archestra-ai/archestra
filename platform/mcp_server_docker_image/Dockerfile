@@ -99,7 +99,8 @@ RUN apk add --no-cache \
    # CVE-2025-55130, CVE-2025-55131: Node.js vulnerabilities fixed in 24.13.0-r0
    # CVE-2025-13878: BIND vulnerability fixed in 9.20.18-r0
    # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
-   apk upgrade --no-cache nodejs bind openssl
+   # CVE-2025-61732: Go vulnerability fixed in 1.25.7-r0
+   apk upgrade --no-cache nodejs bind openssl go
 
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package (CVE-2026-23950)
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm

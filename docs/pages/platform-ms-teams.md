@@ -113,6 +113,14 @@ Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png]
         {
           "name": "ChatMessage.Read.Chat",
           "type": "Application"
+        },
+        {
+          "name": "TeamMember.Read.Group",
+          "type": "Application"
+        },
+        {
+          "name": "ChatMember.Read.Chat",
+          "type": "Application"
         }
       ]
     }
@@ -122,7 +130,7 @@ Create a folder with **[color.png](/docs/color.png)** (192x192), **[outline.png]
 
 Replace `{{BOT_MS_APP_ID}}` with your **Microsoft App ID**. **Zip the folder contents**.
 
-> **No Azure AD API permissions are required.** User identity is verified automatically via the Bot Framework. Thread history uses **RSC (Resource-Specific Consent)** permissions declared in the manifest above — these are **scoped to where the bot is installed** and require only **team owner consent** (no tenant admin).
+> **No Azure AD API permissions are required.** User identity is resolved via RSC permissions (`TeamMember.Read.Group`, `ChatMember.Read.Chat`) which allow the bot to look up member details. Thread history uses `ChannelMessage.Read.Group` and `ChatMessage.Read.Chat`. All RSC permissions are **scoped to where the bot is installed** and require only **team owner consent** (no tenant admin).
 >
 > **Alternative:** If you cannot use RSC (e.g., older Teams clients), you can use Azure AD application permissions for thread history instead. In Azure Portal, go to **App registrations** → find your bot's app → **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions** and add: `ChannelMessage.Read.All`, `Chat.Read.All`, `Team.ReadBasic.All`, `Channel.ReadBasic.All`. Grant admin consent for all permissions. Configure the `ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_*` env vars (can point to the same App Registration the bot uses). This approach requires **tenant admin consent**, grants **tenant-wide access**, and the `authorization` section in the manifest is redundant.
 
@@ -193,5 +201,8 @@ This routes the message to the "Sales" agent instead of the channel's default ag
 - Check webhook URL is accessible externally
 - Verify App ID and Password are correct
 
+**"Could not verify your identity"**
+- Ensure `TeamMember.Read.Group` and `ChatMember.Read.Chat` RSC permissions are in your manifest. These are required for the bot to resolve user emails. Reinstall the app after updating the manifest.
+
 **No thread history**
-- Ensure `authorization.permissions.resourceSpecific` with `ChannelMessage.Read.Group` and `ChatMessage.Read.Chat` is in your Teams app manifest. Reinstall the app after updating the manifest. The team owner must consent to the permissions when adding the app.
+- Ensure `ChannelMessage.Read.Group` and `ChatMessage.Read.Chat` RSC permissions are in your manifest. Reinstall the app after updating the manifest. The team owner must consent to the permissions when adding the app.

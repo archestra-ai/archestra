@@ -1,10 +1,17 @@
 import { SESSION_ID_HEADER } from "@shared";
 
+const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
+
 /**
  * Session source indicates where the session ID was extracted from.
  * This is stored in the database and displayed in the UI.
  */
-export type SessionSource = "claude_code" | "header" | "openai_user" | null;
+export type SessionSource =
+  | "claude_code"
+  | "header"
+  | "openwebui_chat"
+  | "openai_user"
+  | null;
 
 export interface SessionInfo {
   sessionId: string | null;
@@ -17,8 +24,9 @@ export interface SessionInfo {
  *
  * Priority order:
  * 1. Explicit X-Archestra-Session-Id header (source: 'header')
- * 2. Claude Code metadata.user_id field containing session UUID (source: 'claude_code')
- * 3. OpenAI user field (source: 'openai_user')
+ * 2. Open WebUI X-OpenWebUI-Chat-Id header (source: 'openwebui_chat')
+ * 3. Claude Code metadata.user_id field containing session UUID (source: 'claude_code')
+ * 4. OpenAI user field (source: 'openai_user')
  *
  * @param headers - The request headers object
  * @param body - The request body (may contain metadata.user_id or user field)
@@ -36,7 +44,14 @@ export function extractSessionInfo(
     return { sessionId: headerSessionId, sessionSource: "header" };
   }
 
-  // Priority 2: Claude Code metadata format
+  // Priority 2: Open WebUI chat ID header
+  // Sent when ENABLE_FORWARD_USER_INFO_HEADERS=true in Open WebUI
+  const openwebuiChatId = getHeaderValue(headers, OPENWEBUI_CHAT_ID_HEADER);
+  if (openwebuiChatId) {
+    return { sessionId: openwebuiChatId, sessionSource: "openwebui_chat" };
+  }
+
+  // Priority 3: Claude Code metadata format
   // Format: user_{hash}_account_{account_id}_session_{session_uuid}
   const metadataUserId = body?.metadata?.user_id;
   if (metadataUserId) {
@@ -46,7 +61,7 @@ export function extractSessionInfo(
     }
   }
 
-  // Priority 3: OpenAI user field (some clients use this for session tracking)
+  // Priority 4: OpenAI user field (some clients use this for session tracking)
   const user = body?.user;
   if (user && typeof user === "string" && user.trim().length > 0) {
     return { sessionId: user.trim(), sessionSource: "openai_user" };

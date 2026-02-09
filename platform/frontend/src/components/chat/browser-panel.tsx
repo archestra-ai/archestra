@@ -20,6 +20,12 @@ interface BrowserPanelProps {
   hasPlaywrightMcp?: boolean;
   /** Called to install browser (Playwright MCP) */
   onInstallBrowser?: () => Promise<unknown>;
+  /** Whether the browser requires reinstallation due to config change */
+  reinstallRequired?: boolean;
+  /** Whether the browser installation failed */
+  installationFailed?: boolean;
+  /** Called to reinstall the browser */
+  onReinstallBrowser?: () => Promise<unknown>;
   /** Called when user enters a URL without a conversation - should create conversation and navigate */
   onCreateConversationWithUrl?: (url: string) => void;
   /** Whether conversation creation is in progress */
@@ -37,6 +43,9 @@ export function BrowserPanel({
   isInstallingBrowser = false,
   hasPlaywrightMcp = false,
   onInstallBrowser,
+  reinstallRequired = false,
+  installationFailed = false,
+  onReinstallBrowser,
   onCreateConversationWithUrl,
   isCreatingConversation = false,
   initialNavigateUrl,
@@ -70,6 +79,9 @@ export function BrowserPanel({
       isInstallingBrowser={isInstallingBrowser}
       hasPlaywrightMcp={hasPlaywrightMcp}
       onInstallBrowser={onInstallBrowser}
+      reinstallRequired={reinstallRequired}
+      installationFailed={installationFailed}
+      onReinstallBrowser={onReinstallBrowser}
       onCreateConversationWithUrl={onCreateConversationWithUrl}
       isCreatingConversation={isCreatingConversation}
       initialNavigateUrl={initialNavigateUrl}

@@ -7,6 +7,8 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { authClient } from "./clients/auth/auth-client";
+import { useMcpServers } from "./mcp-server.query";
 import { handleApiError } from "./utils";
 
 const {
@@ -23,6 +25,7 @@ const {
   deleteConversationEnabledTools,
   getAgentTools,
   installMcpServer,
+  reinstallMcpServer,
   getMcpServer,
 } = archestraApiSdk;
 
@@ -440,6 +443,25 @@ export function useBrowserInstallation() {
     },
   });
 
+  const reinstallMutation = useMutation({
+    mutationFn: async (serverId: string) => {
+      const { data, error } = await reinstallMcpServer({
+        path: { id: serverId },
+        body: {},
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.id) {
+        setInstallingServerId(data.id);
+      }
+    },
+  });
+
   // Poll for installation status
   const statusQuery = useQuery({
     queryKey: ["browser-installation-status", installingServerId],
@@ -465,6 +487,7 @@ export function useBrowserInstallation() {
       setInstallingServerId(null);
       queryClient.invalidateQueries({ queryKey: ["chat", "global-tools"] });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       toast.success("Browser installed successfully");
     }
     if (statusQuery.data === "error") {
@@ -476,10 +499,12 @@ export function useBrowserInstallation() {
   return {
     isInstalling:
       installMutation.isPending ||
+      reinstallMutation.isPending ||
       (!!installingServerId &&
         statusQuery.data !== "success" &&
         statusQuery.data !== "error"),
     installBrowser: installMutation.mutateAsync,
+    reinstallBrowser: reinstallMutation.mutateAsync,
     installationStatus: statusQuery.data,
   };
 }
@@ -488,6 +513,17 @@ export function useHasPlaywrightMcpTools(agentId: string | undefined) {
   const toolsQuery = useChatProfileMcpTools(agentId);
   const globalToolsQuery = useGlobalChatTools();
   const browserInstall = useBrowserInstallation();
+
+  // Fetch user's Playwright server to check reinstallRequired
+  const playwrightServersQuery = useMcpServers({
+    catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+  });
+  const { data: session } = authClient.useSession();
+  const currentUserId = session?.user?.id;
+  // Find the server owned by the current user (admins see all servers)
+  const playwrightServer = playwrightServersQuery.data?.find(
+    (s) => s.ownerId === currentUserId,
+  );
 
   // Only check global tools with PLAYWRIGHT_MCP_CATALOG_ID
   // Profile tools (e.g., microsoft__playwright-mcp) should NOT enable browser preview
@@ -499,8 +535,12 @@ export function useHasPlaywrightMcpTools(agentId: string | undefined) {
 
   return {
     hasPlaywrightMcp,
+    reinstallRequired: playwrightServer?.reinstallRequired ?? false,
+    installationFailed: playwrightServer?.localInstallationStatus === "error",
+    playwrightServerId: playwrightServer?.id,
     isLoading: toolsQuery.isLoading || globalToolsQuery.isLoading,
     isInstalling: browserInstall.isInstalling,
     installBrowser: browserInstall.installBrowser,
+    reinstallBrowser: browserInstall.reinstallBrowser,
   };
 }

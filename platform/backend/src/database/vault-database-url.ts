@@ -65,7 +65,12 @@ export async function getDatabaseUrlFromVault(
   const { path, key } = parsed;
 
   // Dynamically import to avoid circular dependency
-  const { assertByosEnabled } = await import("@/secrets-manager");
+  const { secretManagerCoordinator, assertByosEnabled } = await import(
+    "@/secrets-manager"
+  );
+
+  // Ensure async initialization has completed before accessing the instance
+  await secretManagerCoordinator.ensureInitialized();
 
   // Use the global READONLY_VAULT secret manager
   const vaultManager = assertByosEnabled();

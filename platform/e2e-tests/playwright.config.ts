@@ -14,6 +14,7 @@ const projectNames = {
   webkit: "webkit",
   sso: "sso",
   api: "api",
+  vaultK8s: "vault-k8s",
 };
 
 /**
@@ -28,6 +29,8 @@ const testPatterns = {
   credentialsWithVault: /credentials-with-vault\.ee\.spec\.ts/,
   // NOTE: File was renamed to .ee.spec.ts in commit f10027e (move SSO logic to .ee files)
   ssoProviders: /sso-providers\.ee\.spec\.ts/,
+  // Vault K8s startup test — runs in a dedicated CI job with Vault K8s auth
+  vaultK8s: /vault-k8s-startup\.spec\.ts/,
 };
 
 /**
@@ -37,6 +40,7 @@ const testPatterns = {
 const browserTestIgnore = [
   testPatterns.credentialsWithVault,
   testPatterns.ssoProviders,
+  testPatterns.vaultK8s,
 ];
 
 /**
@@ -172,6 +176,17 @@ export default defineConfig({
     // API integration tests
     {
       name: projectNames.api,
+      testDir: "./tests/api",
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: dependencies.testProjects,
+    },
+    // Vault K8s startup test — validates platform starts with DB URL from Vault via K8s auth
+    {
+      name: projectNames.vaultK8s,
+      testMatch: testPatterns.vaultK8s,
       testDir: "./tests/api",
       use: {
         ...devices["Desktop Chrome"],

@@ -22,13 +22,14 @@ class SecretManager {
   private static initialized = false;
   private currentInstance: ISecretManager | null = null;
   private managerType: SecretsManagerType;
+  private initPromise: Promise<ISecretManager>;
 
   constructor() {
     if (SecretManager.initialized) {
       throw new Error("SecretManager already initialized");
     }
     this.managerType = getSecretsManagerTypeBasedOnEnvVars();
-    this.initialize();
+    this.initPromise = this.initialize();
     SecretManager.initialized = true;
   }
 
@@ -36,6 +37,15 @@ class SecretManager {
     this.managerType = managerType ?? getSecretsManagerTypeBasedOnEnvVars();
     this.currentInstance = await createSecretManager(this.managerType);
     return this.currentInstance;
+  }
+
+  /**
+   * Wait for the async initialization to complete.
+   * Call this before accessing getCurrentInstance() during early startup
+   * (e.g., before database initialization that reads secrets from Vault).
+   */
+  async ensureInitialized(): Promise<ISecretManager> {
+    return this.initPromise;
   }
 
   getCurrentInstance(): ISecretManager {

@@ -93,6 +93,23 @@ local_resource(
 #       ARCHESTRA_HASHICORP_VAULT_K8S_ROLE=archestra
 load('ext://helm_resource', 'helm_resource')
 
+# Grant default SA in archestra-dev the system:auth-delegator ClusterRole
+# so Vault can perform TokenReview for K8s auth
+k8s_yaml(blob("""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: archestra-dev
+"""))
+
 helm_resource(
   'vault-k8s',
   '../helm/e2e-tests',
@@ -101,7 +118,6 @@ helm_resource(
     '--set', 'vault.enabled=true',
     '--set', 'vault.service.type=ClusterIP',
     '--set', 'vault.k8sAuth.enabled=true',
-    '--set', 'vault.k8sAuth.kvVersion=2',
     '--set', 'wiremock.enabled=false',
     '--set', 'keycloak.enabled=false',
   ],
@@ -110,6 +126,7 @@ helm_resource(
   auto_init=False,
   resource_deps=[],
 )
+
 
 # Archestra running in K8s (for testing Vault K8s auth, etc.)
 # Start with: tilt trigger archestra-k8s
@@ -129,6 +146,7 @@ if os.name != 'nt':
       'frontend',
       'shared',
       'docker-banner.sh',
+      'prev-static-assets',
     ],
     ignore=[
       '**/node_modules',

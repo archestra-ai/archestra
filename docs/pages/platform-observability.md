@@ -155,6 +155,7 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 - `profile.id` - The ID of the profile executing the tool call
 - `profile.name` - The name of the profile executing the tool call
 - `profile.<label_key>` - Custom profile labels
+- `mcp.is_error_result` - Whether the tool returned an error result (`true`/`false`). This is distinct from span status ERROR, which indicates an exception during execution.
 
 **Span Names:**
 

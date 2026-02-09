@@ -178,13 +178,15 @@ export async function createAgentServer(
             toolName: name,
             mcpServerName,
             agent,
-            callback: async () => {
-              return executeArchestraTool(name, args, {
+            callback: async (span) => {
+              const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
               });
+              span.setAttribute("mcp.is_error_result", result.isError ?? false);
+              return result;
             },
           });
 
@@ -262,8 +264,14 @@ export async function createAgentServer(
           toolName: name,
           mcpServerName,
           agent,
-          callback: async () => {
-            return mcpClient.executeToolCall(toolCall, agentId, tokenAuth);
+          callback: async (span) => {
+            const r = await mcpClient.executeToolCall(
+              toolCall,
+              agentId,
+              tokenAuth,
+            );
+            span.setAttribute("mcp.is_error_result", r.isError ?? false);
+            return r;
           },
         });
 

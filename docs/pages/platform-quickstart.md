@@ -43,18 +43,18 @@ docker run -p 9000:9000 -p 3000:3000 \
    archestra/platform;
 ```
 
-## Build Your First Agent
+## Build Your First Agent `Easy`
 
 1. Go to **MCP Registry**, add new and search for `microsoft__playwright-mcp`, install it.
 2. Gaze at Archestra running the MCP server in Kubernetes cluster! (If you want to make sure: `kubectl get pods`)
 3. Go to **Agents** and create "Archestra Docs Reader Agent" with this system prompt: `You're using playwright to answer questions about Archestra based on https://archestra.ai/docs/`
 4. While editing the agent, make sure to enable all `microsoft__playwright-mcp` tools for it.
-5. Go to **Settings -> LLM API Keys** and add your preferred provider.
+5. Go to **Settings -> LLM API Keys** and add your preferred provider. You can connect commercial providers like OpenAI, Anthropic, or Google Gemini. For a free option, use [Cerebras](https://cerebras.ai/) or a local [Ollama](https://ollama.com/) instance.
 6. Go to **Chat**, choose the "Archestra Docs Reader Agent" and ask "How could I deploy Archestra?"
 ![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.png)
 7. Enjoy Archestra navigating the website for you!
 
-## Connect to Your Agent via MCP Gateway
+## Connect to Your Agent via MCP Gateway `Advanced`
 
 Archestra is not just a Chat UI, it's a very capable MCP Gateway. Let's connect our "Archestra Docs Reader Agent" to **Claude Code** to make sure we could trigger it as an MCP server!
 

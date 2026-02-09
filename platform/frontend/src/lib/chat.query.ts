@@ -182,6 +182,13 @@ export function useDeleteConversation() {
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+
+      // Clean up localStorage keys associated with this conversation
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(`archestra-chat-artifact-open-${deletedId}`);
+        localStorage.removeItem(`archestra_chat_draft_${deletedId}`);
+      }
+
       toast.success("Conversation deleted");
     },
   });

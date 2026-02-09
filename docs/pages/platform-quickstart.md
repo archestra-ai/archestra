@@ -43,7 +43,7 @@ docker run -p 9000:9000 -p 3000:3000 \
    archestra/platform;
 ```
 
-## Build Your First Agent
+## Build Your First Agent `Easy`
 
 1. Go to **MCP Registry**, add new and search for `microsoft__playwright-mcp`, install it.
 2. Gaze at Archestra running the MCP server in Kubernetes cluster! (If you want to make sure: `kubectl get pods`)
@@ -54,7 +54,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 ![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.png)
 7. Enjoy Archestra navigating the website for you!
 
-## Connect to Your Agent via MCP Gateway
+## Connect to Your Agent via MCP Gateway `Advanced`
 
 Archestra is not just a Chat UI, it's a very capable MCP Gateway. Let's connect our "Archestra Docs Reader Agent" to **Claude Code** to make sure we could trigger it as an MCP server!
 

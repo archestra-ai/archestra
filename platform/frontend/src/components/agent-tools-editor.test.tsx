@@ -55,7 +55,7 @@ function ToolChecklistWrapper({
     <ToolChecklist
       tools={tools}
       selectedToolIds={selectedToolIds}
-      setSelectedToolIds={setSelectedToolIds}
+      onSelectionChange={setSelectedToolIds}
     />
   );
 }

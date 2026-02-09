@@ -1124,6 +1124,14 @@ export default class K8sDeployment {
   }
 
   /**
+   * Resolve the HTTP endpoint URL for streamable-http servers.
+   * Called by the manager after lazy-loading a deployment on a different replica.
+   */
+  async resolveHttpEndpoint(): Promise<void> {
+    await this.ensureHttpServerConfigured();
+  }
+
+  /**
    * Ensure HTTP server configuration (Service and URL) is set up
    */
   private async ensureHttpServerConfigured(): Promise<void> {

@@ -18,6 +18,7 @@ import {
   ChatApiKeyModel,
   DualLlmConfigModel,
   InternalMcpCatalogModel,
+  McpHttpSessionModel,
   McpServerModel,
   MemberModel,
   OrganizationModel,
@@ -197,10 +198,11 @@ async function seedPlaywrightCatalog(): Promise<void> {
     //   --host 0.0.0.0: bind to all interfaces so K8s Service can route traffic to the pod
     //   --port 8080: enable HTTP transport mode (without --port, it runs in stdio mode and exits)
     //   --allowed-hosts *: allow connections from K8s Service DNS (default only allows localhost)
-    //   --isolated: each HTTP session gets its own browser context, enabling multiple conversations
-    //     to use the browser simultaneously. The chat agent and browser preview share the same
-    //     HTTP session (same conversationId → same connection key in mcpClient), so they see the
-    //     same browser context. Different conversations get different sessions → different contexts.
+    //   --isolated: each Mcp-Session-Id gets its own browser context for session isolation
+    //
+    // Multi-replica support: The Mcp-Session-Id is stored in the database after the first
+    // connection and reused by all backend pods so they share the same Playwright browser context.
+    // See mcp-client.ts for session ID persistence logic.
     arguments: [
       "--host",
       "0.0.0.0",
@@ -505,4 +507,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();
+  // Clean up orphaned MCP HTTP sessions (older than 24h)
+  await McpHttpSessionModel.deleteExpired();
 }

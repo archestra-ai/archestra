@@ -325,3 +325,11 @@ export const OAUTH_PAGES = {
  * and when detecting OAuth auth method from tokenId.
  */
 export const OAUTH_TOKEN_ID_PREFIX = "oauth-";
+
+/**
+ * Path for deep-linking to MCP catalog install dialogs.
+ * Used by backend error messages and frontend routing.
+ * Append `?install={catalogId}` to auto-open the install dialog.
+ */
+export const MCP_CATALOG_INSTALL_PATH = "/mcp-catalog/registry";
+export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";

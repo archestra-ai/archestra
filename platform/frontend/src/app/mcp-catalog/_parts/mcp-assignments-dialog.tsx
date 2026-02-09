@@ -1,18 +1,15 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import type { archestraApiTypes } from "@shared";
 import { Loader2, Search, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ToolChecklist } from "@/components/agent-tools-editor";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
   TokenSelect,
 } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -594,13 +591,14 @@ function ProfileAssignmentPill({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[420px] p-0"
+        className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
         side="bottom"
         align="start"
         sideOffset={8}
         avoidCollisions
+        collisionPadding={16}
       >
-        <div className="p-4 border-b flex items-start justify-between gap-2">
+        <div className="p-4 border-b flex items-start justify-between gap-2 shrink-0">
           <div className="flex-1 min-w-0">
             <h4 className="font-semibold truncate">{profile.name}</h4>
             <p className="text-sm text-muted-foreground mt-1">
@@ -619,7 +617,7 @@ function ProfileAssignmentPill({
 
         {/* Credential Selector */}
         {showCredentialSelector && (
-          <div className="p-4 border-b space-y-2">
+          <div className="p-4 border-b space-y-2 shrink-0">
             <Label className="text-sm font-medium">Credential</Label>
             <TokenSelect
               catalogId={catalogId}
@@ -631,118 +629,14 @@ function ProfileAssignmentPill({
         )}
 
         {/* Tool Checklist */}
-        <ToolChecklist
-          tools={allTools}
-          selectedToolIds={selectedToolIds}
-          onSelectionChange={handleToolToggle}
-        />
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <ToolChecklist
+            tools={allTools}
+            selectedToolIds={selectedToolIds}
+            onSelectionChange={handleToolToggle}
+          />
+        </div>
       </PopoverContent>
     </Popover>
-  );
-}
-
-interface ToolChecklistProps {
-  tools: CatalogTool[];
-  selectedToolIds: Set<string>;
-  onSelectionChange: (selectedIds: Set<string>) => void;
-}
-
-function ToolChecklist({
-  tools,
-  selectedToolIds,
-  onSelectionChange,
-}: ToolChecklistProps) {
-  const allSelected = tools.every((tool) => selectedToolIds.has(tool.id));
-  const noneSelected = tools.every((tool) => !selectedToolIds.has(tool.id));
-  const selectedCount = tools.filter((t) => selectedToolIds.has(t.id)).length;
-
-  const handleToggle = (toolId: string) => {
-    const newSet = new Set(selectedToolIds);
-    if (newSet.has(toolId)) {
-      newSet.delete(toolId);
-    } else {
-      newSet.add(toolId);
-    }
-    onSelectionChange(newSet);
-  };
-
-  const handleSelectAll = () => {
-    onSelectionChange(new Set(tools.map((t) => t.id)));
-  };
-
-  const handleDeselectAll = () => {
-    onSelectionChange(new Set());
-  };
-
-  const formatToolName = (toolName: string) => {
-    const lastSeparator = toolName.lastIndexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    if (lastSeparator !== -1) {
-      return toolName.substring(lastSeparator + 2);
-    }
-    return toolName;
-  };
-
-  return (
-    <div>
-      <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30">
-        <span className="text-xs text-muted-foreground">
-          {selectedCount} of {tools.length} selected
-        </span>
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs h-6 px-2"
-            onClick={handleSelectAll}
-            disabled={allSelected}
-          >
-            Select All
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs h-6 px-2"
-            onClick={handleDeselectAll}
-            disabled={noneSelected}
-          >
-            Deselect All
-          </Button>
-        </div>
-      </div>
-      <div className="max-h-[250px] overflow-y-auto">
-        <div className="p-2 space-y-0.5">
-          {tools.map((tool) => {
-            const toolName = formatToolName(tool.name);
-            const isSelected = selectedToolIds.has(tool.id);
-
-            return (
-              <label
-                key={tool.id}
-                htmlFor={`tool-assign-${tool.id}`}
-                className={cn(
-                  "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
-                  isSelected ? "bg-primary/10" : "hover:bg-muted/50",
-                )}
-              >
-                <Checkbox
-                  id={`tool-assign-${tool.id}`}
-                  checked={isSelected}
-                  onCheckedChange={() => handleToggle(tool.id)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{toolName}</div>
-                  {tool.description && (
-                    <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                      {tool.description}
-                    </div>
-                  )}
-                </div>
-              </label>
-            );
-          })}
-        </div>
-      </div>
-    </div>
   );
 }

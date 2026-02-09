@@ -29,9 +29,13 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
-import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import {
+  parseAuthRequired,
+  parsePolicyDenied,
+} from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
+import { AuthRequiredTool } from "./auth-required-tool";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -896,6 +900,17 @@ function MessageTool({
           {...(agentId
             ? { editable: true, profileId: agentId }
             : { editable: false })}
+        />
+      );
+    }
+
+    const authRequired = parseAuthRequired(errorText);
+    if (authRequired) {
+      return (
+        <AuthRequiredTool
+          toolName={toolName}
+          catalogName={authRequired.catalogName}
+          installUrl={authRequired.installUrl}
         />
       );
     }

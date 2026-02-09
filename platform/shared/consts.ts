@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SupportedProvider } from "./model-constants";
 
 export const E2eTestId = {
   AgentsTable: "agents-table",
@@ -333,3 +334,11 @@ export const OAUTH_TOKEN_ID_PREFIX = "oauth-";
  */
 export const MCP_CATALOG_INSTALL_PATH = "/mcp-catalog/registry";
 export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
+
+/**
+ * Providers where an API key is optional (self-hosted providers that typically don't require auth).
+ */
+export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
+  "ollama",
+  "vllm",
+]);

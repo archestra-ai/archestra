@@ -475,8 +475,11 @@ export default {
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
     },
     ollama: {
-      enabled: Boolean(process.env.ARCHESTRA_OLLAMA_BASE_URL),
-      baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
+      enabled: Boolean(
+        process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
+      ),
+      baseUrl:
+        process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
     },
     zhipuai: {
       baseUrl:
@@ -540,8 +543,7 @@ export default {
      * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
      */
-    browserStreamingEnabled:
-      process.env.FEATURES_BROWSER_STREAMING_ENABLED === "true",
+    browserStreamingEnabled: true,
   },
   enterpriseLicenseActivated:
     process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
@@ -556,7 +558,7 @@ export default {
     // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.37", // x-release-please-version
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.41", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -564,6 +566,8 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
+      k8sNodeHost:
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST || undefined,
     },
   },
   vault: {

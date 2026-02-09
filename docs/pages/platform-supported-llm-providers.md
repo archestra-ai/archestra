@@ -226,16 +226,15 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 
 ### Environment Variables
 
-| Variable                        | Required | Description                                                                      |
-| ------------------------------- | -------- | -------------------------------------------------------------------------------- |
-| `ARCHESTRA_OLLAMA_BASE_URL`     | Yes      | Ollama server base URL (e.g., `http://localhost:11434/v1` for default Ollama)    |
-| `ARCHESTRA_CHAT_OLLAMA_API_KEY` | No       | API key for Ollama server (optional, Ollama typically doesn't require auth)      |
+| Variable                        | Required | Description                                                                                  |
+| ------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_OLLAMA_BASE_URL`     | No       | Ollama server base URL (default: `http://localhost:11434/v1`)                                |
+| `ARCHESTRA_CHAT_OLLAMA_API_KEY` | No       | API key for Ollama server (optional, should be used for the Ollama Cloud API)                |
 
 ### Important Notes
 
-- **Configure base URL to enable Ollama**: The Ollama provider is only available when `ARCHESTRA_OLLAMA_BASE_URL` is set. Without it, Ollama won't appear as an option in the platform.
-- **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
-- **No API key required**: Ollama typically doesn't require authentication for local deployments.
+- **Enabled by default**: Ollama is enabled out of the box with a default base URL of `http://localhost:11434/v1`. Set `ARCHESTRA_OLLAMA_BASE_URL` to override the default if your Ollama server runs on a different host or port.
+- **No API key required**: Self-hosted Ollama typically doesn't require authentication. When adding an Ollama API key in the platform, the API key field is optional.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
 
 ## Zhipu AI

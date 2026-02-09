@@ -24,6 +24,8 @@ Docker deployment provides the fastest way to get started with Archestra Platfor
 
 Run the platform with a single command:
 
+**Linux / macOS:**
+
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
@@ -31,6 +33,18 @@ docker run -p 9000:9000 -p 3000:3000 \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \
+   archestra/platform;
+```
+
+**Windows (PowerShell):**
+
+```powershell
+docker pull archestra/platform:latest;
+docker run -p 9000:9000 -p 3000:3000 `
+   -e ARCHESTRA_QUICKSTART=true `
+   -v /var/run/docker.sock:/var/run/docker.sock `
+   -v archestra-postgres-data:/var/lib/postgresql/data `
+   -v archestra-app-data:/app/data `
    archestra/platform;
 ```
 
@@ -617,8 +631,8 @@ The following environment variables can be used to configure Archestra Platform.
 
 - **`ARCHESTRA_OLLAMA_BASE_URL`** - Base URL for your Ollama server.
 
-  - Required to enable Ollama provider support
-  - Example: `http://localhost:11434/v1` (default Ollama)
+  - Default: `http://localhost:11434/v1` (Ollama is enabled by default)
+  - Set this to override the default if your Ollama server runs on a different host or port
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.

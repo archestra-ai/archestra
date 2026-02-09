@@ -33,6 +33,8 @@ Archestra is an open source platform built from multiple components:
 
 We've prepared a all-in-one Docker image for you. Once it's up, follow http://localhost:3000
 
+**Linux / macOS:**
+
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
@@ -40,6 +42,18 @@ docker run -p 9000:9000 -p 3000:3000 \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \
+   archestra/platform;
+```
+
+**Windows (PowerShell):**
+
+```powershell
+docker pull archestra/platform:latest;
+docker run -p 9000:9000 -p 3000:3000 `
+   -e ARCHESTRA_QUICKSTART=true `
+   -v /var/run/docker.sock:/var/run/docker.sock `
+   -v archestra-postgres-data:/var/lib/postgresql/data `
+   -v archestra-app-data:/app/data `
    archestra/platform;
 ```
 

@@ -911,23 +911,17 @@
             "type": "tempo",
             "uid": "$traces_datasource"
           },
-          "filters": [
-            {
-              "id": "llm-filter",
-              "operator": "=",
-              "scope": "span"
-            }
-          ],
+          "filters": [],
           "hide": false,
           "instant": false,
           "limit": 100,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra Platform API\" && span.route.category=\"llm-proxy\"}",
-          "queryType": "traceqlSearch",
+          "query": "{resource.service.name=\"Archestra Platform API\" && span.route.category=\"llm-proxy\"} | select(span.llm.provider, span.llm.model, span.profile.name)",
+          "queryType": "traceql",
           "range": true,
           "refId": "A",
           "serviceMapUseNativeHistograms": false,
-          "tableType": "traces"
+          "tableType": "spans"
         }
       ],
       "title": "LLM Traces",
@@ -1440,23 +1434,17 @@
             "type": "tempo",
             "uid": "$traces_datasource"
           },
-          "filters": [
-            {
-              "id": "mcp-filter",
-              "operator": "=",
-              "scope": "span"
-            }
-          ],
+          "filters": [],
           "hide": false,
           "instant": false,
           "limit": 100,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra Platform API\" && span.route.category=\"mcp-gateway\"}",
-          "queryType": "traceqlSearch",
+          "query": "{resource.service.name=\"Archestra Platform API\" && span.route.category=\"mcp-gateway\"} | select(span.mcp.server_name, span.mcp.tool_name, span.profile.name)",
+          "queryType": "traceql",
           "range": true,
           "refId": "A",
           "serviceMapUseNativeHistograms": false,
-          "tableType": "traces"
+          "tableType": "spans"
         }
       ],
       "title": "MCP Traces",

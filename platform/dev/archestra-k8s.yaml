@@ -96,7 +96,7 @@ spec:
             - name: ARCHESTRA_DATABASE_URL
               value: "postgresql://archestra:archestra_dev_password@postgresql.archestra-dev.svc:5432/archestra_dev?schema=public"
             - name: ARCHESTRA_SECRETS_MANAGER
-              value: "Vault"
+              value: "READONLY_VAULT"
             - name: ARCHESTRA_HASHICORP_VAULT_ADDR
               value: "http://vault.archestra-dev.svc:8200"
             - name: ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD
@@ -115,3 +115,5 @@ spec:
               value: "disabled"
             - name: ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED
               value: "true"
+            - name: ARCHESTRA_DATABASE_URL_VAULT_REF
+              value: "kv/archestra/dbsecret:conn"

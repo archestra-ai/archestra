@@ -12,7 +12,7 @@ Simplify AI usage in your company, providing user-friendly MCP toolbox, observab
 <p align="center">
   <a href="https://www.archestra.ai/docs/platform-quickstart">Getting Started</a>
   - <a href="https://github.com/archestra-ai/archestra/releases">Releases</a>
-  - <a href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg">Slack Community</a>
+  - <a href="https://join.slack.com/t/archestracommunity/shared_invite/zt-3d3ifjzg0-y2Z93cLLkZgRAooRpNu7ZA">Slack Community</a>
 </p>
 </div>
 

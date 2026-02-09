@@ -56,7 +56,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { estimateMessagesSize } from "@/utils/message-size";
-import { mapProviderError } from "./errors";
+import { mapProviderError, ProviderError } from "./errors";
 import {
   stripImagesFromMessages,
   type UiMessage,
@@ -346,11 +346,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     "Chat stream error occurred",
                   );
 
-                  // Map provider error to user-friendly ChatErrorResponse
-                  const mappedError: ChatErrorResponse = mapProviderError(
-                    error,
-                    provider,
-                  );
+                  // Use pre-built error from subagent if available (preserves correct provider),
+                  // otherwise map the error with the current provider
+                  const mappedError: ChatErrorResponse =
+                    error instanceof ProviderError
+                      ? error.chatErrorResponse
+                      : mapProviderError(error, provider);
 
                   logger.info(
                     {

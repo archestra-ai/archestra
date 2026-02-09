@@ -1,4 +1,19 @@
+{{- if .Values.vault.k8sAuth.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.vault.k8sAuth.serviceAccountName }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
 {{- if .Values.vault.enabled }}
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -35,6 +50,8 @@ spec:
           value: {{ .Values.vault.devRootToken | quote }}
         - name: VAULT_DEV_LISTEN_ADDRESS
           value: "0.0.0.0:8200"
+        - name: VAULT_ADDR
+          value: "http://127.0.0.1:8200"
       ports:
         - containerPort: 8200
           name: vault
@@ -64,54 +81,47 @@ spec:
               - /bin/sh
               - -c
               - |
-                # Wait for Vault to be ready
+                export VAULT_ADDR="http://127.0.0.1:8200"
+                export VAULT_TOKEN="{{ .Values.vault.devRootToken }}"
+
+                # Wait for Vault API to be fully ready (not just initialized)
                 for i in $(seq 1 30); do
-                  if vault status 2>/dev/null | grep -q "Initialized.*true"; then
+                  if vault secrets list >/dev/null 2>&1; then
                     break
                   fi
                   sleep 1
                 done
 
-                {{- if eq (int .Values.vault.k8sAuth.kvVersion) 1 }}
-                # Enable KV v1 secrets engine
+                # Enable both KV v1 and v2 engines so the same Vault works with either version
                 vault secrets enable -path=kv -version=1 kv 2>/dev/null || true
-
-                # Create policy for KV v1
-                vault policy write archestra-secrets - <<EOF
+                vault secrets enable -path=secret kv-v2 2>/dev/null || true
+                vault policy write archestra-secrets - <<'POLICY'
                 path "kv/archestra" {
                   capabilities = ["list"]
                 }
                 path "kv/archestra/*" {
                   capabilities = ["create", "read", "update", "delete", "list"]
                 }
-                EOF
-                {{- else }}
-                # Enable KV v2 secrets engine
-                vault secrets enable -path=secret kv-v2 2>/dev/null || true
-
-                # Create policy for KV v2
-                vault policy write archestra-secrets - <<EOF
                 path "secret/data/archestra/*" {
                   capabilities = ["create", "read", "update", "delete", "list"]
                 }
                 path "secret/metadata/archestra/*" {
                   capabilities = ["read", "delete", "list"]
                 }
-                EOF
-                {{- end }}
+                POLICY
 
-                # Enable Kubernetes auth method
                 vault auth enable kubernetes 2>/dev/null || true
 
-                # Configure K8s auth to use the in-cluster API
                 vault write auth/kubernetes/config \
                   kubernetes_host="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
 
-                # Create a role bound to the configured service account
                 vault write auth/kubernetes/role/archestra \
                   bound_service_account_names="{{ .Values.vault.k8sAuth.boundServiceAccountName }}" \
                   bound_service_account_namespaces="{{ .Values.vault.k8sAuth.boundServiceAccountNamespace }}" \
                   policies="archestra-secrets" \
                   ttl="{{ .Values.vault.k8sAuth.ttl }}"
+
+                vault write kv/archestra/config \
+                  dburl="postgresql://archestra:archestra_dev_password@archestra-platform-postgresql:5432/archestra_dev"
       {{- end }}
 {{- end }}

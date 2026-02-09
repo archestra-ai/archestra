@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
-import { stepCountIs, streamText } from "ai";
+import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import {
@@ -170,19 +170,46 @@ export async function executeA2AMessage(
     });
 
     // Execute with AI SDK using streamText (required for long-running requests)
-    // We stream internally but collect the full result
+    // We stream internally but collect the full result.
+    // Capture stream-level errors (e.g. API billing errors) via onError so we
+    // can surface the real cause instead of a generic NoOutputGeneratedError.
+    let capturedStreamError: unknown;
     const stream = streamText({
       model,
       system: systemPrompt,
       prompt: message,
       tools: mcpTools,
       stopWhen: stepCountIs(500),
+      onError: ({ error }) => {
+        capturedStreamError = error;
+      },
     });
 
-    // Wait for the stream to complete and get the final text
-    const finalText = await stream.text;
-    const usage = await stream.usage;
-    const finishReason = await stream.finishReason;
+    // Wait for the stream to complete and get the final text.
+    // When the underlying provider returns an error (e.g. 400 insufficient
+    // credits), the stream produces zero steps and the AI SDK throws
+    // NoOutputGeneratedError.  Re-throw with the real error message so callers
+    // (and ultimately end-users) see what actually went wrong.
+    let finalText: string;
+    let usage: Awaited<typeof stream.usage>;
+    let finishReason: Awaited<typeof stream.finishReason>;
+    try {
+      finalText = await stream.text;
+      usage = await stream.usage;
+      finishReason = await stream.finishReason;
+    } catch (streamError) {
+      if (
+        NoOutputGeneratedError.isInstance(streamError) &&
+        capturedStreamError
+      ) {
+        const realMessage =
+          capturedStreamError instanceof Error
+            ? capturedStreamError.message
+            : String(capturedStreamError);
+        throw new Error(realMessage);
+      }
+      throw streamError;
+    }
 
     // Generate message ID
     const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;

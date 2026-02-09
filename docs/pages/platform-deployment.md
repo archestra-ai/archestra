@@ -499,10 +499,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
   - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
 
-- **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application. This must match the URL users type in their browser (including protocol and port), as it is used for both CORS validation and authentication origin checks.
+- **`ARCHESTRA_FRONTEND_URL`** - Setting this variable enables origin validation for CORS and authentication. When set, only requests from this origin (and any in `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`) are allowed. When not set, all origins are accepted.
 
   - Example: `https://frontend.example.com`
-  - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
+  - Optional for local development and quickstart (origin validation is off by default)
   - If users access the platform via a LAN IP (e.g., `http://192.168.1.5:3000`), set this to that URL
 
 - **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
@@ -560,9 +560,9 @@ The following environment variables can be used to configure Archestra Platform.
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
-- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for both CORS and authentication flows.
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra trusted origins for CORS and authentication, in addition to `ARCHESTRA_FRONTEND_URL`. Setting this variable (even without `ARCHESTRA_FRONTEND_URL`) enables origin validation.
 
-  - Default: None
+  - Default: None (origin validation is off when neither this nor `ARCHESTRA_FRONTEND_URL` is set)
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
   - Use this to trust external identity providers (IdPs) for SSO, or to allow access from multiple URLs (e.g., both a LAN IP and a domain name)
   - Example for LAN access alongside localhost: `http://192.168.1.5:3000,http://192.168.1.5:9000`

@@ -34,7 +34,6 @@ const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
-const isQuickstart = process.env.ARCHESTRA_QUICKSTART === "true";
 
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
@@ -111,27 +110,59 @@ const getPortFromUrl = (): number => {
   }
 };
 
-const parseAllowedOrigins = (): string[] => {
-  // Development or quickstart: use empty array to signal "use defaults" (localhost + private IPs)
-  // Quickstart users often access from LAN IPs and need the same relaxed origin checking
-  if (isDevelopment || isQuickstart) {
-    return [];
-  }
+/**
+ * Networking & Origin Validation Strategy
+ * ========================================
+ *
+ * Development mode:
+ *   - Backend and frontend bind to 127.0.0.1 (loopback only).
+ *   - Only local processes can reach the server, so CORS and origin
+ *     checks are unnecessary. All origins are accepted.
+ *
+ * Quickstart mode (Docker):
+ *   - Inside the container the app binds to 0.0.0.0.
+ *   - On the host, Docker's `-p 3000:3000` maps to 0.0.0.0 by default,
+ *     making the app accessible from LAN IPs.
+ *   - Quickstart is designed for quick evaluation, so all origins are
+ *     accepted without checks. It's ok if someone will decide to
+ *     access Archestra from the mobile phone.
+ *
+ * Production mode:
+ *   - Origin validation is OFF by default. All origins are accepted.
+ *   - Origin checks are only enforced when explicitly configured via:
+ *       ARCHESTRA_FRONTEND_URL              — primary frontend origin
+ *       ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS — comma-separated extra origins
+ *   - Setting either variable signals that origin validation should be
+ *     performed. Only the configured origins will be allowed.
+ */
 
-  // ARCHESTRA_FRONTEND_URL if set
+/**
+ * Collect all explicitly configured origins from environment variables.
+ */
+const getConfiguredOrigins = (): string[] => {
+  const origins: string[] = [];
+
   const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
-  if (frontendUrl && frontendUrl !== "") {
-    return [frontendUrl];
+  if (frontendUrl) {
+    origins.push(frontendUrl);
   }
 
-  return [];
+  const additional =
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS?.trim();
+  if (additional) {
+    origins.push(
+      ...additional
+        .split(",")
+        .map((o) => o.trim())
+        .filter((o) => o.length > 0),
+    );
+  }
+
+  return origins;
 };
 
 /**
  * For each origin containing "localhost", add the equivalent "127.0.0.1" origin (and vice versa).
- * localhost and 127.0.0.1 resolve to the same loopback interface, so both should be trusted
- * when either is configured. This prevents origin validation failures when users access
- * the app via 127.0.0.1 but only localhost is configured (or vice versa).
  */
 const addLoopbackEquivalents = (origins: string[]): string[] => {
   const result = new Set(origins);
@@ -145,84 +176,34 @@ const addLoopbackEquivalents = (origins: string[]): string[] => {
   return [...result];
 };
 
-/** Matches http(s)://localhost or http(s)://127.0.0.1 with any port */
-export const LOCALHOST_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-
-/** Matches private/link-local IPs: 0.0.0.0, 10.x.x.x, 172.16-31.x.x, 192.168.x.x with any port */
-export const PRIVATE_IP_REGEX =
-  /^https?:\/\/(0\.0\.0\.0|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$/;
-
 /**
  * Get CORS origin configuration for Fastify.
- * Returns an array of strings and RegExp patterns that fastify-cors accepts.
- * Includes additional trusted origins to stay in sync with better-auth's trustedOrigins.
+ * When no origin env vars are set, accepts all origins.
+ * When configured, only allows the specified origins.
  */
 export const getCorsOrigins = (): (string | RegExp)[] => {
-  const origins = parseAllowedOrigins();
-  const additionalOrigins = getAdditionalTrustedOrigins();
+  const origins = getConfiguredOrigins();
 
-  // Development: allow localhost and private IPs on any port
   if (origins.length === 0) {
-    return [LOCALHOST_REGEX, PRIVATE_IP_REGEX, ...additionalOrigins];
+    return [/.*/];
   }
 
-  // Production: use configured origins plus additional origins
-  return [...addLoopbackEquivalents(origins), ...additionalOrigins];
-};
-
-/**
- * Parse additional trusted origins from environment variable.
- * Used to add extra trusted origins beyond the frontend URL (e.g., external IdPs for SSO).
- *
- * Format: Comma-separated list of origins (e.g., "http://idp.example.com:8080,https://auth.example.com")
- * Whitespace around each origin is trimmed.
- *
- * @returns Array of additional trusted origins
- */
-export const getAdditionalTrustedOrigins = (): string[] => {
-  const envValue =
-    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS?.trim();
-
-  if (!envValue) {
-    return [];
-  }
-
-  return envValue
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
+  return addLoopbackEquivalents(origins);
 };
 
 /**
  * Get trusted origins for better-auth.
- * Returns wildcard patterns for localhost (development) or specific origins for production.
- * Also includes any additional trusted origins from ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS.
+ * When no origin env vars are set, accepts all origins.
+ * When configured, only allows the specified origins.
  */
 export const getTrustedOrigins = (): string[] => {
-  const origins = parseAllowedOrigins();
-  const additionalOrigins = getAdditionalTrustedOrigins();
+  const origins = getConfiguredOrigins();
 
-  // Default: allow localhost and private IP wildcards for development
   if (origins.length === 0) {
-    return [
-      "http://localhost:*",
-      "https://localhost:*",
-      "http://127.0.0.1:*",
-      "https://127.0.0.1:*",
-      "http://0.0.0.0:*",
-      "https://0.0.0.0:*",
-      "http://10.*:*",
-      "https://10.*:*",
-      "http://172.*:*",
-      "https://172.*:*",
-      "http://192.168.*:*",
-      "https://192.168.*:*",
-      ...additionalOrigins,
-    ];
+    return ["http://*:*", "https://*:*", "http://*", "https://*"];
   }
 
-  // Production: use configured origins plus additional origins
-  return [...addLoopbackEquivalents(origins), ...additionalOrigins];
+  return addLoopbackEquivalents(origins);
 };
 
 /**
@@ -357,7 +338,7 @@ export const getOtelExporterOtlpEndpoint = (
 export default {
   frontendBaseUrl,
   api: {
-    host: "0.0.0.0",
+    host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
     name: "Archestra Platform API",
     version: process.env.ARCHESTRA_VERSION || packageJson.version,

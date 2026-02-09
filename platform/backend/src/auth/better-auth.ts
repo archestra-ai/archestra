@@ -42,7 +42,6 @@ const APP_NAME = "Archestra";
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  production,
   auth: {
     secret,
     cookieDomain,
@@ -50,17 +49,6 @@ const {
     additionalTrustedSsoProviderIds,
   },
 } = config;
-
-const isHttps = () => {
-  // if baseURL (coming from process.env.ARCHESTRA_FRONTEND_URL) is not set, use production (process.env.NODE_ENV=production)
-  // to determine if we're using HTTPS
-  if (!frontendBaseUrl) {
-    return production;
-  }
-  // otherwise, use frontendBaseUrl to determine if we're using HTTPS
-  // this is useful for envs where NODE_ENV=production but using HTTP localhost like docker run
-  return frontendBaseUrl.startsWith("https://");
-};
 
 const ac = createAccessControl(allAvailableActions);
 
@@ -238,10 +226,9 @@ export const auth: any = betterAuth({
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
-      secure: isHttps(), // Use secure cookies when we're using HTTPS
       // "lax" is required for OAuth/SSO flows because the callback is a cross-site top-level navigation
       // "strict" would prevent the state cookie from being sent with the callback request
-      sameSite: isHttps() ? "none" : "lax",
+      sameSite: "lax",
     },
   },
 

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack -H 0.0.0.0",
+    "dev": "next dev --turbopack -H 127.0.0.1",
     "build": "next build --turbopack",
     "start": "NODE_ENV=production next start",
     "lint": "biome check",

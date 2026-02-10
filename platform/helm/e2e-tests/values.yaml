@@ -121,5 +121,5 @@ vault:
   secrets:
     - path: kv/archestra/config
       data:
-        dburl: "postgresql://archestra:archestra_dev_password@archestra-platform-postgresql:5432/archestra_dev"
+        dburl: "postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev"
 

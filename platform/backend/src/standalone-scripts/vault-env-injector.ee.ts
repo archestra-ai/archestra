@@ -5,7 +5,7 @@
  * Standalone init-container script that fetches secrets from HashiCorp Vault
  * and writes them as shell-sourceable KEY=VALUE pairs to /vault/secrets/env.
  *
- * Reuses ReadonlyVaultSecretManager for Vault authentication (TOKEN, K8S)
+ * Reuses VaultClient for Vault authentication (TOKEN, K8S, AWS)
  * and secret retrieval (KV v1/v2, K8s token refresh).
  *
  * Usage:
@@ -16,7 +16,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import ReadonlyVaultSecretManager from "../secrets-manager/readonly-vault.ee";
+import { VaultClient } from "../secrets-manager/vault-client.ee";
 import { getVaultConfigFromEnv } from "../secrets-manager/vault-config";
 
 interface SecretSpec {
@@ -60,7 +60,7 @@ async function main() {
   }
 
   const vaultConfig = getVaultConfigFromEnv();
-  const manager = new ReadonlyVaultSecretManager(vaultConfig);
+  const manager = new VaultClient(vaultConfig);
 
   console.log(
     `Fetching ${secrets.length} secret(s) from Vault at ${vaultConfig.address} (auth: ${vaultConfig.authMethod})...`,

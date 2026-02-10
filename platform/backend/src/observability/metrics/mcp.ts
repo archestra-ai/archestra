@@ -8,27 +8,13 @@
 
 import client from "prom-client";
 import logger from "@/logging";
+import { sanitizeLabelKey } from "./utils";
 
 let mcpToolCallDuration: client.Histogram<string>;
 let mcpToolCallsTotal: client.Counter<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
-
-// Regexp pattern to sanitize label keys
-const sanitizeRegexp = /[^a-zA-Z0-9_]/g;
-
-/**
- * Sanitize a label key for Prometheus compatibility.
- * Prometheus label names must match [a-zA-Z_][a-zA-Z0-9_]*
- */
-function sanitizeLabelKey(key: string): string {
-  let sanitized = key.replace(sanitizeRegexp, "_");
-  if (/^[0-9]/.test(sanitized)) {
-    sanitized = `_${sanitized}`;
-  }
-  return sanitized;
-}
 
 /**
  * Initialize MCP metrics with dynamic profile label keys

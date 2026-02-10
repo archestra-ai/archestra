@@ -73,12 +73,16 @@ export interface TokenAuthResult {
  * Create a fresh MCP server for a request
  * In stateless mode, we need to create new server instances per request
  */
+type AgentInfo = {
+  name: string;
+  id: string;
+  labels?: Array<{ key: string; value: string }>;
+};
+
 export async function createAgentServer(
   agentId: string,
-  logger: { info: (obj: unknown, msg: string) => void },
-  cachedAgent?: { name: string; id: string },
   tokenAuth?: TokenAuthContext,
-): Promise<{ server: Server; agent: { name: string; id: string } }> {
+): Promise<{ server: Server; agent: AgentInfo }> {
   const server = new Server(
     {
       name: `archestra-agent-${agentId}`,
@@ -91,15 +95,11 @@ export async function createAgentServer(
     },
   );
 
-  // Use cached agent data if available, otherwise fetch it
-  let agent = cachedAgent;
-  if (!agent) {
-    const fetchedAgent = await AgentModel.findById(agentId);
-    if (!fetchedAgent) {
-      throw new Error(`Agent not found: ${agentId}`);
-    }
-    agent = fetchedAgent;
+  const fetchedAgent = await AgentModel.findById(agentId);
+  if (!fetchedAgent) {
+    throw new Error(`Agent not found: ${agentId}`);
   }
+  const agent = fetchedAgent;
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -197,10 +197,7 @@ export async function createAgentServer(
             toolName: name,
             durationSeconds,
             isError: false,
-            profileLabels:
-              "labels" in agent
-                ? (agent.labels as Array<{ key: string; value: string }>)
-                : undefined,
+            profileLabels: agent.labels,
           });
 
           logger.info(
@@ -281,10 +278,7 @@ export async function createAgentServer(
           toolName: name,
           durationSeconds,
           isError: result.isError ?? false,
-          profileLabels:
-            "labels" in agent
-              ? (agent.labels as Array<{ key: string; value: string }>)
-              : undefined,
+          profileLabels: agent.labels,
         });
 
         const contentLength = estimateToolResultContentLength(result.content);
@@ -318,10 +312,7 @@ export async function createAgentServer(
           toolName: name,
           durationSeconds,
           isError: true,
-          profileLabels:
-            "labels" in agent
-              ? (agent.labels as Array<{ key: string; value: string }>)
-              : undefined,
+          profileLabels: agent.labels,
         });
 
         if (typeof error === "object" && error !== null && "code" in error) {
@@ -347,7 +338,6 @@ export async function createAgentServer(
  */
 export function createStatelessTransport(
   agentId: string,
-  logger: { info: (obj: unknown, msg: string) => void },
 ): StreamableHTTPServerTransport {
   logger.info({ agentId }, "Creating stateless transport instance");
 

@@ -61,13 +61,8 @@ async function handleMcpPostRequest(
 
   try {
     // Create fresh server and transport for each request (stateless mode)
-    const { server } = await createAgentServer(
-      profileId,
-      fastify.log,
-      undefined,
-      tokenAuthContext,
-    );
-    const transport = createStatelessTransport(profileId, fastify.log);
+    const { server } = await createAgentServer(profileId, tokenAuthContext);
+    const transport = createStatelessTransport(profileId);
 
     fastify.log.info({ profileId }, "Connecting server to transport");
     await server.connect(transport);

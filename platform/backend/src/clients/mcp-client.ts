@@ -294,12 +294,43 @@ class McpClient {
           authInfo,
         );
       } catch (error) {
-        // Handle stale session: clear cached connection and retry once with a fresh session
-        if (error instanceof StaleSessionError && !isRetry) {
+        // Handle stale HTTP session.  The MCP SDK skips the `initialize`
+        // handshake when `transport.sessionId` is already set (session
+        // resumption), so `client.connect()` succeeds without making any
+        // HTTP request.  The stale session only surfaces later as a
+        // StreamableHTTPError "Session not found" during the first real
+        // RPC call (listTools / callTool).  Detect this and retry with a
+        // fresh session.
+        const isStaleSession =
+          error instanceof StaleSessionError ||
+          (error instanceof StreamableHTTPError &&
+            String(error.message).includes("Session not found"));
+
+        if (isStaleSession && !isRetry) {
           logger.info(
             { connectionKey },
             "Stale session detected, retrying with fresh session",
           );
+          try {
+            await McpHttpSessionModel.deleteStaleSession(connectionKey);
+          } catch (err) {
+            logger.warn(
+              { connectionKey, err },
+              "Failed to delete stale MCP HTTP session",
+            );
+          }
+          // Close the stale client so its AbortController is cleaned up
+          const staleClient = this.activeConnections.get(connectionKey);
+          if (staleClient) {
+            try {
+              await staleClient.close();
+            } catch {
+              logger.error(
+                { connectionKey },
+                "Failed to close stale MCP client",
+              );
+            }
+          }
           this.activeConnections.delete(connectionKey);
           this.toolNameCache.delete(connectionKey);
           return executeToolCall(getTransport, currentSecrets, true);

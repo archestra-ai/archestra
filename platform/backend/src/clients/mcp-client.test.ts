@@ -1474,6 +1474,71 @@ describe("McpClient", () => {
           isError: true,
         });
       });
+
+      test("retries when callTool throws StreamableHTTPError with 'Session not found'", async () => {
+        const { StreamableHTTPError } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__http_error_retry",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // First call: findByConnectionKey returns a stored session
+        // Second call (retry): findByConnectionKey returns null (session was deleted)
+        vi.spyOn(McpHttpSessionModel, "findByConnectionKey")
+          .mockResolvedValueOnce("stale-session-id")
+          .mockResolvedValueOnce(null);
+
+        // connect() succeeds both times (SDK skips initialization for resumed sessions)
+        mockConnect.mockResolvedValue(undefined);
+
+        // First callTool throws StreamableHTTPError "Session not found",
+        // second callTool succeeds (after retry with fresh session)
+        mockCallTool
+          .mockRejectedValueOnce(
+            new StreamableHTTPError(
+              404,
+              "Error POSTing to endpoint: Session not found",
+            ),
+          )
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "Success after retry" }],
+            isError: false,
+          });
+
+        const toolCall = {
+          id: "call_http_error_retry",
+          name: "stale-session-server__http_error_retry",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Should succeed after retry
+        expect(result).toMatchObject({
+          id: "call_http_error_retry",
+          content: [{ type: "text", text: "Success after retry" }],
+          isError: false,
+        });
+
+        // deleteStaleSession should have been called
+        expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalled();
+
+        // callTool should have been called twice (first stale, then fresh)
+        expect(mockCallTool).toHaveBeenCalledTimes(2);
+      });
     });
 
     describe("Tool name casing resolution", () => {

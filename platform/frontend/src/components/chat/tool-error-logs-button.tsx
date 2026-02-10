@@ -1,11 +1,11 @@
 "use client";
 
+import { parseFullToolName } from "@shared";
 import { FileText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { McpLogsDialog } from "@/app/mcp-catalog/_parts/mcp-logs-dialog";
 import { Button } from "@/components/ui/button";
 import { useMcpServers } from "@/lib/mcp-server.query";
-import { extractMcpServerName } from "./tool-error-logs-button.utils";
 
 interface ToolErrorLogsButtonProps {
   toolName: string;
@@ -19,7 +19,7 @@ export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const { data: allMcpServers } = useMcpServers();
 
-  const mcpServerName = extractMcpServerName(toolName);
+  const mcpServerName = parseFullToolName(toolName).serverName;
 
   // Find all installations for this MCP server by catalog name
   const serverInstalls = useMemo(() => {

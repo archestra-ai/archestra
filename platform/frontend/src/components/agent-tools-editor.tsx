@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@shared";
 import { useQueries } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import {
@@ -539,7 +536,7 @@ export interface ToolChecklistProps {
 }
 
 function formatToolName(toolName: string) {
-  return toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? toolName;
+  return parseFullToolName(toolName).toolName || toolName;
 }
 
 function ExpandableDescription({ description }: { description: string }) {

@@ -2,9 +2,9 @@ import { ZhipuaiErrorTypes } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
+import { metrics } from "@/observability";
 import { MockZhipuaiClient } from "@/routes/proxy/mock-zhipuai-client";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -998,7 +998,11 @@ export const zhipuaiAdapterFactory: LLMProvider<
     }
 
     const customFetch = options?.agent
-      ? getObservableFetch("zhipuai", options.agent, options.externalAgentId)
+      ? metrics.llm.getObservableFetch(
+          "zhipuai",
+          options.agent,
+          options.externalAgentId,
+        )
       : undefined;
 
     return new ZhipuaiClient(apiKey, options?.baseUrl, customFetch);

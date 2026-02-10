@@ -629,6 +629,9 @@ jobs:
             --set vault.k8sAuth.enabled=true \
             --set vault.k8sAuth.boundServiceAccountName=archestra-platform \
             --set vault.k8sAuth.boundServiceAccountNamespace=default \
+            --set 'vault.secrets[0].path=kv/archestra/config' \
+            --set 'vault.secrets[0].data.dburl=postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev' \
+            --set 'vault.secrets[0].data.dummy_var=hello-from-vault' \
             --set wiremock.enabled=false \
             --set keycloak.enabled=false
 

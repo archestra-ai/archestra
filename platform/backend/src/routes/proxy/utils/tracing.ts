@@ -1,4 +1,4 @@
-import { type Span, trace } from "@opentelemetry/api";
+import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
 import type { Agent } from "@/types";
@@ -83,6 +83,60 @@ export async function startActiveLlmSpan<T>(
         "[tracing] startActiveLlmSpan: executing callback",
       );
       return await callback(span);
+    },
+  );
+}
+
+/**
+ * Starts an active MCP span for tool call execution.
+ * Creates an OpenTelemetry span with MCP-specific attributes for tracing tool calls
+ * through the MCP Gateway.
+ *
+ * @param toolName - The name of the tool being called
+ * @param mcpServerName - The MCP server handling the tool call
+ * @param agent - The agent/profile executing the tool call
+ * @param callback - The callback function to execute within the span context
+ * @returns The result of the callback function
+ */
+export async function startActiveMcpSpan<T>(params: {
+  toolName: string;
+  mcpServerName: string;
+  agent: { id: string; name: string; labels?: Agent["labels"] };
+  callback: (span: Span) => Promise<T>;
+}): Promise<T> {
+  const tracer = trace.getTracer("archestra");
+
+  return tracer.startActiveSpan(
+    `mcp.${params.mcpServerName}.${params.toolName}`,
+    {
+      attributes: {
+        "route.category": RouteCategory.MCP_GATEWAY,
+        "mcp.server_name": params.mcpServerName,
+        "mcp.tool_name": params.toolName,
+        "profile.id": params.agent.id,
+        "profile.name": params.agent.name,
+      },
+    },
+    async (span) => {
+      if (params.agent.labels && params.agent.labels.length > 0) {
+        for (const label of params.agent.labels) {
+          span.setAttribute(`profile.${label.key}`, label.value);
+        }
+      }
+
+      try {
+        const result = await params.callback(span);
+        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+        throw error;
+      } finally {
+        span.end();
+      }
     },
   );
 }

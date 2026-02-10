@@ -37,6 +37,17 @@ import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 
 /**
+ * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
+ * Caught by executeToolCall to trigger a transparent retry with a fresh session.
+ */
+class StaleSessionError extends Error {
+  constructor(connectionKey: string) {
+    super(`Stale MCP HTTP session for connection ${connectionKey}`);
+    this.name = "StaleSessionError";
+  }
+}
+
+/**
  * Type for MCP tool with server metadata returned from database
  */
 type McpToolWithServerMetadata = {
@@ -137,6 +148,16 @@ class McpClient {
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new Map<string, Map<string, string>>();
+  // Per-connectionKey lock to prevent thundering-herd when multiple concurrent
+  // calls (e.g. browser stream ticks) detect a stale session simultaneously.
+  // Only the first caller performs cleanup + retry; others wait and reuse.
+  private sessionRecoveryLocks = new Map<string, Promise<void>>();
+  // Session affinity metadata discovered during transport creation.
+  // Used when persisting fresh session IDs after connect().
+  private pendingHttpSessionMetadata = new Map<
+    string,
+    { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
+  >();
 
   /**
    * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
@@ -161,6 +182,7 @@ class McpClient {
       }
       this.activeConnections.delete(connectionKey);
       this.toolNameCache.delete(connectionKey);
+      this.pendingHttpSessionMetadata.delete(connectionKey);
       logger.info({ connectionKey }, "Closed cached MCP session");
     }
 
@@ -283,6 +305,75 @@ class McpClient {
           authInfo,
         );
       } catch (error) {
+        // Handle stale HTTP session.  The MCP SDK skips the `initialize`
+        // handshake when `transport.sessionId` is already set (session
+        // resumption), so `client.connect()` succeeds without making any
+        // HTTP request.  The stale session only surfaces later as a
+        // StreamableHTTPError "Session not found" during the first real
+        // RPC call (listTools / callTool).  Detect this and retry with a
+        // fresh session.
+        const isStaleSession =
+          error instanceof StaleSessionError ||
+          (error instanceof StreamableHTTPError &&
+            String(error.message).includes("Session not found"));
+
+        if (isStaleSession && !isRetry) {
+          // Check if another concurrent call is already recovering this
+          // connection (e.g. multiple browser-stream ticks firing at once).
+          // If so, wait for it and reuse the fresh client it creates.
+          const existingRecovery = this.sessionRecoveryLocks.get(connectionKey);
+          if (existingRecovery) {
+            logger.info(
+              { connectionKey },
+              "Waiting for concurrent session recovery",
+            );
+            await existingRecovery;
+            return executeToolCall(getTransport, currentSecrets, true);
+          }
+
+          logger.info(
+            { connectionKey },
+            "Stale session detected, retrying with fresh session",
+          );
+
+          // Acquire recovery lock so concurrent callers wait for us.
+          let resolveRecovery!: () => void;
+          const recoveryPromise = new Promise<void>((resolve) => {
+            resolveRecovery = resolve;
+          });
+          this.sessionRecoveryLocks.set(connectionKey, recoveryPromise);
+
+          try {
+            try {
+              await McpHttpSessionModel.deleteStaleSession(connectionKey);
+            } catch (err) {
+              logger.warn(
+                { connectionKey, err },
+                "Failed to delete stale MCP HTTP session",
+              );
+            }
+            // Close the stale client so its AbortController is cleaned up
+            const staleClient = this.activeConnections.get(connectionKey);
+            if (staleClient) {
+              try {
+                await staleClient.close();
+              } catch {
+                logger.warn(
+                  { connectionKey },
+                  "Failed to close stale MCP client",
+                );
+              }
+            }
+            this.activeConnections.delete(connectionKey);
+            this.toolNameCache.delete(connectionKey);
+            this.pendingHttpSessionMetadata.delete(connectionKey);
+            return await executeToolCall(getTransport, currentSecrets, true);
+          } finally {
+            resolveRecovery();
+            this.sessionRecoveryLocks.delete(connectionKey);
+          }
+        }
+
         const errorMessage =
           error instanceof Error ? error.message : String(error);
 
@@ -417,6 +508,17 @@ class McpClient {
         );
         this.activeConnections.delete(connectionKey);
         this.toolNameCache.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
+        // If the transport carries a stored session ID the session is likely
+        // stale (e.g. Playwright pod restarted).  Delete it from the DB so
+        // the retry path creates a truly fresh connection instead of reading
+        // the same stale ID again.
+        if (
+          transport instanceof StreamableHTTPClientTransport &&
+          transport.sessionId
+        ) {
+          McpHttpSessionModel.deleteStaleSession(connectionKey).catch(() => {});
+        }
         // Fall through to create new client
       }
     }
@@ -442,17 +544,42 @@ class McpClient {
       await client.connect(transport);
     } catch (error) {
       // If we used a stored session ID and connection failed, the session is
-      // likely stale (e.g. Playwright pod restarted).  Delete it so the next
-      // retry creates a fresh session.
+      // likely stale (e.g. Playwright pod restarted).  Delete it and throw a
+      // StaleSessionError so executeToolCall can retry with a fresh session.
       if (usedStoredSession) {
-        McpHttpSessionModel.deleteStaleSession(connectionKey).catch((err) =>
+        try {
+          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+        } catch (err) {
           logger.warn(
             { connectionKey, err },
-            "Failed to delete stale MCP HTTP session (non-fatal)",
-          ),
-        );
+            "Failed to delete stale MCP HTTP session",
+          );
+        }
+        throw new StaleSessionError(connectionKey);
       }
       throw error;
+    }
+
+    // When resuming a stored session the MCP SDK skips the `initialize`
+    // handshake, so `connect()` succeeds without any HTTP request.  Verify
+    // the session is actually alive with a ping *before* caching or
+    // re-persisting the (potentially stale) session ID.  Without this check
+    // concurrent calls would re-persist the stale ID into the DB, undoing
+    // another call's cleanup and creating a thundering-herd loop.
+    if (usedStoredSession) {
+      try {
+        await client.ping();
+      } catch {
+        try {
+          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+        } catch (err) {
+          logger.warn(
+            { connectionKey, err },
+            "Failed to delete stale MCP HTTP session",
+          );
+        }
+        throw new StaleSessionError(connectionKey);
+      }
     }
 
     // Store the connection for reuse BEFORE persisting session ID.
@@ -463,12 +590,22 @@ class McpClient {
     // Persist the MCP session ID so other backend pods can reuse it.
     // With --isolated, each Mcp-Session-Id maps to a separate browser context;
     // storing the ID in the database lets every pod connect to the same context.
+    // Only persist *new* session IDs (obtained via fresh init), not stored ones
+    // we just verified — those are already in the DB with the correct value.
     if (
+      !usedStoredSession &&
       transport instanceof StreamableHTTPClientTransport &&
       transport.sessionId
     ) {
+      const pendingMetadata =
+        this.pendingHttpSessionMetadata.get(connectionKey);
       try {
-        await McpHttpSessionModel.upsert(connectionKey, transport.sessionId);
+        await McpHttpSessionModel.upsert({
+          connectionKey,
+          sessionId: transport.sessionId,
+          sessionEndpointUrl: pendingMetadata?.sessionEndpointUrl,
+          sessionEndpointPodName: pendingMetadata?.sessionEndpointPodName,
+        });
       } catch (err) {
         logger.warn(
           { connectionKey, err },
@@ -904,24 +1041,48 @@ class McpClient {
           );
         }
 
-        // Look up stored session ID for multi-replica support.
-        // When multiple backend pods connect to the same Playwright pod with
-        // --isolated, they need to share the same Mcp-Session-Id to use the
-        // same browser context.
+        // Look up stored session metadata for multi-replica support.
+        // In multi-replica MCP server deployments, we must resume sessions
+        // against the same pod endpoint where the session was created.
         let sessionId: string | undefined;
+        let endpointUrl = url;
+        let sessionEndpointPodName: string | null = null;
         if (connectionKey) {
           const stored =
-            await McpHttpSessionModel.findByConnectionKey(connectionKey);
+            await McpHttpSessionModel.findRecordByConnectionKey(connectionKey);
           if (stored) {
-            sessionId = stored;
+            sessionId = stored.sessionId;
+            endpointUrl = stored.sessionEndpointUrl || endpointUrl;
+            sessionEndpointPodName = stored.sessionEndpointPodName;
             logger.debug(
-              { connectionKey, sessionId },
-              "Using stored MCP HTTP session ID",
+              {
+                connectionKey,
+                sessionId,
+                endpointUrl,
+                sessionEndpointPodName,
+              },
+              "Using stored MCP HTTP session metadata",
             );
+          } else if (
+            config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
+          ) {
+            const runningPodEndpoint =
+              await McpServerRuntimeManager.getRunningPodHttpEndpoint(
+                targetMcpServerId,
+              );
+            if (runningPodEndpoint) {
+              endpointUrl = runningPodEndpoint.endpointUrl;
+              sessionEndpointPodName = runningPodEndpoint.podName;
+            }
           }
+
+          this.pendingHttpSessionMetadata.set(connectionKey, {
+            sessionEndpointUrl: endpointUrl,
+            sessionEndpointPodName,
+          });
         }
 
-        return new StreamableHTTPClientTransport(new URL(url), {
+        return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
           requestInit: { headers: new Headers({}) },
         });
@@ -1174,6 +1335,7 @@ class McpClient {
         // Ignore close errors
       }
       this.activeConnections.delete(connectionKey);
+      this.pendingHttpSessionMetadata.delete(connectionKey);
     }
 
     // Attempt refresh
@@ -1424,6 +1586,7 @@ class McpClient {
 
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
     this.activeConnections.clear();
+    this.pendingHttpSessionMetadata.clear();
   }
 }
 

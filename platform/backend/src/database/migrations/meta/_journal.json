@@ -974,6 +974,13 @@
       "when": 1770540078472,
       "tag": "0138_misty_old_lace",
       "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1770718166813,
+      "tag": "0139_woozy_shadow_king",
+      "breakpoints": true
     }
   ]
 }

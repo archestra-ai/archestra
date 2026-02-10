@@ -6262,6 +6262,7 @@ export type PostV1A2aByAgentIdResponses = {
         error?: {
             code: number;
             message: string;
+            data?: unknown;
         };
     };
 };

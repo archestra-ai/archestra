@@ -37,7 +37,6 @@ export const E2eTestId = {
   ConnectAgentButton: "connect-agent-button",
   ConnectCatalogItemButton: "connect-catalog-item-button",
   SelectCredentialTypePersonal: "select-credential-type-personal",
-  SelectCredentialTypeTeam: "select-credential-type-team",
   CredentialsCount: "credentials-count",
   StaticCredentialToUse: "static-credential-to-use",
   SelectCredentialTypeTeamDropdown: "select-credential-type-team-dropdown",

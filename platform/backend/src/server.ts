@@ -666,7 +666,7 @@ const start = async () => {
 
     if (process.env.ENABLE_E2E_TEST_ENDPOINTS === "true") {
       fastify.get("/test", async () => ({
-        value: process.env.VAULT_TEST_DUMMY ?? null,
+        value: process.env.TEST_VALUE ?? null,
       }));
     }
 

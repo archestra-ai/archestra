@@ -55,7 +55,7 @@ archestra:
         - envVar: ARCHESTRA_DATABASE_URL
           path: kv/archestra/config
           key: dburl
-        - envVar: VAULT_TEST_DUMMY
+        - envVar: TEST_VALUE
           path: kv/archestra/config
           key: dummy_var
 

@@ -122,4 +122,5 @@ vault:
     - path: kv/archestra/config
       data:
         dburl: "postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev"
+        dummy_var: "hello-from-vault"
 

@@ -43,7 +43,7 @@ export function PageLayout({
     <div className="flex h-full w-full flex-col">
       <div className="border-b border-border bg-card/30">
         <div className={cn("mx-auto", maxWidth, "px-4 pt-8 md:px-8")}>
-          <div className="flex justify-between items-start">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start">
             <h1 className="mb-2 text-2xl font-semibold tracking-tight">
               {title}
             </h1>
@@ -53,7 +53,7 @@ export function PageLayout({
             {description}
           </div>
           {tabs.length > 0 && (
-            <div className="flex gap-4 mb-0">
+            <div className="flex gap-4 mb-0 overflow-x-auto whitespace-nowrap">
               {tabs.map((tab) => {
                 const isActive = isTabActive(pathname, tab.href, tabs);
                 return (

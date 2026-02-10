@@ -192,7 +192,7 @@ function SessionRow({
               <Link
                 href={`/chat?conversation=${session.sessionId}`}
                 onClick={(e) => e.stopPropagation()}
-                className="flex-shrink-0"
+                className="shrink-0"
               >
                 <Badge
                   variant="outline"
@@ -214,7 +214,7 @@ function SessionRow({
               </span>
               <Badge
                 variant="secondary"
-                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 flex-shrink-0"
+                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0"
               >
                 Claude Code
               </Badge>
@@ -536,7 +536,7 @@ function SessionsTable({
         </p>
       ) : (
         <div className="rounded-md border">
-          <Table>
+          <Table className="table-auto min-w-[900px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="min-w-[200px]">Session</TableHead>

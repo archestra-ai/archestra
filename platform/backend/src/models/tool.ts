@@ -2,6 +2,7 @@ import {
   AGENT_TOOL_PREFIX,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  parseFullToolName,
   slugify,
   TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
 } from "@shared";
@@ -60,10 +61,8 @@ class ToolModel {
    * Unslugify a tool name to get the original tool name
    */
   static unslugifyName(slugifiedName: string): string {
-    const parts = slugifiedName.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    return parts.length > 1
-      ? parts.slice(1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-      : slugifiedName;
+    const { serverName, toolName } = parseFullToolName(slugifiedName);
+    return serverName !== null ? toolName : slugifiedName;
   }
 
   static async create(tool: InsertTool): Promise<Tool> {

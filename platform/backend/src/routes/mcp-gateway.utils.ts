@@ -11,6 +11,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   OAUTH_TOKEN_ID_PREFIX,
+  parseFullToolName,
 } from "@shared";
 import type { FastifyRequest } from "fastify";
 import {
@@ -150,10 +151,7 @@ export async function createAgentServer(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
       const startTime = Date.now();
-      // Extract MCP server name from tool name (format: servername__toolname)
-      const separatorIndex = name.indexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
-      const mcpServerName =
-        separatorIndex > 0 ? name.substring(0, separatorIndex) : "unknown";
+      const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
       try {
         // Check if this is an Archestra tool or agent delegation tool

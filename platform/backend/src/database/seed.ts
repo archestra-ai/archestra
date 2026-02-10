@@ -8,6 +8,7 @@ import {
   testMcpServerCommand,
 } from "@shared";
 import { and, eq } from "drizzle-orm";
+import { isEqual } from "lodash-es";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -221,8 +222,7 @@ async function seedPlaywrightCatalog(): Promise<void> {
   );
   const configChanged =
     !existingCatalog ||
-    JSON.stringify(existingCatalog.localConfig) !==
-      JSON.stringify(playwrightLocalConfig);
+    !isEqual(existingCatalog.localConfig, playwrightLocalConfig);
 
   await db
     .insert(schema.internalMcpCatalogTable)

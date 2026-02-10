@@ -37,6 +37,17 @@ import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 
 /**
+ * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
+ * Caught by executeToolCall to trigger a transparent retry with a fresh session.
+ */
+class StaleSessionError extends Error {
+  constructor(connectionKey: string) {
+    super(`Stale MCP HTTP session for connection ${connectionKey}`);
+    this.name = "StaleSessionError";
+  }
+}
+
+/**
  * Type for MCP tool with server metadata returned from database
  */
 type McpToolWithServerMetadata = {
@@ -283,6 +294,17 @@ class McpClient {
           authInfo,
         );
       } catch (error) {
+        // Handle stale session: clear cached connection and retry once with a fresh session
+        if (error instanceof StaleSessionError && !isRetry) {
+          logger.info(
+            { connectionKey },
+            "Stale session detected, retrying with fresh session",
+          );
+          this.activeConnections.delete(connectionKey);
+          this.toolNameCache.delete(connectionKey);
+          return executeToolCall(getTransport, currentSecrets, true);
+        }
+
         const errorMessage =
           error instanceof Error ? error.message : String(error);
 
@@ -442,15 +464,11 @@ class McpClient {
       await client.connect(transport);
     } catch (error) {
       // If we used a stored session ID and connection failed, the session is
-      // likely stale (e.g. Playwright pod restarted).  Delete it so the next
-      // retry creates a fresh session.
+      // likely stale (e.g. Playwright pod restarted).  Delete it and throw a
+      // StaleSessionError so executeToolCall can retry with a fresh session.
       if (usedStoredSession) {
-        McpHttpSessionModel.deleteStaleSession(connectionKey).catch((err) =>
-          logger.warn(
-            { connectionKey, err },
-            "Failed to delete stale MCP HTTP session (non-fatal)",
-          ),
-        );
+        await McpHttpSessionModel.deleteStaleSession(connectionKey);
+        throw new StaleSessionError(connectionKey);
       }
       throw error;
     }

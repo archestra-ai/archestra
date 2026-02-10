@@ -1330,6 +1330,149 @@ describe("McpClient", () => {
       });
     });
 
+    describe("Stale session retry", () => {
+      let localMcpServerId: string;
+      let localCatalogId: string;
+
+      beforeEach(async ({ makeUser }) => {
+        const testUser = await makeUser({
+          email: "test-stale-session@example.com",
+        });
+
+        const localCatalog = await InternalMcpCatalogModel.create({
+          name: "stale-session-server",
+          serverType: "local",
+          localConfig: {
+            dockerImage: "mcr.microsoft.com/playwright/mcp",
+            transportType: "streamable-http",
+            httpPort: 8080,
+          },
+        });
+        localCatalogId = localCatalog.id;
+
+        const localMcpServer = await McpServerModel.create({
+          name: "stale-session-server",
+          catalogId: localCatalogId,
+          serverType: "local",
+          userId: testUser.id,
+        });
+        localMcpServerId = localMcpServer.id;
+
+        mockUsesStreamableHttp.mockReset();
+        mockGetHttpEndpointUrl.mockReset();
+        mockCallTool.mockReset();
+        mockConnect.mockReset();
+        mockPing.mockReset();
+
+        // Make StreamableHTTPClientTransport mock store sessionId from options
+        // so getOrCreateClient can detect stored sessions via `transport.sessionId`
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        vi.mocked(StreamableHTTPClientTransport).mockImplementation(
+          // biome-ignore lint/suspicious/noExplicitAny: test mock
+          function (this: any, _url: URL, options?: any) {
+            this.sessionId = options?.sessionId;
+          } as any,
+        );
+      });
+
+      test("retries with fresh session when stale session is detected", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // First call: findByConnectionKey returns a stored session
+        // Second call (retry): findByConnectionKey returns null (session was deleted)
+        vi.spyOn(McpHttpSessionModel, "findByConnectionKey")
+          .mockResolvedValueOnce("stale-session-id")
+          .mockResolvedValueOnce(null);
+
+        // First connect fails (stale session), second connect succeeds
+        mockConnect
+          .mockRejectedValueOnce(new Error("Session not found"))
+          .mockResolvedValueOnce(undefined);
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Success after retry" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_stale_retry",
+          name: "stale-session-server__test_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Should succeed after retry
+        expect(result).toMatchObject({
+          id: "call_stale_retry",
+          content: [{ type: "text", text: "Success after retry" }],
+          isError: false,
+        });
+
+        // deleteStaleSession should have been called
+        expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalled();
+
+        // connect should have been called twice (first stale, then fresh)
+        expect(mockConnect).toHaveBeenCalledTimes(2);
+      });
+
+      test("does not retry more than once for stale sessions", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__no_double_retry",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // Both calls return stored session IDs
+        vi.spyOn(McpHttpSessionModel, "findByConnectionKey")
+          .mockResolvedValueOnce("stale-session-1")
+          .mockResolvedValueOnce("stale-session-2");
+
+        // Both connect attempts fail
+        mockConnect
+          .mockRejectedValueOnce(new Error("Session not found"))
+          .mockRejectedValueOnce(new Error("Session not found again"));
+
+        const toolCall = {
+          id: "call_no_double_retry",
+          name: "stale-session-server__no_double_retry",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Should return error (no infinite retry loop)
+        expect(result).toMatchObject({
+          id: "call_no_double_retry",
+          isError: true,
+        });
+      });
+    });
+
     describe("Tool name casing resolution", () => {
       test("resolves camelCase tool name from remote server", async () => {
         // Create tool with lowercased name (as slugifyName produces)

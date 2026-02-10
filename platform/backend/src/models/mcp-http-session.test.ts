@@ -86,6 +86,72 @@ describe("McpHttpSessionModel", () => {
     });
   });
 
+  describe("deleteByMcpServerId", () => {
+    test("deletes sessions with matching mcpServerId in connection key", async () => {
+      // Create sessions with different formats containing the same mcpServerId
+      await McpHttpSessionModel.upsert(
+        "catalog1:server-abc:agent1:conv1",
+        "sess-1",
+      );
+      await McpHttpSessionModel.upsert(
+        "catalog1:server-abc:agent2:conv2",
+        "sess-2",
+      );
+      await McpHttpSessionModel.upsert("catalog1:server-abc", "sess-3");
+
+      const deleted =
+        await McpHttpSessionModel.deleteByMcpServerId("server-abc");
+      expect(deleted).toBe(3);
+
+      expect(
+        await McpHttpSessionModel.findByConnectionKey(
+          "catalog1:server-abc:agent1:conv1",
+        ),
+      ).toBeNull();
+      expect(
+        await McpHttpSessionModel.findByConnectionKey(
+          "catalog1:server-abc:agent2:conv2",
+        ),
+      ).toBeNull();
+      expect(
+        await McpHttpSessionModel.findByConnectionKey("catalog1:server-abc"),
+      ).toBeNull();
+    });
+
+    test("does not delete sessions for other servers", async () => {
+      await McpHttpSessionModel.upsert(
+        "catalog1:server-abc:agent1:conv1",
+        "sess-1",
+      );
+      await McpHttpSessionModel.upsert(
+        "catalog1:server-xyz:agent1:conv1",
+        "sess-2",
+      );
+
+      const deleted =
+        await McpHttpSessionModel.deleteByMcpServerId("server-abc");
+      expect(deleted).toBe(1);
+
+      // Other server's session should remain
+      expect(
+        await McpHttpSessionModel.findByConnectionKey(
+          "catalog1:server-xyz:agent1:conv1",
+        ),
+      ).toBe("sess-2");
+    });
+
+    test("returns 0 when no sessions match", async () => {
+      await McpHttpSessionModel.upsert(
+        "catalog1:server-xyz:agent1:conv1",
+        "sess-1",
+      );
+
+      const deleted =
+        await McpHttpSessionModel.deleteByMcpServerId("server-nonexistent");
+      expect(deleted).toBe(0);
+    });
+  });
+
   describe("deleteExpired", () => {
     test("deletes sessions older than TTL", async () => {
       // Insert a session with an old timestamp by upserting then manually updating

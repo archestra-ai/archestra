@@ -1,4 +1,4 @@
-import { eq, lt } from "drizzle-orm";
+import { eq, like, lt } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
@@ -44,6 +44,28 @@ class McpHttpSessionModel {
       { connectionKey },
       "Deleted stale MCP HTTP session (server likely restarted)",
     );
+  }
+
+  /**
+   * Delete all sessions associated with a given MCP server ID.
+   * Connection keys contain the mcpServerId as the second segment
+   * (e.g. "catalogId:mcpServerId:agentId:conversationId" or "catalogId:mcpServerId").
+   * Called when a server is restarted to invalidate stale session IDs.
+   */
+  static async deleteByMcpServerId(mcpServerId: string): Promise<number> {
+    const pattern = `%:${mcpServerId}%`;
+    const deleted = await db
+      .delete(schema.mcpHttpSessionsTable)
+      .where(like(schema.mcpHttpSessionsTable.connectionKey, pattern))
+      .returning({ connectionKey: schema.mcpHttpSessionsTable.connectionKey });
+
+    if (deleted.length > 0) {
+      logger.info(
+        { mcpServerId, count: deleted.length },
+        "Deleted MCP HTTP sessions for restarted server",
+      );
+    }
+    return deleted.length;
   }
 
   /**

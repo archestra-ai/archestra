@@ -50,8 +50,8 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 ### MCP Metrics
 
-- `mcp_tool_calls_total` - Total MCP tool calls by profile_id, profile_name, mcp_server_name, tool_name, and status (success/error)
-- `mcp_tool_call_duration_seconds` - MCP tool call execution duration by profile_id, profile_name, mcp_server_name, tool_name, and status
+- `mcp_tool_calls_total` - Total MCP tool calls by profile_name, mcp_server_name, tool_name, and status (success/error)
+- `mcp_tool_call_duration_seconds` - MCP tool call execution duration by profile_name, mcp_server_name, tool_name, and status
 
 ### Process Metrics
 

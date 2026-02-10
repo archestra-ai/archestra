@@ -192,7 +192,6 @@ export async function createAgentServer(
 
           const durationSeconds = (Date.now() - startTime) / 1000;
           metrics.mcp.reportMcpToolCall({
-            profileId: agent.id,
             profileName: agent.name,
             mcpServerName,
             toolName: name,
@@ -277,7 +276,6 @@ export async function createAgentServer(
 
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({
-          profileId: agent.id,
           profileName: agent.name,
           mcpServerName,
           toolName: name,
@@ -315,7 +313,6 @@ export async function createAgentServer(
       } catch (error) {
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({
-          profileId: agent.id,
           profileName: agent.name,
           mcpServerName,
           toolName: name,

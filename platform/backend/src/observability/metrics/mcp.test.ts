@@ -74,7 +74,6 @@ describe("reportMcpToolCall", () => {
 
   test("reports successful tool call with duration", () => {
     reportMcpToolCall({
-      profileId: "profile-1",
       profileName: "My Profile",
       mcpServerName: "github",
       toolName: "github__list_repos",
@@ -83,7 +82,6 @@ describe("reportMcpToolCall", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_id: "profile-1",
       profile_name: "My Profile",
       mcp_server_name: "github",
       tool_name: "github__list_repos",
@@ -92,7 +90,6 @@ describe("reportMcpToolCall", () => {
 
     expect(histogramObserve).toHaveBeenCalledWith(
       {
-        profile_id: "profile-1",
         profile_name: "My Profile",
         mcp_server_name: "github",
         tool_name: "github__list_repos",
@@ -104,7 +101,6 @@ describe("reportMcpToolCall", () => {
 
   test("reports failed tool call", () => {
     reportMcpToolCall({
-      profileId: "profile-1",
       profileName: "My Profile",
       mcpServerName: "slack",
       toolName: "slack__send_message",
@@ -113,7 +109,6 @@ describe("reportMcpToolCall", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_id: "profile-1",
       profile_name: "My Profile",
       mcp_server_name: "slack",
       tool_name: "slack__send_message",
@@ -122,7 +117,6 @@ describe("reportMcpToolCall", () => {
 
     expect(histogramObserve).toHaveBeenCalledWith(
       {
-        profile_id: "profile-1",
         profile_name: "My Profile",
         mcp_server_name: "slack",
         tool_name: "slack__send_message",
@@ -134,7 +128,6 @@ describe("reportMcpToolCall", () => {
 
   test("skips duration observation for zero duration", () => {
     reportMcpToolCall({
-      profileId: "profile-1",
       profileName: "My Profile",
       mcpServerName: "github",
       toolName: "github__list_repos",
@@ -150,7 +143,6 @@ describe("reportMcpToolCall", () => {
     initializeMcpMetrics(["environment"]);
 
     reportMcpToolCall({
-      profileId: "profile-1",
       profileName: "My Profile",
       mcpServerName: "github",
       toolName: "github__list_repos",
@@ -160,7 +152,6 @@ describe("reportMcpToolCall", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_id: "profile-1",
       profile_name: "My Profile",
       mcp_server_name: "github",
       tool_name: "github__list_repos",
@@ -173,7 +164,6 @@ describe("reportMcpToolCall", () => {
     initializeMcpMetrics(["environment", "team"]);
 
     reportMcpToolCall({
-      profileId: "profile-1",
       profileName: "My Profile",
       mcpServerName: "github",
       toolName: "github__list_repos",
@@ -183,7 +173,6 @@ describe("reportMcpToolCall", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith({
-      profile_id: "profile-1",
       profile_name: "My Profile",
       mcp_server_name: "github",
       tool_name: "github__list_repos",

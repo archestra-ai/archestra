@@ -58,7 +58,6 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
   }
 
   const baseLabelNames = [
-    "profile_id",
     "profile_name",
     "mcp_server_name",
     "tool_name",
@@ -87,7 +86,6 @@ export function initializeMcpMetrics(labelKeys: string[]): void {
  * Build metric labels for an MCP tool call
  */
 function buildMetricLabels(params: {
-  profileId: string;
   profileName: string;
   mcpServerName: string;
   toolName: string;
@@ -95,7 +93,6 @@ function buildMetricLabels(params: {
   profileLabels?: Array<{ key: string; value: string }>;
 }): Record<string, string> {
   const labels: Record<string, string> = {
-    profile_id: params.profileId,
     profile_name: params.profileName,
     mcp_server_name: params.mcpServerName,
     tool_name: params.toolName,
@@ -116,7 +113,6 @@ function buildMetricLabels(params: {
  * Reports an MCP tool call with duration
  */
 export function reportMcpToolCall(params: {
-  profileId: string;
   profileName: string;
   mcpServerName: string;
   toolName: string;
@@ -131,7 +127,6 @@ export function reportMcpToolCall(params: {
 
   const status = params.isError ? "error" : "success";
   const labels = buildMetricLabels({
-    profileId: params.profileId,
     profileName: params.profileName,
     mcpServerName: params.mcpServerName,
     toolName: params.toolName,

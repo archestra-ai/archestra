@@ -468,6 +468,7 @@ function McpToolCallsTable({
       <DataTable
         columns={columns}
         data={mcpToolCalls}
+        hideSelectedCount
         pagination={
           paginationMeta
             ? {

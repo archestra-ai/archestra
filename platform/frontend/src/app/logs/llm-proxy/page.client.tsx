@@ -1,7 +1,16 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Layers, MessageSquare, Search, User } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Layers,
+  MessageSquare,
+  Search,
+  User,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -11,6 +20,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -85,39 +101,88 @@ function Pagination({
   onPaginationChange: (params: { pageIndex: number; pageSize: number }) => void;
 }) {
   const totalPages = Math.ceil(total / pageSize);
+  const currentPage = pageIndex + 1;
   const canPrevious = pageIndex > 0;
   const canNext = pageIndex < totalPages - 1;
 
   return (
     <div className="flex items-center justify-between px-2 py-4">
-      <div className="text-sm text-muted-foreground">
-        Showing {pageIndex * pageSize + 1} to{" "}
-        {Math.min((pageIndex + 1) * pageSize, total)} of {total} results
-      </div>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            onPaginationChange({ pageIndex: pageIndex - 1, pageSize })
-          }
-          disabled={!canPrevious}
-        >
-          Previous
-        </Button>
-        <span className="text-sm">
-          Page {pageIndex + 1} of {totalPages}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            onPaginationChange({ pageIndex: pageIndex + 1, pageSize })
-          }
-          disabled={!canNext}
-        >
-          Next
-        </Button>
+      <div className="flex-1" />
+      <div className="flex items-center gap-6 lg:gap-8">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium">Rows per page</p>
+          <Select
+            value={`${pageSize}`}
+            onValueChange={(value) =>
+              onPaginationChange({ pageIndex: 0, pageSize: Number(value) })
+            }
+          >
+            <SelectTrigger className="h-8 w-[90px]">
+              <SelectValue placeholder={pageSize} />
+            </SelectTrigger>
+            <SelectContent side="top">
+              {[10, 20, 30, 40, 50, 100].map((size) => (
+                <SelectItem key={size} value={`${size}`}>
+                  {size}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+          Page {currentPage} of {totalPages}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="hidden size-8 lg:flex"
+            onClick={() => onPaginationChange({ pageIndex: 0, pageSize })}
+            disabled={!canPrevious}
+          >
+            <span className="sr-only">Go to first page</span>
+            <ChevronsLeft />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8"
+            onClick={() =>
+              onPaginationChange({ pageIndex: pageIndex - 1, pageSize })
+            }
+            disabled={!canPrevious}
+          >
+            <span className="sr-only">Go to previous page</span>
+            <ChevronLeft />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8"
+            onClick={() =>
+              onPaginationChange({ pageIndex: pageIndex + 1, pageSize })
+            }
+            disabled={!canNext}
+          >
+            <span className="sr-only">Go to next page</span>
+            <ChevronRight />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="hidden size-8 lg:flex"
+            onClick={() =>
+              onPaginationChange({
+                pageIndex: totalPages - 1,
+                pageSize,
+              })
+            }
+            disabled={!canNext}
+          >
+            <span className="sr-only">Go to last page</span>
+            <ChevronsRight />
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -535,32 +600,34 @@ function SessionsTable({
             : "No sessions found"}
         </p>
       ) : (
-        <div className="rounded-md border">
-          <Table className="table-auto min-w-[900px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[200px]">Session</TableHead>
-                <TableHead className="w-[100px] whitespace-nowrap">
-                  Requests
-                </TableHead>
-                <TableHead className="w-[200px]">Models</TableHead>
-                <TableHead className="w-[140px] whitespace-nowrap">
-                  Cost
-                </TableHead>
-                <TableHead className="w-[160px]">Time</TableHead>
-                <TableHead className="min-w-[100px]">Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sessions.map((session, index) => (
-                <SessionRow
-                  key={`${session.sessionId ?? "single"}-${session.profileId}-${index}`}
-                  session={session}
-                  agents={agents}
-                />
-              ))}
-            </TableBody>
-          </Table>
+        <div className="w-full space-y-4">
+          <div className="overflow-hidden rounded-md border">
+            <Table className="table-auto min-w-[900px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[200px]">Session</TableHead>
+                  <TableHead className="w-[100px] whitespace-nowrap">
+                    Requests
+                  </TableHead>
+                  <TableHead className="w-[200px]">Models</TableHead>
+                  <TableHead className="w-[140px] whitespace-nowrap">
+                    Cost
+                  </TableHead>
+                  <TableHead className="w-[160px]">Time</TableHead>
+                  <TableHead className="min-w-[100px]">Details</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sessions.map((session, index) => (
+                  <SessionRow
+                    key={`${session.sessionId ?? "single"}-${session.profileId}-${index}`}
+                    session={session}
+                    agents={agents}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           {paginationMeta && (
             <Pagination
               pageIndex={pageIndex}

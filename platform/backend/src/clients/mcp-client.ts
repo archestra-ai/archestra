@@ -470,6 +470,16 @@ class McpClient {
         );
         this.activeConnections.delete(connectionKey);
         this.toolNameCache.delete(connectionKey);
+        // If the transport carries a stored session ID the session is likely
+        // stale (e.g. Playwright pod restarted).  Delete it from the DB so
+        // the retry path creates a truly fresh connection instead of reading
+        // the same stale ID again.
+        if (
+          transport instanceof StreamableHTTPClientTransport &&
+          transport.sessionId
+        ) {
+          McpHttpSessionModel.deleteStaleSession(connectionKey).catch(() => {});
+        }
         // Fall through to create new client
       }
     }
@@ -511,6 +521,28 @@ class McpClient {
       throw error;
     }
 
+    // When resuming a stored session the MCP SDK skips the `initialize`
+    // handshake, so `connect()` succeeds without any HTTP request.  Verify
+    // the session is actually alive with a ping *before* caching or
+    // re-persisting the (potentially stale) session ID.  Without this check
+    // concurrent calls would re-persist the stale ID into the DB, undoing
+    // another call's cleanup and creating a thundering-herd loop.
+    if (usedStoredSession) {
+      try {
+        await client.ping();
+      } catch {
+        try {
+          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+        } catch (err) {
+          logger.warn(
+            { connectionKey, err },
+            "Failed to delete stale MCP HTTP session",
+          );
+        }
+        throw new StaleSessionError(connectionKey);
+      }
+    }
+
     // Store the connection for reuse BEFORE persisting session ID.
     // This prevents a race where a second request creates a duplicate connection
     // while the upsert is in flight.
@@ -519,7 +551,10 @@ class McpClient {
     // Persist the MCP session ID so other backend pods can reuse it.
     // With --isolated, each Mcp-Session-Id maps to a separate browser context;
     // storing the ID in the database lets every pod connect to the same context.
+    // Only persist *new* session IDs (obtained via fresh init), not stored ones
+    // we just verified — those are already in the DB with the correct value.
     if (
+      !usedStoredSession &&
       transport instanceof StreamableHTTPClientTransport &&
       transport.sessionId
     ) {

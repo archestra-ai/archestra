@@ -1,7 +1,7 @@
 import type { ServerWebSocketMessage } from "@shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS } from "ws";
-import { closeChatMcpClient } from "@/clients/chat-mcp-client";
+import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
 import { browserStateManager } from "@/features/browser-stream/services/browser-stream.state-manager";
@@ -16,6 +16,8 @@ export type BrowserStreamSubscription = {
   userContext: BrowserUserContext;
   intervalId: NodeJS.Timeout;
   isSending: boolean;
+  /** Set when screenshots were skipped due to active subagents */
+  wasBlockedBySubagent: boolean;
 };
 
 type BrowserStreamClientContextParams = {
@@ -189,20 +191,18 @@ export class BrowserStreamSocketClientContext {
       clearInterval(subscription.intervalId);
       this.browserSubscriptions.delete(ws);
 
-      // Close the MCP client connection for this conversation to free resources.
-      // Each conversation has its own MCP client and browser instance.
-      closeChatMcpClient(
-        subscription.agentId,
-        subscription.userContext.userId,
-        subscription.conversationId,
-      );
+      // NOTE: We intentionally do NOT close the MCP client connection here.
+      // The browser stream shares the same MCP client (keyed by agentId:userId:conversationId)
+      // as the chat agentic loop. Closing it here would kill in-flight tool calls
+      // from the agentic loop, causing AI_MissingToolResultsError.
+      // The MCP client manages its own lifecycle via the LRU cache in chat-mcp-client.ts.
 
       logger.info(
         {
           conversationId: subscription.conversationId,
           agentId: subscription.agentId,
         },
-        "Browser stream client unsubscribed and MCP client closed",
+        "Browser stream client unsubscribed",
       );
     }
   }
@@ -283,6 +283,26 @@ export class BrowserStreamSocketClientContext {
       if (!subscription) return;
       if (subscription.isSending) return;
 
+      // Skip screenshot while subagents are using the browser to prevent
+      // flickering — the preview holds the last good screenshot instead.
+      if (
+        subagentExecutionTracker.hasActiveSubagents(subscription.conversationId)
+      ) {
+        subscription.wasBlockedBySubagent = true;
+        return;
+      }
+
+      // After subagents finish, re-select the parent's tab before resuming
+      // screenshots. The subagent may have switched to a different tab.
+      if (subscription.wasBlockedBySubagent) {
+        subscription.wasBlockedBySubagent = false;
+        await browserStreamFeature.selectOrCreateTab(
+          agentId,
+          conversationId,
+          userContext,
+        );
+      }
+
       subscription.isSending = true;
       try {
         await this.sendScreenshot(ws, agentId, conversationId, userContext);
@@ -307,6 +327,7 @@ export class BrowserStreamSocketClientContext {
       userContext,
       intervalId,
       isSending: false,
+      wasBlockedBySubagent: false,
     });
 
     void sendTick();
@@ -643,7 +664,12 @@ export class BrowserStreamSocketClientContext {
           result.url &&
           !this.isBlankUrl(result.url)
         ) {
-          await browserStateManager.updateUrl(conversationId, result.url);
+          await browserStateManager.updateUrl(
+            agentId,
+            userContext.userId,
+            conversationId,
+            result.url,
+          );
         }
 
         // Determine canGoBack based on current URL

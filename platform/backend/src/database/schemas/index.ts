@@ -8,6 +8,7 @@ export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
 export { default as apiKeyModelsTable } from "./api-key-model";
+export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
   type ChatApiKeyScope,
   default as chatApiKeysTable,
@@ -22,10 +23,12 @@ export { default as incomingEmailSubscriptionsTable } from "./incoming-email-sub
 export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
+export { default as jwksTable } from "./jwks";
 export { default as labelKeysTable } from "./label-key";
 export { default as labelValuesTable } from "./label-value";
 export { default as limitsTable } from "./limit";
 export { default as limitModelUsageTable } from "./limit-model-usage";
+export { default as mcpHttpSessionsTable } from "./mcp-http-session";
 export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerInstallationRequestsTable } from "./mcp-server-installation-request";
 export { default as mcpServerUsersTable } from "./mcp-server-user";
@@ -33,6 +36,10 @@ export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
 export { default as modelsTable } from "./model";
+export { default as oauthAccessTokensTable } from "./oauth-access-token";
+export { default as oauthClientsTable } from "./oauth-client";
+export { default as oauthConsentsTable } from "./oauth-consent";
+export { default as oauthRefreshTokensTable } from "./oauth-refresh-token";
 export { default as optimizationRulesTable } from "./optimization-rule";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";

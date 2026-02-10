@@ -97,6 +97,10 @@ export class Authnz {
       url.startsWith(config.mcpGateway.endpoint) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
+      // Skip OAuth well-known discovery endpoints (RFC 8414 / RFC 9728)
+      url.startsWith("/.well-known/oauth-") ||
+      // Skip OAuth consent page proxy (handled by frontend)
+      url.startsWith("/oauth/") ||
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith("/.well-known/acme-challenge/") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)

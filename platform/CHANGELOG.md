@@ -1,5 +1,63 @@
 # Changelog
 
+## [1.0.41](https://github.com/archestra-ai/archestra/compare/platform-v1.0.37...platform-v1.0.41) (2026-02-09)
+
+
+### Features
+
+* add OAuth 2.1 authorization server for MCP Gateway ([#2639](https://github.com/archestra-ai/archestra/issues/2639)) ([7d170c1](https://github.com/archestra-ai/archestra/commit/7d170c12335534f2c7c0bcd20ab0be8d77a5a9e5))
+* implement prompt draft persistence ([#2131](https://github.com/archestra-ai/archestra/issues/2131)) ([7ba9963](https://github.com/archestra-ai/archestra/commit/7ba996356b06b2292d7f72668417f3100f5be9c9))
+* MCP auth at tool call time ([#2662](https://github.com/archestra-ai/archestra/issues/2662)) ([c75c4f3](https://github.com/archestra-ai/archestra/commit/c75c4f31997c246607374f9bab4b9283dc8d3ac9))
+* select model and key per agent ([#2626](https://github.com/archestra-ai/archestra/issues/2626)) ([fb00f22](https://github.com/archestra-ai/archestra/commit/fb00f2209f0c38389c988e88d70621bff6b77290))
+* yaml advanced configuration ([#2584](https://github.com/archestra-ai/archestra/issues/2584)) ([c23061a](https://github.com/archestra-ai/archestra/commit/c23061a9221e7b11f2994d7946259d0fa41f4f7a))
+
+
+### Bug Fixes
+
+* browser preview improvements ([#2580](https://github.com/archestra-ai/archestra/issues/2580)) ([6307b90](https://github.com/archestra-ai/archestra/commit/6307b9084385ad043c575cff902b640c2a55ca40))
+* consistent mcp session id ([#2661](https://github.com/archestra-ai/archestra/issues/2661)) ([97f18ce](https://github.com/archestra-ai/archestra/commit/97f18cefc4d17e5f46d107a13392892c32b53de0))
+* enable browser mcp ([#2689](https://github.com/archestra-ai/archestra/issues/2689)) ([e4c6307](https://github.com/archestra-ai/archestra/commit/e4c630753b5afc59c8833066de2b50c2944ecdcb))
+* fix bulding arm platform image ([#2638](https://github.com/archestra-ai/archestra/issues/2638)) ([cf2065e](https://github.com/archestra-ai/archestra/commit/cf2065ed99280ac4cbb8f8a54dd508067263c592))
+* fix cves ([#2591](https://github.com/archestra-ai/archestra/issues/2591)) ([580bca1](https://github.com/archestra-ai/archestra/commit/580bca1e15d428344fa7842e54ade17873bdbbcf))
+* fix mcp browser reinstall ([#2660](https://github.com/archestra-ai/archestra/issues/2660)) ([b17d764](https://github.com/archestra-ai/archestra/commit/b17d7640b421bfd3570e84ec2a977b562b6dbad9))
+* fix streamable default yaml generation ([#2601](https://github.com/archestra-ai/archestra/issues/2601)) ([16f055d](https://github.com/archestra-ai/archestra/commit/16f055d44ffad618e5f756f848e9a6811b1789b0))
+* fix subagents browser tabs isolation ([#2653](https://github.com/archestra-ai/archestra/issues/2653)) ([70950c6](https://github.com/archestra-ai/archestra/commit/70950c644c2500887f729d9829bb058b8add1a95))
+* improve browser preview ([#2585](https://github.com/archestra-ai/archestra/issues/2585)) ([112e2e0](https://github.com/archestra-ai/archestra/commit/112e2e05fb75415010e60ccf5c2cadbd1a818f31))
+* improve browser preview4 ([#2595](https://github.com/archestra-ai/archestra/issues/2595)) ([d2acfbc](https://github.com/archestra-ai/archestra/commit/d2acfbce0ac9e2c1d3be11ec26b8835414417570))
+* increase stop count from 20 to 500 ([#2624](https://github.com/archestra-ai/archestra/issues/2624)) ([6b0320a](https://github.com/archestra-ai/archestra/commit/6b0320a8ef944bbd4089b703962ef7d11c7e461a))
+* polish advanced yaml configuration ([#2598](https://github.com/archestra-ai/archestra/issues/2598)) ([4edd98e](https://github.com/archestra-ai/archestra/commit/4edd98e4dd65e9b9b2f877bdb9d09323772e8bb5))
+* prepend /v1 for Ollama OpenAI-compat proxy paths ([#2617](https://github.com/archestra-ai/archestra/issues/2617)) ([3e28b76](https://github.com/archestra-ai/archestra/commit/3e28b765f97007cfe7a5c1fe1a209a8755102577))
+* prevent browser stream unsubscribe from killing in-flight chat t… ([#2685](https://github.com/archestra-ai/archestra/issues/2685)) ([a6d2a3e](https://github.com/archestra-ai/archestra/commit/a6d2a3e8af26d5949fc2824e229898f5f6c2c704))
+* prevent tool policy dialog header from overflowing boundary ([#2602](https://github.com/archestra-ai/archestra/issues/2602)) ([8a6bddc](https://github.com/archestra-ai/archestra/commit/8a6bddc8277e05627d317b7732d20b28c54721be))
+* rename Langgraph to LangChain in architecture diagram ([#2632](https://github.com/archestra-ai/archestra/issues/2632)) ([b36dbc7](https://github.com/archestra-ai/archestra/commit/b36dbc7223eeb31f88a4dbc3cb07f0324feff32e))
+* replace alert with sonner toast ([#2572](https://github.com/archestra-ai/archestra/issues/2572)) ([17e0e1b](https://github.com/archestra-ai/archestra/commit/17e0e1bb24ed4b083350da9856fb315823f8dfea))
+* Revert "Revert "fix: sync CORS and trusted origins, improve origin error UX"" ([#2668](https://github.com/archestra-ai/archestra/issues/2668)) ([90a7f70](https://github.com/archestra-ai/archestra/commit/90a7f70068dcf047d78852c36429901f2687beed))
+* running migrations when ext vault secret is used ([#2633](https://github.com/archestra-ai/archestra/issues/2633)) ([8bf7276](https://github.com/archestra-ai/archestra/commit/8bf7276c248a8df8fea30d347a2f7267bebfe159))
+* set ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST and lint issue ([#2694](https://github.com/archestra-ai/archestra/issues/2694)) ([10c4b38](https://github.com/archestra-ai/archestra/commit/10c4b385625c9bb1deaaef94df406d3149582e32))
+* surface real error instead of NoOutputGeneratedError in A2A delegation ([#2686](https://github.com/archestra-ai/archestra/issues/2686)) ([556d56f](https://github.com/archestra-ai/archestra/commit/556d56f053658e805c84fc4edfddafa69822c7a3))
+* sync CORS and trusted origins, improve origin error UX ([#2656](https://github.com/archestra-ai/archestra/issues/2656)) ([c263876](https://github.com/archestra-ai/archestra/commit/c2638769ea33303db0a561ff0331bad64f7d65b4))
+* update Slack community invite link ([#2667](https://github.com/archestra-ai/archestra/issues/2667)) ([2234935](https://github.com/archestra-ai/archestra/commit/2234935569194ad13b34bb0dc120e748bfd0944d))
+* use semver for version comparison to prevent false "new version" display ([#2592](https://github.com/archestra-ai/archestra/issues/2592)) ([e2ac086](https://github.com/archestra-ai/archestra/commit/e2ac086caf4c29b37cd596cb96148c41a1482c4c))
+* wait for secretmanager to init before run migration ([#2678](https://github.com/archestra-ai/archestra/issues/2678)) ([6d75487](https://github.com/archestra-ai/archestra/commit/6d754870b085ef9bf920fcc320a4046d8a2baba8))
+
+
+### Dependencies
+
+* bump @anthropic-ai/sdk from 0.71.2 to 0.72.0 in /platform ([#2622](https://github.com/archestra-ai/archestra/issues/2622)) ([e854e20](https://github.com/archestra-ai/archestra/commit/e854e20ce249ad303cff1e30620ebf4326377acd))
+* bump the platform-dependencies group across 1 directory with 33 updates ([#2645](https://github.com/archestra-ai/archestra/issues/2645)) ([434a0ee](https://github.com/archestra-ai/archestra/commit/434a0ee22f54626781449b3a99c3a58da065c43c))
+
+
+### Miscellaneous Chores
+
+* add e2e tests for mcp deployment custom yaml ([#2614](https://github.com/archestra-ai/archestra/issues/2614)) ([0b0e1b9](https://github.com/archestra-ai/archestra/commit/0b0e1b9b6731df924af477bd95989008551ad6af))
+* **deps:** bump @modelcontextprotocol/sdk from 1.25.3 to 1.26.0 in /platform/mcp_server_docker_image ([#2603](https://github.com/archestra-ai/archestra/issues/2603)) ([5b7053f](https://github.com/archestra-ai/archestra/commit/5b7053f0a7a751faa40e25ce4259710640e195c7))
+* format displayed github repo star count ([#2596](https://github.com/archestra-ai/archestra/issues/2596)) ([ed5e2fe](https://github.com/archestra-ai/archestra/commit/ed5e2fecaa2a825ad9fd88c77828b746525bbad3))
+* **release:** bump version ([#2642](https://github.com/archestra-ai/archestra/issues/2642)) ([24fd48f](https://github.com/archestra-ai/archestra/commit/24fd48f4f393d8a7cbea81787a226e98b7d2603f))
+* **release:** bump version ([#2679](https://github.com/archestra-ai/archestra/issues/2679)) ([cdc0138](https://github.com/archestra-ai/archestra/commit/cdc01388361e3e496fc158f3d77b0e67af19b347))
+* simplify adding new LLM provider ([#2610](https://github.com/archestra-ai/archestra/issues/2610)) ([1055253](https://github.com/archestra-ai/archestra/commit/105525351384712d73eb466b214a72cf7f867324))
+* simplify local ollama config ([#2687](https://github.com/archestra-ai/archestra/issues/2687)) ([4c55cf6](https://github.com/archestra-ai/archestra/commit/4c55cf68b31de6d82f43b2acaf469a2388c2f4ad))
+* simplify MS Teams perms and update docs ([#2618](https://github.com/archestra-ai/archestra/issues/2618)) ([e96a6ed](https://github.com/archestra-ai/archestra/commit/e96a6eddee3f64450ec97a6f7239b01923581a87))
+
 ## [1.0.37](https://github.com/archestra-ai/archestra/compare/platform-v1.0.34...platform-v1.0.37) (2026-02-02)
 
 

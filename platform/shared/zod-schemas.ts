@@ -45,6 +45,9 @@ export const LocalConfigSchema = z
     transportType: z.enum(["stdio", "streamable-http"]).optional(),
     httpPort: z.number().optional(),
     httpPath: z.string().optional(),
+    // Fixed Kubernetes NodePort for local dev (avoids dynamic port assignment).
+    // Only used when serviceType=NodePort (local dev, not in-cluster).
+    nodePort: z.number().optional(),
     // Kubernetes service account role for MCP server pods that need K8s API access
     // If not specified, uses the default service account (no K8s permissions)
     // Specify just the role (e.g., "operator") - the platform automatically constructs the full name:

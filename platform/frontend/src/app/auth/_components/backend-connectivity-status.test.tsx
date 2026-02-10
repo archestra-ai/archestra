@@ -21,6 +21,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "initializing",
       attemptCount: 0,
+      estimatedTotalAttempts: 7,
       elapsedMs: 0,
       retry: mockRetry,
     });
@@ -40,6 +41,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "checking",
       attemptCount: 0,
+      estimatedTotalAttempts: 7,
       elapsedMs: 0,
       retry: mockRetry,
     });
@@ -60,6 +62,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connected",
       attemptCount: 0,
+      estimatedTotalAttempts: 7,
       elapsedMs: 0,
       retry: mockRetry,
     });
@@ -78,6 +81,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 0,
+      estimatedTotalAttempts: 7,
       elapsedMs: 0,
       retry: mockRetry,
     });
@@ -93,10 +97,11 @@ describe("BackendConnectivityStatus", () => {
     expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
   });
 
-  it("should show retry count when there are failed attempts", () => {
+  it("should show retry count with estimated total when there are failed attempts", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 3,
+      estimatedTotalAttempts: 7,
       elapsedMs: 5000,
       retry: mockRetry,
     });
@@ -108,7 +113,7 @@ describe("BackendConnectivityStatus", () => {
     );
 
     expect(
-      screen.getByText(/Still trying to connect, attempt 3/),
+      screen.getByText(/Still trying to connect, attempt 3 \/ 7/),
     ).toBeInTheDocument();
   });
 
@@ -116,6 +121,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "unreachable",
       attemptCount: 5,
+      estimatedTotalAttempts: 7,
       elapsedMs: 60000,
       retry: mockRetry,
     });
@@ -138,6 +144,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "unreachable",
       attemptCount: 5,
+      estimatedTotalAttempts: 7,
       elapsedMs: 60000,
       retry: mockRetry,
     });
@@ -158,6 +165,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "unreachable",
       attemptCount: 5,
+      estimatedTotalAttempts: 7,
       elapsedMs: 60000,
       retry: mockRetry,
     });
@@ -179,6 +187,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "unreachable",
       attemptCount: 5,
+      estimatedTotalAttempts: 7,
       elapsedMs: 60000,
       retry: mockRetry,
     });
@@ -196,6 +205,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 1,
+      estimatedTotalAttempts: 7,
       elapsedMs: 500,
       retry: mockRetry,
     });
@@ -216,6 +226,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 0,
+      estimatedTotalAttempts: 7,
       elapsedMs: 3500,
       retry: mockRetry,
     });
@@ -236,6 +247,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 2,
+      estimatedTotalAttempts: 7,
       elapsedMs: 3000,
       retry: mockRetry,
     });
@@ -253,6 +265,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connected",
       attemptCount: 2,
+      estimatedTotalAttempts: 7,
       elapsedMs: 3500,
       retry: mockRetry,
     });
@@ -282,6 +295,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 2,
+      estimatedTotalAttempts: 7,
       elapsedMs: 3000,
       retry: mockRetry,
     });
@@ -296,6 +310,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connected",
       attemptCount: 2,
+      estimatedTotalAttempts: 7,
       elapsedMs: 3500,
       retry: mockRetry,
     });
@@ -316,6 +331,7 @@ describe("BackendConnectivityStatus", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connected",
       attemptCount: 0,
+      estimatedTotalAttempts: 7,
       elapsedMs: 100,
       retry: mockRetry,
     });

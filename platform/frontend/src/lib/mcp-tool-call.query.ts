@@ -4,6 +4,22 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
 
+type MCPGatewayAuthMethod =
+  archestraApiTypes.GetMcpToolCallResponses["200"]["authMethod"];
+
+export function formatAuthMethod(authMethod: MCPGatewayAuthMethod): string {
+  switch (authMethod) {
+    case "oauth":
+      return "OAuth";
+    case "user_token":
+      return "User Token";
+    case "org_token":
+      return "Org Token";
+    case "team_token":
+      return "Team Token";
+  }
+}
+
 const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 
 export function useMcpToolCalls({

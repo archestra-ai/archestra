@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
@@ -13,7 +13,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useProfiles } from "@/lib/agent.query";
-import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
+import { formatAuthMethod, useMcpToolCalls } from "@/lib/mcp-tool-call.query";
 import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
@@ -223,6 +223,31 @@ function McpToolCallsTable({
         const agent = agents?.find((a) => a.id === row.original.agentId);
         return (
           <TruncatedText message={agent?.name ?? "Unknown"} maxLength={30} />
+        );
+      },
+    },
+    {
+      id: "user",
+      header: "User",
+      cell: ({ row }) => {
+        const { userName, authMethod } = row.original;
+        if (!userName && !authMethod) {
+          return <div className="text-xs text-muted-foreground">—</div>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1">
+            {userName && (
+              <Badge variant="outline" className="text-xs max-w-[150px]">
+                <User className="h-3 w-3 mr-1 shrink-0" />
+                <span className="truncate">{userName}</span>
+              </Badge>
+            )}
+            {authMethod && (
+              <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                {formatAuthMethod(authMethod)}
+              </Badge>
+            )}
+          </div>
         );
       },
     },

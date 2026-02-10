@@ -35,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProfiles } from "@/lib/agent.query";
 import {
   useAgentDelegations,
@@ -494,156 +495,242 @@ export function McpConnectionInstructions({
         </div>
       )}
 
-      {/* Token Selector */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Select token</Label>
-        <Select
-          value={effectiveTokenId}
-          onValueChange={(value) => {
-            setSelectedTokenId(value);
-            // Reset exposed token state when changing token selection
-            setShowExposedToken(false);
-            setExposedTokenValue(null);
-          }}
-        >
-          <SelectTrigger className="w-full min-h-[60px] py-2.5">
-            <SelectValue placeholder="Select token">
-              {effectiveTokenId && (
-                <div className="flex flex-col gap-0.5 items-start text-left">
-                  <div>{getTokenDisplayName()}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {isPersonalTokenSelected
-                      ? "The most secure option."
-                      : selectedTeamToken?.isOrganizationToken
-                        ? "To share org-wide"
-                        : "To share with your teammates"}
-                  </div>
-                </div>
-              )}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {userToken && (
-              <SelectItem value={PERSONAL_TOKEN_ID}>
-                <div className="flex flex-col gap-0.5 items-start">
-                  <div>Personal Token</div>
-                  <div className="text-xs text-muted-foreground">
-                    The most secure option.
-                  </div>
-                </div>
-              </SelectItem>
-            )}
-            {/* Team tokens (non-organization) */}
-            {tokens
-              ?.filter((token) => !token.isOrganizationToken)
-              .map((token) => (
-                <SelectItem key={token.id} value={token.id}>
-                  <div className="flex flex-col gap-0.5 items-start">
-                    <div>
-                      {token.team?.name
-                        ? `Team Token (${token.team.name})`
-                        : token.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      To share with your teammates
-                    </div>
-                  </div>
-                </SelectItem>
-              ))}
-            {/* Organization token */}
-            {tokens
-              ?.filter((token) => token.isOrganizationToken)
-              .map((token) => (
-                <SelectItem key={token.id} value={token.id}>
-                  <div className="flex flex-col gap-0.5 items-start">
-                    <div>Organization Token</div>
-                    <div className="text-xs text-muted-foreground">
-                      To share org-wide
-                    </div>
-                  </div>
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       <ConnectionBaseUrlSelect
         value={connectionUrl}
         onChange={setConnectionUrl}
         idPrefix="mcp"
       />
 
-      <div className="space-y-3">
-        <div className="space-y-2">
+      {/* Auth Method Tabs */}
+      <Tabs defaultValue="static-token" className="space-y-4">
+        <div className="space-y-1">
+          <Label className="text-sm font-medium">Authentication</Label>
+          <TabsList className="w-full">
+            <TabsTrigger value="static-token" className="flex-1">
+              Static Token
+            </TabsTrigger>
+            <TabsTrigger value="oauth" className="flex-1">
+              OAuth 2.1
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        {/* Static Token Tab */}
+        <TabsContent value="static-token" className="space-y-4">
+          {/* Token Selector */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Select token</Label>
+            <Select
+              value={effectiveTokenId}
+              onValueChange={(value) => {
+                setSelectedTokenId(value);
+                setShowExposedToken(false);
+                setExposedTokenValue(null);
+              }}
+            >
+              <SelectTrigger className="w-full min-h-[60px] py-2.5">
+                <SelectValue placeholder="Select token">
+                  {effectiveTokenId && (
+                    <div className="flex flex-col gap-0.5 items-start text-left">
+                      <div>{getTokenDisplayName()}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {isPersonalTokenSelected
+                          ? "The most secure option."
+                          : selectedTeamToken?.isOrganizationToken
+                            ? "To share org-wide"
+                            : "To share with your teammates"}
+                      </div>
+                    </div>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {userToken && (
+                  <SelectItem value={PERSONAL_TOKEN_ID}>
+                    <div className="flex flex-col gap-0.5 items-start">
+                      <div>Personal Token</div>
+                      <div className="text-xs text-muted-foreground">
+                        The most secure option.
+                      </div>
+                    </div>
+                  </SelectItem>
+                )}
+                {tokens
+                  ?.filter((token) => !token.isOrganizationToken)
+                  .map((token) => (
+                    <SelectItem key={token.id} value={token.id}>
+                      <div className="flex flex-col gap-0.5 items-start">
+                        <div>
+                          {token.team?.name
+                            ? `Team Token (${token.team.name})`
+                            : token.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          To share with your teammates
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                {tokens
+                  ?.filter((token) => token.isOrganizationToken)
+                  .map((token) => (
+                    <SelectItem key={token.id} value={token.id}>
+                      <div className="flex flex-col gap-0.5 items-start">
+                        <div>Organization Token</div>
+                        <div className="text-xs text-muted-foreground">
+                          To share org-wide
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Configuration for MCP clients:
+            </p>
+            <div className="bg-muted rounded-md p-3 relative">
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 bg-transparent"
+                  onClick={handleExposeToken}
+                  disabled={
+                    isLoadingToken ||
+                    (!isPersonalTokenSelected && !hasProfileAdminPermission)
+                  }
+                >
+                  {isLoadingToken ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading...</span>
+                    </>
+                  ) : showExposedToken ? (
+                    <>
+                      <EyeOff className="h-4 w-4" />
+                      <span>Hide token</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-4 w-4" />
+                      <span>Expose token</span>
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 bg-transparent"
+                  onClick={
+                    isPersonalTokenSelected || hasProfileAdminPermission
+                      ? handleCopyConfig
+                      : handleCopyConfigWithoutRealToken
+                  }
+                  disabled={isCopyingConfig}
+                >
+                  {isCopyingConfig ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Copying...</span>
+                    </>
+                  ) : copiedConfig ? (
+                    <>
+                      <Check className="h-4 w-4 text-green-500" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      <span>Copy with exposed token</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+              <pre className="text-xs whitespace-pre-wrap break-all">
+                <CodeText className="text-sm whitespace pre-wrap break-all">
+                  {mcpConfig}
+                </CodeText>
+              </pre>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* OAuth 2.1 Tab */}
+        <TabsContent value="oauth" className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Configuration for MCP clients:
+            MCP clients that support OAuth 2.1 will handle authentication
+            automatically. Just provide the MCP Gateway URL — the client
+            discovers the authorization server, registers itself, and walks the
+            user through a browser-based login and consent flow.
           </p>
 
-          <div className="bg-muted rounded-md p-3 relative">
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-2 bg-transparent"
-                onClick={handleExposeToken}
-                disabled={
-                  isLoadingToken ||
-                  (!isPersonalTokenSelected && !hasProfileAdminPermission)
-                }
-              >
-                {isLoadingToken ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Loading...</span>
-                  </>
-                ) : showExposedToken ? (
-                  <>
-                    <EyeOff className="h-4 w-4" />
-                    <span>Hide token</span>
-                  </>
-                ) : (
-                  <>
-                    <Eye className="h-4 w-4" />
-                    <span>Expose token</span>
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-2 bg-transparent"
-                onClick={
-                  isPersonalTokenSelected || hasProfileAdminPermission
-                    ? handleCopyConfig
-                    : handleCopyConfigWithoutRealToken
-                }
-                disabled={isCopyingConfig}
-              >
-                {isCopyingConfig ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Copying...</span>
-                  </>
-                ) : copiedConfig ? (
-                  <>
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4" />
-                    <span>Copy with exposed token</span>
-                  </>
-                )}
-              </Button>
-            </div>
-            <pre className="text-xs whitespace-pre-wrap break-all">
-              <CodeText className="text-sm whitespace pre-wrap break-all">
-                {mcpConfig}
-              </CodeText>
-            </pre>
-          </div>
+          <OAuthConfigBlock mcpUrl={mcpUrl} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function OAuthConfigBlock({ mcpUrl }: { mcpUrl: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const oauthConfig = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          mcpServers: {
+            archestra: {
+              url: mcpUrl,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    [mcpUrl],
+  );
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(oauthConfig);
+    setCopied(true);
+    toast.success("Configuration copied");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground">
+        Configuration for MCP clients:
+      </p>
+      <div className="bg-muted rounded-md p-3 relative">
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 bg-transparent"
+            onClick={handleCopy}
+          >
+            {copied ? (
+              <>
+                <Check className="h-4 w-4 text-green-500" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4" />
+                <span>Copy</span>
+              </>
+            )}
+          </Button>
         </div>
+        <pre className="text-xs whitespace-pre-wrap break-all">
+          <CodeText className="text-sm whitespace pre-wrap break-all">
+            {oauthConfig}
+          </CodeText>
+        </pre>
       </div>
     </div>
   );

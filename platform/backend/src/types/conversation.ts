@@ -40,8 +40,6 @@ export const InsertConversationSchema = createInsertSchema(
   id: true,
   createdAt: true,
   updatedAt: true,
-  // browserState is managed internally, not exposed for creation via API
-  browserState: true,
 });
 
 export const UpdateConversationSchema = createUpdateSchema(

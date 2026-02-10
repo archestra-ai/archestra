@@ -24,6 +24,8 @@ Docker deployment provides the fastest way to get started with Archestra Platfor
 
 Run the platform with a single command:
 
+**Linux / macOS:**
+
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
@@ -31,6 +33,18 @@ docker run -p 9000:9000 -p 3000:3000 \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \
+   archestra/platform;
+```
+
+**Windows (PowerShell):**
+
+```powershell
+docker pull archestra/platform:latest;
+docker run -p 9000:9000 -p 3000:3000 `
+   -e ARCHESTRA_QUICKSTART=true `
+   -v /var/run/docker.sock:/var/run/docker.sock `
+   -v archestra-postgres-data:/var/lib/postgresql/data `
+   -v archestra-app-data:/app/data `
    archestra/platform;
 ```
 
@@ -42,6 +56,8 @@ This will start the platform with:
 - **MCP Kubernetes Orchestrator** via KinD
 
 **Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
+
+> **Accessing from another device on your network?** In quickstart mode, private network IPs (e.g., `192.168.x.x`, `10.x.x.x`) are automatically trusted, so authentication works without extra configuration.
 
 If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 
@@ -497,10 +513,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
   - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
 
-- **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
+- **`ARCHESTRA_FRONTEND_URL`** - Setting this variable enables origin validation for CORS and authentication. When set, only requests from this origin (and any in `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`) are allowed. When not set, all origins are accepted.
 
   - Example: `https://frontend.example.com`
-  - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
+  - Highly recommended for production.
+  - If users access the platform via a LAN IP (e.g., `http://192.168.1.5:3000`), set this to that URL
 
 - **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
 
@@ -557,12 +574,12 @@ The following environment variables can be used to configure Archestra Platform.
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
-- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for authentication flows.
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra trusted origins for CORS and authentication, in addition to `ARCHESTRA_FRONTEND_URL`. Setting this variable (even without `ARCHESTRA_FRONTEND_URL`) enables origin validation.
 
-  - Default: None
+  - Default: None (origin validation is off when neither this nor `ARCHESTRA_FRONTEND_URL` is set)
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
-  - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
-  - Required when configuring SSO with external identity providers hosted on different domains
+  - Use this to trust external identity providers (IdPs) for SSO, or to allow access from multiple URLs (e.g., both a LAN IP and a domain name)
+  - Example for LAN access alongside localhost: `http://192.168.1.5:3000,http://192.168.1.5:9000`
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
 
@@ -614,8 +631,8 @@ The following environment variables can be used to configure Archestra Platform.
 
 - **`ARCHESTRA_OLLAMA_BASE_URL`** - Base URL for your Ollama server.
 
-  - Required to enable Ollama provider support
-  - Example: `http://localhost:11434/v1` (default Ollama)
+  - Default: `http://localhost:11434/v1` (Ollama is enabled by default)
+  - Set this to override the default if your Ollama server runs on a different host or port
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.

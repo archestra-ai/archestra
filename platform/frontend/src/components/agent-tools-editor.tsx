@@ -152,25 +152,28 @@ const AgentToolsEditorContent = forwardRef<
   }, [assignedToolsData]);
 
   // Sort catalog items: assigned tools first (by count desc), then servers with tools, then 0 tools
+  // Globally available servers (e.g., playwright-browser) are hidden
   const sortedCatalogItems = useMemo(() => {
-    return [...catalogItems].sort((a, b) => {
-      const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
-      const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
+    return [...catalogItems]
+      .filter((c) => !c.isGloballyAvailable)
+      .sort((a, b) => {
+        const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
+        const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
 
-      // Items with assigned tools come first, sorted by assigned count descending
-      if (aAssigned > 0 && bAssigned === 0) return -1;
-      if (aAssigned === 0 && bAssigned > 0) return 1;
-      if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+        // Items with assigned tools come first, sorted by assigned count descending
+        if (aAssigned > 0 && bAssigned === 0) return -1;
+        if (aAssigned === 0 && bAssigned > 0) return 1;
+        if (aAssigned !== bAssigned) return bAssigned - aAssigned;
 
-      // Among items with same assigned count, sort by total tools available
-      const aCount = toolCountByCatalog.get(a.id) ?? 0;
-      const bCount = toolCountByCatalog.get(b.id) ?? 0;
-      if (aCount > 0 && bCount === 0) return -1;
-      if (aCount === 0 && bCount > 0) return 1;
+        // Among items with same assigned count, sort by total tools available
+        const aCount = toolCountByCatalog.get(a.id) ?? 0;
+        const bCount = toolCountByCatalog.get(b.id) ?? 0;
+        if (aCount > 0 && bCount === 0) return -1;
+        if (aCount === 0 && bCount > 0) return 1;
 
-      // Finally, sort alphabetically by name
-      return a.name.localeCompare(b.name);
-    });
+        // Finally, sort alphabetically by name
+        return a.name.localeCompare(b.name);
+      });
   }, [catalogItems, assignedToolsByCatalog, toolCountByCatalog]);
 
   // Filter by search query
@@ -466,7 +469,7 @@ function McpServerPill({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[420px] max-h-[min(500px,70vh)] p-0 flex flex-col overflow-hidden"
+        className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
         side="bottom"
         align="start"
         sideOffset={8}
@@ -520,7 +523,7 @@ function McpServerPill({
             <ToolChecklist
               tools={allTools}
               selectedToolIds={selectedToolIds}
-              setSelectedToolIds={setSelectedToolIds}
+              onSelectionChange={setSelectedToolIds}
             />
           </div>
         )}
@@ -532,7 +535,7 @@ function McpServerPill({
 export interface ToolChecklistProps {
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
-  setSelectedToolIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onSelectionChange: (selectedIds: Set<string>) => void;
 }
 
 function formatToolName(toolName: string) {
@@ -595,7 +598,7 @@ function ExpandableDescription({ description }: { description: string }) {
 export function ToolChecklist({
   tools,
   selectedToolIds,
-  setSelectedToolIds,
+  onSelectionChange,
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -618,15 +621,13 @@ export function ToolChecklist({
   const selectedCount = tools.filter((t) => selectedToolIds.has(t.id)).length;
 
   const handleToggle = (toolId: string) => {
-    setSelectedToolIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(toolId)) {
-        newSet.delete(toolId);
-      } else {
-        newSet.add(toolId);
-      }
-      return newSet;
-    });
+    const newSet = new Set(selectedToolIds);
+    if (newSet.has(toolId)) {
+      newSet.delete(toolId);
+    } else {
+      newSet.add(toolId);
+    }
+    onSelectionChange(newSet);
   };
 
   const handleSelectAll = () => {
@@ -634,7 +635,7 @@ export function ToolChecklist({
     for (const tool of filteredTools) {
       newSet.add(tool.id);
     }
-    setSelectedToolIds(newSet);
+    onSelectionChange(newSet);
   };
 
   const handleDeselectAll = () => {
@@ -642,7 +643,7 @@ export function ToolChecklist({
     for (const tool of filteredTools) {
       newSet.delete(tool.id);
     }
-    setSelectedToolIds(newSet);
+    onSelectionChange(newSet);
   };
 
   return (

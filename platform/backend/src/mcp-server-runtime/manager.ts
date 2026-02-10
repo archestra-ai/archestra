@@ -452,6 +452,9 @@ export class McpServerRuntimeManager {
         catalogItem,
       );
 
+      // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
+      await k8sDeployment.resolveHttpEndpoint();
+
       this.mcpServerIdToDeploymentMap.set(mcpServerId, k8sDeployment);
       logger.info(
         `Lazy-loaded MCP server deployment ${mcpServerId} into memory`,

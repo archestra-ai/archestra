@@ -246,6 +246,8 @@ export async function executeArchestraTool(
         sessionId,
         // Pass the current delegation chain so the child can extend it
         parentDelegationChain: context.delegationChain || context.agentId,
+        // Propagate conversationId for browser tab isolation
+        conversationId: context.conversationId,
       });
 
       return {

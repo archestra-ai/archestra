@@ -105,10 +105,11 @@ describe("ToolModel", () => {
       expect(result).toBe("list_repos");
     });
 
-    test("handles tool names containing separator", () => {
+    test("handles server names containing separator (e.g. upstash__context7)", () => {
+      // "upstash__context7__resolve-library-id" → tool name is "resolve-library-id"
       const slugified = `server${MCP_SERVER_TOOL_NAME_SEPARATOR}tool${MCP_SERVER_TOOL_NAME_SEPARATOR}name`;
       const result = ToolModel.unslugifyName(slugified);
-      expect(result).toBe(`tool${MCP_SERVER_TOOL_NAME_SEPARATOR}name`);
+      expect(result).toBe("name");
     });
 
     test("returns original name if no separator found", () => {

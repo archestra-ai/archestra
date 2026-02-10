@@ -467,7 +467,14 @@ class McpClient {
       // likely stale (e.g. Playwright pod restarted).  Delete it and throw a
       // StaleSessionError so executeToolCall can retry with a fresh session.
       if (usedStoredSession) {
-        await McpHttpSessionModel.deleteStaleSession(connectionKey);
+        try {
+          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+        } catch (err) {
+          logger.warn(
+            { connectionKey, err },
+            "Failed to delete stale MCP HTTP session",
+          );
+        }
         throw new StaleSessionError(connectionKey);
       }
       throw error;

@@ -1369,12 +1369,15 @@ describe("McpClient", () => {
         const { StreamableHTTPClientTransport } = await import(
           "@modelcontextprotocol/sdk/client/streamableHttp.js"
         );
-        vi.mocked(StreamableHTTPClientTransport).mockImplementation(
-          // biome-ignore lint/suspicious/noExplicitAny: test mock
-          function (this: any, _url: URL, options?: any) {
-            this.sessionId = options?.sessionId;
-          } as any,
-        );
+        vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+          this: { sessionId?: string },
+          _url: URL,
+          options?: { sessionId?: string },
+        ) {
+          this.sessionId = options?.sessionId;
+        } as
+          // biome-ignore lint/suspicious/noExplicitAny: cast required for mock constructor
+          any);
       });
 
       test("retries with fresh session when stale session is detected", async () => {

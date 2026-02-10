@@ -1,4 +1,4 @@
-import { eq, like, lt } from "drizzle-orm";
+import { eq, like, lt, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
@@ -53,10 +53,21 @@ class McpHttpSessionModel {
    * Called when a server is restarted to invalidate stale session IDs.
    */
   static async deleteByMcpServerId(mcpServerId: string): Promise<number> {
-    const pattern = `%:${mcpServerId}%`;
+    // Escape LIKE wildcards (%, _) in case the ID ever contains them
+    const escapedId = mcpServerId.replace(/[%_\\]/g, "\\$&");
+    // Match both key formats precisely:
+    //   "catalogId:mcpServerId:agentId:conversationId" (4-segment)
+    //   "catalogId:mcpServerId" (2-segment, must end at string boundary)
+    const patternFull = `%:${escapedId}:%`;
+    const patternShort = `%:${escapedId}`;
     const deleted = await db
       .delete(schema.mcpHttpSessionsTable)
-      .where(like(schema.mcpHttpSessionsTable.connectionKey, pattern))
+      .where(
+        or(
+          like(schema.mcpHttpSessionsTable.connectionKey, patternFull),
+          like(schema.mcpHttpSessionsTable.connectionKey, patternShort),
+        ),
+      )
       .returning({ connectionKey: schema.mcpHttpSessionsTable.connectionKey });
 
     if (deleted.length > 0) {

@@ -15,6 +15,7 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   anthropic: () => new AnthropicTokenizer(),
   openai: () => new TiktokenTokenizer(),
   cerebras: () => new TiktokenTokenizer(),
+  perplexity: () => new TiktokenTokenizer(),
   cohere: () => new TiktokenTokenizer(),
   mistral: () => new TiktokenTokenizer(),
   vllm: () => new TiktokenTokenizer(),

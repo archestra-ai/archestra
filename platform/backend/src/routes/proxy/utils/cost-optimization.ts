@@ -12,6 +12,7 @@ import type {
   Cerebras,
   Cohere,
   Gemini,
+  Perplexity,
   Mistral,
   OpenAi,
   Vllm,
@@ -21,6 +22,7 @@ import type {
 type ProviderMessages = {
   anthropic: Anthropic.Types.MessagesRequest["messages"];
   cerebras: Cerebras.Types.ChatCompletionsRequest["messages"];
+  perplexity: Perplexity.Types.ChatCompletionsRequest["messages"];
   cohere: Cohere.Types.ChatRequest["messages"];
   gemini: Gemini.Types.GenerateContentRequest["contents"];
   mistral: Mistral.Types.ChatCompletionsRequest["messages"];

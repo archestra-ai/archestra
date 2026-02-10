@@ -92,6 +92,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://cloud.cerebras.ai/platform",
     consoleName: "Cerebras Cloud",
   },
+  perplexity: {
+    name: "Perplexity",
+    icon: "/icons/perplexity.png",
+    placeholder: "gsk_...",
+    enabled: true,
+    consoleUrl: "https://console.perplexity.com/keys",
+    consoleName: "Perplexity Console",
+  },
   cohere: {
     name: "Cohere",
     icon: "/icons/cohere.png",

@@ -8,6 +8,7 @@ import {
   testMcpServerCommand,
 } from "@shared";
 import { and, eq } from "drizzle-orm";
+import { isEqual } from "lodash-es";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -221,8 +222,7 @@ async function seedPlaywrightCatalog(): Promise<void> {
   );
   const configChanged =
     !existingCatalog ||
-    JSON.stringify(existingCatalog.localConfig) !==
-      JSON.stringify(playwrightLocalConfig);
+    !isEqual(existingCatalog.localConfig, playwrightLocalConfig);
 
   await db
     .insert(schema.internalMcpCatalogTable)
@@ -396,6 +396,7 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
     openai: config.chat.openai.apiKey,
     gemini: config.chat.gemini.apiKey,
     cerebras: config.chat.cerebras.apiKey,
+    perplexity: config.chat.perplexity.apiKey,
     cohere: config.chat.cohere.apiKey,
     mistral: config.chat.mistral.apiKey,
     ollama: config.chat.ollama.apiKey,
@@ -484,6 +485,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     openai: "OpenAI",
     gemini: "Google",
     cerebras: "Cerebras",
+    perplexity: "Perplexity",
     cohere: "Cohere",
     mistral: "Mistral",
     ollama: "Ollama",

@@ -2,6 +2,7 @@ export { anthropicAdapterFactory } from "./anthropic";
 export { bedrockAdapterFactory } from "./bedrock";
 export { cerebrasAdapterFactory } from "./cerebras";
 export { cohereAdapterFactory } from "./cohere";
+export { perplexityAdapterFactory } from "./perplexity";
 export { geminiAdapterFactory } from "./gemini";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";

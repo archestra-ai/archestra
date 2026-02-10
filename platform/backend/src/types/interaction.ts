@@ -8,6 +8,7 @@ import {
   Cerebras,
   Cohere,
   Gemini,
+  Perplexity,
   Mistral,
   Ollama,
   OpenAi,
@@ -31,6 +32,7 @@ export const InteractionRequestSchema = z.union([
   Anthropic.API.MessagesRequestSchema,
   Bedrock.API.ConverseRequestSchema,
   Cerebras.API.ChatCompletionRequestSchema,
+  Perplexity.API.ChatCompletionRequestSchema,
   Mistral.API.ChatCompletionRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
@@ -44,6 +46,7 @@ export const InteractionResponseSchema = z.union([
   Anthropic.API.MessagesResponseSchema,
   Bedrock.API.ConverseResponseSchema,
   Cerebras.API.ChatCompletionResponseSchema,
+  Perplexity.API.ChatCompletionResponseSchema,
   Mistral.API.ChatCompletionResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
@@ -115,6 +118,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Cerebras.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Cerebras.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["perplexity:chatCompletions"]),
+    request: Perplexity.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Perplexity.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Perplexity.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

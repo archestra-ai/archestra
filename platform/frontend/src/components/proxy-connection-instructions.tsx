@@ -40,6 +40,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.cerebras,
     originalUrl: "https://api.cerebras.ai/v1/",
   },
+  perplexity: {
+    label: providerDisplayNames.perplexity,
+    originalUrl: "https://api.perplexity.ai/",
+  },
   mistral: {
     label: providerDisplayNames.mistral,
     originalUrl: "https://api.mistral.ai/v1/",

@@ -325,7 +325,7 @@ class McpClient {
             try {
               await staleClient.close();
             } catch {
-              logger.error(
+              logger.warn(
                 { connectionKey },
                 "Failed to close stale MCP client",
               );

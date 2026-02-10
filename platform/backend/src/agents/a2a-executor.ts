@@ -17,6 +17,7 @@ import {
   McpServerModel,
   TeamModel,
 } from "@/models";
+import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import type { SupportedChatProvider } from "@/types";
 
 export interface A2AExecuteParams {
@@ -202,13 +203,11 @@ export async function executeA2AMessage(
         NoOutputGeneratedError.isInstance(streamError) &&
         capturedStreamError
       ) {
-        const realMessage =
-          capturedStreamError instanceof Error
-            ? capturedStreamError.message
-            : String(capturedStreamError);
-        throw new Error(realMessage);
+        throw new ProviderError(
+          mapProviderError(capturedStreamError, provider),
+        );
       }
-      throw streamError;
+      throw new ProviderError(mapProviderError(streamError, provider));
     }
 
     // Generate message ID

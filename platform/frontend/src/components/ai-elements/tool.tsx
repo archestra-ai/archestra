@@ -10,7 +10,14 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { createContext, useContext, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -211,6 +218,38 @@ export type ToolOutputProps = ComponentProps<"div"> & {
   }>;
 };
 
+/**
+ * Try to extract MCP Apps metadata from tool output.
+ * When a tool result contains `_meta.ui`, it's wrapped as:
+ * `{"_mcpMeta": {"ui": {"resourceUri": "ui://..."}}, "_appHtml": "...", "content": "..."}`
+ */
+function extractMcpMeta(output: unknown): {
+  meta: Record<string, unknown>;
+  appHtml?: string;
+  content: string;
+} | null {
+  if (typeof output !== "string") return null;
+  try {
+    const parsed = JSON.parse(output);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "_mcpMeta" in parsed &&
+      typeof parsed._mcpMeta === "object"
+    ) {
+      return {
+        meta: parsed._mcpMeta,
+        appHtml:
+          typeof parsed._appHtml === "string" ? parsed._appHtml : undefined,
+        content: parsed.content ?? "",
+      };
+    }
+  } catch {
+    // Not JSON or not our format
+  }
+  return null;
+}
+
 export const ToolOutput = ({
   className,
   output,
@@ -223,6 +262,24 @@ export const ToolOutput = ({
 
   if (!(output || errorText || conversations)) {
     return null;
+  }
+
+  // Check for MCP Apps UI metadata with embedded HTML content
+  const mcpMeta = extractMcpMeta(output);
+  if (mcpMeta?.appHtml) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {label ?? "Result"}
+        </h4>
+        <McpAppFrame appHtml={mcpMeta.appHtml} />
+        {mcpMeta.content && (
+          <div className="rounded-md bg-muted/50 p-3 text-xs text-foreground">
+            {mcpMeta.content}
+          </div>
+        )}
+      </div>
+    );
   }
 
   // Render conversations as chat bubbles if provided
@@ -343,3 +400,43 @@ export const ToolOutput = ({
     </div>
   );
 };
+
+/**
+ * Renders an MCP App UI in a sandboxed iframe.
+ * The HTML content was fetched at tool execution time via `resources/read`
+ * and is embedded directly using the iframe `srcdoc` attribute.
+ */
+function McpAppFrame({ appHtml }: { appHtml: string }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(300);
+
+  const handleMessage = useCallback((event: MessageEvent) => {
+    // Only accept messages from our iframe
+    if (iframeRef.current?.contentWindow !== event.source) return;
+
+    const data = event.data;
+    if (typeof data !== "object" || data === null) return;
+
+    // Handle resize messages from the app
+    if (data.type === "resize" && typeof data.height === "number") {
+      setHeight(Math.min(Math.max(data.height, 100), 800));
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [handleMessage]);
+
+  return (
+    <div className="rounded-md border bg-background overflow-hidden">
+      <iframe
+        ref={iframeRef}
+        srcDoc={appHtml}
+        title="MCP App"
+        sandbox="allow-scripts"
+        style={{ width: "100%", height: `${height}px`, border: "none" }}
+      />
+    </div>
+  );
+}

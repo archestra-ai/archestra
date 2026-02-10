@@ -292,6 +292,7 @@ class McpClient {
           !!result.isError,
           tool.responseModifierTemplate,
           authInfo,
+          result._meta as Record<string, unknown> | undefined,
         );
       } catch (error) {
         // Handle stale HTTP session.  The MCP SDK skips the `initialize`
@@ -1160,6 +1161,7 @@ class McpClient {
     isError: boolean,
     template: string | null,
     authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
+    meta?: Record<string, unknown>,
   ): Promise<CommonToolResult> {
     const modifiedContent = this.applyTemplate(
       content,
@@ -1172,6 +1174,7 @@ class McpClient {
       name: toolCall.name,
       content: modifiedContent,
       isError,
+      ...(meta && { _meta: meta }),
     };
 
     await this.persistToolCall(
@@ -1442,6 +1445,74 @@ class McpClient {
         lastError?.message || "Unknown error"
       }`,
     );
+  }
+
+  /**
+   * Read a MCP resource (e.g. ui:// for MCP Apps) using the same server
+   * connection as a given tool. Returns the text content or null on failure.
+   */
+  async readResource(
+    toolName: string,
+    agentId: string,
+    resourceUri: string,
+    tokenAuth?: TokenAuthContext,
+    options?: { conversationId?: string },
+  ): Promise<string | null> {
+    try {
+      // Reuse the same validation & connection flow as executeToolCall
+      const toolCall = { id: "resource-read", name: toolName, arguments: {} };
+      const validationResult = await this.validateAndGetTool(
+        toolCall,
+        agentId,
+        tokenAuth,
+      );
+      if ("error" in validationResult) return null;
+      const { tool, catalogItem } = validationResult;
+
+      const targetResult = await this.determineTargetMcpServerIdForCatalogItem({
+        tool,
+        toolCall,
+        agentId,
+        tokenAuth,
+        catalogItem,
+      });
+      if ("error" in targetResult) return null;
+      const { targetMcpServerId } = targetResult;
+
+      const secretsResult = await this.getSecretsForMcpServer({
+        targetMcpServerId,
+        toolCall,
+        agentId,
+      });
+      if ("error" in secretsResult) return null;
+      const { secrets } = secretsResult;
+
+      const connectionKey = options?.conversationId
+        ? `${catalogItem.id}:${targetMcpServerId}:${agentId}:${options.conversationId}`
+        : `${catalogItem.id}:${targetMcpServerId}`;
+
+      const transport = await this.getTransport(
+        catalogItem,
+        targetMcpServerId,
+        secrets,
+        connectionKey,
+      );
+      const client = await this.getOrCreateClient(connectionKey, transport);
+
+      const result = await client.readResource({ uri: resourceUri });
+
+      const firstContent = result.contents[0];
+      if (!firstContent) return null;
+      return "text" in firstContent
+        ? firstContent.text
+        : (firstContent.blob ?? null);
+    } catch (error) {
+      logger.warn(
+        { toolName, agentId, resourceUri, err: error },
+        "Failed to read MCP resource (non-fatal)",
+      );
+      return null;
+    }
   }
 
   /**

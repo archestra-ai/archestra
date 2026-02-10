@@ -19,6 +19,7 @@ const mockConnect = vi.fn();
 const mockClose = vi.fn();
 const mockListTools = vi.fn();
 const mockPing = vi.fn();
+const mockReadResource = vi.fn();
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: test..
@@ -28,6 +29,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     this.close = mockClose;
     this.listTools = mockListTools;
     this.ping = mockPing;
+    this.readResource = mockReadResource;
   }),
 }));
 
@@ -104,6 +106,7 @@ describe("McpClient", () => {
     mockClose.mockReset();
     mockListTools.mockReset();
     mockPing.mockReset();
+    mockReadResource.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
     mockGetOrLoadDeployment.mockReset();
@@ -1538,6 +1541,160 @@ describe("McpClient", () => {
 
         // callTool should have been called twice (first stale, then fresh)
         expect(mockCallTool).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe("_meta preservation", () => {
+      test("preserves _meta from callTool result in CommonToolResult", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__ui_tool",
+          description: "Tool with _meta.ui",
+          parameters: {},
+          catalogId,
+          mcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "Map rendered" }],
+          isError: false,
+          _meta: {
+            ui: {
+              resourceUri: "ui://mapbox-server/map-view",
+            },
+          },
+        });
+
+        const toolCall = {
+          id: "call_meta_1",
+          name: "github-mcp-server__ui_tool",
+          arguments: { location: "New York" },
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result).toEqual({
+          id: "call_meta_1",
+          name: "github-mcp-server__ui_tool",
+          content: [{ type: "text", text: "Map rendered" }],
+          isError: false,
+          _meta: {
+            ui: {
+              resourceUri: "ui://mapbox-server/map-view",
+            },
+          },
+        });
+      });
+
+      test("omits _meta when callTool response has no _meta", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__no_meta_tool",
+          description: "Tool without _meta",
+          parameters: {},
+          catalogId,
+          mcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "No meta" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_no_meta",
+          name: "github-mcp-server__no_meta_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        expect(result).toEqual({
+          id: "call_no_meta",
+          name: "github-mcp-server__no_meta_tool",
+          content: [{ type: "text", text: "No meta" }],
+          isError: false,
+        });
+        expect(result._meta).toBeUndefined();
+      });
+    });
+
+    describe("readResource", () => {
+      test("reads a ui:// resource using the same MCP server connection as the tool", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__map_tool",
+          description: "Tool with UI resource",
+          parameters: {},
+          catalogId,
+          mcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        mockReadResource.mockResolvedValueOnce({
+          contents: [
+            {
+              uri: "ui://github-mcp-server/map-view",
+              text: "<html><body>Map UI</body></html>",
+              mimeType: "text/html",
+            },
+          ],
+        });
+
+        const content = await mcpClient.readResource(
+          "github-mcp-server__map_tool",
+          agentId,
+          "ui://github-mcp-server/map-view",
+        );
+
+        expect(content).toBe("<html><body>Map UI</body></html>");
+        expect(mockReadResource).toHaveBeenCalledWith({
+          uri: "ui://github-mcp-server/map-view",
+        });
+      });
+
+      test("returns null when resource has no contents", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__empty_res_tool",
+          description: "Tool with empty resource",
+          parameters: {},
+          catalogId,
+          mcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
+        });
+
+        mockReadResource.mockResolvedValueOnce({
+          contents: [],
+        });
+
+        const content = await mcpClient.readResource(
+          "github-mcp-server__empty_res_tool",
+          agentId,
+          "ui://github-mcp-server/empty",
+        );
+
+        expect(content).toBeNull();
+      });
+
+      test("returns null when tool is not found", async () => {
+        const content = await mcpClient.readResource(
+          "nonexistent-server__tool",
+          agentId,
+          "ui://nonexistent-server/resource",
+        );
+
+        expect(content).toBeNull();
       });
     });
 

@@ -27,8 +27,20 @@ Chat will use LLM API Keys configured in Settings -> LLM API Keys. When a chat r
 
 See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the full list.
 
+### MCP Apps (Interactive UI)
+
+When an MCP tool returns `_meta.ui.resourceUri` in its result, Chat automatically renders the tool's interactive UI in a sandboxed iframe alongside the text output. This follows the [MCP Apps (ext-apps) specification](https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/mcp-apps).
+
+The flow:
+1. The MCP server tool returns a result with `_meta.ui.resourceUri` pointing to a `ui://` resource
+2. Archestra reads the resource HTML via `resources/read` on the same MCP server connection
+3. The HTML is rendered in a sandboxed iframe (`allow-scripts` only) in the chat tool output
+
+The iframe supports `postMessage`-based communication for dynamic resizing. MCP Apps that send `{ type: "resize", height: number }` messages will have their iframe height adjusted automatically (clamped between 100px and 800px).
+
 ## Security Notes
 
 - API keys are stored encrypted using the configured [secrets manager](/docs/platform-secrets-management)
 - Keys are never exposed in the UI after creation
 - Profile assignments allow separation of billing/usage across teams
+- MCP App iframes are sandboxed with `allow-scripts` only (no access to parent page, cookies, or navigation)

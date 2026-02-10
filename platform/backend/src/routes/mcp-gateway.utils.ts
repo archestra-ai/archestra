@@ -257,6 +257,7 @@ export async function createAgentServer(
             ? result.content
             : [{ type: "text", text: JSON.stringify(result.content) }],
           isError: result.isError,
+          ...(result._meta && { _meta: result._meta }),
         };
       } catch (error) {
         if (typeof error === "object" && error !== null && "code" in error) {

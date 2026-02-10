@@ -1049,7 +1049,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
   }
 
   // Convert MCP content to string for AI SDK
-  return (result.content as Array<{ type: string; text?: string }>)
+  const textContent = (result.content as Array<{ type: string; text?: string }>)
     .map((item: { type: string; text?: string }) => {
       if (item.type === "text" && item.text) {
         return item.text;
@@ -1057,6 +1057,42 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
       return JSON.stringify(item);
     })
     .join("\n");
+
+  // If the tool result has _meta (e.g. MCP Apps UI), wrap the result so the
+  // frontend can detect and render the app UI alongside the text content.
+  if (result._meta) {
+    const ui = (result._meta as { ui?: { resourceUri?: string } }).ui;
+    let appHtml: string | undefined;
+
+    // When a ui:// resource URI is present, read the HTML content so the
+    // frontend can render it directly in a sandboxed iframe via srcdoc.
+    if (ui?.resourceUri) {
+      const html = await mcpClient.readResource(
+        toolName,
+        agentId,
+        ui.resourceUri,
+        mcpGwToken
+          ? {
+              tokenId: mcpGwToken.tokenId,
+              teamId: mcpGwToken.teamId,
+              isOrganizationToken: mcpGwToken.isOrganizationToken,
+              organizationId,
+              userId,
+            }
+          : undefined,
+        { conversationId },
+      );
+      if (html) appHtml = html;
+    }
+
+    return JSON.stringify({
+      _mcpMeta: result._meta,
+      ...(appHtml && { _appHtml: appHtml }),
+      content: textContent,
+    });
+  }
+
+  return textContent;
 }
 
 /**

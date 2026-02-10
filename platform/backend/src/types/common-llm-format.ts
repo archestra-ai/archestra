@@ -29,6 +29,8 @@ export type CommonToolResult = {
   content: unknown;
   isError: boolean;
   error?: string;
+  /** MCP _meta from CallToolResult (e.g. _meta.ui for MCP Apps) */
+  _meta?: Record<string, unknown>;
 };
 
 /**

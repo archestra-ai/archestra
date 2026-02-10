@@ -378,6 +378,41 @@ const zhipuaiConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const groqConfig: ModelOptimizationTestConfig = {
+  providerName: "Groq",
+  provider: "groq",
+
+  endpoint: (agentId) => `/v1/groq/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-groq-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-groq-baseline",
+  optimizedModel: "e2e-test-groq-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -408,6 +443,7 @@ const testConfigs: ModelOptimizationTestConfig[] = [
   geminiConfig,
   cohereConfig,
   cerebrasConfig,
+  groqConfig,
   mistralConfig,
   vllmConfig,
   ollamaConfig,

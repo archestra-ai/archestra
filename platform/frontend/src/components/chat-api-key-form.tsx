@@ -92,6 +92,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://cloud.cerebras.ai/platform",
     consoleName: "Cerebras Cloud",
   },
+  deepseek: {
+    name: "DeepSeek",
+    icon: "/icons/deepseek.png",
+    placeholder: "gsk_...",
+    enabled: true,
+    consoleUrl: "https://console.deepseek.com/keys",
+    consoleName: "DeepSeek Console",
+  },
   cohere: {
     name: "Cohere",
     icon: "/icons/cohere.png",

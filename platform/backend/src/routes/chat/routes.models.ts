@@ -242,6 +242,44 @@ async function fetchCerebrasModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from DeepSeek API (OpenAI-compatible)
+ */
+async function fetchDeepSeekModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.deepseek.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch DeepSeek models",
+    );
+    throw new Error(`Failed to fetch DeepSeek models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+      owned_by: string;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "deepseek" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from Mistral API (OpenAI-compatible)
  */
 async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
@@ -729,6 +767,7 @@ async function getProviderApiKey({
   const envApiKeyFallbacks: Record<SupportedProvider, () => string | null> = {
     anthropic: () => config.chat.anthropic.apiKey || null,
     cerebras: () => config.chat.cerebras.apiKey || null,
+    deepseek: () => config.chat.deepseek.apiKey || null,
     cohere: () => config.chat.cohere?.apiKey || null,
     gemini: () => config.chat.gemini.apiKey || null,
     mistral: () => config.chat.mistral.apiKey || null,
@@ -750,6 +789,7 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   bedrock: fetchBedrockModels,
   cerebras: fetchCerebrasModels,
+  deepseek: fetchDeepSeekModels,
   gemini: fetchGeminiModels,
   mistral: fetchMistralModels,
   openai: fetchOpenAiModels,
@@ -823,7 +863,7 @@ export async function fetchModelsForProvider({
   try {
     let models: ModelInfo[] = [];
     if (
-      ["anthropic", "cerebras", "cohere", "mistral", "openai"].includes(
+      ["anthropic", "cerebras", "deepseek", "cohere", "mistral", "openai"].includes(
         provider,
       )
     ) {

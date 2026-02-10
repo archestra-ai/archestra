@@ -406,6 +406,7 @@ class ModelsDevClient {
       anthropic: ["anthropic/"],
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
+      deepseek: ["deepseek/"],
       mistral: ["mistral/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],

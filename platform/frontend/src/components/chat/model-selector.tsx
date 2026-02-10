@@ -97,6 +97,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   gemini: "google",
   bedrock: "amazon-bedrock",
   cerebras: "cerebras",
+  deepseek: "deepseek",
   cohere: "cohere",
   mistral: "mistral",
   vllm: "vllm",

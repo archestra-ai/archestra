@@ -93,10 +93,12 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   // WHY: Team options are disabled if:
   // 1. Reinstalling a personal server (can't switch to team)
-  // 2. User lacks mcpServer:update permission (members don't have it, only editors/admins do)
+  // 2. User lacks mcpServer:update permission AND personal is still available.
+  //    When personal is unavailable (already installed or BYOS), teams must stay
+  //    enabled since they are the only option
   const areTeamsDisabled = isReinstall
     ? !existingTeamId // Reinstalling personal server - can't switch to team
-    : !hasMcpServerUpdate;
+    : !hasMcpServerUpdate && !isPersonalDisabled;
 
   // Compute the initial dropdown value
   const initialValue = useMemo(() => {

@@ -1106,6 +1106,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   gemini: parseGeminiError,
   bedrock: parseBedrockError,
   cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
+  groq: parseOpenAIError, // Groq uses OpenAI-compatible API
   cohere: parseCohereError,
   mistral: parseOpenAIError, // Mistral uses OpenAI-compatible API
   vllm: parseVllmError,
@@ -1124,6 +1125,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   gemini: mapGeminiErrorWrapper,
   bedrock: mapBedrockErrorWrapper,
   cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
+  groq: mapOpenAIErrorWrapper, // Groq uses OpenAI-compatible API
   cohere: mapCohereErrorWrapper,
   mistral: mapOpenAIErrorWrapper, // Mistral uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,

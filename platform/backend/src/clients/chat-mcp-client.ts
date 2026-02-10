@@ -5,7 +5,7 @@ import {
   isAgentTool,
   isArchestraMcpServerTool,
   isBrowserMcpTool,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  parseFullToolName,
   TimeInMs,
 } from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
@@ -699,18 +699,10 @@ export async function getChatMcpTools({
                   },
                 );
 
-                // Report metrics for Archestra tools
-                const separatorIdx = mcpTool.name.indexOf(
-                  MCP_SERVER_TOOL_NAME_SEPARATOR,
-                );
-                metrics.mcp.reportMcpToolCall({
-                  profileName: agentName,
-                  mcpServerName:
-                    separatorIdx > 0
-                      ? mcpTool.name.substring(0, separatorIdx)
-                      : "unknown",
+                reportToolMetrics({
                   toolName: mcpTool.name,
-                  durationSeconds: (Date.now() - toolStartTime) / 1000,
+                  agentName,
+                  startTime: toolStartTime,
                   isError: archestraResponse.isError ?? false,
                 });
 
@@ -759,6 +751,12 @@ export async function getChatMcpTools({
                 mcpGwToken,
               });
             } catch (error) {
+              reportToolMetrics({
+                toolName: mcpTool.name,
+                agentName,
+                startTime: toolStartTime,
+                isError: true,
+              });
               logger.error(
                 {
                   agentId,
@@ -847,18 +845,10 @@ export async function getChatMcpTools({
                   archestraContext,
                 );
 
-                // Report metrics for agent tools
-                const agentToolSepIdx = agentTool.name.indexOf(
-                  MCP_SERVER_TOOL_NAME_SEPARATOR,
-                );
-                metrics.mcp.reportMcpToolCall({
-                  profileName: agentName,
-                  mcpServerName:
-                    agentToolSepIdx > 0
-                      ? agentTool.name.substring(0, agentToolSepIdx)
-                      : "unknown",
+                reportToolMetrics({
                   toolName: agentTool.name,
-                  durationSeconds: (Date.now() - agentToolStartTime) / 1000,
+                  agentName,
+                  startTime: agentToolStartTime,
                   isError: response.isError ?? false,
                 });
 
@@ -885,6 +875,12 @@ export async function getChatMcpTools({
                   )
                   .join("\n");
               } catch (error) {
+                reportToolMetrics({
+                  toolName: agentTool.name,
+                  agentName,
+                  startTime: agentToolStartTime,
+                  isError: true,
+                });
                 logger.error(
                   {
                     agentId,
@@ -1026,33 +1022,32 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     arguments: toolArguments ?? {},
   };
 
-  const result = await mcpClient.executeToolCall(
-    toolCall,
-    agentId,
-    mcpGwToken
-      ? {
-          tokenId: mcpGwToken.tokenId,
-          teamId: mcpGwToken.teamId,
-          isOrganizationToken: mcpGwToken.isOrganizationToken,
-          organizationId,
-          userId,
-        }
-      : undefined,
-    { conversationId },
-  );
-
-  // Report MCP metrics
-  const durationSeconds = (Date.now() - startTime) / 1000;
-  const separatorIndex = toolName.indexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
-  const mcpServerName =
-    separatorIndex > 0 ? toolName.substring(0, separatorIndex) : "unknown";
-  metrics.mcp.reportMcpToolCall({
-    profileName: agentName,
-    mcpServerName,
-    toolName,
-    durationSeconds,
-    isError: result.isError ?? false,
-  });
+  let result: Awaited<ReturnType<typeof mcpClient.executeToolCall>>;
+  try {
+    result = await mcpClient.executeToolCall(
+      toolCall,
+      agentId,
+      mcpGwToken
+        ? {
+            tokenId: mcpGwToken.tokenId,
+            teamId: mcpGwToken.teamId,
+            isOrganizationToken: mcpGwToken.isOrganizationToken,
+            organizationId,
+            userId,
+          }
+        : undefined,
+      { conversationId },
+    );
+    reportToolMetrics({
+      toolName,
+      agentName,
+      startTime,
+      isError: result.isError ?? false,
+    });
+  } catch (error) {
+    reportToolMetrics({ toolName, agentName, startTime, isError: true });
+    throw error;
+  }
 
   // Check if MCP tool returned an error
   if (result.isError) {
@@ -1345,4 +1340,20 @@ async function filterToolsByEnabledIds(
   );
 
   return filteredTools;
+}
+
+function reportToolMetrics(params: {
+  toolName: string;
+  agentName: string;
+  startTime: number;
+  isError: boolean;
+}): void {
+  const { serverName } = parseFullToolName(params.toolName);
+  metrics.mcp.reportMcpToolCall({
+    profileName: params.agentName,
+    mcpServerName: serverName ?? "unknown",
+    toolName: params.toolName,
+    durationSeconds: (Date.now() - params.startTime) / 1000,
+    isError: params.isError,
+  });
 }

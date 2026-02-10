@@ -100,7 +100,7 @@ function Pagination({
   total: number;
   onPaginationChange: (params: { pageIndex: number; pageSize: number }) => void;
 }) {
-  const totalPages = Math.ceil(total / pageSize);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = pageIndex + 1;
   const canPrevious = pageIndex > 0;
   const canNext = pageIndex < totalPages - 1;

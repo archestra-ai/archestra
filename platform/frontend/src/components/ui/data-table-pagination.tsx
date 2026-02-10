@@ -29,9 +29,10 @@ export function DataTablePagination<TData>({
   const paginationState = table.getState().pagination;
   const currentPage = (paginationState?.pageIndex ?? 0) + 1;
   const pageSize = paginationState?.pageSize ?? 10;
-  const totalPages = totalRows
-    ? Math.ceil(totalRows / pageSize)
-    : table.getPageCount();
+  const totalPages = Math.max(
+    1,
+    totalRows ? Math.ceil(totalRows / pageSize) : table.getPageCount(),
+  );
 
   const handlePageSizeChange = (value: string) => {
     const newPageSize = Number(value);

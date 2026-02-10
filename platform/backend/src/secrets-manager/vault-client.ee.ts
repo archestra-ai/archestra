@@ -1,15 +1,15 @@
 import fs from "node:fs/promises";
 import { Sha256 } from "@aws-crypto/sha256-js";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
+import { ApiError } from "@shared/types";
 import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
 import logger from "@/logging";
-import {
-  ApiError,
-  type VaultConfig,
-  type VaultFolderConnectivityResult,
-  type VaultSecretListItem,
-} from "@/types";
+import type {
+  VaultConfig,
+  VaultFolderConnectivityResult,
+  VaultSecretListItem,
+} from "@/types/secrets-manager";
 import { extractVaultErrorMessage } from "./utils";
 
 /**

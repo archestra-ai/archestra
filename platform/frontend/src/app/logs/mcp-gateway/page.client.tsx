@@ -284,9 +284,14 @@ function McpToolCallsTable({
         return (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant="secondary" className="text-xs max-w-[180px]">
-                <span className="truncate">{displayName}</span>
-              </Badge>
+              <div className="max-w-[160px]">
+                <Badge
+                  variant="secondary"
+                  className="text-xs max-w-full inline-flex"
+                >
+                  <span className="truncate">{displayName}</span>
+                </Badge>
+              </div>
             </TooltipTrigger>
             <TooltipContent>{rawName}</TooltipContent>
           </Tooltip>
@@ -302,11 +307,7 @@ function McpToolCallsTable({
           return <div className="text-xs text-muted-foreground">—</div>;
         }
         const { toolName } = parseFullToolName(fullName);
-        return (
-          <div className="text-xs">
-            <TruncatedText message={toolName || fullName} maxLength={40} />
-          </div>
-        );
+        return <code className="text-xs">{toolName || fullName}</code>;
       },
     },
     {

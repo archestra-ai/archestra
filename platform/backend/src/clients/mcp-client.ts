@@ -148,6 +148,10 @@ class McpClient {
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new Map<string, Map<string, string>>();
+  // Per-connectionKey lock to prevent thundering-herd when multiple concurrent
+  // calls (e.g. browser stream ticks) detect a stale session simultaneously.
+  // Only the first caller performs cleanup + retry; others wait and reuse.
+  private sessionRecoveryLocks = new Map<string, Promise<void>>();
 
   /**
    * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
@@ -307,33 +311,59 @@ class McpClient {
             String(error.message).includes("Session not found"));
 
         if (isStaleSession && !isRetry) {
+          // Check if another concurrent call is already recovering this
+          // connection (e.g. multiple browser-stream ticks firing at once).
+          // If so, wait for it and reuse the fresh client it creates.
+          const existingRecovery = this.sessionRecoveryLocks.get(connectionKey);
+          if (existingRecovery) {
+            logger.info(
+              { connectionKey },
+              "Waiting for concurrent session recovery",
+            );
+            await existingRecovery;
+            return executeToolCall(getTransport, currentSecrets, true);
+          }
+
           logger.info(
             { connectionKey },
             "Stale session detected, retrying with fresh session",
           );
+
+          // Acquire recovery lock so concurrent callers wait for us.
+          let resolveRecovery!: () => void;
+          const recoveryPromise = new Promise<void>((resolve) => {
+            resolveRecovery = resolve;
+          });
+          this.sessionRecoveryLocks.set(connectionKey, recoveryPromise);
+
           try {
-            await McpHttpSessionModel.deleteStaleSession(connectionKey);
-          } catch (err) {
-            logger.warn(
-              { connectionKey, err },
-              "Failed to delete stale MCP HTTP session",
-            );
-          }
-          // Close the stale client so its AbortController is cleaned up
-          const staleClient = this.activeConnections.get(connectionKey);
-          if (staleClient) {
             try {
-              await staleClient.close();
-            } catch {
+              await McpHttpSessionModel.deleteStaleSession(connectionKey);
+            } catch (err) {
               logger.warn(
-                { connectionKey },
-                "Failed to close stale MCP client",
+                { connectionKey, err },
+                "Failed to delete stale MCP HTTP session",
               );
             }
+            // Close the stale client so its AbortController is cleaned up
+            const staleClient = this.activeConnections.get(connectionKey);
+            if (staleClient) {
+              try {
+                await staleClient.close();
+              } catch {
+                logger.warn(
+                  { connectionKey },
+                  "Failed to close stale MCP client",
+                );
+              }
+            }
+            this.activeConnections.delete(connectionKey);
+            this.toolNameCache.delete(connectionKey);
+            return await executeToolCall(getTransport, currentSecrets, true);
+          } finally {
+            resolveRecovery();
+            this.sessionRecoveryLocks.delete(connectionKey);
           }
-          this.activeConnections.delete(connectionKey);
-          this.toolNameCache.delete(connectionKey);
-          return executeToolCall(getTransport, currentSecrets, true);
         }
 
         const errorMessage =

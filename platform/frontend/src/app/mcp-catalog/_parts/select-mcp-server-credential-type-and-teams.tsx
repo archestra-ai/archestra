@@ -194,19 +194,33 @@ export function SelectMcpServerCredentialTypeAndTeams({
             data-testid={E2eTestId.SelectCredentialTypePersonal}
           >
             Myself
+            {hasPersonalInstallation && !isReinstall && (
+              <span className="text-muted-foreground ml-1">
+                (already installed)
+              </span>
+            )}
           </SelectItem>
-          {availableTeams.length > 0 && (
+          {(isReinstall ? availableTeams : teams ?? []).length > 0 && (
             <SelectGroup>
               <SelectLabel>Teams</SelectLabel>
-              {availableTeams.map((team) => (
-                <SelectItem
-                  key={team.id}
-                  value={team.id}
-                  disabled={areTeamsDisabled}
-                >
-                  {team.name}
-                </SelectItem>
-              ))}
+              {(isReinstall ? availableTeams : teams ?? []).map((team) => {
+                const isAlreadyInstalled =
+                  !isReinstall && teamsWithInstallation.includes(team.id);
+                return (
+                  <SelectItem
+                    key={team.id}
+                    value={team.id}
+                    disabled={areTeamsDisabled || isAlreadyInstalled}
+                  >
+                    {team.name}
+                    {isAlreadyInstalled && (
+                      <span className="text-muted-foreground ml-1">
+                        (already installed)
+                      </span>
+                    )}
+                  </SelectItem>
+                );
+              })}
             </SelectGroup>
           )}
         </SelectContent>

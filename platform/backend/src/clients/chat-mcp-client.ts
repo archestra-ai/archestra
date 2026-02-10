@@ -5,6 +5,7 @@ import {
   isAgentTool,
   isArchestraMcpServerTool,
   isBrowserMcpTool,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   TimeInMs,
 } from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
@@ -25,6 +26,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { metrics } from "@/observability";
 
 /**
  * MCP Gateway base URL (internal)
@@ -679,6 +681,8 @@ export async function getChatMcpTools({
 
             const toolArguments = isRecord(args) ? args : undefined;
 
+            const toolStartTime = Date.now();
+
             try {
               // Check if this is an Archestra tool - handle directly without DB lookup
               if (isArchestraMcpServerTool(mcpTool.name)) {
@@ -694,6 +698,21 @@ export async function getChatMcpTools({
                     sessionId,
                   },
                 );
+
+                // Report metrics for Archestra tools
+                const separatorIdx = mcpTool.name.indexOf(
+                  MCP_SERVER_TOOL_NAME_SEPARATOR,
+                );
+                metrics.mcp.reportMcpToolCall({
+                  profileName: agentName,
+                  mcpServerName:
+                    separatorIdx > 0
+                      ? mcpTool.name.substring(0, separatorIdx)
+                      : "unknown",
+                  toolName: mcpTool.name,
+                  durationSeconds: (Date.now() - toolStartTime) / 1000,
+                  isError: archestraResponse.isError ?? false,
+                });
 
                 // Check for errors
                 if (archestraResponse.isError) {
@@ -732,6 +751,7 @@ export async function getChatMcpTools({
                 toolName: mcpTool.name,
                 toolArguments,
                 agentId,
+                agentName,
                 userId,
                 organizationId,
                 userIsProfileAdmin,
@@ -818,12 +838,29 @@ export async function getChatMcpTools({
                 "Executing agent tool from chat",
               );
 
+              const agentToolStartTime = Date.now();
+
               try {
                 const response = await executeArchestraTool(
                   agentTool.name,
                   args,
                   archestraContext,
                 );
+
+                // Report metrics for agent tools
+                const agentToolSepIdx = agentTool.name.indexOf(
+                  MCP_SERVER_TOOL_NAME_SEPARATOR,
+                );
+                metrics.mcp.reportMcpToolCall({
+                  profileName: agentName,
+                  mcpServerName:
+                    agentToolSepIdx > 0
+                      ? agentTool.name.substring(0, agentToolSepIdx)
+                      : "unknown",
+                  toolName: agentTool.name,
+                  durationSeconds: (Date.now() - agentToolStartTime) / 1000,
+                  isError: response.isError ?? false,
+                });
 
                 if (response.isError) {
                   const errorText = (
@@ -890,6 +927,7 @@ export async function getChatMcpTools({
       organizationId,
       userIsProfileAdmin,
       agentId,
+      agentName,
       conversationId,
       mcpGwToken,
     });
@@ -915,6 +953,7 @@ interface ToolExecutionContext {
   toolName: string;
   toolArguments: Record<string, unknown> | undefined;
   agentId: string;
+  agentName: string;
   userId: string;
   organizationId: string;
   userIsProfileAdmin: boolean;
@@ -942,12 +981,14 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     toolName,
     toolArguments,
     agentId,
+    agentName,
     userId,
     organizationId,
     userIsProfileAdmin,
     conversationId,
     mcpGwToken,
   } = ctx;
+  const startTime = Date.now();
 
   // For browser tools, ensure the correct conversation tab is selected first
   const { browserStreamFeature } = await import(
@@ -999,6 +1040,19 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
       : undefined,
     { conversationId },
   );
+
+  // Report MCP metrics
+  const durationSeconds = (Date.now() - startTime) / 1000;
+  const separatorIndex = toolName.indexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
+  const mcpServerName =
+    separatorIndex > 0 ? toolName.substring(0, separatorIndex) : "unknown";
+  metrics.mcp.reportMcpToolCall({
+    profileName: agentName,
+    mcpServerName,
+    toolName,
+    durationSeconds,
+    isError: result.isError ?? false,
+  });
 
   // Check if MCP tool returned an error
   if (result.isError) {
@@ -1072,6 +1126,7 @@ async function addGlobalCatalogTools({
   organizationId,
   userIsProfileAdmin,
   agentId,
+  agentName,
   conversationId,
   mcpGwToken,
 }: {
@@ -1080,6 +1135,7 @@ async function addGlobalCatalogTools({
   organizationId: string;
   userIsProfileAdmin: boolean;
   agentId: string;
+  agentName: string;
   conversationId?: string;
   mcpGwToken: {
     tokenValue: string;
@@ -1180,6 +1236,7 @@ async function addGlobalCatalogTools({
                 toolName: catalogTool.name,
                 toolArguments,
                 agentId,
+                agentName,
                 userId,
                 organizationId,
                 userIsProfileAdmin,

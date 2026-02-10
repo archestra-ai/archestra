@@ -566,6 +566,20 @@ export class McpServerRuntimeManager {
   }
 
   /**
+   * Get a pod-pinned HTTP endpoint URL for streamable-http servers.
+   * This helps preserve MCP sessions when multiple MCP server replicas are running.
+   */
+  async getRunningPodHttpEndpoint(
+    mcpServerId: string,
+  ): Promise<{ endpointUrl: string; podName: string } | undefined> {
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
+    if (!k8sDeployment) {
+      return undefined;
+    }
+    return k8sDeployment.getRunningPodHttpEndpoint();
+  }
+
+  /**
    * Get logs from an MCP server deployment
    */
   async getMcpServerLogs(

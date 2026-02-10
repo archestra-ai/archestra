@@ -5,26 +5,68 @@ import logger from "@/logging";
 /** Sessions not updated for this long are considered orphaned */
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+type McpHttpSessionRecord = {
+  sessionId: string;
+  sessionEndpointUrl: string | null;
+  sessionEndpointPodName: string | null;
+};
+
 class McpHttpSessionModel {
   static async findByConnectionKey(
     connectionKey: string,
   ): Promise<string | null> {
+    const session =
+      await McpHttpSessionModel.findRecordByConnectionKey(connectionKey);
+    return session?.sessionId ?? null;
+  }
+
+  static async findRecordByConnectionKey(
+    connectionKey: string,
+  ): Promise<McpHttpSessionRecord | null> {
     const result = await db
-      .select({ sessionId: schema.mcpHttpSessionsTable.sessionId })
+      .select({
+        sessionId: schema.mcpHttpSessionsTable.sessionId,
+        sessionEndpointUrl: schema.mcpHttpSessionsTable.sessionEndpointUrl,
+        sessionEndpointPodName:
+          schema.mcpHttpSessionsTable.sessionEndpointPodName,
+      })
       .from(schema.mcpHttpSessionsTable)
       .where(eq(schema.mcpHttpSessionsTable.connectionKey, connectionKey))
       .limit(1);
 
-    return result[0]?.sessionId ?? null;
+    return result[0] ?? null;
   }
 
-  static async upsert(connectionKey: string, sessionId: string): Promise<void> {
+  static async upsert(params: {
+    connectionKey: string;
+    sessionId: string;
+    sessionEndpointUrl?: string | null;
+    sessionEndpointPodName?: string | null;
+  }): Promise<void> {
+    const {
+      connectionKey,
+      sessionId,
+      sessionEndpointUrl = null,
+      sessionEndpointPodName = null,
+    } = params;
+
     await db
       .insert(schema.mcpHttpSessionsTable)
-      .values({ connectionKey, sessionId, updatedAt: new Date() })
+      .values({
+        connectionKey,
+        sessionId,
+        sessionEndpointUrl,
+        sessionEndpointPodName,
+        updatedAt: new Date(),
+      })
       .onConflictDoUpdate({
         target: schema.mcpHttpSessionsTable.connectionKey,
-        set: { sessionId, updatedAt: new Date() },
+        set: {
+          sessionId,
+          sessionEndpointUrl,
+          sessionEndpointPodName,
+          updatedAt: new Date(),
+        },
       });
   }
 

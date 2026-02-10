@@ -49,10 +49,12 @@ vi.mock(
 const {
   mockUsesStreamableHttp,
   mockGetHttpEndpointUrl,
+  mockGetRunningPodHttpEndpoint,
   mockGetOrLoadDeployment,
 } = vi.hoisted(() => ({
   mockUsesStreamableHttp: vi.fn(),
   mockGetHttpEndpointUrl: vi.fn(),
+  mockGetRunningPodHttpEndpoint: vi.fn(),
   mockGetOrLoadDeployment: vi.fn(),
 }));
 
@@ -60,6 +62,7 @@ vi.mock("@/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
+    getRunningPodHttpEndpoint: mockGetRunningPodHttpEndpoint,
     getOrLoadDeployment: mockGetOrLoadDeployment,
   },
 }));
@@ -106,13 +109,15 @@ describe("McpClient", () => {
     mockPing.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
+    mockGetRunningPodHttpEndpoint.mockReset();
     mockGetOrLoadDeployment.mockReset();
 
     // Spy on McpHttpSessionModel to prevent real DB writes during mcp-client tests
     // and to avoid errors from session persistence in the background
-    vi.spyOn(McpHttpSessionModel, "findByConnectionKey").mockResolvedValue(
-      null,
-    );
+    vi.spyOn(
+      McpHttpSessionModel,
+      "findRecordByConnectionKey",
+    ).mockResolvedValue(null);
     vi.spyOn(McpHttpSessionModel, "upsert").mockResolvedValue(undefined);
     vi.spyOn(McpHttpSessionModel, "deleteByConnectionKey").mockResolvedValue(
       undefined,
@@ -1380,6 +1385,58 @@ describe("McpClient", () => {
           any);
       });
 
+      test("uses stored endpoint URL when resuming HTTP session", async () => {
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "stale-session-server__stored_endpoint",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://service-url:8080/mcp");
+        vi.spyOn(
+          McpHttpSessionModel,
+          "findRecordByConnectionKey",
+        ).mockResolvedValueOnce({
+          sessionId: "stored-session-id",
+          sessionEndpointUrl: "http://10.42.1.88:8080/mcp",
+          sessionEndpointPodName: "mcp-stale-session-server-abc123",
+        });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_stored_endpoint",
+            name: "stale-session-server__stored_endpoint",
+            arguments: {},
+          },
+          agentId,
+          undefined,
+          { conversationId: "conv-1" },
+        );
+
+        expect(result.isError).toBe(false);
+        expect(vi.mocked(StreamableHTTPClientTransport)).toHaveBeenCalledWith(
+          new URL("http://10.42.1.88:8080/mcp"),
+          expect.objectContaining({ sessionId: "stored-session-id" }),
+        );
+      });
+
       test("retries with fresh session when stale session is detected", async () => {
         const tool = await ToolModel.createToolIfNotExists({
           name: "stale-session-server__test_tool",
@@ -1396,10 +1453,14 @@ describe("McpClient", () => {
         mockUsesStreamableHttp.mockResolvedValue(true);
         mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
 
-        // First call: findByConnectionKey returns a stored session
-        // Second call (retry): findByConnectionKey returns null (session was deleted)
-        vi.spyOn(McpHttpSessionModel, "findByConnectionKey")
-          .mockResolvedValueOnce("stale-session-id")
+        // First call: findRecordByConnectionKey returns a stored session
+        // Second call (retry): findRecordByConnectionKey returns null (session was deleted)
+        vi.spyOn(McpHttpSessionModel, "findRecordByConnectionKey")
+          .mockResolvedValueOnce({
+            sessionId: "stale-session-id",
+            sessionEndpointUrl: null,
+            sessionEndpointPodName: null,
+          })
           .mockResolvedValueOnce(null);
 
         // First connect fails (stale session), second connect succeeds
@@ -1451,9 +1512,17 @@ describe("McpClient", () => {
         mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
 
         // Both calls return stored session IDs
-        vi.spyOn(McpHttpSessionModel, "findByConnectionKey")
-          .mockResolvedValueOnce("stale-session-1")
-          .mockResolvedValueOnce("stale-session-2");
+        vi.spyOn(McpHttpSessionModel, "findRecordByConnectionKey")
+          .mockResolvedValueOnce({
+            sessionId: "stale-session-1",
+            sessionEndpointUrl: null,
+            sessionEndpointPodName: null,
+          })
+          .mockResolvedValueOnce({
+            sessionId: "stale-session-2",
+            sessionEndpointUrl: null,
+            sessionEndpointPodName: null,
+          });
 
         // Both connect attempts fail
         mockConnect
@@ -1495,10 +1564,14 @@ describe("McpClient", () => {
         mockUsesStreamableHttp.mockResolvedValue(true);
         mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
 
-        // First call: findByConnectionKey returns a stored session
-        // Second call (retry): findByConnectionKey returns null (session was deleted)
-        vi.spyOn(McpHttpSessionModel, "findByConnectionKey")
-          .mockResolvedValueOnce("stale-session-id")
+        // First call: findRecordByConnectionKey returns a stored session
+        // Second call (retry): findRecordByConnectionKey returns null (session was deleted)
+        vi.spyOn(McpHttpSessionModel, "findRecordByConnectionKey")
+          .mockResolvedValueOnce({
+            sessionId: "stale-session-id",
+            sessionEndpointUrl: null,
+            sessionEndpointPodName: null,
+          })
           .mockResolvedValueOnce(null);
 
         // connect() succeeds both times (SDK skips initialization for resumed sessions)

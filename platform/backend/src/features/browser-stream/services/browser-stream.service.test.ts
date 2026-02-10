@@ -426,6 +426,10 @@ describe("BrowserStreamService URL handling", () => {
   });
 
   test("selectOrCreateTab selects existing tab when stored tabIndex exists", async () => {
+    const updateUrlSpy = vi
+      .spyOn(browserStateManager, "updateUrl")
+      .mockResolvedValue();
+
     const browserService = new BrowserStreamService();
     const agentId = "test-agent";
     const conversationId = "test-conversation";
@@ -481,6 +485,12 @@ describe("BrowserStreamService URL handling", () => {
         toolName: "browser_tabs",
         args: { action: "select", index: 2 },
       }),
+    );
+    expect(updateUrlSpy).toHaveBeenCalledWith(
+      agentId,
+      userContext.userId,
+      conversationId,
+      "https://stored.example.com",
     );
   });
 
@@ -556,7 +566,9 @@ describe("BrowserStreamService URL handling", () => {
     vi.spyOn(browserStateManager, "get").mockResolvedValue({
       url: "https://stored.example.com",
     });
-    vi.spyOn(browserStateManager, "set").mockResolvedValue(Ok(undefined));
+    const setStateSpy = vi
+      .spyOn(browserStateManager, "set")
+      .mockResolvedValue(Ok(undefined));
 
     // Mock findTabsTool and findNavigateTool
     vi.spyOn(
@@ -606,6 +618,83 @@ describe("BrowserStreamService URL handling", () => {
         args: { url: "https://stored.example.com" },
       }),
     );
+    expect(setStateSpy).toHaveBeenCalledWith(
+      agentId,
+      userContext.userId,
+      conversationId,
+      expect.objectContaining({
+        url: "https://stored.example.com",
+        tabIndex: 1,
+      }),
+    );
+  });
+
+  test("selectOrCreateTab restores stored URL when existing tab is blank", async () => {
+    const browserService = new BrowserStreamService();
+    const agentId = "test-agent";
+    const conversationId = "test-conversation";
+    const userContext = {
+      userId: "test-user",
+      organizationId: "test-org",
+      userIsProfileAdmin: false,
+    };
+
+    vi.spyOn(browserStateManager, "get").mockResolvedValue({
+      url: "https://stored.example.com",
+      tabIndex: 0,
+    });
+    const updateUrlSpy = vi
+      .spyOn(browserStateManager, "updateUrl")
+      .mockResolvedValue();
+
+    vi.spyOn(
+      browserService as unknown as {
+        findTabsTool: () => Promise<string | null>;
+      },
+      "findTabsTool",
+    ).mockResolvedValue("browser_tabs");
+
+    vi.spyOn(
+      browserService as unknown as {
+        findNavigateTool: () => Promise<string | null>;
+      },
+      "findNavigateTool",
+    ).mockResolvedValue("browser_navigate");
+
+    const executeToolSpy = mockExecuteTool(browserService, async ({ args }) => {
+      if (args?.action === "list") {
+        return {
+          isError: false,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify([{ index: 0, url: "about:blank" }]),
+            },
+          ],
+        };
+      }
+      return { isError: false, content: [] };
+    });
+
+    const result = await browserService.selectOrCreateTab(
+      agentId,
+      conversationId,
+      userContext,
+    );
+
+    expect(result).toEqual({ success: true, tabIndex: 0 });
+    expect(executeToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "browser_navigate",
+        args: { url: "https://stored.example.com" },
+      }),
+    );
+    expect(updateUrlSpy).toHaveBeenCalledWith(
+      agentId,
+      userContext.userId,
+      conversationId,
+      "https://stored.example.com",
+    );
   });
 
   test("selectOrCreateTab deduplicates concurrent calls", async () => {
@@ -623,6 +712,7 @@ describe("BrowserStreamService URL handling", () => {
       url: "https://stored.example.com",
       tabIndex: 1,
     });
+    vi.spyOn(browserStateManager, "updateUrl").mockResolvedValue();
 
     // Mock findTabsTool
     vi.spyOn(

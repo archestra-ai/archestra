@@ -152,6 +152,12 @@ class McpClient {
   // calls (e.g. browser stream ticks) detect a stale session simultaneously.
   // Only the first caller performs cleanup + retry; others wait and reuse.
   private sessionRecoveryLocks = new Map<string, Promise<void>>();
+  // Session affinity metadata discovered during transport creation.
+  // Used when persisting fresh session IDs after connect().
+  private pendingHttpSessionMetadata = new Map<
+    string,
+    { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
+  >();
 
   /**
    * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
@@ -176,6 +182,7 @@ class McpClient {
       }
       this.activeConnections.delete(connectionKey);
       this.toolNameCache.delete(connectionKey);
+      this.pendingHttpSessionMetadata.delete(connectionKey);
       logger.info({ connectionKey }, "Closed cached MCP session");
     }
 
@@ -359,6 +366,7 @@ class McpClient {
             }
             this.activeConnections.delete(connectionKey);
             this.toolNameCache.delete(connectionKey);
+            this.pendingHttpSessionMetadata.delete(connectionKey);
             return await executeToolCall(getTransport, currentSecrets, true);
           } finally {
             resolveRecovery();
@@ -500,6 +508,7 @@ class McpClient {
         );
         this.activeConnections.delete(connectionKey);
         this.toolNameCache.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
         // If the transport carries a stored session ID the session is likely
         // stale (e.g. Playwright pod restarted).  Delete it from the DB so
         // the retry path creates a truly fresh connection instead of reading
@@ -588,8 +597,15 @@ class McpClient {
       transport instanceof StreamableHTTPClientTransport &&
       transport.sessionId
     ) {
+      const pendingMetadata =
+        this.pendingHttpSessionMetadata.get(connectionKey);
       try {
-        await McpHttpSessionModel.upsert(connectionKey, transport.sessionId);
+        await McpHttpSessionModel.upsert({
+          connectionKey,
+          sessionId: transport.sessionId,
+          sessionEndpointUrl: pendingMetadata?.sessionEndpointUrl,
+          sessionEndpointPodName: pendingMetadata?.sessionEndpointPodName,
+        });
       } catch (err) {
         logger.warn(
           { connectionKey, err },
@@ -1025,24 +1041,48 @@ class McpClient {
           );
         }
 
-        // Look up stored session ID for multi-replica support.
-        // When multiple backend pods connect to the same Playwright pod with
-        // --isolated, they need to share the same Mcp-Session-Id to use the
-        // same browser context.
+        // Look up stored session metadata for multi-replica support.
+        // In multi-replica MCP server deployments, we must resume sessions
+        // against the same pod endpoint where the session was created.
         let sessionId: string | undefined;
+        let endpointUrl = url;
+        let sessionEndpointPodName: string | null = null;
         if (connectionKey) {
           const stored =
-            await McpHttpSessionModel.findByConnectionKey(connectionKey);
+            await McpHttpSessionModel.findRecordByConnectionKey(connectionKey);
           if (stored) {
-            sessionId = stored;
+            sessionId = stored.sessionId;
+            endpointUrl = stored.sessionEndpointUrl || endpointUrl;
+            sessionEndpointPodName = stored.sessionEndpointPodName;
             logger.debug(
-              { connectionKey, sessionId },
-              "Using stored MCP HTTP session ID",
+              {
+                connectionKey,
+                sessionId,
+                endpointUrl,
+                sessionEndpointPodName,
+              },
+              "Using stored MCP HTTP session metadata",
             );
+          } else if (
+            config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
+          ) {
+            const runningPodEndpoint =
+              await McpServerRuntimeManager.getRunningPodHttpEndpoint(
+                targetMcpServerId,
+              );
+            if (runningPodEndpoint) {
+              endpointUrl = runningPodEndpoint.endpointUrl;
+              sessionEndpointPodName = runningPodEndpoint.podName;
+            }
           }
+
+          this.pendingHttpSessionMetadata.set(connectionKey, {
+            sessionEndpointUrl: endpointUrl,
+            sessionEndpointPodName,
+          });
         }
 
-        return new StreamableHTTPClientTransport(new URL(url), {
+        return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
           requestInit: { headers: new Headers({}) },
         });
@@ -1295,6 +1335,7 @@ class McpClient {
         // Ignore close errors
       }
       this.activeConnections.delete(connectionKey);
+      this.pendingHttpSessionMetadata.delete(connectionKey);
     }
 
     // Attempt refresh
@@ -1545,6 +1586,7 @@ class McpClient {
 
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
     this.activeConnections.clear();
+    this.pendingHttpSessionMetadata.clear();
   }
 }
 

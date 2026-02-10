@@ -119,11 +119,7 @@ export default defineConfig((options: UserConfig) => {
     ...options,
 
     // Bundle server and standalone scripts that need to run in production
-    entry: [
-      "src/server.ts",
-      "src/standalone-scripts/run-migrations.ts",
-      "src/standalone-scripts/vault-env-injector.ee.ts",
-    ],
+    entry: ["src/server.ts", "src/standalone-scripts/vault-env-injector.ee.ts"],
 
     // Copy SQL migrations and other assets that need to exist at runtime
     copy: ["src/database/migrations"],

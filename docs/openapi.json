@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.37"
+    "version": "1.0.41"
   },
   "components": {
     "schemas": {

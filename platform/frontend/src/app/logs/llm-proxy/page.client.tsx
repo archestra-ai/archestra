@@ -1,16 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Layers,
-  MessageSquare,
-  Search,
-  User,
-} from "lucide-react";
+import { Layers, MessageSquare, Search, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -20,13 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Table,
   TableBody,
@@ -88,105 +73,6 @@ function formatDuration(start: Date | string, end: Date | string): string {
 
 type SessionData =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
-
-function Pagination({
-  pageIndex,
-  pageSize,
-  total,
-  onPaginationChange,
-}: {
-  pageIndex: number;
-  pageSize: number;
-  total: number;
-  onPaginationChange: (params: { pageIndex: number; pageSize: number }) => void;
-}) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const currentPage = pageIndex + 1;
-  const canPrevious = pageIndex > 0;
-  const canNext = pageIndex < totalPages - 1;
-
-  return (
-    <div className="flex items-center justify-between px-2 py-4">
-      <div className="flex-1" />
-      <div className="flex items-center gap-6 lg:gap-8">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-medium">Rows per page</p>
-          <Select
-            value={`${pageSize}`}
-            onValueChange={(value) =>
-              onPaginationChange({ pageIndex: 0, pageSize: Number(value) })
-            }
-          >
-            <SelectTrigger className="h-8 w-[90px]">
-              <SelectValue placeholder={pageSize} />
-            </SelectTrigger>
-            <SelectContent side="top">
-              {[10, 20, 30, 40, 50, 100].map((size) => (
-                <SelectItem key={size} value={`${size}`}>
-                  {size}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-          Page {currentPage} of {totalPages}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="hidden size-8 lg:flex"
-            onClick={() => onPaginationChange({ pageIndex: 0, pageSize })}
-            disabled={!canPrevious}
-          >
-            <span className="sr-only">Go to first page</span>
-            <ChevronsLeft />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8"
-            onClick={() =>
-              onPaginationChange({ pageIndex: pageIndex - 1, pageSize })
-            }
-            disabled={!canPrevious}
-          >
-            <span className="sr-only">Go to previous page</span>
-            <ChevronLeft />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8"
-            onClick={() =>
-              onPaginationChange({ pageIndex: pageIndex + 1, pageSize })
-            }
-            disabled={!canNext}
-          >
-            <span className="sr-only">Go to next page</span>
-            <ChevronRight />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="hidden size-8 lg:flex"
-            onClick={() =>
-              onPaginationChange({
-                pageIndex: totalPages - 1,
-                pageSize,
-              })
-            }
-            disabled={!canNext}
-          >
-            <span className="sr-only">Go to last page</span>
-            <ChevronsRight />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function SessionRow({
   session,
@@ -629,7 +515,7 @@ function SessionsTable({
             </Table>
           </div>
           {paginationMeta && (
-            <Pagination
+            <TablePagination
               pageIndex={pageIndex}
               pageSize={pageSize}
               total={paginationMeta.total}

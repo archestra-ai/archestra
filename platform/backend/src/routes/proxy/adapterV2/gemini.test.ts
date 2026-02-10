@@ -480,7 +480,74 @@ describe("GeminiRequestAdapter", () => {
       }
     });
 
-    test("strips oversized MCP image blocks in tool results", () => {
+    test("converts MCP resource blocks in tool results to text", () => {
+      const originalBrowserStreaming = config.features.browserStreamingEnabled;
+      config.features.browserStreamingEnabled = true;
+      try {
+        const uiResourceUri = "ui://app/test";
+        const mcpResourceResponse = [
+          { type: "text", text: "UI ready" },
+          {
+            type: "resource",
+            resource: {
+              uri: uiResourceUri,
+              mimeType: "text/html;profile=mcp-app",
+            },
+          },
+        ] as unknown as Record<string, unknown>;
+
+        const request = createMockRequest([
+          { role: "user", parts: [{ text: "Show UI" }] },
+          {
+            role: "model",
+            parts: [
+              {
+                functionCall: {
+                  name: "show_ui",
+                  id: "call_123",
+                  args: {},
+                },
+              },
+            ],
+          },
+          {
+            role: "user",
+            parts: [
+              {
+                functionResponse: {
+                  name: "show_ui",
+                  id: "call_123",
+                  response: mcpResourceResponse,
+                },
+              },
+            ],
+          },
+        ]);
+
+        const adapter = geminiAdapterFactory.createRequestAdapter(request);
+        const result = adapter.toProviderRequest();
+
+        const userContent = result.contents?.find(
+          (content) =>
+            content.role === "user" &&
+            content.parts?.some((part) => "functionResponse" in part),
+        );
+        const functionResponsePart = userContent?.parts?.find(
+          (part) => "functionResponse" in part,
+        );
+
+        expect(
+          (functionResponsePart as { functionResponse: { response: unknown } })
+            ?.functionResponse?.response,
+        ).toEqual({
+          text: `UI ready\nUI resource: ${uiResourceUri} mimeType=text/html;profile=mcp-app`,
+        });
+      } finally {
+        config.features.browserStreamingEnabled = originalBrowserStreaming;
+      }
+    });
+
+    test("strips oversized MCP image blocks in tool results", () => { 
       const originalBrowserStreaming = config.features.browserStreamingEnabled;
       config.features.browserStreamingEnabled = true;
       try {

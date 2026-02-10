@@ -937,7 +937,7 @@ interface ToolExecutionContext {
  * @returns The tool result as a string
  * @throws Error if tool execution fails
  */
-async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
+async function executeMcpTool(ctx: ToolExecutionContext): Promise<unknown> {
   const {
     toolName,
     toolArguments,
@@ -1048,15 +1048,9 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     }
   }
 
-  // Convert MCP content to string for AI SDK
-  return (result.content as Array<{ type: string; text?: string }>)
-    .map((item: { type: string; text?: string }) => {
-      if (item.type === "text" && item.text) {
-        return item.text;
-      }
-      return JSON.stringify(item);
-    })
-    .join("\n");
+  // Return MCP content as-is (array of content blocks). This allows the frontend
+  // to render rich outputs such as images and MCP UI resources.
+  return result.content;
 }
 
 /**

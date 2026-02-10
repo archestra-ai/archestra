@@ -1048,6 +1048,47 @@ describe("ToolModel", () => {
       expect(result1[0].name).toBe("conflict-tool");
       expect(result2[0].name).toBe("conflict-tool");
     });
+
+    test("stores and backfills MCP tool meta", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Existing tool discovered previously without meta
+      const existingTool = await makeTool({
+        name: "tool-with-meta",
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      expect(existingTool.meta ?? {}).toEqual({});
+
+      const uiMeta = {
+        ui: {
+          resourceUri: "ui://app/test",
+        },
+      };
+
+      const [updatedTool] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "tool-with-meta",
+          description: "Tool with meta",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+          meta: uiMeta,
+        },
+      ]);
+
+      expect(updatedTool.meta).toEqual(uiMeta);
+
+      // Verify it was persisted
+      const fetched = await ToolModel.findByName("tool-with-meta");
+      expect(fetched?.meta).toEqual(uiMeta);
+    });
   });
 
   describe("bulkCreateProxyToolsIfNotExists", () => {

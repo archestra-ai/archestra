@@ -4,8 +4,9 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import mcpClient from "@/clients/mcp-client";
+import { TeamTokenModel, ToolModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { mcpGatewayRoutes } from "./mcp-gateway";
 
 /**
@@ -112,6 +113,226 @@ describe("MCP Gateway (stateless mode)", () => {
       const body = toolsResponse.json();
       // If error, it should be "Server not initialized", not a session error
       expect(body.error?.message).toContain("Server not initialized");
+    }
+  });
+
+  test("tools/list includes stored _meta for MCP Apps UI", async ({
+    makeAgent,
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const org = await makeOrganization();
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const catalog = await makeInternalMcpCatalog({ name: "ui-catalog" });
+    const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+    const uiResourceUri = "ui://app/test";
+
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "mcp_ui_tool",
+      description: "Tool with MCP UI meta",
+      parameters: { type: "object", properties: {} },
+      catalogId: catalog.id,
+      mcpServerId: mcpServer.id,
+      meta: {
+        ui: {
+          resourceUri: uiResourceUri,
+        },
+      },
+    });
+
+    await makeAgentTool(agent.id, tool.id);
+
+    const toolsResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/list",
+        params: {},
+        id: 1,
+      },
+    });
+
+    expect(toolsResponse.statusCode).toBe(200);
+
+    const body = toolsResponse.json() as {
+      result?: { tools?: Array<Record<string, unknown>> };
+    };
+
+    expect(body.result?.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "mcp_ui_tool",
+          _meta: {
+            ui: {
+              resourceUri: uiResourceUri,
+            },
+          },
+        }),
+      ]),
+    );
+  });
+
+  test("resources/list derives UI resources from tool meta", async ({
+    makeAgent,
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const org = await makeOrganization();
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const catalog = await makeInternalMcpCatalog({ name: "ui-catalog" });
+    const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+    const uiResourceUri = "ui://app/test";
+
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "mcp_ui_tool",
+      description: "Tool with MCP UI meta",
+      parameters: { type: "object", properties: {} },
+      catalogId: catalog.id,
+      mcpServerId: mcpServer.id,
+      meta: {
+        ui: {
+          resourceUri: uiResourceUri,
+        },
+      },
+    });
+
+    await makeAgentTool(agent.id, tool.id);
+
+    const resourcesResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "resources/list",
+        params: {},
+        id: 1,
+      },
+    });
+
+    expect(resourcesResponse.statusCode).toBe(200);
+
+    const body = resourcesResponse.json() as {
+      result?: { resources?: Array<Record<string, unknown>> };
+    };
+
+    expect(body.result?.resources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          uri: uiResourceUri,
+        }),
+      ]),
+    );
+  });
+
+  test("resources/read delegates to underlying MCP server readResource", async ({
+    makeAgent,
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const org = await makeOrganization();
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const catalog = await makeInternalMcpCatalog({ name: "ui-catalog" });
+    const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+    const uiResourceUri = "ui://app/test";
+
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "mcp_ui_tool",
+      description: "Tool with MCP UI meta",
+      parameters: { type: "object", properties: {} },
+      catalogId: catalog.id,
+      mcpServerId: mcpServer.id,
+      meta: {
+        ui: {
+          resourceUri: uiResourceUri,
+        },
+      },
+    });
+
+    await makeAgentTool(agent.id, tool.id);
+
+    const connectSpy = vi
+      .spyOn(mcpClient, "connectAndReadResource")
+      .mockResolvedValue({
+        contents: [
+          {
+            uri: uiResourceUri,
+            mimeType: "text/html;profile=mcp-app",
+            text: "<html><body>test</body></html>",
+          },
+        ],
+      } as unknown as Awaited<ReturnType<typeof mcpClient.connectAndReadResource>>);
+
+    try {
+      const readResponse = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "resources/read",
+          params: { uri: uiResourceUri },
+          id: 1,
+        },
+      });
+
+      expect(readResponse.statusCode).toBe(200);
+
+      const body = readResponse.json() as {
+        result?: { contents?: Array<Record<string, unknown>> };
+      };
+
+      expect(body.result?.contents).toEqual([
+        {
+          uri: uiResourceUri,
+          mimeType: "text/html;profile=mcp-app",
+          text: "<html><body>test</body></html>",
+        },
+      ]);
+
+      expect(connectSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uri: uiResourceUri,
+          mcpServerId: mcpServer.id,
+        }),
+      );
+    } finally {
+      connectSpy.mockRestore();
     }
   });
 

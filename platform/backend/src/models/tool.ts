@@ -256,6 +256,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         parameters: schema.toolsTable.parameters,
         description: schema.toolsTable.description,
+        meta: schema.toolsTable.meta,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
         delegateToAgentId: schema.toolsTable.delegateToAgentId,
@@ -419,6 +420,8 @@ class ToolModel {
       parameters: Record<string, unknown>;
       catalogId: string;
       mcpServerId: string;
+      /** MCP tool _meta (used e.g. for MCP Apps UI resources) */
+      meta?: Record<string, unknown>;
     }>,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
@@ -449,18 +452,46 @@ class ToolModel {
 
     for (const tool of tools) {
       const existingTool = existingToolsByName.get(tool.name);
+
       if (existingTool) {
+        // Backfill tool meta (e.g. MCP Apps UI linkage) if the tool already exists
+        // and we just discovered new metadata.
+        if (tool.meta && Object.keys(tool.meta).length > 0) {
+          const existingMeta = (existingTool.meta ?? {}) as Record<string, unknown>;
+          const existingMetaEmpty = Object.keys(existingMeta).length === 0;
+
+          if (existingMetaEmpty) {
+            const updatedAt = new Date();
+            await db
+              .update(schema.toolsTable)
+              .set({
+                meta: tool.meta,
+                updatedAt,
+              })
+              .where(eq(schema.toolsTable.id, existingTool.id));
+
+            resultTools.push({
+              ...existingTool,
+              meta: tool.meta,
+              updatedAt,
+            });
+            continue;
+          }
+        }
+
         resultTools.push(existingTool);
-      } else {
-        toolsToInsert.push({
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters,
-          catalogId: tool.catalogId,
-          mcpServerId: tool.mcpServerId,
-          agentId: null,
-        });
+        continue;
       }
+
+      toolsToInsert.push({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+        meta: tool.meta ?? {},
+        catalogId: tool.catalogId,
+        mcpServerId: tool.mcpServerId,
+        agentId: null,
+      });
     }
 
     // Bulk insert new tools if any

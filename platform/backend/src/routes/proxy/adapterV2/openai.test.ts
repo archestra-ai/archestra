@@ -627,6 +627,63 @@ describe("OpenAIRequestAdapter", () => {
       }
     });
 
+    test("converts MCP resource blocks in tool results to text", () => {
+      const originalBrowserStreaming = config.features.browserStreamingEnabled;
+      config.features.browserStreamingEnabled = true;
+      try {
+        const uiResourceUri = "ui://app/test";
+        const messages = [
+          { role: "user", content: "Show UI" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call_123",
+                type: "function",
+                function: {
+                  name: "show_ui",
+                  arguments: "{}",
+                },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            tool_call_id: "call_123",
+            content: [
+              { type: "text", text: "UI ready" },
+              {
+                type: "resource",
+                resource: {
+                  uri: uiResourceUri,
+                  mimeType: "text/html;profile=mcp-app",
+                },
+              },
+            ],
+          },
+        ] as unknown as OpenAi.Types.ChatCompletionsRequest["messages"];
+
+        const request = createMockRequest(messages);
+        const adapter = openaiAdapterFactory.createRequestAdapter(request);
+        const result = adapter.toProviderRequest();
+
+        const toolMessage = result.messages.find(
+          (message) => message.role === "tool",
+        );
+
+        expect(toolMessage?.content).toEqual([
+          { type: "text", text: "UI ready" },
+          {
+            type: "text",
+            text: `UI resource: ${uiResourceUri} mimeType=text/html;profile=mcp-app`,
+          },
+        ]);
+      } finally {
+        config.features.browserStreamingEnabled = originalBrowserStreaming;
+      }
+    });
+
     test("strips oversized MCP image blocks in tool results", () => {
       const originalBrowserStreaming = config.features.browserStreamingEnabled;
       config.features.browserStreamingEnabled = true;

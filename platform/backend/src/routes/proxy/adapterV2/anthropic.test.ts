@@ -395,7 +395,71 @@ describe("AnthropicRequestAdapter", () => {
       }
     });
 
-    test("strips oversized MCP image blocks in tool results", () => {
+    test("converts MCP resource blocks in tool results to text", () => {
+      const originalBrowserStreaming = config.features.browserStreamingEnabled;
+      config.features.browserStreamingEnabled = true;
+      try {
+        const uiResourceUri = "ui://app/test";
+        const messages = [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "tool_123",
+                name: "show_ui",
+                input: {},
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "tool_123",
+                content: [
+                  { type: "text", text: "UI ready" },
+                  {
+                    type: "resource",
+                    resource: {
+                      uri: uiResourceUri,
+                      mimeType: "text/html;profile=mcp-app",
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+
+        const request = createMockRequest(messages);
+        const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+        const result = adapter.toProviderRequest();
+
+        const userMessage = result.messages.find(
+          (message) => message.role === "user",
+        );
+        const userContent = Array.isArray(userMessage?.content)
+          ? userMessage.content
+          : [];
+        const toolResultBlock = userContent.find(
+          (block) => block.type === "tool_result",
+        ) as { content?: unknown } | undefined;
+
+        expect(toolResultBlock?.content).toEqual([
+          { type: "text", text: "UI ready" },
+          {
+            type: "text",
+            text: `UI resource: ${uiResourceUri} mimeType=text/html;profile=mcp-app`,
+          },
+        ]);
+      } finally {
+        config.features.browserStreamingEnabled = originalBrowserStreaming;
+      }
+    });
+
+    test("strips oversized MCP image blocks in tool results", () => { 
       const originalBrowserStreaming = config.features.browserStreamingEnabled;
       config.features.browserStreamingEnabled = true;
       try {

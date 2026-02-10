@@ -3,7 +3,10 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -21,9 +24,12 @@ import { userHasPermission } from "@/auth/utils";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
+import { secretManager } from "@/secrets-manager";
 import {
   AgentModel,
   AgentTeamModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
@@ -85,6 +91,8 @@ export async function createAgentServer(
     {
       capabilities: {
         tools: { listChanged: false },
+        // Needed for MCP Apps / mcp-ui
+        resources: { subscribe: false, listChanged: false },
       },
     },
   );
@@ -112,13 +120,13 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
-      name,
-      title: archestraToolTitles.get(name) || name,
-      description,
-      inputSchema: parameters,
+    const toolsList = mcpTools.map((tool) => ({
+      name: tool.name,
+      title: archestraToolTitles.get(tool.name) || tool.name,
+      description: tool.description ?? undefined,
+      inputSchema: tool.parameters,
       annotations: {},
-      _meta: {},
+      _meta: tool.meta ?? {},
     }));
 
     // Log tools/list request
@@ -142,6 +150,134 @@ export async function createAgentServer(
     }
 
     return { tools: toolsList };
+  });
+
+  // ---------------------------------------------------------------------------
+  // resources/* support (MCP Apps / mcp-ui)
+  // ---------------------------------------------------------------------------
+
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+
+    const resourcesByUri = new Map<
+      string,
+      {
+        uri: string;
+        title?: string;
+        description?: string;
+      }
+    >();
+
+    for (const tool of mcpTools) {
+      const meta = tool.meta as Record<string, unknown> | undefined;
+      const ui =
+        meta && typeof meta.ui === "object" && meta.ui !== null
+          ? (meta.ui as Record<string, unknown>)
+          : undefined;
+
+      const resourceUri =
+        ui && typeof ui.resourceUri === "string" ? ui.resourceUri : undefined;
+
+      if (!resourceUri) continue;
+
+      if (!resourcesByUri.has(resourceUri)) {
+        resourcesByUri.set(resourceUri, {
+          uri: resourceUri,
+          title: archestraToolTitles.get(tool.name) || tool.name,
+          description: `UI resource for tool ${tool.name}`,
+        });
+      }
+    }
+
+    const resources = Array.from(resourcesByUri.values()).map((r) => ({
+      name: r.uri,
+      title: r.title,
+      uri: r.uri,
+      description: r.description,
+    }));
+
+    return { resources };
+  });
+
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+    return { resourceTemplates: [] };
+  });
+
+  server.setRequestHandler(ReadResourceRequestSchema, async ({ params }) => {
+    const uri = params?.uri;
+
+    if (!uri || typeof uri !== "string") {
+      return { contents: [] };
+    }
+
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+
+    // Prefer servers that explicitly link to this UI resource via tool meta.
+    const preferredServerIds: string[] = [];
+    const allCandidateServerIds = new Set<string>();
+
+    for (const tool of mcpTools) {
+      if (tool.mcpServerId) {
+        allCandidateServerIds.add(tool.mcpServerId);
+      }
+
+      const meta = tool.meta as Record<string, unknown> | undefined;
+      const ui =
+        meta && typeof meta.ui === "object" && meta.ui !== null
+          ? (meta.ui as Record<string, unknown>)
+          : undefined;
+
+      const resourceUri =
+        ui && typeof ui.resourceUri === "string" ? ui.resourceUri : undefined;
+
+      if (resourceUri === uri && tool.mcpServerId) {
+        preferredServerIds.push(tool.mcpServerId);
+      }
+    }
+
+    const orderedServerIds = Array.from(
+      new Set([...preferredServerIds, ...Array.from(allCandidateServerIds)]),
+    );
+
+    for (const mcpServerId of orderedServerIds) {
+      try {
+        const mcpServer = await McpServerModel.findById(mcpServerId);
+        if (!mcpServer?.catalogId) continue;
+
+        const catalogItem = await InternalMcpCatalogModel.findById(
+          mcpServer.catalogId,
+        );
+        if (!catalogItem) continue;
+
+        // Load secrets if available
+        let secrets: Record<string, unknown> = {};
+        if (mcpServer.secretId) {
+          const secretRecord = await secretManager().getSecret(mcpServer.secretId);
+          if (secretRecord) {
+            secrets = secretRecord.secret;
+          }
+        }
+
+        const result = await mcpClient.connectAndReadResource({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secrets,
+          uri,
+        });
+
+        if (result?.contents?.length) {
+          return result;
+        }
+      } catch (error) {
+        // Ignore and try next server
+        logger.info(
+          { agentId, uri, mcpServerId, err: error },
+          "resources/read failed for server, trying next",
+        );
+      }
+    }
+
+    return { contents: [] };
   });
 
   server.setRequestHandler(

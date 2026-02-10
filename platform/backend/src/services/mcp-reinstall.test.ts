@@ -622,7 +622,12 @@ describe("mcp-reinstall", () => {
       const catalog = createCatalog({ serverType: "remote" });
 
       vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
-        { name: "test-tool", description: "A test tool", inputSchema: {} },
+        {
+          name: "test-tool",
+          description: "A test tool",
+          inputSchema: {},
+          meta: {},
+        },
       ]);
       vi.mocked(ToolModel.syncToolsForCatalog).mockRejectedValue(
         new Error("Database constraint violation"),
@@ -662,7 +667,12 @@ describe("mcp-reinstall", () => {
       const catalog = createCatalog({ serverType: "remote" });
 
       vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
-        { name: "test-tool", description: "A test tool", inputSchema: {} },
+        {
+          name: "test-tool",
+          description: "A test tool",
+          inputSchema: {},
+          meta: {},
+        },
       ]);
       vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
         created: [],
@@ -692,8 +702,18 @@ describe("mcp-reinstall", () => {
         waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
       } as never);
       vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
-        { name: "tool1", description: "First tool", inputSchema: {} },
-        { name: "tool2", description: "Second tool", inputSchema: {} },
+        {
+          name: "tool1",
+          description: "First tool",
+          inputSchema: {},
+          meta: {},
+        },
+        {
+          name: "tool2",
+          description: "Second tool",
+          inputSchema: {},
+          meta: {},
+        },
       ]);
       vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
         created: [{ id: "new-tool" }],

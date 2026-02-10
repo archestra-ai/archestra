@@ -46,6 +46,11 @@ import {
   isImageTooLarge,
   isMcpImageBlock,
 } from "../utils/mcp-image";
+import {
+  formatMcpResourceBlockAsText,
+  hasResourceContent,
+  isMcpResourceBlock,
+} from "../utils/mcp-resource";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
@@ -267,13 +272,15 @@ class CerebrasRequestAdapter
         return message;
       }
 
-      // Check if this tool message contains images
-      if (!hasImageContent(message.content)) {
+      const hasMcpImages = hasImageContent(message.content);
+      const hasMcpResources = hasResourceContent(message.content);
+
+      if (!hasMcpImages && !hasMcpResources) {
         return message;
       }
 
-      // If model doesn't support images, strip image blocks from content
-      if (!modelSupportsImages) {
+      // If model doesn't support images, strip MCP image blocks but keep other content.
+      if (!modelSupportsImages && hasMcpImages) {
         strippedImageCount++;
         const strippedContent = stripImageBlocksFromContent(message.content);
         return {
@@ -282,13 +289,16 @@ class CerebrasRequestAdapter
         };
       }
 
-      // Model supports images - convert MCP image blocks to Cerebras format
+      // Convert MCP image/resource blocks to Cerebras/OpenAI-compatible content blocks.
       const convertedContent = convertMcpImageBlocksToCerebras(message.content);
       if (!convertedContent) {
         return message;
       }
 
-      toolMessagesWithImages++;
+      if (hasMcpImages) {
+        toolMessagesWithImages++;
+      }
+
       return {
         ...message,
         content: convertedContent,
@@ -482,7 +492,7 @@ function convertMcpImageBlocksToCerebras(
     return null;
   }
 
-  if (!hasImageContent(content)) {
+  if (!hasImageContent(content) && !hasResourceContent(content)) {
     return null;
   }
 
@@ -531,6 +541,11 @@ function convertMcpImageBlocksToCerebras(
           url: `data:${mimeType};base64,${item.data}`,
         },
       });
+    } else if (isMcpResourceBlock(item)) {
+      cerebrasContent.push({
+        type: "text",
+        text: formatMcpResourceBlockAsText(item),
+      });
     } else if (candidate.type === "text" && "text" in candidate) {
       cerebrasContent.push({
         type: "text",
@@ -572,6 +587,8 @@ function stripImageBlocksFromContent(content: unknown): string {
 
     if (isMcpImageBlock(item)) {
       imageCount++;
+    } else if (isMcpResourceBlock(item)) {
+      textParts.push(formatMcpResourceBlockAsText(item));
     } else if (candidate.type === "text" && "text" in candidate) {
       textParts.push(
         typeof candidate.text === "string"

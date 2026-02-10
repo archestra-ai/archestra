@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   type ChatErrorResponse,
   RouteId,
@@ -16,8 +17,12 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import {
+  getChatMcpTools,
+  selectMCPGatewayToken,
+} from "@/clients/chat-mcp-client";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import mcpClient from "@/clients/mcp-client";
 import {
   createDirectLLMModel,
   createLLMModelForAgent,
@@ -42,7 +47,10 @@ import {
   ToolModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import {
+  getSecretValueForLlmProviderApiKey,
+  secretManager,
+} from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,
@@ -602,6 +610,250 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }));
 
       return reply.send(tools);
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // MCP UI (mcp-ui / MCP Apps) helpers for Archestra Chat UI
+  // ---------------------------------------------------------------------------
+
+  fastify.get(
+    "/api/chat/agents/:agentId/mcp-ui/tools",
+    {
+      schema: {
+        operationId: RouteId.GetChatAgentMcpUiTools,
+        description:
+          "Get tool metadata (including MCP UI _meta) for tools available in chat for an agent",
+        tags: ["Chat"],
+        params: z.object({ agentId: UuidIdSchema }),
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              name: z.string(),
+              meta: z.record(z.string(), z.any()),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ params: { agentId }, user, organizationId, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      if (!agent) {
+        return reply.send([]);
+      }
+
+      const mcpTools = await getChatMcpTools({
+        agentName: agent.name,
+        agentId,
+        userId: user.id,
+        organizationId,
+        userIsProfileAdmin: isAgentAdmin,
+      });
+
+      const toolNames = Object.keys(mcpTools);
+      const result: Array<{ name: string; meta: Record<string, unknown> }> = [];
+
+      for (const name of toolNames) {
+        const tool = await ToolModel.findByName(name, user.id, isAgentAdmin);
+        result.push({ name, meta: (tool?.meta ?? {}) as Record<string, unknown> });
+      }
+
+      return reply.send(result);
+    },
+  );
+
+  fastify.post(
+    "/api/chat/agents/:agentId/mcp-ui/resources/read",
+    {
+      schema: {
+        operationId: RouteId.ReadChatAgentMcpUiResource,
+        description:
+          "Read an MCP UI resource via MCP Gateway (used by @mcp-ui/client AppRenderer)",
+        tags: ["Chat"],
+        params: z.object({ agentId: UuidIdSchema }),
+        body: z.object({
+          uri: z.string(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            // ReadResourceResult
+            contents: z.array(z.any()),
+          }),
+        ),
+      },
+    },
+    async ({ params: { agentId }, body: { uri }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      if (!agent) {
+        return reply.send({ contents: [] });
+      }
+
+      if (!uri) {
+        return reply.send({ contents: [] });
+      }
+
+      const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+
+      // Prefer servers that explicitly link to this UI resource via tool meta.
+      const preferredServerIds: string[] = [];
+      const allCandidateServerIds = new Set<string>();
+
+      for (const tool of mcpTools) {
+        if (tool.mcpServerId) {
+          allCandidateServerIds.add(tool.mcpServerId);
+        }
+
+        const meta = tool.meta as Record<string, unknown> | undefined;
+        const ui =
+          meta && typeof meta.ui === "object" && meta.ui !== null
+            ? (meta.ui as Record<string, unknown>)
+            : undefined;
+
+        const resourceUri =
+          ui && typeof ui.resourceUri === "string" ? ui.resourceUri : undefined;
+
+        if (resourceUri === uri && tool.mcpServerId) {
+          preferredServerIds.push(tool.mcpServerId);
+        }
+      }
+
+      const orderedServerIds = Array.from(
+        new Set([...preferredServerIds, ...Array.from(allCandidateServerIds)]),
+      );
+
+      for (const mcpServerId of orderedServerIds) {
+        try {
+          const mcpServer = await McpServerModel.findById(mcpServerId);
+          if (!mcpServer?.catalogId) continue;
+
+          const catalogItem = await InternalMcpCatalogModel.findById(
+            mcpServer.catalogId,
+          );
+          if (!catalogItem) continue;
+
+          // Load secrets if available
+          let secrets: Record<string, unknown> = {};
+          if (mcpServer.secretId) {
+            const secretRecord = await secretManager().getSecret(
+              mcpServer.secretId,
+            );
+            if (secretRecord) {
+              secrets = secretRecord.secret;
+            }
+          }
+
+          const result = await mcpClient.connectAndReadResource({
+            catalogItem,
+            mcpServerId: mcpServer.id,
+            secrets,
+            uri,
+          });
+
+          if (result?.contents?.length) {
+            return reply.send(result);
+          }
+        } catch (error) {
+          logger.info(
+            { agentId, uri, mcpServerId, err: error },
+            "[mcp-ui] resources/read failed for server, trying next",
+          );
+        }
+      }
+
+      return reply.send({ contents: [] });
+    },
+  );
+
+  fastify.post(
+    "/api/chat/agents/:agentId/mcp-ui/tools/call",
+    {
+      schema: {
+        operationId: RouteId.CallChatAgentMcpUiTool,
+        description:
+          "Call an MCP tool via Archestra MCP client (used by @mcp-ui/client AppRenderer)",
+        tags: ["Chat"],
+        params: z.object({ agentId: UuidIdSchema }),
+        body: z.object({
+          name: z.string(),
+          arguments: z.record(z.string(), z.any()).optional(),
+          conversationId: UuidIdSchema.optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            // CallToolResult
+            content: z.array(z.any()),
+            isError: z.boolean().optional(),
+          }),
+        ),
+      },
+    },
+    async (
+      {
+        params: { agentId },
+        body: { name, arguments: args, conversationId },
+        user,
+        organizationId,
+        headers,
+      },
+      reply,
+    ) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const token = await selectMCPGatewayToken(
+        agentId,
+        user.id,
+        organizationId,
+        isAgentAdmin,
+      );
+
+      if (!token) {
+        throw new ApiError(403, "No valid token available to execute tools");
+      }
+
+      const toolCall = {
+        id: randomUUID(),
+        name,
+        arguments: args ?? {},
+      };
+
+      const result = await mcpClient.executeToolCall(
+        toolCall,
+        agentId,
+        {
+          tokenId: token.tokenId,
+          teamId: token.teamId,
+          isOrganizationToken: token.isOrganizationToken,
+          organizationId,
+          userId: user.id,
+          ...(token.isUserToken && { isUserToken: true }),
+        },
+        { conversationId },
+      );
+
+      return reply.send({
+        content: Array.isArray(result.content)
+          ? result.content
+          : [{ type: "text", text: JSON.stringify(result.content) }],
+        isError: result.isError,
+      });
     },
   );
 

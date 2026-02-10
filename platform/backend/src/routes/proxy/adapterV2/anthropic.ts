@@ -28,6 +28,11 @@ import {
   isImageTooLarge,
   isMcpImageBlock,
 } from "../utils/mcp-image";
+import {
+  formatMcpResourceBlockAsText,
+  hasResourceContent,
+  isMcpResourceBlock,
+} from "../utils/mcp-resource";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 // =============================================================================
@@ -461,7 +466,7 @@ function convertMcpImageBlocksToAnthropic(
     return null;
   }
 
-  if (!hasImageContent(content)) {
+  if (!hasImageContent(content) && !hasResourceContent(content)) {
     return null;
   }
 
@@ -488,6 +493,11 @@ function convertMcpImageBlocksToAnthropic(
           media_type: mimeType,
           data: item.data,
         },
+      });
+    } else if (isMcpResourceBlock(item)) {
+      convertedContent.push({
+        type: "text",
+        text: formatMcpResourceBlockAsText(item),
       });
     } else if (isAnthropicImageBlock(item)) {
       convertedContent.push(item);

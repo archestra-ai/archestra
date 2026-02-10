@@ -17,6 +17,7 @@ export const ToolParametersContentSchema = z.union([
 
 export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
+  meta: z.record(z.string(), z.unknown()),
 });
 
 export const ExtendedSelectToolSchema = SelectToolSchema.omit({
@@ -41,9 +42,11 @@ export const ExtendedSelectToolSchema = SelectToolSchema.omit({
 
 export const InsertToolSchema = createInsertSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
+  meta: z.record(z.string(), z.unknown()).optional(),
 });
 export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema.optional(),
+  meta: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type Tool = z.infer<typeof SelectToolSchema>;

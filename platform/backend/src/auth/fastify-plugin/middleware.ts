@@ -103,6 +103,11 @@ export class Authnz {
       url.startsWith("/oauth/") ||
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith("/.well-known/acme-challenge/") ||
+      // MCP UI proxy/sandbox HTML files are public by design (loaded cross-origin in iframes)
+      url === "/mcp-ui-proxy" ||
+      url.startsWith("/mcp-ui-proxy?") ||
+      url === "/sandbox_proxy.html" ||
+      url.startsWith("/sandbox_proxy.html?") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/sso-providers/public") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)

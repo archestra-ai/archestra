@@ -452,6 +452,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatAgentMcpTools]: {
     profile: ["read"],
   },
+  [RouteId.GetChatAgentMcpUiTools]: {
+    profile: ["read"],
+  },
+  [RouteId.ReadChatAgentMcpUiResource]: {
+    profile: ["read"],
+  },
+  [RouteId.CallChatAgentMcpUiTool]: {
+    profile: ["read"],
+  },
   [RouteId.GetChatGlobalTools]: {
     conversation: ["read"],
   },

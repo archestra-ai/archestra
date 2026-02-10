@@ -5,7 +5,7 @@ import {
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ReadResourceResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   isBrowserMcpTool,
   MCP_CATALOG_INSTALL_PATH,
@@ -27,7 +27,6 @@ import { refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
-  CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
   InternalMcpCatalog,
@@ -130,6 +129,21 @@ class ConnectionLimiter {
 type TransportKind = "stdio" | "http";
 
 const HTTP_CONCURRENCY_LIMIT = 4;
+
+/**
+ * MCP UI (MCP Apps) extension capabilities (SEP-1724 pattern).
+ *
+ * Some servers may conditionally include MCP Apps UI metadata based on client capabilities.
+ * We always advertise support so tool discovery can capture `_meta.ui.resourceUri`.
+ */
+const MCP_UI_CLIENT_CAPABILITIES = {
+  // biome-ignore lint/suspicious/noExplicitAny: Extensions are not yet in the SDK's ClientCapabilities type
+  extensions: {
+    "io.modelcontextprotocol/ui": {
+      mimeTypes: ["text/html;profile=mcp-app"],
+    },
+  },
+} as const;
 
 class McpClient {
   private clients = new Map<string, Client>();
@@ -429,7 +443,8 @@ class McpClient {
         version: "1.0.0",
       },
       {
-        capabilities: {},
+        // biome-ignore lint/suspicious/noExplicitAny: Extensions aren't typed yet in MCP SDK client capabilities
+        capabilities: MCP_UI_CLIENT_CAPABILITIES as any,
       },
     );
 
@@ -1309,7 +1324,15 @@ class McpClient {
     catalogItem: InternalMcpCatalog;
     mcpServerId: string;
     secrets: Record<string, unknown>;
-  }): Promise<CommonMcpToolDefinition[]> {
+  }): Promise<
+    Array<{
+      name: string;
+      description: string;
+      inputSchema: Record<string, unknown>;
+      /** Raw MCP Tool._meta */
+      meta: Record<string, unknown>;
+    }>
+  > {
     const { catalogItem, mcpServerId, secrets } = params;
 
     // For local servers, retry connection a few times since the MCP server process
@@ -1335,7 +1358,8 @@ class McpClient {
             version: "1.0.0",
           },
           {
-            capabilities: {},
+            // biome-ignore lint/suspicious/noExplicitAny: Extensions aren't typed yet in MCP SDK client capabilities
+            capabilities: MCP_UI_CLIENT_CAPABILITIES as any,
           },
         );
 
@@ -1354,11 +1378,12 @@ class McpClient {
         // Close connection (we just needed the tools)
         await client.close();
 
-        // Transform tools to our format
+        // Transform tools to our format (preserve _meta for MCP Apps UI linkage)
         return toolsResult.tools.map((tool: Tool) => ({
           name: tool.name,
           description: tool.description || `Tool: ${tool.name}`,
           inputSchema: tool.inputSchema as Record<string, unknown>,
+          meta: tool._meta ?? {},
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
@@ -1383,6 +1408,89 @@ class McpClient {
     // Should never reach here, but TypeScript needs it
     throw new Error(
       `Failed to connect to MCP server ${catalogItem.name}: ${
+        lastError?.message || "Unknown error"
+      }`,
+    );
+  }
+
+  /**
+   * Read a resource from an MCP server (stateless connect → read → close).
+   *
+   * Used by MCP Gateway to support `resources/read` (needed for MCP Apps / mcp-ui).
+   */
+  async connectAndReadResource(params: {
+    catalogItem: InternalMcpCatalog;
+    mcpServerId: string;
+    secrets: Record<string, unknown>;
+    uri: string;
+  }): Promise<ReadResourceResult> {
+    const { catalogItem, mcpServerId, secrets, uri } = params;
+
+    // For local servers, retry connection a few times since the MCP server process
+    // may need time to initialize even after the pod is ready.
+    const maxRetries = catalogItem.serverType === "local" ? 3 : 1;
+    const retryDelayMs = 5000; // 5 seconds between retries
+
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      let client: Client | null = null;
+
+      try {
+        const transport = await this.getTransport(catalogItem, mcpServerId, secrets);
+
+        client = new Client(
+          {
+            name: "archestra-platform",
+            version: "1.0.0",
+          },
+          {
+            // biome-ignore lint/suspicious/noExplicitAny: Extensions aren't typed yet in MCP SDK client capabilities
+            capabilities: MCP_UI_CLIENT_CAPABILITIES as any,
+          },
+        );
+
+        await Promise.race([
+          client.connect(transport),
+          this.createTimeout(30000, "Connection timeout after 30 seconds"),
+        ]);
+
+        const resourceResult = await Promise.race([
+          client.readResource({ uri }),
+          this.createTimeout(30000, "Read resource timeout after 30 seconds"),
+        ]);
+
+        await client.close();
+        return resourceResult as ReadResourceResult;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("Unknown error");
+
+        // Best-effort close.
+        if (client) {
+          try {
+            await client.close();
+          } catch (_closeError) {
+            // ignore
+          }
+        }
+
+        if (attempt < maxRetries) {
+          logger.warn(
+            { attempt, maxRetries, err: error, uri },
+            `Failed to read resource from MCP server ${catalogItem.name} (attempt ${attempt}/${maxRetries}). Retrying in ${retryDelayMs}ms...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+
+        throw new Error(
+          `Failed to read resource ${uri} from MCP server ${catalogItem.name}: ${lastError.message}`,
+        );
+      }
+    }
+
+    throw new Error(
+      `Failed to read resource ${uri} from MCP server ${catalogItem.name}: ${
         lastError?.message || "Unknown error"
       }`,
     );

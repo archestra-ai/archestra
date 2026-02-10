@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -29,6 +30,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
+import { useChatProfileMcpUiTools } from "@/lib/mcp-ui.query";
 import {
   parseAuthRequired,
   parsePolicyDenied,
@@ -43,6 +45,7 @@ import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { McpUiToolOutput } from "./mcp-ui-tool-output";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -105,6 +108,25 @@ export function ChatMessages({
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
+
+  // MCP UI (MCP Apps) tool metadata (toolName -> Tool._meta)
+  const { data: mcpUiTools = [] } = useChatProfileMcpUiTools(agentId);
+  const mcpUiMetaByToolName = useMemo(
+    () => new Map(mcpUiTools.map((t) => [t.name, t.meta])),
+    [mcpUiTools],
+  );
+
+  const getMcpUiResourceUri = useCallback(
+    (toolName: string): string | undefined => {
+      const meta = mcpUiMetaByToolName.get(toolName);
+      if (!meta || typeof meta !== "object") return undefined;
+      const ui = (meta as Record<string, unknown>).ui;
+      if (!ui || typeof ui !== "object") return undefined;
+      const resourceUri = (ui as Record<string, unknown>).resourceUri;
+      return typeof resourceUri === "string" ? resourceUri : undefined;
+    },
+    [mcpUiMetaByToolName],
+  );
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;
@@ -770,6 +792,8 @@ export function ChatMessages({
                           toolResultPart={toolResultPart}
                           toolName={toolName}
                           agentId={agentId}
+                          conversationId={conversationId}
+                          toolResourceUri={getMcpUiResourceUri(toolName)}
                         />
                       );
                     }
@@ -800,6 +824,8 @@ export function ChatMessages({
                             toolResultPart={toolResultPart}
                             toolName={toolName}
                             agentId={agentId}
+                            conversationId={conversationId}
+                            toolResourceUri={getMcpUiResourceUri(toolName)}
                           />
                         );
                       }
@@ -872,16 +898,61 @@ function useStreamingStallDetection(
   return isStreamingStalled;
 }
 
+function summarizeMcpToolOutputForDisplay(output: unknown): unknown {
+  if (!Array.isArray(output)) {
+    return output;
+  }
+
+  const textParts: string[] = [];
+  let imageCount = 0;
+  let resourceCount = 0;
+  let sawMcpBlock = false;
+
+  for (const item of output) {
+    if (typeof item !== "object" || item === null) continue;
+    const candidate = item as Record<string, unknown>;
+
+    if (candidate.type === "text" && typeof candidate.text === "string") {
+      sawMcpBlock = true;
+      textParts.push(candidate.text);
+    } else if (candidate.type === "image") {
+      sawMcpBlock = true;
+      imageCount++;
+    } else if (candidate.type === "resource") {
+      sawMcpBlock = true;
+      resourceCount++;
+    }
+  }
+
+  if (!sawMcpBlock) {
+    return output;
+  }
+
+  if (imageCount > 0) {
+    textParts.push(`[${imageCount} image(s) available]`);
+  }
+
+  if (resourceCount > 0) {
+    textParts.push(`[${resourceCount} UI resource(s) available]`);
+  }
+
+  return textParts.join("\n");
+}
+
 function MessageTool({
   part,
   toolResultPart,
   toolName,
   agentId,
+  conversationId,
+  toolResourceUri,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   agentId?: string;
+  conversationId: string | undefined;
+  toolResourceUri: string | undefined;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -954,17 +1025,31 @@ function MessageTool({
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
+
+        <McpUiToolOutput
+          agentId={agentId}
+          conversationId={conversationId}
+          toolName={toolName}
+          toolInput={
+            part.input && typeof part.input === "object"
+              ? (part.input as Record<string, unknown>)
+              : undefined
+          }
+          toolOutput={toolResultPart ? toolResultPart.output : part.output}
+          toolResourceUri={toolResourceUri}
+        />
+
         {toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
+            output={summarizeMcpToolOutputForDisplay(toolResultPart.output)}
             errorText={errorText}
           />
         )}
         {!toolResultPart && Boolean(part.output) && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
-            output={part.output}
+            output={summarizeMcpToolOutputForDisplay(part.output)}
             errorText={errorText}
           />
         )}

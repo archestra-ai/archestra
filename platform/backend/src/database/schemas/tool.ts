@@ -45,6 +45,8 @@ const toolsTable = pgTable(
       .notNull()
       .default({}),
     description: text("description"),
+    /** MCP tool metadata (_meta), used e.g. for MCP Apps UI resources */
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
     policiesAutoConfiguredAt: timestamp("policies_auto_configured_at", {
       mode: "date",
     }),

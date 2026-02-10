@@ -17,6 +17,22 @@ import { APICallError, RetryError } from "ai";
 import logger from "@/logging";
 
 // =============================================================================
+// ProviderError — carries a fully-mapped ChatErrorResponse with correct provider
+// =============================================================================
+
+export class ProviderError extends Error {
+  public readonly chatErrorResponse: ChatErrorResponse;
+
+  constructor(chatErrorResponse: ChatErrorResponse) {
+    super(
+      chatErrorResponse.originalError?.message || chatErrorResponse.message,
+    );
+    this.name = "ProviderError";
+    this.chatErrorResponse = chatErrorResponse;
+  }
+}
+
+// =============================================================================
 // Safe Serialization
 // =============================================================================
 
@@ -1106,6 +1122,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   gemini: parseGeminiError,
   bedrock: parseBedrockError,
   cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
+  xai: parseOpenAIError, // XAI uses OpenAI-compatible API
   cohere: parseCohereError,
   mistral: parseOpenAIError, // Mistral uses OpenAI-compatible API
   vllm: parseVllmError,
@@ -1124,6 +1141,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   gemini: mapGeminiErrorWrapper,
   bedrock: mapBedrockErrorWrapper,
   cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
+  xai: mapOpenAIErrorWrapper, // XAI uses OpenAI-compatible API
   cohere: mapCohereErrorWrapper,
   mistral: mapOpenAIErrorWrapper, // Mistral uses OpenAI-compatible API
   vllm: mapVllmErrorWrapper,

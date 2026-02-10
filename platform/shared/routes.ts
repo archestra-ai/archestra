@@ -167,6 +167,11 @@ export const RouteId = {
     "cerebrasChatCompletionsWithDefaultAgent",
   CerebrasChatCompletionsWithAgent: "cerebrasChatCompletionsWithAgent",
 
+  // Proxy Routes - XAI
+  XAIChatCompletionsWithDefaultAgent:
+    "xaiChatCompletionsWithDefaultAgent",
+  XAIChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+
   // Proxy Routes - Mistral
   MistralChatCompletionsWithDefaultAgent:
     "mistralChatCompletionsWithDefaultAgent",

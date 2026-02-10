@@ -81,6 +81,7 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
+  xai: () => config.chat.xai.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
@@ -166,6 +167,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   cohere: "command-light", // Cohere's fast model
+  xai: "llama-3.1-8b-instant", // XAI's fastest model with instant inference
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
@@ -265,6 +267,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createCohere({
       apiKey,
       baseURL: config.llm.cohere.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  xai: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "XAI API key is required. Please configure XAI_API_KEY.",
+      );
+    }
+    // XAI uses OpenAI-compatible API at https://api.x.ai/v1
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.xai.baseUrl,
     });
     return client(modelName);
   },
@@ -443,6 +460,18 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       return client(modelName);
+    },
+
+    xai: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/xai/:agentId (SDK appends /chat/completions)
+      // XAI uses OpenAI-compatible API, so we use the OpenAI SDK
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("xai", agentId),
+        headers,
+      });
+      // Use .chat() to force Chat Completions API
+      return client.chat(modelName);
     },
 
     mistral: ({ apiKey, agentId, modelName, headers }) => {

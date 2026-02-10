@@ -49,13 +49,12 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
   mistral: "mistral",
   // These providers use OpenAI-compatible API in Archestra
   llama: "openai",
-  deepseek: "openai",
+  xai: "openai",
   groq: "openai",
   "fireworks-ai": "openai",
   togetherai: "openai",
   // Explicitly unsupported providers (return null to skip)
   perplexity: null,
-  xai: null,
   nvidia: null,
   "amazon-bedrock": null,
   azure: null,
@@ -402,10 +401,11 @@ class ModelsDevClient {
     // provider (e.g., "google/gemini-2.5-flash" vs "google-vertex/gemini-2.5-flash").
     const preferredSourcePrefixes: Record<SupportedProvider, string[]> = {
       gemini: ["google/"], // Prefer google over google-vertex
-      openai: ["openai/", "deepseek/"], // Prefer direct providers over aggregators
+      openai: ["openai/", "xai/"], // Prefer direct providers over aggregators
       anthropic: ["anthropic/"],
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
+      xai: ["xai/"],
       mistral: ["mistral/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],

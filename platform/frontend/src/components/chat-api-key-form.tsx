@@ -92,6 +92,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://cloud.cerebras.ai/platform",
     consoleName: "Cerebras Cloud",
   },
+  xai: {
+    name: "XAI",
+    icon: "/icons/xai.png",
+    placeholder: "gsk_...",
+    enabled: true,
+    consoleUrl: "https://console.xai.com/keys",
+    consoleName: "XAI Console",
+  },
   cohere: {
     name: "Cohere",
     icon: "/icons/cohere.png",

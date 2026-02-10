@@ -92,6 +92,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://cloud.cerebras.ai/platform",
     consoleName: "Cerebras Cloud",
   },
+  minimax: {
+    name: "MiniMax",
+    icon: "/icons/minimax.png",
+    placeholder: "gsk_...",
+    enabled: true,
+    consoleUrl: "https://console.minimax.com/keys",
+    consoleName: "MiniMax Console",
+  },
   cohere: {
     name: "Cohere",
     icon: "/icons/cohere.png",

@@ -40,6 +40,10 @@ const PROVIDER_CONFIG: Record<
     label: providerDisplayNames.cerebras,
     originalUrl: "https://api.cerebras.ai/v1/",
   },
+  minimax: {
+    label: providerDisplayNames.minimax,
+    originalUrl: "https://api.minimax.chat/v1/",
+  },
   mistral: {
     label: providerDisplayNames.mistral,
     originalUrl: "https://api.mistral.ai/v1/",

@@ -32,6 +32,7 @@ type UsageExtractor =
 const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   openai: getOpenAIUsage,
   cerebras: getOpenAIUsage,
+  minimax: getOpenAIUsage,
   vllm: getOpenAIUsage,
   ollama: getOpenAIUsage,
   mistral: getOpenAIUsage,

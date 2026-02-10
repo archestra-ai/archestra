@@ -81,6 +81,7 @@ const envApiKeyGetters: Record<
   bedrock: () => config.chat.bedrock.apiKey,
   cerebras: () => config.chat.cerebras.apiKey,
   cohere: () => config.chat.cohere.apiKey,
+  minimax: () => config.chat.minimax.apiKey,
   gemini: () => config.chat.gemini.apiKey,
   mistral: () => config.chat.mistral.apiKey,
   ollama: () => config.chat.ollama.apiKey,
@@ -166,6 +167,7 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   gemini: "gemini-2.0-flash-001",
   cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
   cohere: "command-light", // Cohere's fast model
+  minimax: "llama-3.1-8b-instant", // MiniMax's fastest model with instant inference
   vllm: "default", // vLLM uses whatever model is deployed
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
@@ -265,6 +267,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     const client = createCohere({
       apiKey,
       baseURL: config.llm.cohere.baseUrl,
+    });
+    return client(modelName);
+  },
+
+  minimax: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "MiniMax API key is required. Please configure MINIMAX_API_KEY.",
+      );
+    }
+    // MiniMax uses OpenAI-compatible API at https://api.minimax.chat/v1
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.llm.minimax.baseUrl,
     });
     return client(modelName);
   },
@@ -443,6 +460,18 @@ const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
         headers,
       });
       return client(modelName);
+    },
+
+    minimax: ({ apiKey, agentId, modelName, headers }) => {
+      // URL format: /v1/minimax/:agentId (SDK appends /chat/completions)
+      // MiniMax uses OpenAI-compatible API, so we use the OpenAI SDK
+      const client = createOpenAI({
+        apiKey,
+        baseURL: buildProxyBaseUrl("minimax", agentId),
+        headers,
+      });
+      // Use .chat() to force Chat Completions API
+      return client.chat(modelName);
     },
 
     mistral: ({ apiKey, agentId, modelName, headers }) => {

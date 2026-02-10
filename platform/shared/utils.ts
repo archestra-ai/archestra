@@ -6,14 +6,14 @@ import {
 
 /**
  * Parse a fully-qualified MCP tool name into server name and raw tool name.
- * Splits on the FIRST "__" (matching how slugifyName constructs names).
- * Returns everything after first "__" as toolName (preserving any "__" in the tool part).
+ * Splits on the LAST "__" to handle server names that contain "__"
+ * (e.g., "upstash__context7__resolve-library-id" → server: "upstash__context7", tool: "resolve-library-id").
  */
 export function parseFullToolName(fullName: string): {
   serverName: string | null;
   toolName: string;
 } {
-  const index = fullName.indexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
+  const index = fullName.lastIndexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
   if (index <= 0) return { serverName: null, toolName: fullName };
   return {
     serverName: fullName.substring(0, index),

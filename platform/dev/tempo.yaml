@@ -10,6 +10,17 @@ distributor:
         http:
           endpoint: 0.0.0.0:4318
 
+ingester:
+  lifecycler:
+    address: 127.0.0.1
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+  trace_idle_period: 10s
+  max_block_bytes: 1048576
+  max_block_duration: 5m
+
 storage:
   trace:
     backend: local
@@ -24,3 +35,6 @@ metrics_generator:
       dimensions: []
   storage:
     path: /var/tempo/generator/wal
+
+usage_report:
+  reporting_enabled: false

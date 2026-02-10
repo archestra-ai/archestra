@@ -2,10 +2,10 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import InteractionModel from "@/models/interaction";
+import { metrics } from "@/observability";
 import type { Agent, Tool } from "@/types";
 
 const PolicyConfigSchema = z.object({
@@ -132,7 +132,7 @@ Examples:
     const anthropic = createAnthropic({
       apiKey: anthropicApiKey,
       baseURL: `${config.llm.anthropic.baseUrl}/v1`,
-      fetch: getObservableFetch(
+      fetch: metrics.llm.getObservableFetch(
         "anthropic",
         PolicyConfigSubagent.VIRTUAL_AGENT,
         PolicyConfigSubagent.SUBAGENT_ID, // Use subagent ID as external agent ID

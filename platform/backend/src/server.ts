@@ -13,7 +13,7 @@ const isMainModule =
  */
 if (isMainModule) {
   await import("./sentry");
-  await import("./tracing");
+  await import("./observability/tracing");
 }
 
 import fastifyCors from "@fastify/cors";
@@ -50,12 +50,12 @@ import {
   cleanupKnowledgeGraphProvider,
   initializeKnowledgeGraphProvider,
 } from "@/knowledge-graph";
-import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";
+import { metrics } from "@/observability";
 import { systemKeyManager } from "@/services/system-key-manager";
 import {
   Anthropic,
@@ -573,7 +573,8 @@ const start = async () => {
 
     // Initialize metrics with keys of custom agent labels
     const labelKeys = await AgentLabelModel.getAllKeys();
-    initializeMetrics(labelKeys);
+    metrics.llm.initializeMetrics(labelKeys);
+    metrics.mcp.initializeMcpMetrics(labelKeys);
 
     // Start metrics server
     await startMetricsServer();

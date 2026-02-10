@@ -169,6 +169,33 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - **API Key format**: Obtain your API key from the [Cohere Dashboard](https://dashboard.cohere.ai/)
 
+## Groq
+
+[Groq](https://groq.com/) provides ultra-fast AI inference powered by their custom LPU (Language Processing Unit) hardware, delivering industry-leading token generation speeds through an OpenAI-compatible API.
+
+### Supported Groq APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+- **Streaming**: ✅ Fully supported
+
+### Groq Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/groq/{agent-id}`
+- **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                      | Required | Description                                                              |
+| ----------------------------- | -------- | ------------------------------------------------------------------------ |
+| `ARCHESTRA_GROQ_BASE_URL`     | No       | Groq API base URL (default: `https://api.groq.com/openai/v1`)           |
+| `ARCHESTRA_CHAT_GROQ_API_KEY` | No       | Default API key for Groq (can be overridden per conversation/team/org)   |
+
+### Important Notes
+
+- **API Key format**: Obtain your API key from the [Groq Console](https://console.groq.com/keys). Keys start with `gsk_`.
+- **Available models**: Groq supports models including `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `gemma2-9b-it`, `mixtral-8x7b-32768`, and `whisper-large-v3-turbo`.
+- **Rate limits**: Free tier includes 30 requests/minute and 14,400 requests/day. Check [Groq's rate limits](https://console.groq.com/docs/rate-limits) for current limits.
+
 ## Mistral AI
 
 [Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.

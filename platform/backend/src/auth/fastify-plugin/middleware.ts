@@ -93,6 +93,7 @@ export class Authnz {
       url === "/openapi.json" ||
       url === "/health" ||
       url === "/ready" ||
+      url === "/test" ||
       url === "/api/features" ||
       url.startsWith(config.mcpGateway.endpoint) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway

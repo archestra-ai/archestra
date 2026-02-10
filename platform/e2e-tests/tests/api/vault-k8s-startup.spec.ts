@@ -28,4 +28,20 @@ test.describe("Vault K8s startup - DB URL from Vault", () => {
     // Cleanup
     await deleteAgent(request, agent.id);
   });
+
+  test("vault init container injected dummy env var", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/test",
+      ignoreStatusCheck: true,
+    });
+    expect(response.ok()).toBeTruthy();
+
+    const body = await response.json();
+    expect(body.value).toBe("hello-from-vault");
+  });
 });

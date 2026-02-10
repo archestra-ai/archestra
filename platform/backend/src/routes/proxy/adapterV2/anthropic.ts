@@ -2,9 +2,9 @@ import AnthropicProvider from "@anthropic-ai/sdk";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
+import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
   Anthropic,
@@ -1143,7 +1143,11 @@ export const anthropicAdapterFactory: LLMProvider<
 
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options?.agent
-      ? getObservableFetch("anthropic", options.agent, options.externalAgentId)
+      ? metrics.llm.getObservableFetch(
+          "anthropic",
+          options.agent,
+          options.externalAgentId,
+        )
       : undefined;
 
     // Check if this is a Bearer token (OAuth) or regular API key

@@ -562,6 +562,50 @@ export class BrowserStreamService {
             "[BrowserTabs] Selected existing tab for conversation",
           );
 
+          // If the tab exists but is blank (common after browser process restart),
+          // restore the persisted URL for this conversation.
+          const shouldRestoreStoredUrl =
+            this.isBlankUrl(existingTab.url) &&
+            storedUrl &&
+            !this.isBlankUrl(storedUrl);
+          if (shouldRestoreStoredUrl) {
+            const navigateTool = await this.findNavigateTool(
+              agentId,
+              userContext.userId,
+            );
+            if (navigateTool) {
+              await this.executeTool({
+                toolName: navigateTool,
+                args: { url: storedUrl },
+                agentId,
+                conversationId,
+                userContext,
+              });
+              await browserStateManager.updateUrl(
+                agentId,
+                userContext.userId,
+                conversationId,
+                storedUrl,
+              );
+            }
+          }
+
+          // If browser has a non-blank URL for this tab, persist it immediately.
+          // This ensures URL restoration survives backend redeploys even when no
+          // explicit browser_navigate happened in this session.
+          if (
+            !shouldRestoreStoredUrl &&
+            existingTab.url &&
+            !this.isBlankUrl(existingTab.url)
+          ) {
+            await browserStateManager.updateUrl(
+              agentId,
+              userContext.userId,
+              conversationId,
+              existingTab.url,
+            );
+          }
+
           return { success: true, tabIndex: storedTabIndex };
         }
         // Tab no longer exists (was closed externally), need to create new one
@@ -651,13 +695,26 @@ export class BrowserStreamService {
         }
       }
 
+      // If we did not navigate explicitly, attempt to recover current URL from
+      // browser state (current tab) and persist it when non-blank.
+      const recoveredCurrentUrl = !urlToLoad
+        ? await this.getCurrentUrl(agentId, conversationId, userContext)
+        : undefined;
+      const urlToPersist: string = !this.isBlankUrl(urlToLoad)
+        ? (urlToLoad ?? "")
+        : !this.isBlankUrl(recoveredCurrentUrl)
+          ? (recoveredCurrentUrl ?? "")
+          : !this.isBlankUrl(storedUrl)
+            ? (storedUrl ?? "")
+            : "";
+
       // Save state
       await browserStateManager.set(
         agentId,
         userContext.userId,
         conversationId,
         {
-          url: urlToLoad ?? "",
+          url: urlToPersist,
           tabIndex: newTabIndex,
         },
       );

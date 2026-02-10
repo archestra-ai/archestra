@@ -32,6 +32,8 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { metrics } from "@/observability";
+import { startActiveMcpSpan } from "@/routes/proxy/utils/tracing";
 import {
   type CommonToolCall,
   type MCPGatewayAuthMethod,
@@ -71,12 +73,16 @@ export interface TokenAuthResult {
  * Create a fresh MCP server for a request
  * In stateless mode, we need to create new server instances per request
  */
+type AgentInfo = {
+  name: string;
+  id: string;
+  labels?: Array<{ key: string; value: string }>;
+};
+
 export async function createAgentServer(
   agentId: string,
-  logger: { info: (obj: unknown, msg: string) => void },
-  cachedAgent?: { name: string; id: string },
   tokenAuth?: TokenAuthContext,
-): Promise<{ server: Server; agent: { name: string; id: string } }> {
+): Promise<{ server: Server; agent: AgentInfo }> {
   const server = new Server(
     {
       name: `archestra-agent-${agentId}`,
@@ -89,15 +95,11 @@ export async function createAgentServer(
     },
   );
 
-  // Use cached agent data if available, otherwise fetch it
-  let agent = cachedAgent;
-  if (!agent) {
-    const fetchedAgent = await AgentModel.findById(agentId);
-    if (!fetchedAgent) {
-      throw new Error(`Agent not found: ${agentId}`);
-    }
-    agent = fetchedAgent;
+  const fetchedAgent = await AgentModel.findById(agentId);
+  if (!fetchedAgent) {
+    throw new Error(`Agent not found: ${agentId}`);
   }
+  const agent = fetchedAgent;
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -147,6 +149,12 @@ export async function createAgentServer(
   server.setRequestHandler(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
+      const startTime = Date.now();
+      // Extract MCP server name from tool name (format: servername__toolname)
+      const separatorIndex = name.indexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
+      const mcpServerName =
+        separatorIndex > 0 ? name.substring(0, separatorIndex) : "unknown";
+
       try {
         // Check if this is an Archestra tool or agent delegation tool
         const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
@@ -166,11 +174,30 @@ export async function createAgentServer(
           );
 
           // Handle Archestra and agent delegation tools directly
-          const response = await executeArchestraTool(name, args, {
-            agent: { id: agent.id, name: agent.name },
-            agentId: agent.id,
-            organizationId: tokenAuth?.organizationId,
-            tokenAuth,
+          const response = await startActiveMcpSpan({
+            toolName: name,
+            mcpServerName,
+            agent,
+            callback: async (span) => {
+              const result = await executeArchestraTool(name, args, {
+                agent: { id: agent.id, name: agent.name },
+                agentId: agent.id,
+                organizationId: tokenAuth?.organizationId,
+                tokenAuth,
+              });
+              span.setAttribute("mcp.is_error_result", result.isError ?? false);
+              return result;
+            },
+          });
+
+          const durationSeconds = (Date.now() - startTime) / 1000;
+          metrics.mcp.reportMcpToolCall({
+            profileName: agent.name,
+            mcpServerName,
+            toolName: name,
+            durationSeconds,
+            isError: false,
+            profileLabels: agent.labels,
           });
 
           logger.info(
@@ -228,12 +255,31 @@ export async function createAgentServer(
           arguments: args || {},
         };
 
-        // Execute the tool call via McpClient (pass tokenAuth for dynamic credential resolution)
-        const result = await mcpClient.executeToolCall(
-          toolCall,
-          agentId,
-          tokenAuth,
-        );
+        // Execute the tool call via McpClient with tracing
+        const result = await startActiveMcpSpan({
+          toolName: name,
+          mcpServerName,
+          agent,
+          callback: async (span) => {
+            const r = await mcpClient.executeToolCall(
+              toolCall,
+              agentId,
+              tokenAuth,
+            );
+            span.setAttribute("mcp.is_error_result", r.isError ?? false);
+            return r;
+          },
+        });
+
+        const durationSeconds = (Date.now() - startTime) / 1000;
+        metrics.mcp.reportMcpToolCall({
+          profileName: agent.name,
+          mcpServerName,
+          toolName: name,
+          durationSeconds,
+          isError: result.isError ?? false,
+          profileLabels: agent.labels,
+        });
 
         const contentLength = estimateToolResultContentLength(result.content);
         logger.info(
@@ -259,6 +305,16 @@ export async function createAgentServer(
           isError: result.isError,
         };
       } catch (error) {
+        const durationSeconds = (Date.now() - startTime) / 1000;
+        metrics.mcp.reportMcpToolCall({
+          profileName: agent.name,
+          mcpServerName,
+          toolName: name,
+          durationSeconds,
+          isError: true,
+          profileLabels: agent.labels,
+        });
+
         if (typeof error === "object" && error !== null && "code" in error) {
           throw error; // Re-throw JSON-RPC errors
         }
@@ -282,7 +338,6 @@ export async function createAgentServer(
  */
 export function createStatelessTransport(
   agentId: string,
-  logger: { info: (obj: unknown, msg: string) => void },
 ): StreamableHTTPServerTransport {
   logger.info({ agentId }, "Creating stateless transport instance");
 

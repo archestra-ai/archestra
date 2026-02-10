@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.42](https://github.com/archestra-ai/archestra/compare/platform-v1.0.41...platform-v1.0.42) (2026-02-10)
+
+
+### Features
+
+* add custom vault injector ([#2698](https://github.com/archestra-ai/archestra/issues/2698)) ([09fa98e](https://github.com/archestra-ai/archestra/commit/09fa98e2934770a064478f026a7a7fea4d540f07))
+* add MCP metrics/tracing ([#2699](https://github.com/archestra-ai/archestra/issues/2699)) ([8ecdccf](https://github.com/archestra-ai/archestra/commit/8ecdccfb9711437600e2be098464d2d41a9e9c49))
+
+
+### Bug Fixes
+
+* cleanup stale sessions and fix catalog config comparison ([#2701](https://github.com/archestra-ai/archestra/issues/2701)) ([952f431](https://github.com/archestra-ai/archestra/commit/952f431124a69eafa40aa351024818f2e07e565b))
+* detect "session not found" and retry with fresh session ([#2703](https://github.com/archestra-ai/archestra/issues/2703)) ([7d9eee6](https://github.com/archestra-ai/archestra/commit/7d9eee6db1b0455977d8e0ac110f58c75e40ce89))
+* detect stale session with ping ([#2705](https://github.com/archestra-ai/archestra/issues/2705)) ([7379620](https://github.com/archestra-ai/archestra/commit/7379620fe07841788f8481be2393f18ba12be81b))
+* revert organization logo preview when upload fails ([#2680](https://github.com/archestra-ai/archestra/issues/2680)) ([34e61d6](https://github.com/archestra-ai/archestra/commit/34e61d6b74a293386f2890abddc6d10e5a243a31))
+
+
+### Miscellaneous Chores
+
+* deduplicate metrics `sanitizeLabelKey` util function ([#2709](https://github.com/archestra-ai/archestra/issues/2709)) ([85d82ca](https://github.com/archestra-ai/archestra/commit/85d82cace7fef0cffa9aad115a7b996ca57b79a7))
+* remove "Show Tool calls" toggle button from chat header ([#2710](https://github.com/archestra-ai/archestra/issues/2710)) ([ea9dfe0](https://github.com/archestra-ai/archestra/commit/ea9dfe0bd6be5832e4a57b889908e5abdcd39cd1)), closes [#2643](https://github.com/archestra-ai/archestra/issues/2643)
+* rename "credential type" to "installation type" and replace radio buttons with dropdown ([#2711](https://github.com/archestra-ai/archestra/issues/2711)) ([950b27e](https://github.com/archestra-ai/archestra/commit/950b27ee98806be2a089f0db2fdd9db5428366e8))
+
 ## [1.0.41](https://github.com/archestra-ai/archestra/compare/platform-v1.0.37...platform-v1.0.41) (2026-02-09)
 
 

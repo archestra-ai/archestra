@@ -3,11 +3,12 @@
 import { E2eTestId } from "@shared";
 import { useEffect, useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -16,15 +17,10 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
-import { cn } from "@/lib/utils";
 
-const CredentialType = {
-  Personal: "personal",
-  Team: "team",
-} as const;
+const PERSONAL_VALUE = "personal";
 
 interface SelectMcpServerCredentialTypeAndTeamsProps {
-  selectedTeamId: string | null;
   onTeamChange: (teamId: string | null) => void;
   /** Catalog ID to filter existing installations - if provided, disables already-used options */
   catalogId?: string;
@@ -37,7 +33,6 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
-  selectedTeamId,
   onTeamChange,
   catalogId,
   onCredentialTypeChange,
@@ -90,226 +85,148 @@ export function SelectMcpServerCredentialTypeAndTeams({
     return teams.filter((t) => !teamsWithInstallation.includes(t.id));
   }, [teams, catalogId, teamsWithInstallation, isReinstall]);
 
-  // Determine initial credential type based on what's available
-  const initialCredentialType = useMemo(() => {
-    // For reinstall, use the existing credential type
-    if (isReinstall) {
-      return existingTeamId ? CredentialType.Team : CredentialType.Personal;
-    }
-    // Force team selection when BYOS is enabled
-    if (byosEnabled && availableTeams.length > 0) {
-      return CredentialType.Team;
-    }
-    if (hasPersonalInstallation && availableTeams.length > 0) {
-      return CredentialType.Team;
-    }
-    return CredentialType.Personal;
-  }, [
-    byosEnabled,
-    hasPersonalInstallation,
-    availableTeams.length,
-    isReinstall,
-    existingTeamId,
-  ]);
-
-  const [credentialType, setCredentialType] = useState<
-    (typeof CredentialType)[keyof typeof CredentialType]
-  >(initialCredentialType);
-
-  // Update credential type when initial value changes (e.g., after data loads)
-  // Also notifies parent of the current credential type
-  useEffect(() => {
-    // For reinstall, don't auto-switch credential type - keep the existing one
-    if (isReinstall) {
-      onCredentialTypeChange?.(credentialType);
-      return;
-    }
-    // Force team selection when BYOS is enabled or personal is already installed
-    if (
-      (hasPersonalInstallation || byosEnabled) &&
-      credentialType === CredentialType.Personal
-    ) {
-      if (availableTeams.length > 0) {
-        setCredentialType(CredentialType.Team);
-        onCredentialTypeChange?.(CredentialType.Team);
-        return;
-      }
-    }
-    // Always notify parent of current credential type when dependencies change
-    onCredentialTypeChange?.(credentialType);
-  }, [
-    hasPersonalInstallation,
-    byosEnabled,
-    availableTeams.length,
-    credentialType,
-    onCredentialTypeChange,
-    isReinstall,
-  ]);
-
-  const handleCredentialTypeChange = (
-    value: (typeof CredentialType)[keyof typeof CredentialType],
-  ) => {
-    setCredentialType(value);
-    onCredentialTypeChange?.(value);
-    // Reset team selection when switching to personal
-    if (value === CredentialType.Personal) {
-      onTeamChange(null);
-    }
-  };
-
-  const handleTeamChange = (value: string) => {
-    onTeamChange(value || null);
-  };
-
-  // Auto-select team when switching to team mode
-  // For reinstall: use the existing team ID
-  // For new install: use the first available team
-  useEffect(() => {
-    if (credentialType === CredentialType.Team) {
-      if (isReinstall && existingTeamId) {
-        onTeamChange(existingTeamId);
-      } else if (availableTeams?.[0]) {
-        onTeamChange(availableTeams[0].id);
-      }
-    }
-  }, [
-    credentialType,
-    availableTeams,
-    onTeamChange,
-    isReinstall,
-    existingTeamId,
-  ]);
-
   // WHY: During reinstall, lock credential type to existing value (can't change ownership)
   // Personal is disabled if: reinstalling a team server, or (for new install) already has personal or BYOS enabled
   const isPersonalDisabled = isReinstall
     ? !!existingTeamId // Reinstalling team server - can't switch to personal
     : hasPersonalInstallation || byosEnabled;
-  // WHY: Team option is disabled if:
+
+  // WHY: Team options are disabled if:
   // 1. Reinstalling a personal server (can't switch to team)
-  // 2. No teams available (user is not a member of any team with available slots)
-  // 3. User lacks mcpServer:update permission (members don't have it, only editors/admins do)
-  // This enforces that only editors and admins can create team-wide MCP server installations.
-  const isTeamDisabled = isReinstall
+  // 2. User lacks mcpServer:update permission AND personal is still available.
+  //    When personal is unavailable (already installed or BYOS), teams must stay
+  //    enabled since they are the only option
+  const areTeamsDisabled = isReinstall
     ? !existingTeamId // Reinstalling personal server - can't switch to team
-    : availableTeams.length === 0 || !hasMcpServerUpdate;
+    : !hasMcpServerUpdate && !isPersonalDisabled;
+
+  // Compute the initial dropdown value
+  const initialValue = useMemo(() => {
+    if (isReinstall) {
+      return existingTeamId || PERSONAL_VALUE;
+    }
+    // Force team selection when BYOS is enabled or personal is already installed
+    if ((byosEnabled || hasPersonalInstallation) && availableTeams.length > 0) {
+      return availableTeams[0].id;
+    }
+    return PERSONAL_VALUE;
+  }, [
+    byosEnabled,
+    hasPersonalInstallation,
+    availableTeams,
+    isReinstall,
+    existingTeamId,
+  ]);
+
+  const [selectedValue, setSelectedValue] = useState<string>(initialValue);
+
+  // Sync when constraints change (e.g., data loads asynchronously)
+  // Also notifies parent of the current credential type and team
+  useEffect(() => {
+    // For reinstall, don't auto-switch - keep the existing value
+    if (isReinstall) {
+      const isTeam = selectedValue !== PERSONAL_VALUE;
+      onCredentialTypeChange?.(isTeam ? "team" : "personal");
+      onTeamChange(isTeam ? selectedValue : null);
+      return;
+    }
+
+    // Force away from personal when BYOS is enabled or personal already installed
+    if (
+      (hasPersonalInstallation || byosEnabled) &&
+      selectedValue === PERSONAL_VALUE
+    ) {
+      if (availableTeams.length > 0) {
+        setSelectedValue(availableTeams[0].id);
+        onCredentialTypeChange?.("team");
+        onTeamChange(availableTeams[0].id);
+        return;
+      }
+    }
+
+    // Always notify parent of current state when dependencies change
+    const isTeam = selectedValue !== PERSONAL_VALUE;
+    onCredentialTypeChange?.(isTeam ? "team" : "personal");
+    onTeamChange(isTeam ? selectedValue : null);
+  }, [
+    hasPersonalInstallation,
+    byosEnabled,
+    availableTeams,
+    selectedValue,
+    onCredentialTypeChange,
+    onTeamChange,
+    isReinstall,
+  ]);
+
+  const handleValueChange = (value: string) => {
+    setSelectedValue(value);
+    if (value === PERSONAL_VALUE) {
+      onCredentialTypeChange?.("personal");
+      onTeamChange(null);
+    } else {
+      onCredentialTypeChange?.("team");
+      onTeamChange(value);
+    }
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>Credential Type</Label>
-        <RadioGroup
-          value={credentialType}
-          onValueChange={handleCredentialTypeChange}
-        >
-          <div className="flex items-start gap-3">
-            <RadioGroupItem
-              value={CredentialType.Personal}
-              id="r1"
-              disabled={isPersonalDisabled}
-              data-testid={E2eTestId.SelectCredentialTypePersonal}
-              className="mt-0.5"
-            />
-            <div className="space-y-0.5">
-              <Label
-                htmlFor="r1"
-                className={cn(
-                  "flex items-baseline gap-2",
-                  isPersonalDisabled && "opacity-50",
-                )}
-              >
-                Personal
-                {isPersonalDisabled && (
-                  <span className="text-xs text-muted-foreground">
-                    {isReinstall && existingTeamId
-                      ? "(cannot change from team to personal during reinstall)"
-                      : byosEnabled
-                        ? "(not available when Readonly Vault is enabled)"
-                        : "(already created for this MCP server)"}
-                  </span>
-                )}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Only you can use this server installation
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <RadioGroupItem
-              value={CredentialType.Team}
-              id="r2"
-              disabled={isTeamDisabled}
-              data-testid={E2eTestId.SelectCredentialTypeTeam}
-              className="mt-0.5"
-            />
-            <div className="space-y-0.5">
-              <Label
-                htmlFor="r2"
-                className={cn(
-                  "flex items-baseline gap-2",
-                  isTeamDisabled && "opacity-50",
-                )}
-              >
-                Team{" "}
-                {isTeamDisabled && (
-                  <span className="text-xs text-muted-foreground">
-                    {/* WHY: Show different messages based on why team option is disabled:
-                        1. Reinstalling personal server - can't change to team
-                        2. No permission - members can't create team installations
-                        3. No teams - user isn't a member of any team
-                        4. All teams used - all user's teams already have this server */}
-                    {isReinstall && !existingTeamId
-                      ? "(cannot change from personal to team during reinstall)"
-                      : !hasMcpServerUpdate
-                        ? "(you don't have permission to create team installations)"
-                        : teams?.length === 0
-                          ? "(you are not a member of any team)"
-                          : "(all your teams already have this server installed)"}
-                  </span>
-                )}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                All members of the selected team can use this server
-              </p>
-            </div>
-          </div>
-        </RadioGroup>
-      </div>
-
-      {credentialType === "team" && (
-        <div className="space-y-2">
-          <Label>
-            Team <span className="text-destructive">*</span>
-          </Label>
-          <Select
-            value={selectedTeamId || ""}
-            onValueChange={handleTeamChange}
-            disabled={isLoadingTeams}
+    <div className="space-y-2">
+      <Label>Installation Type</Label>
+      <Select
+        value={selectedValue}
+        onValueChange={handleValueChange}
+        disabled={isLoadingTeams || isReinstall}
+      >
+        <SelectTrigger data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}>
+          <SelectValue
+            placeholder={
+              isLoadingTeams ? "Loading..." : "Select installation type"
+            }
+          />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem
+            value={PERSONAL_VALUE}
+            disabled={isPersonalDisabled}
+            data-testid={E2eTestId.SelectCredentialTypePersonal}
           >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  isLoadingTeams ? "Loading teams..." : "Select a team"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent
-              data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
-            >
-              {availableTeams?.map((team) => (
-                <SelectItem key={team.id} value={team.id}>
-                  {team.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {availableTeams?.length === 0 && !isLoadingTeams && (
-            <p className="text-xs text-muted-foreground">
-              No teams available. Create a team first to share this server.
-            </p>
+            Myself
+            {hasPersonalInstallation && !isReinstall && (
+              <span className="text-muted-foreground ml-1">
+                (already installed)
+              </span>
+            )}
+          </SelectItem>
+          {(isReinstall ? availableTeams : (teams ?? [])).length > 0 && (
+            <SelectGroup>
+              <SelectLabel>Teams</SelectLabel>
+              {(isReinstall ? availableTeams : (teams ?? [])).map((team) => {
+                const isAlreadyInstalled =
+                  !isReinstall && teamsWithInstallation.includes(team.id);
+                return (
+                  <SelectItem
+                    key={team.id}
+                    value={team.id}
+                    disabled={areTeamsDisabled || isAlreadyInstalled}
+                  >
+                    {team.name}
+                    {isAlreadyInstalled && (
+                      <span className="text-muted-foreground ml-1">
+                        (already installed)
+                      </span>
+                    )}
+                  </SelectItem>
+                );
+              })}
+            </SelectGroup>
           )}
-        </div>
-      )}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        {selectedValue === PERSONAL_VALUE
+          ? "Only you can use this server installation"
+          : "All members of the selected team can use this server"}
+      </p>
     </div>
   );
 }

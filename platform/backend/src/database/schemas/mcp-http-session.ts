@@ -15,6 +15,8 @@ import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 const mcpHttpSessionsTable = pgTable("mcp_http_sessions", {
   connectionKey: text("connection_key").primaryKey(),
   sessionId: text("session_id").notNull(),
+  sessionEndpointUrl: text("session_endpoint_url"),
+  sessionEndpointPodName: text("session_endpoint_pod_name"),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 

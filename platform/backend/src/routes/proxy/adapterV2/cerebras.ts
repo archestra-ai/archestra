@@ -14,9 +14,9 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
+import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
 import type {
   Cerebras,
@@ -1101,7 +1101,11 @@ export const cerebrasAdapterFactory: LLMProvider<
 
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options?.agent
-      ? getObservableFetch("cerebras", options.agent, options.externalAgentId)
+      ? metrics.llm.getObservableFetch(
+          "cerebras",
+          options.agent,
+          options.externalAgentId,
+        )
       : undefined;
 
     // Use OpenAI SDK with Cerebras base URL (OpenAI-compatible API)

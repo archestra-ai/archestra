@@ -2148,6 +2148,35 @@ export default class K8sDeployment {
   }
 
   /**
+   * Get an HTTP endpoint URL pinned to the currently running pod.
+   * Useful for sticky session resumption in multi-replica streamable-http deployments.
+   */
+  async getRunningPodHttpEndpoint(): Promise<
+    { endpointUrl: string; podName: string } | undefined
+  > {
+    const needsHttp = await this.needsHttpPort();
+    if (!needsHttp) {
+      return undefined;
+    }
+
+    const pod = await this.findPodForDeployment();
+    const podIp = pod?.status?.podIP;
+    const podName = pod?.metadata?.name;
+    if (!podIp || !podName) {
+      return undefined;
+    }
+
+    const catalogItem = await this.getCatalogItem();
+    const httpPort = catalogItem?.localConfig?.httpPort || 8080;
+    const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
+
+    return {
+      endpointUrl: `http://${podIp}:${httpPort}${httpPath}`,
+      podName,
+    };
+  }
+
+  /**
    * Get the HTTP endpoint URL for streamable-http servers
    */
   getHttpEndpointUrl(): string | undefined {

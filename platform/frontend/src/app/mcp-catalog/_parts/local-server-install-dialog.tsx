@@ -290,7 +290,6 @@ export function LocalServerInstallDialog({
         </DialogHeader>
 
         <SelectMcpServerCredentialTypeAndTeams
-          selectedTeamId={selectedTeamId}
           onTeamChange={setSelectedTeamId}
           catalogId={isReinstall ? undefined : catalogItem?.id}
           onCredentialTypeChange={setCredentialType}

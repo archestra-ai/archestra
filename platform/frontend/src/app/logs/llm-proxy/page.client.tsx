@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Table,
   TableBody,
@@ -20,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Tooltip,
   TooltipContent,

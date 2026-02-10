@@ -40,9 +40,7 @@ export function TablePagination({
 
   return (
     <div className="flex items-center justify-between">
-      <div className="flex-1 text-sm text-muted-foreground">
-        {leftContent}
-      </div>
+      <div className="flex-1 text-sm text-muted-foreground">{leftContent}</div>
       <div className="flex items-center gap-6 lg:gap-8">
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium">Rows per page</p>

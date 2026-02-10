@@ -237,6 +237,35 @@ tests:
           path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
           value: database-url
 
+  # Vault sentinel value tests
+  - it: should not fail validation when external_database_url is "from_vault" with postgresql.enabled true
+    set:
+      postgresql.external_database_url: "from_vault"
+      postgresql.enabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+    documentIndex: 1
+
+  - it: should not set PGPASSWORD or ARCHESTRA_DATABASE_URL when external_database_url is "from_vault"
+    documentIndex: 1
+    set:
+      postgresql.external_database_url: "from_vault"
+      postgresql.enabled: true
+      archestra.env: {}
+      archestra.orchestrator.kubernetes.mcpServerRbac.create: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGPASSWORD
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+          any: true
+
   - it: should have init container to wait for PostgreSQL
     documentIndex: 1
     asserts:
@@ -1949,10 +1978,10 @@ tests:
           count: 2
       - equal:
           path: spec.template.spec.initContainers[0].name
-          value: wait-for-postgres
+          value: vault-secrets
       - equal:
           path: spec.template.spec.initContainers[1].name
-          value: vault-secrets
+          value: wait-for-postgres
 
   - it: should use the main archestra platform image for vault-secrets init container
     documentIndex: 1
@@ -1966,7 +1995,7 @@ tests:
           key: url
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].image
+          path: spec.template.spec.initContainers[0].image
           value: archestra/platform:1.0.37
 
   - it: should pass existing env vars to vault-secrets init container
@@ -1983,22 +2012,22 @@ tests:
           key: url
     asserts:
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[0].env
           content:
             name: ARCHESTRA_HASHICORP_VAULT_ADDR
             value: "https://vault.example.com:8200"
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[0].env
           content:
             name: ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD
             value: "K8S"
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[0].env
           content:
             name: ARCHESTRA_HASHICORP_VAULT_K8S_ROLE
             value: "archestra-app"
 
-  - it: should generate fetch commands for each configured secret
+  - it: should pass secrets config as VAULT_INJECTOR_SECRETS env var
     documentIndex: 1
     set:
       archestra.initContainers.vaultSecrets.enabled: true
@@ -2010,14 +2039,13 @@ tests:
           path: secret/data/team/ms_teams_secret
           key: value
     asserts:
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "envVar: 'DATABASE_URL', path: 'secret/data/team/database_url', key: 'url'"
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "envVar: 'MS_TEAMS_SECRET', path: 'secret/data/team/ms_teams_secret', key: 'value'"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: VAULT_INJECTOR_SECRETS
+          any: true
 
-  - it: should include K8S auth logic in init container script
+  - it: should run vault-env-injector Node.js script
     documentIndex: 1
     set:
       archestra.initContainers.vaultSecrets.enabled: true
@@ -2026,15 +2054,12 @@ tests:
           path: secret/data/team/database_url
           key: url
     asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].command[0]
+          value: "node"
       - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD"
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "kubernetes.io/serviceaccount/token"
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "/vault/secrets/env"
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "vault-env-injector"
 
   - it: should mount vault-secrets volume in init container
     documentIndex: 1
@@ -2046,11 +2071,46 @@ tests:
           key: url
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].volumeMounts[0].name
+          path: spec.template.spec.initContainers[0].volumeMounts[0].name
           value: vault-secrets
       - equal:
-          path: spec.template.spec.initContainers[1].volumeMounts[0].mountPath
+          path: spec.template.spec.initContainers[0].volumeMounts[0].mountPath
           value: /vault/secrets
+
+  - it: should mount vault-secrets volume as read-only in wait-for-postgres when enabled
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+      - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content:
+            name: vault-secrets
+            mountPath: /vault/secrets
+            readOnly: true
+
+  - it: should source vault secrets in wait-for-postgres command when enabled
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "/vault/secrets/env"
 
   - it: should create vault-secrets emptyDir volume with Memory medium when enabled
     documentIndex: 1

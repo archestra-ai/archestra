@@ -117,4 +117,9 @@ vault:
     boundServiceAccountName: archestra-platform
     boundServiceAccountNamespace: archestra-dev
     ttl: "24h"
+  # Secrets to write into Vault on startup (used in post-start hook)
+  secrets:
+    - path: kv/archestra/config
+      data:
+        dburl: "postgresql://archestra:archestra_dev_password@archestra-platform-postgresql:5432/archestra_dev"
 

@@ -421,6 +421,11 @@ postgresql:
   #         secretName: my-db-secret
   #         secretKey: database-url
   #
+  # Option 3 - Database URL from Vault init container (set to "vault"):
+  #   external_database_url: "from_vault"
+  #   This skips ARCHESTRA_DATABASE_URL secret creation and instead relies on the vault-secrets init container
+  #   to provide the database URL at runtime.
+  #
   # IMPORTANT: When using external database, you MUST also set enabled=false
   external_database_url: null
 

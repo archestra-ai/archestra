@@ -21140,7 +21140,8 @@
                         },
                         "message": {
                           "type": "string"
-                        }
+                        },
+                        "data": {}
                       },
                       "required": [
                         "code",

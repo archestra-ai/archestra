@@ -5,6 +5,7 @@ import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import { AgentModel, UserModel } from "@/models";
+import { ProviderError } from "@/routes/chat/errors";
 import {
   extractBearerToken,
   validateMCPGatewayToken,
@@ -79,6 +80,7 @@ const A2AJsonRpcResponseSchema = z.object({
     .object({
       code: z.number(),
       message: z.string(),
+      data: z.unknown().optional(),
     })
     .optional(),
 });
@@ -320,12 +322,15 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       } catch (error) {
+        const chatError =
+          error instanceof ProviderError ? error.chatErrorResponse : undefined;
         return reply.send({
           jsonrpc: "2.0" as const,
           id,
           error: {
             code: -32603,
             message: error instanceof Error ? error.message : "Internal error",
+            data: chatError,
           },
         });
       }

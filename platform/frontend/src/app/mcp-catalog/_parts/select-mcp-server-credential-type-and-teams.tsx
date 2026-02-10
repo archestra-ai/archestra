@@ -104,10 +104,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
       return existingTeamId || PERSONAL_VALUE;
     }
     // Force team selection when BYOS is enabled or personal is already installed
-    if (
-      (byosEnabled || hasPersonalInstallation) &&
-      availableTeams.length > 0
-    ) {
+    if ((byosEnabled || hasPersonalInstallation) && availableTeams.length > 0) {
       return availableTeams[0].id;
     }
     return PERSONAL_VALUE;
@@ -178,9 +175,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
         onValueChange={handleValueChange}
         disabled={isLoadingTeams || isReinstall}
       >
-        <SelectTrigger
-          data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
-        >
+        <SelectTrigger data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}>
           <SelectValue
             placeholder={
               isLoadingTeams ? "Loading..." : "Select installation type"
@@ -200,10 +195,10 @@ export function SelectMcpServerCredentialTypeAndTeams({
               </span>
             )}
           </SelectItem>
-          {(isReinstall ? availableTeams : teams ?? []).length > 0 && (
+          {(isReinstall ? availableTeams : (teams ?? [])).length > 0 && (
             <SelectGroup>
               <SelectLabel>Teams</SelectLabel>
-              {(isReinstall ? availableTeams : teams ?? []).map((team) => {
+              {(isReinstall ? availableTeams : (teams ?? [])).map((team) => {
                 const isAlreadyInstalled =
                   !isReinstall && teamsWithInstallation.includes(team.id);
                 return (

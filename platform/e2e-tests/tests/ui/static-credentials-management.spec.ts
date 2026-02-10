@@ -134,9 +134,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         Member: [MARKETING_TEAM_NAME],
       };
       for (const team of expectedTeams[user]) {
-        await expect(
-          page.getByRole("option", { name: team }),
-        ).toBeVisible();
+        await expect(page.getByRole("option", { name: team })).toBeVisible();
       }
       // select first team from dropdown
       await page.getByRole("option", { name: expectedTeams[user][0] }).click();

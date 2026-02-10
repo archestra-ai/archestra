@@ -4,6 +4,7 @@ import AnthropicMessagesInteraction from "./llmProviders/anthropic";
 import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
 import CohereChatInteraction from "./llmProviders/cohere";
+import DeepseekChatCompletionInteraction from "./llmProviders/deepseek";
 import type {
   DualLlmResult,
   Interaction,
@@ -130,6 +131,8 @@ export class DynamicInteraction implements InteractionUtils {
       return new ZhipuaiChatCompletionInteraction(interaction);
     } else if (type === "cerebras:chatCompletions") {
       return new CerebrasChatCompletionInteraction(interaction);
+    } else if (type === "deepseek:chatCompletions") {
+      return new DeepseekChatCompletionInteraction(interaction);
     } else if (type === "mistral:chatCompletions") {
       return new MistralChatCompletionInteraction(interaction);
     } else if (type === "vllm:chatCompletions") {

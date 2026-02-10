@@ -225,7 +225,6 @@ export function RemoteServerInstallDialog({
 
         <div className="grid gap-6 py-4">
           <SelectMcpServerCredentialTypeAndTeams
-            selectedTeamId={selectedTeamId}
             onTeamChange={setSelectedTeamId}
             catalogId={catalogItem?.id}
             onCredentialTypeChange={setCredentialType}

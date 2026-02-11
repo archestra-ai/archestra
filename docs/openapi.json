@@ -31540,6 +31540,18 @@
         }
       }
     },
+    "/api/auth/oauth2/authorize": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/auth/oauth2/token": {
       "post": {
         "tags": [
@@ -80045,6 +80057,9 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "client_id_metadata_document_supported": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -80057,7 +80072,8 @@
                     "grant_types_supported",
                     "token_endpoint_auth_methods_supported",
                     "code_challenge_methods_supported",
-                    "scopes_supported"
+                    "scopes_supported",
+                    "client_id_metadata_document_supported"
                   ],
                   "additionalProperties": false
                 }

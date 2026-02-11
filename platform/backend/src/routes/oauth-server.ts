@@ -79,6 +79,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             token_endpoint_auth_methods_supported: z.array(z.string()),
             code_challenge_methods_supported: z.array(z.string()),
             scopes_supported: z.array(z.string()),
+            client_id_metadata_document_supported: z.boolean(),
           }),
         },
       },
@@ -118,6 +119,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ],
         code_challenge_methods_supported: ["S256"],
         scopes_supported: [...OAUTH_SCOPES],
+        client_id_metadata_document_supported: true,
       };
     },
   );

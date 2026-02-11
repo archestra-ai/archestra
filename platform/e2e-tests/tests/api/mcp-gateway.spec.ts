@@ -1690,9 +1690,7 @@ test.describe("MCP Gateway - CIMD (Client ID Metadata Documents)", () => {
     expect(body.error).toContain("does not match");
   });
 
-  test("CIMD validation error: 404 document not found", async ({
-    request,
-  }) => {
+  test("CIMD validation error: 404 document not found", async ({ request }) => {
     const notFoundClientId = `${WIREMOCK_INTERNAL_URL}/cimd/does-not-exist.json`;
 
     const authorizeParams = new URLSearchParams({

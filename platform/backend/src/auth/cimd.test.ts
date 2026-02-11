@@ -2,7 +2,9 @@ import { afterEach, describe, expect, vi } from "vitest";
 import { OAuthClientModel } from "@/models";
 import { test } from "@/test";
 import {
+  CimdError,
   ensureCimdClientRegistered,
+  fetchAndValidateCimdDocument,
   isCimdClientId,
   validateCimdDocument,
 } from "./cimd";
@@ -17,7 +19,7 @@ describe("CIMD", () => {
 
     test("returns true for HTTP URL with path", () => {
       expect(
-        isCimdClientId("http://localhost:9092/cimd/test-client.json"),
+        isCimdClientId("https://cimd-test.example.com/cimd/test-client.json"),
       ).toBe(true);
     });
 
@@ -56,6 +58,50 @@ describe("CIMD", () => {
 
     test("returns false for mailto: URI", () => {
       expect(isCimdClientId("mailto:user@example.com")).toBe(false);
+    });
+  });
+
+  describe("fetchAndValidateCimdDocument SSRF protection", () => {
+    test("rejects localhost URLs", async () => {
+      await expect(
+        fetchAndValidateCimdDocument("https://localhost/client.json"),
+      ).rejects.toThrow(/private or loopback address/);
+    });
+
+    test("rejects 127.x.x.x URLs", async () => {
+      await expect(
+        fetchAndValidateCimdDocument("https://127.0.0.1/client.json"),
+      ).rejects.toThrow(/private or loopback address/);
+    });
+
+    test("rejects 10.x private range", async () => {
+      await expect(
+        fetchAndValidateCimdDocument("https://10.0.0.1/client.json"),
+      ).rejects.toThrow(/private or loopback address/);
+    });
+
+    test("rejects 192.168.x private range", async () => {
+      await expect(
+        fetchAndValidateCimdDocument("https://192.168.1.1/client.json"),
+      ).rejects.toThrow(/private or loopback address/);
+    });
+
+    test("rejects 172.16-31.x private range", async () => {
+      await expect(
+        fetchAndValidateCimdDocument("https://172.16.0.1/client.json"),
+      ).rejects.toThrow(/private or loopback address/);
+    });
+
+    test("rejects IPv6 loopback", async () => {
+      await expect(
+        fetchAndValidateCimdDocument("https://[::1]/client.json"),
+      ).rejects.toThrow(/private or loopback address/);
+    });
+
+    test("throws CimdError type for SSRF blocks", async () => {
+      await expect(
+        fetchAndValidateCimdDocument("https://localhost/client.json"),
+      ).rejects.toBeInstanceOf(CimdError);
     });
   });
 
@@ -296,7 +342,7 @@ describe("CIMD", () => {
     }
 
     test("registers a CIMD client in the database", async () => {
-      const clientIdUrl = `http://localhost:9092/${crypto.randomUUID()}/client.json`;
+      const clientIdUrl = `https://cimd-test.example.com/${crypto.randomUUID()}/client.json`;
 
       mockFetchWithDocument({
         client_id: clientIdUrl,
@@ -315,7 +361,7 @@ describe("CIMD", () => {
     });
 
     test("uses cache on repeated calls within TTL", async () => {
-      const clientIdUrl = `http://localhost:9092/${crypto.randomUUID()}/client.json`;
+      const clientIdUrl = `https://cimd-test.example.com/${crypto.randomUUID()}/client.json`;
 
       mockFetchWithDocument({
         client_id: clientIdUrl,
@@ -331,7 +377,7 @@ describe("CIMD", () => {
     });
 
     test("throws when fetch returns non-OK status", async () => {
-      const clientIdUrl = `http://localhost:9092/${crypto.randomUUID()}/not-found.json`;
+      const clientIdUrl = `https://cimd-test.example.com/${crypto.randomUUID()}/not-found.json`;
 
       globalThis.fetch = vi
         .fn()
@@ -343,7 +389,7 @@ describe("CIMD", () => {
     });
 
     test("throws when response is not valid JSON", async () => {
-      const clientIdUrl = `http://localhost:9092/${crypto.randomUUID()}/invalid.json`;
+      const clientIdUrl = `https://cimd-test.example.com/${crypto.randomUUID()}/invalid.json`;
 
       globalThis.fetch = vi.fn().mockResolvedValue(
         new Response("not json {{{", {
@@ -358,7 +404,7 @@ describe("CIMD", () => {
     });
 
     test("throws when document validation fails", async () => {
-      const clientIdUrl = `http://localhost:9092/${crypto.randomUUID()}/bad.json`;
+      const clientIdUrl = `https://cimd-test.example.com/${crypto.randomUUID()}/bad.json`;
 
       mockFetchWithDocument({
         client_id: "https://wrong.com/other.json",
@@ -372,7 +418,7 @@ describe("CIMD", () => {
     });
 
     test("updates existing client on re-registration", async () => {
-      const clientIdUrl = `http://localhost:9092/${crypto.randomUUID()}/client.json`;
+      const clientIdUrl = `https://cimd-test.example.com/${crypto.randomUUID()}/client.json`;
 
       // First registration
       mockFetchWithDocument({
@@ -387,7 +433,7 @@ describe("CIMD", () => {
       expect(nameAfterFirst).toBe("Original");
 
       // Simulate cache expiry by using a new unique URL
-      const clientIdUrl2 = `http://localhost:9092/${crypto.randomUUID()}/client.json`;
+      const clientIdUrl2 = `https://cimd-test.example.com/${crypto.randomUUID()}/client.json`;
       mockFetchWithDocument({
         client_id: clientIdUrl2,
         client_name: "Updated",

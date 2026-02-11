@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { isIP } from "node:net";
 import logger from "@/logging";
 import { OAuthClientModel } from "@/models";
 import type { CimdMetadata } from "@/types";
@@ -35,10 +36,11 @@ export function isCimdClientId(clientId: string): boolean {
 export async function fetchAndValidateCimdDocument(
   clientIdUrl: string,
 ): Promise<CimdMetadata> {
+  const url = new URL(clientIdUrl);
+
   // Warn about HTTP CIMD URLs — HTTPS is recommended but not enforced.
   // The MCP spec says the AS "SHOULD" reject HTTP (not "MUST"), and
   // enforcement here breaks internal environments (CI, K8s pod-to-pod).
-  const url = new URL(clientIdUrl);
   if (url.protocol !== "https:") {
     logger.warn(
       { clientIdUrl },
@@ -46,9 +48,19 @@ export async function fetchAndValidateCimdDocument(
     );
   }
 
+  // SSRF mitigation: block private/loopback IP addresses.
+  // Hostnames that resolve to private IPs are still possible (DNS rebinding),
+  // but blocking obvious cases covers the common attack surface.
+  if (isPrivateHost(url.hostname)) {
+    throw new CimdError(
+      `CIMD client_id URL must not point to a private or loopback address: ${url.hostname}`,
+    );
+  }
+
   const response = await fetch(clientIdUrl, {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(10_000),
+    redirect: "error", // Don't follow redirects (prevents redirect-based SSRF)
   });
 
   if (!response.ok) {
@@ -57,9 +69,17 @@ export async function fetchAndValidateCimdDocument(
     );
   }
 
+  // Limit response size to 1 MB to prevent memory exhaustion
+  const body = await response.text();
+  if (body.length > MAX_CIMD_BODY_SIZE) {
+    throw new CimdError(
+      `CIMD document exceeds maximum size of ${MAX_CIMD_BODY_SIZE} bytes`,
+    );
+  }
+
   let document: unknown;
   try {
-    document = await response.json();
+    document = JSON.parse(body);
   } catch {
     throw new CimdError(`CIMD document at ${clientIdUrl} is not valid JSON`);
   }
@@ -109,7 +129,10 @@ export async function ensureCimdClientRegistered(
     softwareVersion: metadata.software_version,
   });
 
-  // Update cache
+  // Update cache, evicting stale entries if it grows too large
+  if (cimdCache.size >= MAX_CACHE_SIZE) {
+    evictStaleEntries();
+  }
   cimdCache.set(clientIdUrl, { fetchedAt: Date.now() });
 
   logger.info(
@@ -120,7 +143,7 @@ export async function ensureCimdClientRegistered(
 
 // ===  Internal helpers ===
 
-class CimdError extends Error {
+export class CimdError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CimdError";
@@ -129,6 +152,12 @@ class CimdError extends Error {
 
 /** Cache TTL: 5 minutes */
 const CACHE_TTL_MS = 5 * 60 * 1000;
+
+/** Max cache entries to prevent unbounded memory growth */
+const MAX_CACHE_SIZE = 10_000;
+
+/** Max CIMD document body size: 1 MB */
+const MAX_CIMD_BODY_SIZE = 1_024 * 1_024;
 
 /** In-memory cache to avoid re-fetching on every request */
 const cimdCache = new Map<string, { fetchedAt: number }>();
@@ -198,4 +227,43 @@ function asOptionalStringArray(value: unknown): string[] | undefined {
     return value as string[];
   }
   return undefined;
+}
+
+/**
+ * Check if a hostname is a private/loopback address (SSRF mitigation).
+ * Blocks: 127.x.x.x, ::1, 10.x, 172.16-31.x, 192.168.x, 169.254.x, localhost.
+ */
+function isPrivateHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+
+  if (lower === "localhost") return true;
+
+  // Check raw IP addresses
+  if (isIP(hostname) === 4) {
+    const parts = hostname.split(".").map(Number);
+    return (
+      parts[0] === 127 || // loopback
+      parts[0] === 10 || // Class A private
+      (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || // Class B private
+      (parts[0] === 192 && parts[1] === 168) || // Class C private
+      (parts[0] === 169 && parts[1] === 254) || // link-local
+      parts[0] === 0 // "this" network
+    );
+  }
+
+  if (isIP(hostname) === 6) {
+    return hostname === "::1" || hostname === "::";
+  }
+
+  return false;
+}
+
+/** Evict expired entries from the CIMD cache */
+function evictStaleEntries(): void {
+  const now = Date.now();
+  for (const [key, entry] of cimdCache) {
+    if (now - entry.fetchedAt >= CACHE_TTL_MS) {
+      cimdCache.delete(key);
+    }
+  }
 }

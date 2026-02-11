@@ -29,51 +29,38 @@ class OAuthClientModel {
   }
 
   /**
-   * Insert or update an OAuth client from a CIMD document.
-   * If the client already exists (by clientId), update its metadata.
-   * If not, insert a new row.
+   * Atomically insert or update an OAuth client from a CIMD document.
+   * Uses onConflictDoUpdate on the unique clientId column to avoid
+   * race conditions between concurrent requests.
    */
   static async upsertFromCimd(data: CimdUpsertData): Promise<void> {
-    const existing = await OAuthClientModel.existsByClientId(data.clientId);
+    const updateFields = {
+      name: data.name,
+      redirectUris: data.redirectUris,
+      grantTypes: data.grantTypes,
+      responseTypes: data.responseTypes,
+      tokenEndpointAuthMethod: data.tokenEndpointAuthMethod,
+      public: data.isPublic,
+      metadata: data.metadata,
+      contacts: data.contacts,
+      uri: data.uri,
+      policy: data.policy,
+      tos: data.tos,
+      softwareId: data.softwareId,
+      softwareVersion: data.softwareVersion,
+    };
 
-    if (existing) {
-      await db
-        .update(schema.oauthClientsTable)
-        .set({
-          name: data.name,
-          redirectUris: data.redirectUris,
-          grantTypes: data.grantTypes,
-          responseTypes: data.responseTypes,
-          tokenEndpointAuthMethod: data.tokenEndpointAuthMethod,
-          public: data.isPublic,
-          metadata: data.metadata,
-          contacts: data.contacts,
-          uri: data.uri,
-          policy: data.policy,
-          tos: data.tos,
-          softwareId: data.softwareId,
-          softwareVersion: data.softwareVersion,
-        })
-        .where(eq(schema.oauthClientsTable.clientId, data.clientId));
-    } else {
-      await db.insert(schema.oauthClientsTable).values({
+    await db
+      .insert(schema.oauthClientsTable)
+      .values({
         id: data.id,
         clientId: data.clientId,
-        name: data.name,
-        redirectUris: data.redirectUris,
-        grantTypes: data.grantTypes,
-        responseTypes: data.responseTypes,
-        tokenEndpointAuthMethod: data.tokenEndpointAuthMethod,
-        public: data.isPublic,
-        metadata: data.metadata,
-        contacts: data.contacts,
-        uri: data.uri,
-        policy: data.policy,
-        tos: data.tos,
-        softwareId: data.softwareId,
-        softwareVersion: data.softwareVersion,
+        ...updateFields,
+      })
+      .onConflictDoUpdate({
+        target: schema.oauthClientsTable.clientId,
+        set: updateFields,
       });
-    }
   }
 }
 

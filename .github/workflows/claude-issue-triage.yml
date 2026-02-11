@@ -1,0 +1,44 @@
+# Automatically triage new issues using Claude.
+# Checks for low-quality issues, duplicates, and applies labels.
+# Uses a shared OAuth token (not user-scoped) since this is bot-initiated.
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage-issue:
+    # Skip issues opened by bots or team members (team members know what they're doing)
+    if: |
+      !contains(fromJson('["iskhakov", "joeyorlando", "brojd", "Konstantinov-Innokentii"]'), github.event.issue.user.login) &&
+      github.event.issue.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Triage issue with Claude
+        uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
+        with:
+          # Uses the /triage-issue custom command defined in .claude/commands/triage-issue.md
+          prompt: "/triage-issue ${{ github.repository }} ISSUE_NUMBER: ${{ github.event.issue.number }}"
+
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Allow triage for issues from any user (including non-collaborators)
+          allowed_non_write_users: "*"
+
+          # Restrict to GitHub MCP tools only - no file editing or bash
+          claude_args: |
+            --allowedTools "mcp__github__get_issue,mcp__github__search_issues,mcp__github__list_issues,mcp__github__create_issue_comment,mcp__github__update_issue,mcp__github__get_issue_comments"

@@ -1,0 +1,78 @@
+# Automatically triage new PRs from external contributors using Claude.
+# Checks for low-quality PRs, ensures they reference an issue, and applies labels.
+# Uses a shared OAuth token (not user-scoped) since this is bot-initiated.
+name: Claude PR Triage
+
+on:
+  pull_request_target:
+    types: [opened]
+
+jobs:
+  triage-pr:
+    # Only run for PRs from non-team members (external contributors)
+    if: |
+      !contains(fromJson('["iskhakov", "joeyorlando", "brojd", "Konstantinov-Innokentii"]'), github.event.pull_request.user.login) &&
+      github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Triage PR with Claude
+        uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
+        with:
+          prompt: |
+            Triage this pull request from an external contributor.
+
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            ## Steps
+
+            1. Get the PR details using `mcp__github__get_pull_request`.
+            2. Evaluate the PR quality:
+
+            ### Auto-close as low-quality if ANY of these apply:
+            - Empty or boilerplate PR description (no explanation of what/why)
+            - Changes are clearly unrelated to the project (spam, self-promotion, etc.)
+            - Trivial changes that add no value (whitespace-only, random comment additions)
+            - PR modifies only CI/workflow files without prior discussion
+
+            ### Check for related issues:
+            3. If the PR doesn't reference an issue, comment asking the contributor to link one.
+
+            ### Valid PRs:
+            4. If the PR is valid, apply appropriate labels:
+               - `bug` - Bug fixes
+               - `enhancement` - New features or improvements
+               - `documentation` - Documentation changes
+
+            5. If the PR is valid and high-quality, leave a brief welcoming comment.
+
+            ## Response format
+
+            ### If closing as low-quality:
+            Be polite but direct. Example:
+            "Thanks for your interest in contributing! I'm closing this PR because [reason]. If you'd like to contribute, please open an issue first to discuss the change."
+
+            ### If valid but missing issue reference:
+            "Thanks for the PR! Could you please link this to a related issue? If there isn't one, please create an issue first describing the problem or feature."
+
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Allow triage for PRs from any user
+          allowed_non_write_users: "*"
+
+          # Restrict to GitHub MCP tools only - no file editing or bash
+          claude_args: |
+            --allowedTools "mcp__github__get_pull_request,mcp__github__list_pull_requests,mcp__github__search_issues,mcp__github__create_pull_request_review,mcp__github__create_issue_comment,mcp__github__update_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files"

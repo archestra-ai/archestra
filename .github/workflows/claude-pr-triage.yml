@@ -10,9 +10,9 @@ on:
 
 jobs:
   triage-pr:
-    # Only run for PRs from non-team members (external contributors)
+    # Skip PRs from bots or repo members/collaborators (only triage external contributors)
     if: |
-      !contains(fromJson('["iskhakov", "joeyorlando", "brojd", "Konstantinov-Innokentii"]'), github.event.pull_request.user.login) &&
+      !contains(fromJson('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.pull_request.author_association) &&
       github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -31,42 +31,8 @@ jobs:
       - name: Triage PR with Claude
         uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
         with:
-          prompt: |
-            Triage this pull request from an external contributor.
-
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-
-            ## Steps
-
-            1. Get the PR details using `mcp__github__get_pull_request`.
-            2. Evaluate the PR quality:
-
-            ### Auto-close as low-quality if ANY of these apply:
-            - Empty or boilerplate PR description (no explanation of what/why)
-            - Changes are clearly unrelated to the project (spam, self-promotion, etc.)
-            - Trivial changes that add no value (whitespace-only, random comment additions)
-            - PR modifies only CI/workflow files without prior discussion
-
-            ### Check for related issues:
-            3. If the PR doesn't reference an issue, comment asking the contributor to link one.
-
-            ### Valid PRs:
-            4. If the PR is valid, apply appropriate labels:
-               - `bug` - Bug fixes
-               - `enhancement` - New features or improvements
-               - `documentation` - Documentation changes
-
-            5. If the PR is valid and high-quality, leave a brief welcoming comment.
-
-            ## Response format
-
-            ### If closing as low-quality:
-            Be polite but direct. Example:
-            "Thanks for your interest in contributing! I'm closing this PR because [reason]. If you'd like to contribute, please open an issue first to discuss the change."
-
-            ### If valid but missing issue reference:
-            "Thanks for the PR! Could you please link this to a related issue? If there isn't one, please create an issue first describing the problem or feature."
+          # Uses the /triage-pr custom command defined in .claude/commands/triage-pr.md
+          prompt: "/triage-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ github.event.pull_request.number }}"
 
           # Use an API key, NOT an OAuth token, for bot-initiated workflows.
           # Max subscriptions are single-user and OAuth tokens in automated workflows

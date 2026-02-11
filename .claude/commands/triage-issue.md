@@ -1,10 +1,10 @@
 Triage the following GitHub issue and determine if it is valid, a duplicate, or low-quality.
 
-REPO: $ARGUMENTS
+$ARGUMENTS
 
 ## Steps
 
-1. Use `mcp__github__get_issue` to get the full issue details.
+1. Use `mcp__github__get_issue` to get the full issue details (extract the issue number from ISSUE_NUMBER above).
 2. Evaluate the issue quality based on these criteria:
 
 ### Auto-close as low-quality if ANY of these apply:

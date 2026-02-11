@@ -10,9 +10,9 @@ on:
 
 jobs:
   triage-issue:
-    # Skip issues opened by bots or team members (team members know what they're doing)
+    # Skip issues from bots or repo members/collaborators (only triage external users)
     if: |
-      !contains(fromJson('["iskhakov", "joeyorlando", "brojd", "Konstantinov-Innokentii"]'), github.event.issue.user.login) &&
+      !contains(fromJson('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.issue.author_association) &&
       github.event.issue.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -32,7 +32,7 @@ jobs:
         uses: anthropics/claude-code-action@1b8ee3b94104046d71fde52ec3557651ad8c0d71 # v1.0.29
         with:
           # Uses the /triage-issue custom command defined in .claude/commands/triage-issue.md
-          prompt: "/triage-issue ${{ github.repository }} ISSUE_NUMBER: ${{ github.event.issue.number }}"
+          prompt: "/triage-issue REPO: ${{ github.repository }} ISSUE_NUMBER: ${{ github.event.issue.number }}"
 
           # Use an API key, NOT an OAuth token, for bot-initiated workflows.
           # Max subscriptions are single-user and OAuth tokens in automated workflows

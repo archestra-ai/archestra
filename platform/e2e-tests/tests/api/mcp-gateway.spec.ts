@@ -1606,7 +1606,22 @@ test.describe("MCP Gateway - CIMD (Client ID Metadata Documents)", () => {
   test("CIMD client-info endpoint returns client name from auto-registered CIMD client", async ({
     request,
   }) => {
-    // The CIMD client should have been auto-registered in the previous test.
+    // Trigger CIMD auto-registration by hitting the authorize endpoint.
+    // Each test must be self-sufficient — don't rely on previous test side-effects.
+    const authorizeParams = new URLSearchParams({
+      response_type: "code",
+      client_id: cimdClientId,
+      redirect_uri: "http://127.0.0.1:34567/callback",
+      scope: "mcp",
+      state: crypto.randomBytes(16).toString("hex"),
+      code_challenge: crypto.randomBytes(32).toString("base64url"),
+      code_challenge_method: "S256",
+    });
+    await request.get(
+      `${API_BASE_URL}${OAUTH_ENDPOINTS.authorize}?${authorizeParams}`,
+      { headers: { Accept: "application/json", Origin: UI_BASE_URL } },
+    );
+
     // Verify the client-info endpoint returns the name from the CIMD document.
     const clientInfoResponse = await request.get(
       `${API_BASE_URL}/api/auth/oauth2/client-info?client_id=${encodeURIComponent(cimdClientId)}`,

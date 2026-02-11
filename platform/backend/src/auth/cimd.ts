@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import config from "@/config";
 import logger from "@/logging";
 import { OAuthClientModel } from "@/models";
 import type { CimdMetadata } from "@/types";
@@ -36,12 +35,15 @@ export function isCimdClientId(clientId: string): boolean {
 export async function fetchAndValidateCimdDocument(
   clientIdUrl: string,
 ): Promise<CimdMetadata> {
-  // Enforce HTTPS in production; allow HTTP in dev/test
-  if (config.production) {
-    const url = new URL(clientIdUrl);
-    if (url.protocol !== "https:") {
-      throw new CimdError("CIMD client_id must use HTTPS in production");
-    }
+  // Warn about HTTP CIMD URLs — HTTPS is recommended but not enforced.
+  // The MCP spec says the AS "SHOULD" reject HTTP (not "MUST"), and
+  // enforcement here breaks internal environments (CI, K8s pod-to-pod).
+  const url = new URL(clientIdUrl);
+  if (url.protocol !== "https:") {
+    logger.warn(
+      { clientIdUrl },
+      "[cimd] CIMD client_id uses HTTP — HTTPS is recommended for production",
+    );
   }
 
   const response = await fetch(clientIdUrl, {

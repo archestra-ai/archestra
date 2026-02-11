@@ -248,7 +248,7 @@ export class BrowserStreamSocketClientContext {
     // Check if Playwright tools are enabled for this agent
     const enablePlaywrightTools =
       await AgentModel.getEnablePlaywrightTools(agentId);
-    if (enablePlaywrightTools === false) {
+    if (enablePlaywrightTools !== true) {
       this.sendToClient(ws, {
         type: "browser_stream_error",
         payload: {

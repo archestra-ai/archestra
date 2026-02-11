@@ -1,12 +1,13 @@
-# Build KinD from source with latest Go 1.25.x to fix CVE-2025-61726
+# Build KinD from source with Go 1.25.7+ to fix CVE-2025-61726, CVE-2025-68121
 # (KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability)
-FROM alpine:3.23 AS kind-builder
+# Alpine 3.23 only has Go 1.25.6, so we use the official golang image for 1.25.7+
+FROM golang:1.25-alpine AS kind-builder
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi
-RUN apk add --no-cache 'go~=1.25' git
+RUN apk add --no-cache git
 RUN git clone --depth 1 --branch v0.31.0 https://github.com/kubernetes-sigs/kind.git /kind && \
     cd /kind && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .

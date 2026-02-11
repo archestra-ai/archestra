@@ -10,7 +10,7 @@ import { OAuthClientModel } from "@/models";
  * The authorization server fetches client metadata from that URL
  * instead of requiring pre-registration via DCR.
  *
- * See: https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization
+ * See: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
  */
 
 interface CimdMetadata {

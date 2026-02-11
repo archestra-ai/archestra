@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { isIP } from "node:net";
+import ipaddr from "ipaddr.js";
 import logger from "@/logging";
 import { OAuthClientModel } from "@/models";
 import type { CimdMetadata } from "@/types";
@@ -229,38 +229,36 @@ function asOptionalStringArray(value: unknown): string[] | undefined {
   return undefined;
 }
 
+/** Ranges from ipaddr.js that should be blocked for SSRF mitigation. */
+const BLOCKED_RANGES = new Set([
+  "loopback",
+  "private",
+  "linkLocal",
+  "unspecified",
+  "broadcast",
+  "carrierGradeNat",
+  "reserved",
+  "uniqueLocal", // IPv6 fc00::/7
+  "multicast",
+]);
+
 /**
  * Check if a hostname is a private/loopback address (SSRF mitigation).
- * Blocks: 127.x.x.x, ::1, 10.x, 172.16-31.x, 192.168.x, 169.254.x, localhost.
+ * Uses ipaddr.js for comprehensive RFC-based range detection covering IPv4 and IPv6.
  */
 function isPrivateHost(hostname: string): boolean {
-  const lower = hostname.toLowerCase();
+  if (hostname.toLowerCase() === "localhost") return true;
 
-  if (lower === "localhost") return true;
+  // Strip brackets from IPv6 addresses (URLs use [::1] format, but ipaddr.js expects ::1)
+  const normalized =
+    hostname.startsWith("[") && hostname.endsWith("]")
+      ? hostname.slice(1, -1)
+      : hostname;
 
-  // Strip brackets from IPv6 addresses (URLs use [::1] format, but isIP expects ::1)
-  const normalizedHost = hostname.startsWith("[") && hostname.endsWith("]")
-    ? hostname.slice(1, -1)
-    : hostname;
+  if (!ipaddr.isValid(normalized)) return false;
 
-  // Check raw IP addresses
-  if (isIP(normalizedHost) === 4) {
-    const parts = normalizedHost.split(".").map(Number);
-    return (
-      parts[0] === 127 || // loopback
-      parts[0] === 10 || // Class A private
-      (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || // Class B private
-      (parts[0] === 192 && parts[1] === 168) || // Class C private
-      (parts[0] === 169 && parts[1] === 254) || // link-local
-      parts[0] === 0 // "this" network
-    );
-  }
-
-  if (isIP(normalizedHost) === 6) {
-    return normalizedHost === "::1" || normalizedHost === "::";
-  }
-
-  return false;
+  const addr = ipaddr.parse(normalized);
+  return BLOCKED_RANGES.has(addr.range());
 }
 
 /** Evict expired entries from the CIMD cache */

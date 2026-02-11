@@ -97,7 +97,7 @@ describe("getIdpLogoutUrl", () => {
     const url = await getIdpLogoutUrl(user.id);
 
     expect(url).not.toBeNull();
-    const parsed = new URL(url!);
+    const parsed = new URL(url as string);
     expect(parsed.origin + parsed.pathname).toBe(
       "https://idp.example.com/protocol/openid-connect/logout",
     );

@@ -3,7 +3,6 @@
 import { archestraApiSdk } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { authClient } from "@/lib/clients/auth/auth-client";
 
 export function SignOutWithIdpLogout() {
   const hasStarted = useRef(false);
@@ -33,9 +32,13 @@ async function performSignOut() {
     // Proceed with local sign-out even if IdP URL fetch fails
   }
 
-  // Clear local session
+  // Clear local session using direct fetch to avoid React state updates
+  // from authClient.signOut() which can trigger navigation before our redirect
   try {
-    await authClient.signOut();
+    await fetch("/api/auth/sign-out", {
+      method: "POST",
+      credentials: "include",
+    });
   } catch {
     // Proceed with redirect even if session cleanup fails
   }

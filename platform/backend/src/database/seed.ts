@@ -191,6 +191,7 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
  * Each user gets their own personal Playwright server instance when they click the Browser button.
  */
 async function seedPlaywrightCatalog(): Promise<void> {
+  const LEGACY_PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
   const playwrightLocalConfig = {
     dockerImage: "mcr.microsoft.com/playwright/mcp",
     transportType: "streamable-http" as const,
@@ -217,9 +218,40 @@ async function seedPlaywrightCatalog(): Promise<void> {
   };
 
   // Read current catalog config before upsert to detect changes
-  const existingCatalog = await InternalMcpCatalogModel.findById(
+  let existingCatalog = await InternalMcpCatalogModel.findById(
     PLAYWRIGHT_MCP_CATALOG_ID,
   );
+  const legacyCatalogByName = await InternalMcpCatalogModel.findByName(
+    LEGACY_PLAYWRIGHT_MCP_SERVER_NAME,
+  );
+
+  // One-time migration: remove legacy playwright catalog installations/resources.
+  // This runs only when the old catalog name is present in the environment.
+  if (
+    existingCatalog?.name === LEGACY_PLAYWRIGHT_MCP_SERVER_NAME ||
+    legacyCatalogByName
+  ) {
+    const catalogIdsToDelete = new Set<string>();
+    if (existingCatalog?.name === LEGACY_PLAYWRIGHT_MCP_SERVER_NAME) {
+      catalogIdsToDelete.add(existingCatalog.id);
+    }
+    if (legacyCatalogByName) {
+      catalogIdsToDelete.add(legacyCatalogByName.id);
+    }
+
+    for (const catalogId of catalogIdsToDelete) {
+      const deleted = await InternalMcpCatalogModel.delete(catalogId);
+      if (deleted) {
+        logger.info(
+          { catalogId, legacyCatalogName: LEGACY_PLAYWRIGHT_MCP_SERVER_NAME },
+          "Removed legacy Playwright catalog and related installations/resources",
+        );
+      }
+    }
+
+    existingCatalog = null;
+  }
+
   const configChanged =
     !existingCatalog ||
     !isEqual(existingCatalog.localConfig, playwrightLocalConfig);
@@ -233,12 +265,18 @@ async function seedPlaywrightCatalog(): Promise<void> {
         "Browser automation for chat - each user gets their own isolated browser session",
       serverType: "local",
       requiresAuth: false,
-      isGloballyAvailable: true,
       localConfig: playwrightLocalConfig,
     })
     .onConflictDoUpdate({
       target: schema.internalMcpCatalogTable.id,
-      set: { localConfig: playwrightLocalConfig },
+      set: {
+        name: PLAYWRIGHT_MCP_SERVER_NAME,
+        description:
+          "Browser automation for chat - each user gets their own isolated browser session",
+        serverType: "local",
+        requiresAuth: false,
+        localConfig: playwrightLocalConfig,
+      },
     });
 
   // If config changed, mark all existing servers for reinstall

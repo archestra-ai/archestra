@@ -20,8 +20,6 @@ import type {
   UpdateConversation,
 } from "@/types";
 import ConversationEnabledToolModel from "./conversation-enabled-tool";
-import InternalMcpCatalogModel from "./internal-mcp-catalog";
-import McpServerModel from "./mcp-server";
 import ToolModel from "./tool";
 
 class ConversationModel {
@@ -55,14 +53,12 @@ class ConversationModel {
       )
       .map((tool) => tool.id);
 
-    const globalToolIds = await getGlobalToolIdsForUser(data.userId);
-
     // Set enabled tools to non-Archestra tools plus default Archestra tools
     // This creates a custom tool selection with most Archestra tools disabled
-    await ConversationEnabledToolModel.setEnabledTools(conversation.id, [
-      ...nonArchestraToolIds,
-      ...globalToolIds,
-    ]);
+    await ConversationEnabledToolModel.setEnabledTools(
+      conversation.id,
+      nonArchestraToolIds,
+    );
 
     const conversationWithAgent = (await ConversationModel.findById({
       id: conversation.id,
@@ -416,36 +412,6 @@ class ConversationModel {
 
     return result[0]?.agentId ?? null;
   }
-}
-
-// =============================================================================
-// Internal Helpers (not exported)
-// =============================================================================
-
-async function getGlobalToolIdsForUser(userId: string): Promise<string[]> {
-  const globalCatalogs =
-    await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
-  if (globalCatalogs.length === 0) {
-    return [];
-  }
-
-  const catalogIds = globalCatalogs.map((c) => c.id);
-
-  // Batch load: get all user's personal servers for these catalogs
-  const userServersByCatalog =
-    await McpServerModel.getUserPersonalServersForCatalogs(userId, catalogIds);
-
-  // Filter to catalogs where user has a personal server
-  const catalogsWithUserServer = catalogIds.filter((id) =>
-    userServersByCatalog.has(id),
-  );
-
-  if (catalogsWithUserServer.length === 0) {
-    return [];
-  }
-
-  // Batch load: get all tool IDs for these catalogs
-  return ToolModel.getToolIdsByCatalogIds(catalogsWithUserServer);
 }
 
 export default ConversationModel;

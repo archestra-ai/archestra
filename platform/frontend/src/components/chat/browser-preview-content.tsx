@@ -43,9 +43,15 @@ interface BrowserPreviewContentProps {
   /** When true, shows "Installing browser" message instead of normal content */
   isInstallingBrowser?: boolean;
   /** Whether Playwright MCP tools are available */
-  hasPlaywrightMcp?: boolean;
+  hasPlaywrightMcpTools?: boolean;
+  /** Whether Playwright MCP server is installed (but tools may not be assigned) */
+  isPlaywrightInstalled?: boolean;
+  /** Whether tools are being assigned to the agent */
+  isAssigningTools?: boolean;
   /** Called to install browser (Playwright MCP) */
   onInstallBrowser?: () => Promise<unknown>;
+  /** Called to assign Playwright tools to the current agent */
+  onAssignToolsToAgent?: () => Promise<unknown>;
   /** Whether the browser requires reinstallation due to config change */
   reinstallRequired?: boolean;
   /** Whether the browser installation failed */
@@ -70,8 +76,11 @@ export function BrowserPreviewContent({
   headerActions,
   className,
   isInstallingBrowser = false,
-  hasPlaywrightMcp = false,
+  hasPlaywrightMcpTools = false,
+  isPlaywrightInstalled = false,
+  isAssigningTools = false,
   onInstallBrowser,
+  onAssignToolsToAgent,
   reinstallRequired = false,
   installationFailed = false,
   onReinstallBrowser,
@@ -104,7 +113,7 @@ export function BrowserPreviewContent({
     setIsEditingUrl,
   } = useBrowserStream({
     conversationId,
-    isActive,
+    isActive: isActive && hasPlaywrightMcpTools,
     isPopup,
     initialUrl: initialNavigateUrl,
   });
@@ -457,25 +466,47 @@ export function BrowserPreviewContent({
         {!isConnecting && !screenshot && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-4">
-              {!hasPlaywrightMcp && !installationFailed ? (
-                // Not installed - show install button
+              {(isInstallingBrowser || isAssigningTools) &&
+              !hasPlaywrightMcpTools ? (
+                // Installing or assigning in progress - show unified loading
+                <>
+                  <Button disabled className="mt-10">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {isAssigningTools ? "Assigning tools" : "Installing"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {isAssigningTools
+                      ? "Assigning Playwright tools to the agent"
+                      : "Required only before first usage of the Browser Preview"}
+                  </p>
+                </>
+              ) : !isPlaywrightInstalled && !installationFailed ? (
+                // Not installed at all - show install button
                 <>
                   <Button
                     onClick={() => onInstallBrowser?.()}
-                    disabled={isInstallingBrowser}
                     className="mt-10"
                   >
-                    {isInstallingBrowser ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Installing
-                      </>
-                    ) : (
-                      "Install Browser"
-                    )}
+                    Install Browser
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     Required only before first usage of the Browser Preview
+                  </p>
+                </>
+              ) : !hasPlaywrightMcpTools &&
+                !reinstallRequired &&
+                !installationFailed ? (
+                // Installed but tools not assigned to current agent
+                <>
+                  <Button
+                    onClick={() => onAssignToolsToAgent?.()}
+                    className="mt-10"
+                  >
+                    Assign tools to agent
+                  </Button>
+                  <p className="text-xs text-muted-foreground max-w-[280px]">
+                    In order to use Browser Preview, Playwright tools need to be
+                    assigned to the agent
                   </p>
                 </>
               ) : reinstallRequired || installationFailed ? (

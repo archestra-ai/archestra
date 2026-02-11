@@ -13462,86 +13462,6 @@ export type GetChatAgentMcpToolsResponses = {
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
 
-export type GetChatGlobalToolsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/chat/global-tools';
-};
-
-export type GetChatGlobalToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetChatGlobalToolsError = GetChatGlobalToolsErrors[keyof GetChatGlobalToolsErrors];
-
-export type GetChatGlobalToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        description: string | null;
-        catalogId: string;
-    }>;
-};
-
-export type GetChatGlobalToolsResponse = GetChatGlobalToolsResponses[keyof GetChatGlobalToolsResponses];
-
 export type GenerateChatConversationTitleData = {
     body?: {
         /**
@@ -17748,7 +17668,6 @@ export type GetInternalMcpCatalogResponses = {
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
-        isGloballyAvailable: boolean;
         authDescription: string | null;
         authFields: Array<{
             name: string;
@@ -17835,7 +17754,6 @@ export type CreateInternalMcpCatalogItemData = {
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
-        isGloballyAvailable?: boolean;
         authDescription?: string | null;
         authFields?: Array<{
             name: string;
@@ -17987,7 +17905,6 @@ export type CreateInternalMcpCatalogItemResponses = {
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
-        isGloballyAvailable: boolean;
         authDescription: string | null;
         authFields: Array<{
             name: string;
@@ -18224,7 +18141,6 @@ export type GetInternalMcpCatalogItemResponses = {
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
-        isGloballyAvailable: boolean;
         authDescription: string | null;
         authFields: Array<{
             name: string;
@@ -18310,7 +18226,6 @@ export type UpdateInternalMcpCatalogItemData = {
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
-        isGloballyAvailable?: boolean;
         authDescription?: string | null;
         authFields?: Array<{
             name: string;
@@ -18464,7 +18379,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
-        isGloballyAvailable: boolean;
         authDescription: string | null;
         authFields: Array<{
             name: string;

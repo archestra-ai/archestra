@@ -35,11 +35,8 @@ import {
   ChatApiKeyModel,
   ConversationEnabledToolModel,
   ConversationModel,
-  InternalMcpCatalogModel,
-  McpServerModel,
   MessageModel,
   TeamModel,
-  ToolModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -601,75 +598,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
             ?.jsonSchema || null,
       }));
-
-      return reply.send(tools);
-    },
-  );
-
-  /**
-   * Get globally available tools with their IDs for the current user.
-   * These are tools from catalogs marked as isGloballyAvailable where the user
-   * has a personal server installed. Returns tool IDs needed for enable/disable.
-   */
-  fastify.get(
-    "/api/chat/global-tools",
-    {
-      schema: {
-        operationId: RouteId.GetChatGlobalTools,
-        description:
-          "Get globally available tools with IDs for the current user",
-        tags: ["Chat"],
-        response: constructResponseSchema(
-          z.array(
-            z.object({
-              id: z.string().uuid(),
-              name: z.string(),
-              description: z.string().nullable(),
-              catalogId: z.string().uuid(),
-            }),
-          ),
-        ),
-      },
-    },
-    async ({ user }, reply) => {
-      // Get all globally available catalogs
-      const globalCatalogs =
-        await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
-
-      if (globalCatalogs.length === 0) {
-        return reply.send([]);
-      }
-
-      const tools: Array<{
-        id: string;
-        name: string;
-        description: string | null;
-        catalogId: string;
-      }> = [];
-
-      for (const catalog of globalCatalogs) {
-        // Check if user has a personal server installed for this catalog
-        const userServer = await McpServerModel.getUserPersonalServerForCatalog(
-          user.id,
-          catalog.id,
-        );
-
-        if (!userServer) {
-          continue;
-        }
-
-        // Get tools for this catalog with their IDs
-        const catalogTools = await ToolModel.findByCatalogId(catalog.id);
-
-        for (const tool of catalogTools) {
-          tools.push({
-            id: tool.id,
-            name: tool.name,
-            description: tool.description,
-            catalogId: catalog.id,
-          });
-        }
-      }
 
       return reply.send(tools);
     },

@@ -425,14 +425,17 @@ export default function ChatPage() {
 
   // Check if Playwright MCP is available for browser panel and get install function
   const {
-    hasPlaywrightMcp,
+    hasPlaywrightMcpTools,
+    isPlaywrightInstalled,
     reinstallRequired,
     installationFailed,
     playwrightServerId,
     isInstalling: isInstallingBrowser,
+    isAssigningTools,
     installBrowser,
     reinstallBrowser,
-  } = useHasPlaywrightMcpTools(browserToolsAgentId);
+    assignToolsToAgent,
+  } = useHasPlaywrightMcpTools(browserToolsAgentId, conversationId);
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
@@ -1089,7 +1092,6 @@ export default function ChatPage() {
               </div>
               {/* Right side - show/hide controls */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs text-muted-foreground">Show:</span>
                 <Button
                   variant={isArtifactOpen ? "secondary" : "ghost"}
                   size="sm"
@@ -1310,8 +1312,23 @@ export default function ChatPage() {
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
         isInstallingBrowser={isInstallingBrowser}
-        hasPlaywrightMcp={hasPlaywrightMcp}
-        onInstallBrowser={installBrowser}
+        hasPlaywrightMcpTools={hasPlaywrightMcpTools}
+        isPlaywrightInstalled={isPlaywrightInstalled}
+        isAssigningTools={isAssigningTools}
+        onInstallBrowser={
+          browserToolsAgentId
+            ? () => installBrowser(browserToolsAgentId)
+            : undefined
+        }
+        onAssignToolsToAgent={
+          browserToolsAgentId
+            ? () =>
+                assignToolsToAgent({
+                  agentId: browserToolsAgentId,
+                  conversationId,
+                })
+            : undefined
+        }
         reinstallRequired={reinstallRequired}
         installationFailed={installationFailed}
         onReinstallBrowser={

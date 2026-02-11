@@ -1,15 +1,23 @@
-# Build KinD from source with latest Go 1.25.x to fix CVE-2025-61726
-# (KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability)
-FROM alpine:3.23 AS kind-builder
+# Build KinD and Docker CLI from source with Go 1.25.7 to fix CVE-2025-61726, CVE-2025-68121
+# Alpine 3.23 only has Go 1.25.6, so we use the official golang image for 1.25.7+
+# KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability
+# Alpine 3.23's docker-cli (29.1.3) is compiled with Go 1.25.6 (vulnerable to CVE-2025-68121)
+FROM golang:1.25.7-alpine AS go-builder
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi
-RUN apk add --no-cache 'go~=1.25' git
+RUN apk add --no-cache git
 RUN git clone --depth 1 --branch v0.31.0 https://github.com/kubernetes-sigs/kind.git /kind && \
     cd /kind && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
+RUN git clone --depth 1 --branch v29.1.3 https://github.com/docker/cli.git /docker-cli && \
+    cd /docker-cli && \
+    cp vendor.mod go.mod && cp vendor.sum go.sum && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
+    -ldflags '-X github.com/docker/cli/cli/version.Version=29.1.3' \
+    -o /docker-binary ./cmd/docker
 
 FROM node:24-alpine3.23 AS base
 
@@ -139,11 +147,11 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# KinD binary is built from source in kind-builder to address CVE-2025-61726
-RUN apk add --no-cache docker-cli
-COPY --from=kind-builder /kind-binary /usr/local/bin/kind
-RUN chmod +x /usr/local/bin/kind
-# TODO: Once KinD releases a version compiled with Go >= 1.25.6, remove the kind-builder stage
+# Both binaries are built from source in go-builder with Go 1.25.7 to fix CVE-2025-68121
+COPY --from=go-builder /docker-binary /usr/local/bin/docker
+COPY --from=go-builder /kind-binary /usr/local/bin/kind
+RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
+# TODO: Once KinD releases a version compiled with Go >= 1.25.7, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
 # RUN ARCH=$(uname -m) && \
@@ -361,7 +369,50 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
         if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
-            echo "ERROR: Failed to create KinD cluster"
+            echo ""
+            echo "=== KinD cluster creation failed ==="
+            echo ""
+
+            # Detect Docker environment
+            DOCKER_SERVER_OS=$(docker info --format '{{.OperatingSystem}}' 2>/dev/null || echo "unknown")
+            DOCKER_SERVER_PLATFORM=$(docker info --format '{{.OSType}}/{{.Architecture}}' 2>/dev/null || echo "unknown")
+            DOCKER_MEMORY_BYTES=$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo "0")
+            DOCKER_MEMORY_GB=$(awk "BEGIN {printf \"%.1f\", ${DOCKER_MEMORY_BYTES:-0} / 1073741824}")
+
+            echo "Docker environment:"
+            echo "  Server OS: ${DOCKER_SERVER_OS}"
+            echo "  Platform:  ${DOCKER_SERVER_PLATFORM}"
+            echo "  Memory:    ${DOCKER_MEMORY_GB} GB"
+            echo ""
+
+            IS_DOCKER_DESKTOP=false
+            if echo "${DOCKER_SERVER_OS}" | grep -qi "docker desktop"; then
+                IS_DOCKER_DESKTOP=true
+            fi
+
+            echo "Troubleshooting steps:"
+            if [ "${IS_DOCKER_DESKTOP}" = "true" ]; then
+                echo "  1. Increase Docker Desktop memory to at least 4 GB"
+                echo "     (Settings > Resources > Memory)"
+                if echo "${DOCKER_SERVER_PLATFORM}" | grep -qi "amd64"; then
+                    echo "  2. Ensure Docker Desktop is using the WSL 2 backend"
+                    echo "     (Settings > General > Use the WSL 2 based engine)"
+                fi
+                echo "  3. Restart Docker Desktop and try again"
+                echo "  4. Ensure Docker has sufficient disk space"
+                echo "     Run: docker system prune -f"
+            else
+                echo "  1. Ensure Docker has at least 4 GB of memory available"
+                echo "  2. Ensure Docker has sufficient disk space"
+                echo "     Run: docker system prune -f"
+                echo "  3. Restart Docker and try again"
+            fi
+            echo ""
+            echo "NOTE: You do NOT need to enable Kubernetes in Docker Desktop settings."
+            echo "      Archestra uses KinD (Kubernetes in Docker) which manages its own cluster."
+            echo ""
+            echo "For help: https://github.com/archestra-ai/archestra/issues"
+
             exit 1
         fi
         echo "KinD cluster created successfully"

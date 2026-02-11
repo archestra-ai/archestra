@@ -171,6 +171,8 @@ export function getCachedPlatformNodeSelector():
  * K8sDeployment manages a single MCP server running as a Kubernetes Deployment.
  */
 export default class K8sDeployment {
+  private static readonly MAX_K8S_LABEL_LENGTH = 63;
+  private static readonly HTTP_SERVICE_SUFFIX = "-service";
   private mcpServer: McpServer;
   private k8sApi: k8s.CoreV1Api;
   private k8sAppsApi: k8s.AppsV1Api;
@@ -456,7 +458,7 @@ export default class K8sDeployment {
    * Delete the Kubernetes Service for this MCP server (used by HTTP-based servers)
    */
   async deleteK8sService(): Promise<void> {
-    const serviceName = `${this.deploymentName}-service`;
+    const serviceName = this.constructHttpServiceName();
 
     try {
       await this.k8sApi.deleteNamespacedService({
@@ -1152,14 +1154,14 @@ export default class K8sDeployment {
     let baseUrl: string;
     if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
       // In-cluster: use service DNS name
-      const serviceName = `${this.deploymentName}-service`;
+      const serviceName = this.constructHttpServiceName();
       baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
     } else if (configuredNodePort) {
       // Local dev with fixed nodePort: use it directly (no need to read from service)
       baseUrl = `http://${config.orchestrator.kubernetes.k8sNodeHost || "localhost"}:${configuredNodePort}`;
     } else {
       // Local dev: get NodePort from service
-      const serviceName = `${this.deploymentName}-service`;
+      const serviceName = this.constructHttpServiceName();
       try {
         const service = await this.k8sApi.readNamespacedService({
           name: serviceName,
@@ -1674,7 +1676,7 @@ export default class K8sDeployment {
     httpPort: number,
     nodePort?: number,
   ): Promise<void> {
-    const serviceName = `${this.deploymentName}-service`;
+    const serviceName = this.constructHttpServiceName();
 
     try {
       // Check if service already exists
@@ -1740,6 +1742,21 @@ export default class K8sDeployment {
       );
       throw error;
     }
+  }
+
+  private constructHttpServiceName(): string {
+    const maxBaseLength =
+      K8sDeployment.MAX_K8S_LABEL_LENGTH -
+      K8sDeployment.HTTP_SERVICE_SUFFIX.length;
+
+    const base = this.deploymentName
+      .replace(/\./g, "-")
+      .slice(0, maxBaseLength)
+      .replace(/^[^a-z0-9]+/, "")
+      .replace(/[^a-z0-9-]+$/g, "");
+
+    const normalizedBase = base.length > 0 ? base : "mcp-server";
+    return `${normalizedBase}${K8sDeployment.HTTP_SERVICE_SUFFIX}`;
   }
 
   /**

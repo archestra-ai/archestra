@@ -1,7 +1,7 @@
 # Build KinD from source with Go 1.25.7+ to fix CVE-2025-61726, CVE-2025-68121
 # (KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability)
 # Alpine 3.23 only has Go 1.25.6, so we use the official golang image for 1.25.7+
-FROM golang:1.25-alpine AS kind-builder
+FROM golang:1.25.7-alpine AS kind-builder
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \

@@ -361,7 +361,50 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
         if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
-            echo "ERROR: Failed to create KinD cluster"
+            echo ""
+            echo "=== KinD cluster creation failed ==="
+            echo ""
+
+            # Detect Docker environment
+            DOCKER_SERVER_OS=$(docker info --format '{{.OperatingSystem}}' 2>/dev/null || echo "unknown")
+            DOCKER_SERVER_PLATFORM=$(docker info --format '{{.OSType}}/{{.Architecture}}' 2>/dev/null || echo "unknown")
+            DOCKER_MEMORY_BYTES=$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo "0")
+            DOCKER_MEMORY_GB=$(awk "BEGIN {printf \"%.1f\", ${DOCKER_MEMORY_BYTES:-0} / 1073741824}")
+
+            echo "Docker environment:"
+            echo "  Server OS: ${DOCKER_SERVER_OS}"
+            echo "  Platform:  ${DOCKER_SERVER_PLATFORM}"
+            echo "  Memory:    ${DOCKER_MEMORY_GB} GB"
+            echo ""
+
+            IS_DOCKER_DESKTOP=false
+            if echo "${DOCKER_SERVER_OS}" | grep -qi "docker desktop"; then
+                IS_DOCKER_DESKTOP=true
+            fi
+
+            echo "Troubleshooting steps:"
+            if [ "${IS_DOCKER_DESKTOP}" = "true" ]; then
+                echo "  1. Increase Docker Desktop memory to at least 4 GB"
+                echo "     (Settings > Resources > Memory)"
+                if echo "${DOCKER_SERVER_PLATFORM}" | grep -qi "amd64"; then
+                    echo "  2. Ensure Docker Desktop is using the WSL 2 backend"
+                    echo "     (Settings > General > Use the WSL 2 based engine)"
+                fi
+                echo "  3. Restart Docker Desktop and try again"
+                echo "  4. Ensure Docker has sufficient disk space"
+                echo "     Run: docker system prune -f"
+            else
+                echo "  1. Ensure Docker has at least 4 GB of memory available"
+                echo "  2. Ensure Docker has sufficient disk space"
+                echo "     Run: docker system prune -f"
+                echo "  3. Restart Docker and try again"
+            fi
+            echo ""
+            echo "NOTE: You do NOT need to enable Kubernetes in Docker Desktop settings."
+            echo "      Archestra uses KinD (Kubernetes in Docker) which manages its own cluster."
+            echo ""
+            echo "For help: https://github.com/archestra-ai/archestra/issues"
+
             exit 1
         fi
         echo "KinD cluster created successfully"

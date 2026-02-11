@@ -7,7 +7,6 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useProfile } from "./agent.query";
 import { authClient } from "./clients/auth/auth-client";
 import { useMcpServers } from "./mcp-server.query";
 import { handleApiError } from "./utils";
@@ -16,7 +15,6 @@ const {
   getChatConversations,
   getChatConversation,
   getChatAgentMcpTools,
-  getChatGlobalTools,
   createChatConversation,
   updateChatConversation,
   deleteChatConversation,
@@ -392,27 +390,6 @@ export function useAgentDelegationTools(agentId: string | undefined) {
 }
 
 /**
- * Get globally available tools with IDs for the current user.
- * These are tools from catalogs marked as isGloballyAvailable where the user
- * has a personal server installed (e.g., Playwright browser tools).
- */
-export function useGlobalChatTools() {
-  return useQuery({
-    queryKey: ["chat", "global-tools"],
-    queryFn: async () => {
-      const { data, error } = await getChatGlobalTools();
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
-      return data ?? [];
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000,
-  });
-}
-
-/**
  * Install browser preview (Playwright) for the current user with polling for completion.
  * Creates a personal Playwright server if one doesn't exist.
  * Polls for installation status since local servers are deployed asynchronously to K8s.
@@ -424,11 +401,12 @@ export function useBrowserInstallation() {
   const queryClient = useQueryClient();
 
   const installMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (agentId: string) => {
       const { data, error } = await installMcpServer({
         body: {
           name: PLAYWRIGHT_MCP_SERVER_NAME,
           catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+          agentIds: [agentId],
         },
       });
       if (error) {
@@ -486,7 +464,7 @@ export function useBrowserInstallation() {
   useEffect(() => {
     if (statusQuery.data === "success") {
       setInstallingServerId(null);
-      queryClient.invalidateQueries({ queryKey: ["chat", "global-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-tools"] });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       toast.success("Browser installed successfully");
@@ -511,10 +489,8 @@ export function useBrowserInstallation() {
 }
 
 export function useHasPlaywrightMcpTools(agentId: string | undefined) {
-  const toolsQuery = useChatProfileMcpTools(agentId);
-  const globalToolsQuery = useGlobalChatTools();
+  const toolsQuery = useProfileToolsWithIds(agentId);
   const browserInstall = useBrowserInstallation();
-  const { data: agent } = useProfile(agentId);
 
   // Fetch user's Playwright server to check reinstallRequired
   const playwrightServersQuery = useMcpServers({
@@ -527,26 +503,20 @@ export function useHasPlaywrightMcpTools(agentId: string | undefined) {
     (s) => s.ownerId === currentUserId,
   );
 
-  // Only check global tools with PLAYWRIGHT_MCP_CATALOG_ID
-  // Profile tools (e.g., microsoft__playwright-mcp) should NOT enable browser preview
-  // Those tools work as regular MCP tools but without the integrated preview feature
-  // Also check agent's enablePlaywrightTools flag
+  // Check if agent has Playwright tools assigned via agent_tools
   const hasPlaywrightMcp =
-    agent?.enablePlaywrightTools !== false &&
-    (globalToolsQuery.data?.some(
+    toolsQuery.data?.some(
       (tool) => tool.catalogId === PLAYWRIGHT_MCP_CATALOG_ID,
-    ) ??
-      false);
+    ) ?? false;
 
   return {
     hasPlaywrightMcp,
-    /** True when the agent has Playwright tools enabled. False while agent data is loading to prevent premature browser stream subscriptions. */
-    isPlaywrightEnabledForAgent:
-      agent != null && agent.enablePlaywrightTools !== false,
+    /** True when the agent has Playwright tools assigned. False while tool data is loading to prevent premature browser stream subscriptions. */
+    isPlaywrightEnabledForAgent: hasPlaywrightMcp,
     reinstallRequired: playwrightServer?.reinstallRequired ?? false,
     installationFailed: playwrightServer?.localInstallationStatus === "error",
     playwrightServerId: playwrightServer?.id,
-    isLoading: toolsQuery.isLoading || globalToolsQuery.isLoading,
+    isLoading: toolsQuery.isLoading,
     isInstalling: browserInstall.isInstalling,
     installBrowser: browserInstall.installBrowser,
     reinstallBrowser: browserInstall.reinstallBrowser,

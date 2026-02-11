@@ -7,6 +7,7 @@ import {
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
 import { BrowserStreamService } from "@/features/browser-stream/services/browser-stream.service";
+import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 
@@ -61,6 +62,8 @@ const buildAppWithUser = async (user: User, organizationId: string) => {
 describe("browser-stream routes authorization", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Mock Playwright tools as assigned so browser stream tests can proceed
+    vi.spyOn(AgentModel, "hasPlaywrightToolsAssigned").mockResolvedValue(true);
   });
 
   test("denies access to conversations not owned by the caller", async ({
@@ -132,7 +135,7 @@ describe("browser-stream routes authorization", () => {
       available: true,
       tools: ["browser_navigate"],
     });
-    expect(availabilitySpy).toHaveBeenCalledWith(agent.id, owner.id);
+    expect(availabilitySpy).toHaveBeenCalledWith(agent.id);
 
     await app.close();
   });

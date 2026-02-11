@@ -3,6 +3,7 @@ import type { ClientWebSocketMessage } from "@shared";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import type * as originalConfigModule from "@/config";
+import AgentModel from "@/models/agent";
 import {
   afterAll,
   beforeAll,
@@ -57,6 +58,8 @@ describe("websocket browser-stream screenshot handling", () => {
     vi.restoreAllMocks();
     service.clientContexts.clear();
     service.browserStreamContext.clearSubscriptions();
+    // Mock Playwright tools as assigned so browser stream tests can proceed
+    vi.spyOn(AgentModel, "hasPlaywrightToolsAssigned").mockResolvedValue(true);
   });
 
   test("sends an error when screenshot data is missing", async ({

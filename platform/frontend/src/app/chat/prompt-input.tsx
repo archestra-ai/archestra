@@ -5,7 +5,6 @@ import {
   getAcceptedFileTypes,
   getSupportedFileTypesDescription,
   type ModelInputModality,
-  PLAYWRIGHT_MCP_CATALOG_ID,
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";
@@ -41,10 +40,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useProfile } from "@/lib/agent.query";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useGlobalChatTools, useProfileToolsWithIds } from "@/lib/chat.query";
+import { useProfileToolsWithIds } from "@/lib/chat.query";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -128,15 +126,7 @@ const PromptInputContent = ({
 
   // Check if agent has tools or delegations
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
-  const { data: rawGlobalTools = [] } = useGlobalChatTools();
   const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
-  const { data: agent } = useProfile(agentId);
-
-  // Filter out Playwright tools if the agent has them disabled
-  const globalTools =
-    agent?.enablePlaywrightTools === false
-      ? rawGlobalTools.filter((t) => t.catalogId !== PLAYWRIGHT_MCP_CATALOG_ID)
-      : rawGlobalTools;
 
   // Check if user can update organization settings (to show settings link in tooltip)
   const { data: canUpdateOrganization } = useHasPermissions({
@@ -186,8 +176,8 @@ const PromptInputContent = ({
     [controller.textInput],
   );
 
-  // Check if there are tools or delegated agents (including global tools like Playwright)
-  const hasTools = tools.length > 0 || globalTools.length > 0;
+  // Check if there are tools or delegated agents
+  const hasTools = tools.length > 0;
   const hasDelegatedAgents = delegatedAgents.length > 0;
   const hasContent = hasTools || hasDelegatedAgents;
 

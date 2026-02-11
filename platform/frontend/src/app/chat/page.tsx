@@ -1316,7 +1316,11 @@ export default function ChatPage() {
         conversationId={conversationId}
         isInstallingBrowser={isInstallingBrowser}
         hasPlaywrightMcp={hasPlaywrightMcp}
-        onInstallBrowser={installBrowser}
+        onInstallBrowser={
+          browserToolsAgentId
+            ? () => installBrowser(browserToolsAgentId)
+            : undefined
+        }
         reinstallRequired={reinstallRequired}
         installationFailed={installationFailed}
         onReinstallBrowser={

@@ -104,11 +104,6 @@ const agentsTable = pgTable(
     /** Allowed domain for 'internal' security mode (e.g., 'example.com') */
     incomingEmailAllowedDomain: text("incoming_email_allowed_domain"),
 
-    /** Whether Playwright browser tools are enabled for this agent in chat */
-    enablePlaywrightTools: boolean("enable_playwright_tools")
-      .notNull()
-      .default(true),
-
     // LLM configuration (allows per-agent model selection)
     /** API key ID for LLM calls */
     llmApiKeyId: uuid("llm_api_key_id").references(() => chatApiKeysTable.id, {

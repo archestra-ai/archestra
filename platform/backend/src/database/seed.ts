@@ -265,7 +265,6 @@ async function seedPlaywrightCatalog(): Promise<void> {
         "Browser automation for chat - each user gets their own isolated browser session",
       serverType: "local",
       requiresAuth: false,
-      isGloballyAvailable: true,
       localConfig: playwrightLocalConfig,
     })
     .onConflictDoUpdate({
@@ -276,7 +275,6 @@ async function seedPlaywrightCatalog(): Promise<void> {
           "Browser automation for chat - each user gets their own isolated browser session",
         serverType: "local",
         requiresAuth: false,
-        isGloballyAvailable: true,
         localConfig: playwrightLocalConfig,
       },
     });

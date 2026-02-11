@@ -1,0 +1,1 @@
+ALTER TABLE "internal_mcp_catalog" DROP COLUMN "is_globally_available";

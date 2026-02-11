@@ -1,12 +1,8 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  isPlaywrightCatalogItem,
-  parseFullToolName,
-} from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@shared";
 import { useQueries } from "@tanstack/react-query";
-import { ExternalLink, Info, Loader2, Search, X } from "lucide-react";
+import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -16,7 +12,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -26,8 +21,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
-import { useProfile, useUpdateProfile } from "@/lib/agent.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
@@ -110,7 +103,6 @@ const AgentToolsEditorContent = forwardRef<
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
-  const updateProfile = useUpdateProfile();
 
   // Fetch catalog items (MCP servers in registry)
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
@@ -156,13 +148,9 @@ const AgentToolsEditorContent = forwardRef<
     return map;
   }, [assignedToolsData]);
 
-  // Sort catalog items: globally available first, then assigned tools (by count desc), then servers with tools, then 0 tools
+  // Sort catalog items: assigned tools first (by count desc), then servers with tools, then 0 tools
   const sortedCatalogItems = useMemo(() => {
     return [...catalogItems].sort((a, b) => {
-      // Globally available items (e.g., Playwright) always come first
-      if (a.isGloballyAvailable && !b.isGloballyAvailable) return -1;
-      if (!a.isGloballyAvailable && b.isGloballyAvailable) return 1;
-
       const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
       const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
 
@@ -195,12 +183,6 @@ const AgentToolsEditorContent = forwardRef<
   const pendingChangesRef = useRef<Map<string, PendingCatalogChanges>>(
     new Map(),
   );
-
-  // Track pending Playwright toggle (null = no change pending)
-  const [pendingPlaywrightToggle, setPendingPlaywrightToggle] = useState<
-    boolean | null
-  >(null);
-  const pendingPlaywrightToggleRef = useRef<boolean | null>(null);
 
   // Calculate total selected count from pending changes
   const calculateTotalSelectedCount = useCallback(() => {
@@ -284,17 +266,6 @@ const AgentToolsEditorContent = forwardRef<
         }
       }
 
-      // Save pending Playwright toggle
-      if (pendingPlaywrightToggleRef.current != null) {
-        await updateProfile.mutateAsync({
-          id: targetAgentId,
-          data: { enablePlaywrightTools: pendingPlaywrightToggleRef.current },
-        });
-        hasChanges = true;
-        pendingPlaywrightToggleRef.current = null;
-        setPendingPlaywrightToggle(null);
-      }
-
       // Invalidate all queries once at the end
       if (hasChanges) {
         invalidateAllQueries(targetAgentId);
@@ -336,28 +307,15 @@ const AgentToolsEditorContent = forwardRef<
 
   return (
     <div className="flex flex-wrap gap-2">
-      {visibleItems.map((catalog) =>
-        isPlaywrightCatalogItem(catalog.id) ? (
-          <PlaywrightToolsPill
-            key={catalog.id}
-            catalogItem={catalog}
-            agentId={agentId}
-            pendingToggle={pendingPlaywrightToggle}
-            onToggle={(checked) => {
-              setPendingPlaywrightToggle(checked);
-              pendingPlaywrightToggleRef.current = checked;
-            }}
-          />
-        ) : (
-          <McpServerPill
-            key={catalog.id}
-            catalogItem={catalog}
-            assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
-            onPendingChanges={registerPendingChanges}
-            onClearPendingChanges={clearPendingChanges}
-          />
-        ),
-      )}
+      {visibleItems.map((catalog) => (
+        <McpServerPill
+          key={catalog.id}
+          catalogItem={catalog}
+          assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
+          onPendingChanges={registerPendingChanges}
+          onClearPendingChanges={clearPendingChanges}
+        />
+      ))}
       {!shouldShowAll && hiddenCount > 0 && onShowMore && (
         <Button
           variant="outline"
@@ -385,95 +343,6 @@ const AgentToolsEditorContent = forwardRef<
     </div>
   );
 });
-
-function PlaywrightToolsPill({
-  catalogItem,
-  agentId,
-  pendingToggle,
-  onToggle,
-}: {
-  catalogItem: InternalMcpCatalogItem;
-  agentId?: string;
-  pendingToggle: boolean | null;
-  onToggle: (checked: boolean) => void;
-}) {
-  const { data: allTools = [] } = useCatalogTools(catalogItem.id);
-  const { data: agent } = useProfile(agentId);
-  const [open, setOpen] = useState(false);
-
-  // Use pending toggle if set, otherwise fall back to server state
-  const isEnabled =
-    pendingToggle != null
-      ? pendingToggle
-      : agent?.enablePlaywrightTools !== false;
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className={cn(
-            "h-8 px-3 gap-1.5 text-xs",
-            !isEnabled && "border-dashed opacity-50",
-          )}
-        >
-          <span className="font-medium">{catalogItem.name}</span>
-          <span>({allTools.length})</span>
-          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-purple-600 text-white">
-            Built-in
-          </Badge>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-4" side="bottom" align="start">
-        <div className="space-y-3">
-          <div>
-            <h4 className="font-semibold text-sm">{catalogItem.name}</h4>
-            <div className="flex items-center gap-1 mt-1">
-              <p className="text-xs text-muted-foreground">
-                {allTools.length} browser automation tools
-              </p>
-              {allTools.length > 0 && (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Info className="h-3 w-3 cursor-pointer ml-1" />
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-64 p-0 overflow-y-auto"
-                    side="right"
-                    align="start"
-                  >
-                    <div className="px-3 py-2 space-y-0.5">
-                      {allTools.map((tool) => (
-                        <p
-                          key={tool.id}
-                          className="text-xs text-muted-foreground"
-                        >
-                          {parseFullToolName(tool.name).toolName || tool.name}
-                        </p>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="playwright-toggle" className="text-sm">
-              {isEnabled ? "Enabled" : "Disabled"}
-            </Label>
-            <Switch
-              id="playwright-toggle"
-              checked={isEnabled}
-              onCheckedChange={onToggle}
-              disabled={!agentId}
-            />
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 interface McpServerPillProps {
   catalogItem: InternalMcpCatalogItem;

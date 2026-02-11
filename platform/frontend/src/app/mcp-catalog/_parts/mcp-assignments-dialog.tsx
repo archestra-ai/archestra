@@ -54,7 +54,6 @@ interface McpAssignmentsDialogProps {
   catalogId: string;
   serverName: string;
   isBuiltin: boolean;
-  readOnly?: boolean;
 }
 
 export function McpAssignmentsDialog({
@@ -63,7 +62,6 @@ export function McpAssignmentsDialog({
   catalogId,
   serverName,
   isBuiltin,
-  readOnly = false,
 }: McpAssignmentsDialogProps) {
   // Fetch all tools for this MCP server
   const { data: allTools = [], isLoading: isLoadingTools } =
@@ -324,7 +322,6 @@ export function McpAssignmentsDialog({
     profiles: Profile[],
     showAll: boolean,
     onShowMore: () => void,
-    pillReadOnly = false,
   ) => {
     const visibleProfiles =
       showAll || profiles.length <= 10 ? profiles : profiles.slice(0, 10);
@@ -346,7 +343,6 @@ export function McpAssignmentsDialog({
               currentCredentialId={assignment?.credentialId ?? null}
               pendingChanges={pending}
               onPendingChanges={updatePendingChanges}
-              readOnly={pillReadOnly}
             />
           );
         })}
@@ -433,60 +429,50 @@ export function McpAssignmentsDialog({
 
               {/* Agents Section */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Agents</Label>
-                {readOnly ? (
-                  <div className="rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
-                    Tools from this built-in server are automatically available
-                    to all agents in chat when installed. No manual assignment
-                    needed.
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2">
-                      {agents.length > 10 &&
-                        (agentsSearchOpen ? (
-                          <div className="relative flex-1 max-w-[200px]">
-                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                            <Input
-                              placeholder="Search..."
-                              value={agentsSearch}
-                              onChange={(e) => setAgentsSearch(e.target.value)}
-                              className="h-7 pl-7 text-xs"
-                              autoFocus
-                              onBlur={() => {
-                                if (!agentsSearch) {
-                                  setAgentsSearchOpen(false);
-                                }
-                              }}
-                            />
-                          </div>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => setAgentsSearchOpen(true)}
-                          >
-                            <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
-                        ))}
-                    </div>
-                    {agents.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        No agents available.
-                      </p>
-                    ) : filteredAgents.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        No matching agents.
-                      </p>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Agents</Label>
+                  {agents.length > 10 &&
+                    (agentsSearchOpen ? (
+                      <div className="relative flex-1 max-w-[200px]">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                        <Input
+                          placeholder="Search..."
+                          value={agentsSearch}
+                          onChange={(e) => setAgentsSearch(e.target.value)}
+                          className="h-7 pl-7 text-xs"
+                          autoFocus
+                          onBlur={() => {
+                            if (!agentsSearch) {
+                              setAgentsSearchOpen(false);
+                            }
+                          }}
+                        />
+                      </div>
                     ) : (
-                      renderProfilePills(
-                        filteredAgents,
-                        agentsShowAll || !!agentsSearch,
-                        () => setAgentsShowAll(true),
-                      )
-                    )}
-                  </>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => setAgentsSearchOpen(true)}
+                      >
+                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    ))}
+                </div>
+                {agents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No agents available.
+                  </p>
+                ) : filteredAgents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No matching agents.
+                  </p>
+                ) : (
+                  renderProfilePills(
+                    filteredAgents,
+                    agentsShowAll || !!agentsSearch,
+                    () => setAgentsShowAll(true),
+                  )
                 )}
               </div>
             </div>
@@ -517,7 +503,6 @@ interface ProfileAssignmentPillProps {
   currentCredentialId: string | null;
   pendingChanges?: PendingChanges;
   onPendingChanges: (profileId: string, changes: PendingChanges) => void;
-  readOnly?: boolean;
 }
 
 function ProfileAssignmentPill({
@@ -529,7 +514,6 @@ function ProfileAssignmentPill({
   currentCredentialId,
   pendingChanges,
   onPendingChanges,
-  readOnly = false,
 }: ProfileAssignmentPillProps) {
   const [open, setOpen] = useState(false);
 
@@ -587,25 +571,6 @@ function ProfileAssignmentPill({
   const totalTools = allTools.length;
   const hasNoAssignments = toolCount === 0;
   const showCredentialSelector = !isBuiltin && mcpServers.length > 0;
-
-  if (readOnly) {
-    return (
-      <Button
-        variant="outline"
-        size="sm"
-        className={cn(
-          "h-8 px-3 gap-1.5 text-xs max-w-[250px] cursor-default",
-          hasNoAssignments && "border-dashed opacity-50",
-        )}
-        disabled
-      >
-        <span className="font-medium truncate">{profile.name}</span>
-        <span className="text-muted-foreground shrink-0">
-          ({toolCount}/{totalTools})
-        </span>
-      </Button>
-    );
-  }
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>

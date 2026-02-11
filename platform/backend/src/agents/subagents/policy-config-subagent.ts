@@ -92,7 +92,6 @@ Examples:
     incomingEmailEnabled: false,
     incomingEmailSecurityMode: "private",
     incomingEmailAllowedDomain: null,
-    enablePlaywrightTools: true,
     createdAt: new Date(),
     updatedAt: new Date(),
     tools: [],

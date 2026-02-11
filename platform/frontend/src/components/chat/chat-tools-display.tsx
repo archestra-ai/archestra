@@ -4,7 +4,6 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   isAgentTool,
-  PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
 } from "@shared";
 import { Loader2, Plus, X } from "lucide-react";
@@ -17,10 +16,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useProfile } from "@/lib/agent.query";
 import {
   useConversationEnabledTools,
-  useGlobalChatTools,
   useProfileToolsWithIds,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
@@ -55,26 +52,8 @@ export function ChatToolsDisplay({
   className,
   readOnly = false,
 }: ChatToolsDisplayProps) {
-  const { data: profileTools = [], isLoading: isLoadingProfileTools } =
+  const { data: profileTools = [], isLoading } =
     useProfileToolsWithIds(agentId);
-
-  // Get globally available tools (e.g., Playwright browser tools)
-  const { data: rawGlobalTools = [], isLoading: isLoadingGlobalTools } =
-    useGlobalChatTools();
-  const { data: agent } = useProfile(agentId);
-
-  // Filter out Playwright tools if the agent has them disabled
-  const globalTools = useMemo(
-    () =>
-      agent?.enablePlaywrightTools === false
-        ? rawGlobalTools.filter(
-            (t) => t.catalogId !== PLAYWRIGHT_MCP_CATALOG_ID,
-          )
-        : rawGlobalTools,
-    [rawGlobalTools, agent?.enablePlaywrightTools],
-  );
-
-  const isLoading = isLoadingProfileTools || isLoadingGlobalTools;
 
   // State for tooltip open state per server
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
@@ -138,19 +117,14 @@ export function ChatToolsDisplay({
   // - Except archestra__todo_write and archestra__artifact_write which stay enabled
   // - All other tools (non-Archestra, agent delegation, global) remain enabled
   const defaultEnabledToolIds = useMemo(() => {
-    const profileDefaultIds = profileTools
+    return profileTools
       .filter(
         (tool) =>
           !tool.name.startsWith("archestra__") ||
           DEFAULT_ARCHESTRA_TOOL_NAMES.includes(tool.name),
       )
       .map((t) => t.id);
-
-    // Global tools are enabled by default
-    const globalDefaultIds = globalTools.map((t) => t.id);
-
-    return [...profileDefaultIds, ...globalDefaultIds];
-  }, [profileTools, globalTools]);
+  }, [profileTools]);
 
   // Compute current enabled tools:
   // - If conversation exists with custom selection, use that
@@ -181,7 +155,6 @@ export function ChatToolsDisplay({
   // Create enabled tool IDs set for quick lookup
   const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
-  // Merge profile tools with global tools (e.g., Playwright browser tools)
   // Agent tools are displayed separately in AgentToolsDisplay
   type ToolItem = {
     id: string;
@@ -191,18 +164,8 @@ export function ChatToolsDisplay({
 
   // Use useMemo to prevent recalculating on every render
   const allTools: ToolItem[] = useMemo(() => {
-    const profileToolsFiltered = profileTools.filter(
-      (tool) => !isAgentTool(tool.name),
-    );
-
-    // Merge with global tools, avoiding duplicates (by tool ID)
-    const profileToolIds = new Set(profileToolsFiltered.map((t) => t.id));
-    const uniqueGlobalTools = globalTools.filter(
-      (tool) => !profileToolIds.has(tool.id),
-    );
-
-    return [...profileToolsFiltered, ...uniqueGlobalTools];
-  }, [profileTools, globalTools]);
+    return profileTools.filter((tool) => !isAgentTool(tool.name));
+  }, [profileTools]);
 
   // Group ALL tools by MCP server name (don't filter by enabled status)
   const groupedTools: Record<string, ToolItem[]> = {};

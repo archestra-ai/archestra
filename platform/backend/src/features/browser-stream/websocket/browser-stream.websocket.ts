@@ -245,15 +245,15 @@ export class BrowserStreamSocketClientContext {
       return;
     }
 
-    // Check if Playwright tools are enabled for this agent
-    const enablePlaywrightTools =
-      await AgentModel.getEnablePlaywrightTools(agentId);
-    if (enablePlaywrightTools !== true) {
+    // Check if Playwright tools are assigned to this agent
+    const hasPlaywrightTools =
+      await AgentModel.hasPlaywrightToolsAssigned(agentId);
+    if (!hasPlaywrightTools) {
       this.sendToClient(ws, {
         type: "browser_stream_error",
         payload: {
           conversationId,
-          error: "Browser tools are disabled for this agent",
+          error: "Browser tools are not assigned to this agent",
         },
       });
       return;

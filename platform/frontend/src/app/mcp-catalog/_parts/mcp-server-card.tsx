@@ -441,8 +441,7 @@ export function McpServerCard({
   );
 
   const assignedCount = getToolsAssignedCount();
-  const isZeroAssignments =
-    assignedCount === 0 && toolsDiscoveredCount > 0 && !isPlaywrightVariant;
+  const isZeroAssignments = assignedCount === 0 && toolsDiscoveredCount > 0;
 
   const toolsAssigned = (
     <>
@@ -777,7 +776,6 @@ export function McpServerCard({
         catalogId={item.id}
         serverName={item.label || item.name}
         isBuiltin={isBuiltin}
-        readOnly={isPlaywrightVariant}
       />
 
       <McpLogsDialog

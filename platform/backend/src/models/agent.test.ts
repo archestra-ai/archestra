@@ -1,4 +1,5 @@
 import {
+  PLAYWRIGHT_MCP_CATALOG_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
@@ -1551,47 +1552,44 @@ describe("AgentModel", () => {
     });
   });
 
-  describe("getEnablePlaywrightTools", () => {
-    test("returns true by default for new agents", async () => {
-      const agent = await AgentModel.create({
-        name: "Default Playwright Agent",
-        teams: [],
-      });
-
-      const result = await AgentModel.getEnablePlaywrightTools(agent.id);
-      expect(result).toBe(true);
-    });
-
-    test("returns false when explicitly disabled", async () => {
+  describe("hasPlaywrightToolsAssigned", () => {
+    test("returns false when no playwright tools are assigned", async () => {
       const agent = await AgentModel.create({
         name: "No Playwright Agent",
         teams: [],
       });
 
-      await AgentModel.update(agent.id, { enablePlaywrightTools: false });
-
-      const result = await AgentModel.getEnablePlaywrightTools(agent.id);
+      const result = await AgentModel.hasPlaywrightToolsAssigned(agent.id);
       expect(result).toBe(false);
     });
 
-    test("returns true after re-enabling", async () => {
+    test("returns true when playwright tools are assigned", async ({
+      makeTool,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+    }) => {
       const agent = await AgentModel.create({
-        name: "Toggle Playwright Agent",
+        name: "Playwright Agent",
         teams: [],
       });
 
-      await AgentModel.update(agent.id, { enablePlaywrightTools: false });
-      expect(await AgentModel.getEnablePlaywrightTools(agent.id)).toBe(false);
+      const catalog = await makeInternalMcpCatalog({
+        id: PLAYWRIGHT_MCP_CATALOG_ID,
+        name: "Playwright",
+        serverType: "builtin",
+      });
 
-      await AgentModel.update(agent.id, { enablePlaywrightTools: true });
-      expect(await AgentModel.getEnablePlaywrightTools(agent.id)).toBe(true);
-    });
+      const tool = await makeTool({
+        name: "playwright__browser_snapshot",
+        description: "Take a snapshot",
+        parameters: {},
+        catalogId: catalog.id,
+      });
 
-    test("returns null for non-existent agent", async () => {
-      const result = await AgentModel.getEnablePlaywrightTools(
-        "00000000-0000-0000-0000-000000000000",
-      );
-      expect(result).toBeNull();
+      await makeAgentTool(agent.id, tool.id);
+
+      const result = await AgentModel.hasPlaywrightToolsAssigned(agent.id);
+      expect(result).toBe(true);
     });
   });
 

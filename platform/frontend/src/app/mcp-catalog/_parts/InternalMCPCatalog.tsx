@@ -702,14 +702,14 @@ export function InternalMCPCatalog({
   return (
     <div className="space-y-4">
       <div className="space-y-4">
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <Button
             onClick={() =>
               userIsMcpServerAdmin
                 ? openDialog("create")
                 : openDialog("custom-request")
             }
-            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            className="bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
           >
             <Plus className="mr-0.5 h-4 w-4" />
             {userIsMcpServerAdmin
@@ -721,7 +721,7 @@ export function InternalMCPCatalog({
             onClick={() => {
               window.location.href = "/connection?tab=mcp";
             }}
-            className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 hover:from-green-500/20 hover:to-emerald-500/20 border-green-500/50 hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md"
+            className="bg-linear-to-r from-green-500/10 to-emerald-500/10 hover:from-green-500/20 hover:to-emerald-500/20 border-green-500/50 hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md whitespace-normal text-left h-auto"
           >
             <Cable className="mr-0.5 h-4 w-4" />
             Connect to the Unified MCP Gateway to access those servers

@@ -3,7 +3,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  parseFullToolName,
 } from "@shared";
 import {
   Bot,
@@ -162,11 +162,9 @@ export function McpConnectionInstructions({
 
       // Check if this is an Archestra built-in tool
       if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID) {
-        const toolName =
-          tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? tool.name;
         archestraToolsList.push({
           id: tool.id,
-          name: toolName,
+          name: parseFullToolName(tool.name).toolName || tool.name,
           description: tool.description,
         });
         return;
@@ -176,11 +174,9 @@ export function McpConnectionInstructions({
         const server = mcpServers.find((s) => s.id === tool.mcpServerId);
         if (server) {
           const existing = groups.get(tool.mcpServerId);
-          const toolName =
-            tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? tool.name;
           const toolData = {
             id: tool.id,
-            name: toolName,
+            name: parseFullToolName(tool.name).toolName || tool.name,
             description: tool.description,
           };
           if (existing) {

@@ -152,6 +152,17 @@ local_resource(
   labels=['dev'],
 )
 
+# Website dev server - manual trigger only
+# Website repo is a sibling of the archestra repo (../../website relative to platform/)
+website_dir = os.path.join(config.main_dir, '..', '..', 'website', 'app', 'app')
+local_resource(
+  'website',
+  serve_cmd='cd ' + website_dir + ' && pnpm dev',
+  labels=['dev'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
 # Codegen depends on backend being up (for API schema generation)                                                    
 codegen_backend_dep = dev_resource_name if is_prod else dev_resource_name + '-backend' 
 local_resource(

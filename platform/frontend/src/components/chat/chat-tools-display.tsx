@@ -4,7 +4,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   isAgentTool,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  parseFullToolName,
 } from "@shared";
 import { Loader2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -193,11 +193,7 @@ export function ChatToolsDisplay({
   // Group ALL tools by MCP server name (don't filter by enabled status)
   const groupedTools: Record<string, ToolItem[]> = {};
   for (const tool of allTools) {
-    const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    const serverName =
-      parts.length > 1
-        ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-        : "default";
+    const serverName = parseFullToolName(tool.name).serverName ?? "default";
     if (!groupedTools[serverName]) {
       groupedTools[serverName] = [];
     }
@@ -291,8 +287,8 @@ export function ChatToolsDisplay({
     isDisabled: boolean,
     _currentServerName: string,
   ) => {
-    const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    const toolName = parts.length > 1 ? parts[parts.length - 1] : tool.name;
+    const { toolName: parsedToolName } = parseFullToolName(tool.name);
+    const toolName = parsedToolName || tool.name;
     const borderColor = isDisabled ? "border-red-500" : "border-green-500";
 
     return (
@@ -345,11 +341,8 @@ export function ChatToolsDisplay({
   const toolButtons = sortedServerEntries.map(([serverName]) => {
     // Get all tools for this server from allTools (profile tools + agent tools)
     const allServerTools = allTools.filter((tool) => {
-      const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
       const toolServerName =
-        parts.length > 1
-          ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-          : "default";
+        parseFullToolName(tool.name).serverName ?? "default";
       return toolServerName === serverName;
     });
 

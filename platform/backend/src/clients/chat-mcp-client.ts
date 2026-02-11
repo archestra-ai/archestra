@@ -5,6 +5,7 @@ import {
   isAgentTool,
   isArchestraMcpServerTool,
   isBrowserMcpTool,
+  parseFullToolName,
   TimeInMs,
 } from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
@@ -25,6 +26,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { metrics } from "@/observability";
 
 /**
  * MCP Gateway base URL (internal)
@@ -679,6 +681,8 @@ export async function getChatMcpTools({
 
             const toolArguments = isRecord(args) ? args : undefined;
 
+            const toolStartTime = Date.now();
+
             try {
               // Check if this is an Archestra tool - handle directly without DB lookup
               if (isArchestraMcpServerTool(mcpTool.name)) {
@@ -694,6 +698,13 @@ export async function getChatMcpTools({
                     sessionId,
                   },
                 );
+
+                reportToolMetrics({
+                  toolName: mcpTool.name,
+                  agentName,
+                  startTime: toolStartTime,
+                  isError: archestraResponse.isError ?? false,
+                });
 
                 // Check for errors
                 if (archestraResponse.isError) {
@@ -732,6 +743,7 @@ export async function getChatMcpTools({
                 toolName: mcpTool.name,
                 toolArguments,
                 agentId,
+                agentName,
                 userId,
                 organizationId,
                 userIsProfileAdmin,
@@ -739,6 +751,12 @@ export async function getChatMcpTools({
                 mcpGwToken,
               });
             } catch (error) {
+              reportToolMetrics({
+                toolName: mcpTool.name,
+                agentName,
+                startTime: toolStartTime,
+                isError: true,
+              });
               logger.error(
                 {
                   agentId,
@@ -818,12 +836,21 @@ export async function getChatMcpTools({
                 "Executing agent tool from chat",
               );
 
+              const agentToolStartTime = Date.now();
+
               try {
                 const response = await executeArchestraTool(
                   agentTool.name,
                   args,
                   archestraContext,
                 );
+
+                reportToolMetrics({
+                  toolName: agentTool.name,
+                  agentName,
+                  startTime: agentToolStartTime,
+                  isError: response.isError ?? false,
+                });
 
                 if (response.isError) {
                   const errorText = (
@@ -848,6 +875,12 @@ export async function getChatMcpTools({
                   )
                   .join("\n");
               } catch (error) {
+                reportToolMetrics({
+                  toolName: agentTool.name,
+                  agentName,
+                  startTime: agentToolStartTime,
+                  isError: true,
+                });
                 logger.error(
                   {
                     agentId,
@@ -890,6 +923,7 @@ export async function getChatMcpTools({
       organizationId,
       userIsProfileAdmin,
       agentId,
+      agentName,
       conversationId,
       mcpGwToken,
     });
@@ -915,6 +949,7 @@ interface ToolExecutionContext {
   toolName: string;
   toolArguments: Record<string, unknown> | undefined;
   agentId: string;
+  agentName: string;
   userId: string;
   organizationId: string;
   userIsProfileAdmin: boolean;
@@ -942,12 +977,14 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     toolName,
     toolArguments,
     agentId,
+    agentName,
     userId,
     organizationId,
     userIsProfileAdmin,
     conversationId,
     mcpGwToken,
   } = ctx;
+  const startTime = Date.now();
 
   // For browser tools, ensure the correct conversation tab is selected first
   const { browserStreamFeature } = await import(
@@ -985,20 +1022,32 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     arguments: toolArguments ?? {},
   };
 
-  const result = await mcpClient.executeToolCall(
-    toolCall,
-    agentId,
-    mcpGwToken
-      ? {
-          tokenId: mcpGwToken.tokenId,
-          teamId: mcpGwToken.teamId,
-          isOrganizationToken: mcpGwToken.isOrganizationToken,
-          organizationId,
-          userId,
-        }
-      : undefined,
-    { conversationId },
-  );
+  let result: Awaited<ReturnType<typeof mcpClient.executeToolCall>>;
+  try {
+    result = await mcpClient.executeToolCall(
+      toolCall,
+      agentId,
+      mcpGwToken
+        ? {
+            tokenId: mcpGwToken.tokenId,
+            teamId: mcpGwToken.teamId,
+            isOrganizationToken: mcpGwToken.isOrganizationToken,
+            organizationId,
+            userId,
+          }
+        : undefined,
+      { conversationId },
+    );
+    reportToolMetrics({
+      toolName,
+      agentName,
+      startTime,
+      isError: result.isError ?? false,
+    });
+  } catch (error) {
+    reportToolMetrics({ toolName, agentName, startTime, isError: true });
+    throw error;
+  }
 
   // Check if MCP tool returned an error
   if (result.isError) {
@@ -1072,6 +1121,7 @@ async function addGlobalCatalogTools({
   organizationId,
   userIsProfileAdmin,
   agentId,
+  agentName,
   conversationId,
   mcpGwToken,
 }: {
@@ -1080,6 +1130,7 @@ async function addGlobalCatalogTools({
   organizationId: string;
   userIsProfileAdmin: boolean;
   agentId: string;
+  agentName: string;
   conversationId?: string;
   mcpGwToken: {
     tokenValue: string;
@@ -1180,6 +1231,7 @@ async function addGlobalCatalogTools({
                 toolName: catalogTool.name,
                 toolArguments,
                 agentId,
+                agentName,
                 userId,
                 organizationId,
                 userIsProfileAdmin,
@@ -1288,4 +1340,20 @@ async function filterToolsByEnabledIds(
   );
 
   return filteredTools;
+}
+
+function reportToolMetrics(params: {
+  toolName: string;
+  agentName: string;
+  startTime: number;
+  isError: boolean;
+}): void {
+  const { serverName } = parseFullToolName(params.toolName);
+  metrics.mcp.reportMcpToolCall({
+    profileName: params.agentName,
+    mcpServerName: serverName ?? "unknown",
+    toolName: params.toolName,
+    durationSeconds: (Date.now() - params.startTime) / 1000,
+    isError: params.isError,
+  });
 }

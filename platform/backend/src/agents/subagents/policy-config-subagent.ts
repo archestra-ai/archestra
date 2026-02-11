@@ -1,28 +1,38 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
+import type { SupportedProviderDiscriminator } from "@shared/model-constants";
 import { generateObject } from "ai";
 import { z } from "zod";
-import config from "@/config";
+import { createDirectLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import InteractionModel from "@/models/interaction";
-import { metrics } from "@/observability";
-import type { Agent, Tool } from "@/types";
+import type { SupportedChatProvider, Tool } from "@/types";
 
 const PolicyConfigSchema = z.object({
-  allowUsageWhenUntrustedDataIsPresent: z
-    .boolean()
+  toolInvocationAction: z
+    .enum([
+      "allow_when_context_is_untrusted",
+      "block_when_context_is_untrusted",
+      "block_always",
+    ])
     .describe(
-      "Should this tool be allowed when untrusted data is present in the context? " +
-        "Set to true for tools that handle sensitive operations safely (e.g., read-only operations, search tools, informational tools). " +
-        "Set to false for tools that could leak sensitive data or modify state based on untrusted input.",
+      "When should this tool be allowed to be invoked? " +
+        "'allow_when_context_is_untrusted' - Allow invocation even when untrusted data is present (safe read-only tools). " +
+        "'block_when_context_is_untrusted' - Allow only when context is trusted, block when untrusted data is present (tools that could leak data). " +
+        "'block_always' - Never allow automatic invocation (dangerous tools that execute code, write data, or send data externally).",
     ),
-  toolResultTreatment: z
-    .enum(["trusted", "sanitize_with_dual_llm", "untrusted"])
+  trustedDataAction: z
+    .enum([
+      "mark_as_trusted",
+      "mark_as_untrusted",
+      "sanitize_with_dual_llm",
+      "block_always",
+    ])
     .describe(
       "How should the tool's results be treated? " +
-        "'trusted' - Results can be used directly in subsequent operations without restrictions (internal data sources). " +
-        "'untrusted' - Results are marked as untrusted and will restrict what other tools can be used (external sources, user-controlled data). " +
-        "'sanitize_with_dual_llm' - Results are processed through dual LLM security pattern before being used (mixed content).",
+        "'mark_as_trusted' - Results are trusted and can be used directly (internal systems, databases, dev tools). " +
+        "'mark_as_untrusted' - Results are untrusted and will restrict subsequent tool usage (external/filesystem data where exact values are safe). " +
+        "'sanitize_with_dual_llm' - Results are processed through dual LLM security pattern (untrusted data that needs summarization). " +
+        "'block_always' - Results are blocked entirely (highly sensitive or dangerous output).",
     ),
   reasoning: z
     .string()
@@ -56,97 +66,65 @@ Parameters: {tool.parameters}
 
 Determine:
 
-1. allowUsageWhenUntrustedDataIsPresent (boolean)
-   - TRUE: Read-only, doesn't leak sensitive data
-   - FALSE: Writes data, executes code, sends data externally
+1. toolInvocationAction (enum) - When should this tool be allowed?
+   - "allow_when_context_is_untrusted": Safe to invoke even with untrusted data (read-only, doesn't leak sensitive data)
+   - "block_when_context_is_untrusted": Only invoke when context is trusted (could leak data if untrusted input is present)
+   - "block_always": Never invoke automatically (writes data, executes code, sends data externally)
 
-2. toolResultTreatment (enum)
-   - "trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
-   - "untrusted": External/filesystem data where exact values are safe to use directly
+2. trustedDataAction (enum) - How should the tool's results be treated?
+   - "mark_as_trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
+   - "mark_as_untrusted": External/filesystem data where exact values are safe to use directly
    - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
+   - "block_always": Highly sensitive or dangerous output that should be blocked entirely
 
 Examples:
-- Internal dev tools: allowUsage=true, treatment="trusted"
-- Database queries: allowUsage=true, treatment="trusted"
-- File reads (code/config): allowUsage=true, treatment="untrusted"
-- Web search/scraping: allowUsage=true, treatment="sanitize_with_dual_llm"
-- File writes: allowUsage=false, treatment="trusted"
-- External APIs (raw data): allowUsage=false, treatment="untrusted"
-- Code execution: allowUsage=false, treatment="untrusted"`;
-
-  // Virtual agent representing the subagent for observability
-  private static readonly VIRTUAL_AGENT: Agent = {
-    id: PolicyConfigSubagent.SUBAGENT_ID,
-    organizationId: "",
-    name: PolicyConfigSubagent.SUBAGENT_NAME,
-    isDemo: false,
-    isDefault: false,
-    considerContextUntrusted: false,
-    agentType: "profile",
-    systemPrompt: null,
-    userPrompt: null,
-    promptVersion: 1,
-    promptHistory: [],
-    allowedChatops: [],
-    description: null,
-    incomingEmailEnabled: false,
-    incomingEmailSecurityMode: "private",
-    incomingEmailAllowedDomain: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    tools: [],
-    teams: [],
-    labels: [],
-    llmApiKeyId: null,
-    llmModel: null,
-  };
+- Internal dev tools: invocation="allow_when_context_is_untrusted", result="mark_as_trusted"
+- Database queries: invocation="allow_when_context_is_untrusted", result="mark_as_trusted"
+- File reads (code/config): invocation="allow_when_context_is_untrusted", result="mark_as_untrusted"
+- Web search/scraping: invocation="allow_when_context_is_untrusted", result="sanitize_with_dual_llm"
+- File writes: invocation="block_always", result="mark_as_trusted"
+- External APIs (raw data): invocation="block_when_context_is_untrusted", result="mark_as_untrusted"
+- Code execution: invocation="block_always", result="mark_as_untrusted"`;
 
   /**
    * Analyze a tool and determine appropriate security policies
    *
    * This method:
    * 1. Constructs analysis prompt from tool metadata
-   * 2. Calls LLM with observable fetch (traces/metrics)
+   * 2. Calls LLM via createDirectLLMModel (multi-provider)
    * 3. Records interaction in database
    * 4. Returns structured policy configuration
    */
   async analyze(params: {
     tool: Pick<Tool, "id" | "name" | "description" | "parameters">;
     mcpServerName: string | null;
-    anthropicApiKey: string;
+    provider: SupportedChatProvider;
+    apiKey: string;
+    modelName: string;
     organizationId: string;
   }): Promise<PolicyConfig> {
-    const { tool, mcpServerName, anthropicApiKey, organizationId } = params;
+    const { tool, mcpServerName, provider, apiKey, modelName, organizationId } =
+      params;
 
     logger.info(
       {
         toolName: tool.name,
         mcpServerName,
         subagentId: PolicyConfigSubagent.SUBAGENT_ID,
-        model: config.chat.defaultModel,
+        provider,
+        model: modelName,
       },
       "[PolicyConfigSubagent] Starting policy analysis",
     );
 
-    // Create Anthropic client with observable fetch for tracing/metrics
-    const anthropic = createAnthropic({
-      apiKey: anthropicApiKey,
-      baseURL: `${config.llm.anthropic.baseUrl}/v1`,
-      fetch: metrics.llm.getObservableFetch(
-        "anthropic",
-        PolicyConfigSubagent.VIRTUAL_AGENT,
-        PolicyConfigSubagent.SUBAGENT_ID, // Use subagent ID as external agent ID
-      ),
-    });
-
+    const model = createDirectLLMModel({ provider, apiKey, modelName });
     const prompt = this.buildPrompt(tool, mcpServerName);
-
     const startTime = Date.now();
 
     try {
       // Make LLM call with structured output
       const result = await generateObject({
-        model: anthropic(config.chat.defaultModel),
+        model,
         schema: PolicyConfigSchema,
         prompt,
       });
@@ -173,6 +151,8 @@ Examples:
         result: result.object,
         organizationId,
         duration,
+        provider,
+        modelName,
       }).catch((error) => {
         logger.error(
           {
@@ -189,7 +169,8 @@ Examples:
         {
           toolName: tool.name,
           mcpServerName,
-          model: config.chat.defaultModel,
+          provider,
+          model: modelName,
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
           subagentId: PolicyConfigSubagent.SUBAGENT_ID,
@@ -229,8 +210,10 @@ Examples:
     result: PolicyConfig;
     organizationId: string;
     duration: number;
+    provider: SupportedChatProvider;
+    modelName: string;
   }): Promise<void> {
-    const { tool, prompt, result } = params;
+    const { tool, prompt, result, provider, modelName } = params;
 
     logger.debug(
       {
@@ -243,12 +226,13 @@ Examples:
     try {
       // Get or create default LLM proxy agent for recording subagent interactions
       const systemAgent = await AgentModel.getLLMProxyOrCreateDefault();
+      const interactionType = PROVIDER_TO_DISCRIMINATOR[provider];
 
       await InteractionModel.create({
         profileId: systemAgent.id,
         externalAgentId: PolicyConfigSubagent.SUBAGENT_ID,
-        type: "anthropic:messages",
-        model: config.chat.defaultModel,
+        type: interactionType,
+        model: modelName,
         request: {
           messages: [
             {
@@ -256,7 +240,7 @@ Examples:
               content: prompt,
             },
           ],
-          model: config.chat.defaultModel,
+          model: modelName,
           max_tokens: 1024,
         },
         response: {
@@ -269,7 +253,7 @@ Examples:
               text: JSON.stringify(result, null, 2),
             },
           ],
-          model: config.chat.defaultModel,
+          model: modelName,
           stop_reason: "end_turn",
           stop_sequence: null,
           usage: {
@@ -301,3 +285,23 @@ Examples:
 
 // Singleton instance
 export const policyConfigSubagent = new PolicyConfigSubagent();
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+const PROVIDER_TO_DISCRIMINATOR: Record<
+  SupportedChatProvider,
+  SupportedProviderDiscriminator
+> = {
+  anthropic: "anthropic:messages",
+  openai: "openai:chatCompletions",
+  gemini: "gemini:generateContent",
+  bedrock: "bedrock:converse",
+  cohere: "cohere:chat",
+  cerebras: "cerebras:chatCompletions",
+  mistral: "mistral:chatCompletions",
+  vllm: "vllm:chatCompletions",
+  ollama: "ollama:chatCompletions",
+  zhipuai: "zhipuai:chatCompletions",
+};

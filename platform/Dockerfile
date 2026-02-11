@@ -140,11 +140,13 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# KinD binary is built from source in kind-builder to address CVE-2025-61726
-RUN apk add --no-cache docker-cli
+# KinD binary is built from source in kind-builder to address CVE-2025-61726, CVE-2025-68121
+# docker-cli is copied from the official Docker image instead of Alpine's apk package
+# because Alpine 3.23's docker-cli is compiled with Go 1.25.6 (vulnerable to CVE-2025-68121)
+COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=kind-builder /kind-binary /usr/local/bin/kind
 RUN chmod +x /usr/local/bin/kind
-# TODO: Once KinD releases a version compiled with Go >= 1.25.6, remove the kind-builder stage
+# TODO: Once KinD releases a version compiled with Go >= 1.25.7, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
 # RUN ARCH=$(uname -m) && \

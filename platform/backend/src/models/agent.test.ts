@@ -1551,6 +1551,50 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("getEnablePlaywrightTools", () => {
+    test("returns true by default for new agents", async () => {
+      const agent = await AgentModel.create({
+        name: "Default Playwright Agent",
+        teams: [],
+      });
+
+      const result = await AgentModel.getEnablePlaywrightTools(agent.id);
+      expect(result).toBe(true);
+    });
+
+    test("returns false when explicitly disabled", async () => {
+      const agent = await AgentModel.create({
+        name: "No Playwright Agent",
+        teams: [],
+      });
+
+      await AgentModel.update(agent.id, { enablePlaywrightTools: false });
+
+      const result = await AgentModel.getEnablePlaywrightTools(agent.id);
+      expect(result).toBe(false);
+    });
+
+    test("returns true after re-enabling", async () => {
+      const agent = await AgentModel.create({
+        name: "Toggle Playwright Agent",
+        teams: [],
+      });
+
+      await AgentModel.update(agent.id, { enablePlaywrightTools: false });
+      expect(await AgentModel.getEnablePlaywrightTools(agent.id)).toBe(false);
+
+      await AgentModel.update(agent.id, { enablePlaywrightTools: true });
+      expect(await AgentModel.getEnablePlaywrightTools(agent.id)).toBe(true);
+    });
+
+    test("returns null for non-existent agent", async () => {
+      const result = await AgentModel.getEnablePlaywrightTools(
+        "00000000-0000-0000-0000-000000000000",
+      );
+      expect(result).toBeNull();
+    });
+  });
+
   describe("getMCPGatewayOrCreateDefault Junction Table", () => {
     test("getMCPGatewayOrCreateDefault returns tools from junction table", async ({
       makeTool,

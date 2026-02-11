@@ -1752,6 +1752,7 @@ export default class K8sDeployment {
     const base = this.deploymentName
       .replace(/\./g, "-")
       .slice(0, maxBaseLength)
+      .replace(/^[^a-z0-9]+/, "")
       .replace(/[^a-z0-9-]+$/g, "");
 
     const normalizedBase = base.length > 0 ? base : "mcp-server";

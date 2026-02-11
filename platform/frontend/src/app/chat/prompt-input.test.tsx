@@ -129,6 +129,14 @@ vi.mock("@/lib/chat.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/agent.query", () => ({
+  useProfile: () => ({
+    data: null,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 // Mock for useHasPermissions - default to non-admin
 const mockUseHasPermissions = vi.fn().mockReturnValue({
   data: false,

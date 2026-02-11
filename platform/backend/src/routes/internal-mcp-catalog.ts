@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { isBuiltInCatalogId, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -285,6 +285,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body }, reply) => {
+      if (isBuiltInCatalogId(id)) {
+        throw new ApiError(403, "Built-in catalog items cannot be modified");
+      }
+
       const {
         oauthClientSecretVaultPath,
         oauthClientSecretVaultKey,
@@ -572,6 +576,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id } }, reply) => {
+      if (isBuiltInCatalogId(id)) {
+        throw new ApiError(403, "Built-in catalog items cannot be deleted");
+      }
+
       // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         expandSecrets: false,
@@ -612,6 +620,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!catalogItem) {
         throw new ApiError(404, `Catalog item with name "${name}" not found`);
+      }
+
+      if (isBuiltInCatalogId(catalogItem.id)) {
+        throw new ApiError(403, "Built-in catalog items cannot be deleted");
       }
 
       if (catalogItem?.clientSecretId) {

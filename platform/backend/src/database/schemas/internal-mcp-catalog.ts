@@ -18,10 +18,6 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   repository: text("repository"),
   installationCommand: text("installation_command"),
   requiresAuth: boolean("requires_auth").notNull().default(false),
-  // When true, tools from this catalog are globally available for all agents (e.g., Playwright browser preview)
-  isGloballyAvailable: boolean("is_globally_available")
-    .notNull()
-    .default(false),
   authDescription: text("auth_description"),
   authFields: jsonb("auth_fields")
     .$type<

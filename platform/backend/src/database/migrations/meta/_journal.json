@@ -981,6 +981,13 @@
       "when": 1770718166813,
       "tag": "0139_woozy_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1770811142359,
+      "tag": "0140_slimy_hercules",
+      "breakpoints": true
     }
   ]
 }

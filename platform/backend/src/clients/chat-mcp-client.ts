@@ -19,8 +19,6 @@ import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
   AgentTeamModel,
-  InternalMcpCatalogModel,
-  McpServerModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
@@ -915,19 +913,6 @@ export async function getChatMcpTools({
       }
     }
 
-    // Fetch tools from globally available catalogs (e.g., Playwright browser preview)
-    // These are personal servers that users can auto-install, tools available for all agents
-    await addGlobalCatalogTools({
-      aiTools,
-      userId,
-      organizationId,
-      userIsProfileAdmin,
-      agentId,
-      agentName,
-      conversationId,
-      mcpGwToken,
-    });
-
     // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
     toolCache.set(toolCacheKey, aiTools);
 
@@ -1106,173 +1091,6 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
       return JSON.stringify(item);
     })
     .join("\n");
-}
-
-/**
- * Add tools from globally available catalogs (e.g., Playwright browser preview).
- * These catalogs are marked as `isGloballyAvailable` and their tools are available
- * for all agents without explicit assignment. Each user gets their own isolated server.
- *
- * Mutates the aiTools object to add global catalog tools.
- */
-async function addGlobalCatalogTools({
-  aiTools,
-  userId,
-  organizationId,
-  userIsProfileAdmin,
-  agentId,
-  agentName,
-  conversationId,
-  mcpGwToken,
-}: {
-  aiTools: Record<string, Tool>;
-  userId: string;
-  organizationId: string;
-  userIsProfileAdmin: boolean;
-  agentId: string;
-  agentName: string;
-  conversationId?: string;
-  mcpGwToken: {
-    tokenValue: string;
-    tokenId: string;
-    teamId: string | null;
-    isOrganizationToken: boolean;
-    isUserToken?: boolean;
-  } | null;
-}): Promise<void> {
-  try {
-    // Get all globally available catalogs
-    const globalCatalogs =
-      await InternalMcpCatalogModel.getGloballyAvailableCatalogs();
-
-    if (globalCatalogs.length === 0) {
-      return;
-    }
-
-    logger.info(
-      {
-        userId,
-        globalCatalogCount: globalCatalogs.length,
-        catalogNames: globalCatalogs.map((c) => c.name),
-      },
-      "Checking for user's personal servers for global catalogs",
-    );
-
-    for (const catalog of globalCatalogs) {
-      // Check if user has a personal server installed for this catalog
-      const userServer = await McpServerModel.getUserPersonalServerForCatalog(
-        userId,
-        catalog.id,
-      );
-
-      if (!userServer) {
-        logger.debug(
-          { userId, catalogId: catalog.id, catalogName: catalog.name },
-          "User does not have personal server for global catalog",
-        );
-        continue;
-      }
-
-      logger.info(
-        {
-          userId,
-          catalogId: catalog.id,
-          catalogName: catalog.name,
-          serverId: userServer.id,
-        },
-        "User has personal server for global catalog, fetching tools",
-      );
-
-      // Get tools for this catalog from the database
-      const catalogTools = await ToolModel.findByCatalogId(catalog.id);
-
-      if (catalogTools.length === 0) {
-        logger.debug(
-          { userId, catalogId: catalog.id, catalogName: catalog.name },
-          "No tools found for global catalog",
-        );
-        continue;
-      }
-
-      // Convert catalog tools to AI SDK Tool format
-      for (const catalogTool of catalogTools) {
-        // Skip if tool already exists (agent-assigned tools take precedence)
-        if (aiTools[catalogTool.name]) {
-          logger.debug(
-            { userId, toolName: catalogTool.name },
-            "Skipping global catalog tool - already exists from agent assignment",
-          );
-          continue;
-        }
-
-        const normalizedSchema = normalizeJsonSchema(catalogTool.parameters);
-
-        aiTools[catalogTool.name] = {
-          description: catalogTool.description || `Tool: ${catalogTool.name}`,
-          inputSchema: jsonSchema(normalizedSchema),
-          execute: async (args: unknown) => {
-            logger.info(
-              {
-                agentId,
-                userId,
-                toolName: catalogTool.name,
-                catalogId: catalog.id,
-                serverId: userServer.id,
-                arguments: args,
-              },
-              "Executing global catalog tool from chat",
-            );
-
-            const toolArguments = isRecord(args) ? args : undefined;
-
-            try {
-              // Execute via shared helper with browser sync
-              return await executeMcpTool({
-                toolName: catalogTool.name,
-                toolArguments,
-                agentId,
-                agentName,
-                userId,
-                organizationId,
-                userIsProfileAdmin,
-                conversationId,
-                mcpGwToken,
-              });
-            } catch (error) {
-              logger.error(
-                {
-                  agentId,
-                  userId,
-                  toolName: catalogTool.name,
-                  err: error,
-                  errorMessage:
-                    error instanceof Error ? error.message : String(error),
-                },
-                "Global catalog tool execution failed",
-              );
-              throw error;
-            }
-          },
-        };
-      }
-
-      logger.info(
-        {
-          userId,
-          catalogId: catalog.id,
-          catalogName: catalog.name,
-          toolCount: catalogTools.length,
-          totalTools: Object.keys(aiTools).length,
-        },
-        "Added global catalog tools to chat tools",
-      );
-    }
-  } catch (error) {
-    logger.error(
-      { userId, error },
-      "Failed to fetch global catalog tools, continuing without them",
-    );
-  }
 }
 
 /**

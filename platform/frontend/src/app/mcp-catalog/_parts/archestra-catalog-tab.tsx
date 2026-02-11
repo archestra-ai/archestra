@@ -248,6 +248,8 @@ export function ArchestraCatalogTab({
           command: dockerConfig.command,
           arguments: dockerConfig.arguments,
           dockerImage: dockerConfig.dockerImage,
+          transportType: dockerConfig.transportType,
+          httpPort: dockerConfig.httpPort,
           serviceAccount: serviceAccount
             ? serviceAccount.replace(
                 /\{\{ARCHESTRA_RELEASE_NAME\}\}/g,

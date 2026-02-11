@@ -7,7 +7,6 @@ import {
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
-  isBrowserMcpTool,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   OAUTH_TOKEN_ID_PREFIX,
@@ -1316,8 +1315,9 @@ class McpClient {
     toolResult: CommonToolResult,
     authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod },
   ): Promise<void> {
-    // Skip browser tool logging to prevent DB bloat
-    if (isBrowserMcpTool(toolCall.name)) {
+    // Skip high-frequency browser tool logging to prevent DB bloat
+    // (screenshots every ~2s, tab list checks, viewport resizes)
+    if (isHighFrequencyBrowserTool(toolCall.name)) {
       return;
     }
 
@@ -1506,6 +1506,22 @@ function deriveAuthMethodFromTokenAuth(
   if (tokenAuth.isUserToken) return "user_token";
   if (tokenAuth.isOrganizationToken) return "org_token";
   return "team_token";
+}
+
+/**
+ * Check if a browser tool is high-frequency and should skip logging.
+ * Screenshots (~2s interval), tab list checks, and viewport resizes
+ * generate too many log entries. Other browser actions (navigate, click,
+ * type, snapshot, etc.) are logged normally.
+ */
+function isHighFrequencyBrowserTool(toolName: string): boolean {
+  const name = toolName.toLowerCase();
+  return (
+    name.includes("browser_take_screenshot") ||
+    name.includes("browser_screenshot") ||
+    name.includes("browser_tabs") ||
+    name.includes("browser_resize")
+  );
 }
 
 // Singleton instance

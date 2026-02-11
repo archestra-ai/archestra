@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.0.37",
+  "version": "1.0.42",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -32,10 +32,10 @@
     "cleanup:dev:k8s": "kubectl delete namespace archestra-dev"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.11",
+    "@biomejs/biome": "2.3.13",
     "husky": "^9.1.7",
     "tsx": "^4.21.0",
-    "turbo": "^2.7.4",
+    "turbo": "^2.8.0",
     "typescript": "^5.9.2"
   },
   "pnpm": {
@@ -54,7 +54,8 @@
       "lodash": "4.17.23",
       "lodash-es": "4.17.23",
       "fast-xml-parser": "5.3.4",
-      "@isaacs/brace-expansion": "5.0.1"
+      "@isaacs/brace-expansion": "5.0.1",
+      "axios": ">=1.13.5"
     }
   },
   "packageManager": "pnpm@10.28.2"

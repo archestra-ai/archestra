@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { RouteId } from "@shared";
+import { PROVIDERS_WITH_OPTIONAL_API_KEY, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
@@ -142,7 +142,8 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (data) =>
               isByosEnabled()
                 ? data.vaultSecretPath && data.vaultSecretKey
-                : data.apiKey,
+                : PROVIDERS_WITH_OPTIONAL_API_KEY.has(data.provider) ||
+                  data.apiKey,
             {
               message:
                 "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
@@ -224,7 +225,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (!secret) {
+      if (!secret && !PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider)) {
         throw new ApiError(
           400,
           "Secret creation failed, cannot create API key",
@@ -236,7 +237,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         name: body.name,
         provider: body.provider,
-        secretId: secret.id,
+        secretId: secret?.id ?? null,
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
         teamId: body.scope === "team" ? body.teamId : null,

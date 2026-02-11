@@ -5,7 +5,13 @@ import { z } from "zod";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import { AccountModel, MemberModel, UserModel, UserTokenModel } from "@/models";
+import {
+  AccountModel,
+  MemberModel,
+  OAuthClientModel,
+  UserModel,
+  UserTokenModel,
+} from "@/models";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -167,6 +173,191 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+  // OAuth client info lookup (for consent page to display client name)
+  fastify.route({
+    method: "GET",
+    url: "/api/auth/oauth2/client-info",
+    schema: {
+      operationId: RouteId.GetOAuthClientInfo,
+      description: "Get OAuth client name by client_id",
+      tags: ["auth"],
+      querystring: z.object({ client_id: z.string() }),
+      response: {
+        200: z.object({ client_name: z.string().nullable() }),
+      },
+    },
+    async handler(request, reply) {
+      const { client_id } = request.query as { client_id: string };
+      const clientName = await OAuthClientModel.getNameByClientId(client_id);
+      return reply.send({ client_name: clientName });
+    },
+  });
+
+  // OAuth 2.1 Token — strip the `resource` parameter before forwarding to
+  // better-auth. MCP clients (e.g. Cursor, Claude Code) include `resource`
+  // with dynamic per-profile URLs like `/v1/mcp/{profileId}`. better-auth's
+  // `validAudiences` only supports exact-match strings so there is no way to
+  // whitelist a dynamic path. Stripping `resource` causes better-auth to
+  // issue opaque tokens instead of JWTs, which our MCP Gateway token
+  // validator already handles.
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/oauth2/token",
+    schema: {
+      tags: ["auth"],
+    },
+    async handler(request, reply) {
+      const body = request.body as Record<string, unknown> | undefined;
+      if (body?.resource) {
+        logger.debug(
+          { resource: body.resource },
+          "[auth:oauth2/token] Stripping resource parameter from token request",
+        );
+        delete body.resource;
+      }
+
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const headers = new Headers();
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (value) headers.append(key, value.toString());
+      });
+
+      const contentType = request.headers["content-type"] || "";
+      const serializedBody = contentType.includes(
+        "application/x-www-form-urlencoded",
+      )
+        ? new URLSearchParams(body as Record<string, string>).toString()
+        : JSON.stringify(body);
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+        body: serializedBody,
+      });
+
+      const response = await betterAuth.handler(req);
+
+      reply.status(response.status);
+      response.headers.forEach((value: string, key: string) => {
+        reply.header(key, value);
+      });
+      reply.send(response.body ? await response.text() : null);
+    },
+  });
+
+  // OAuth 2.1 Consent — intercept better-auth redirect and return JSON
+  // Browser fetch with redirect:"manual" produces opaque redirect responses
+  // where Location header is inaccessible. Convert redirect to JSON so the
+  // consent form can read the URL and navigate.
+  //
+  // CSRF protection is handled by better-auth internally:
+  //   1. Origin header validation against `trustedOrigins` config
+  //   2. The `oauth_query` contains a cryptographically-signed state parameter
+  //      that better-auth verifies, preventing replay and tampering
+  //   3. Session cookie ties consent to the authenticated user
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/oauth2/consent",
+    schema: {
+      operationId: RouteId.SubmitOAuthConsent,
+      description: "Submit OAuth consent decision (accept or deny)",
+      tags: ["auth"],
+      body: z.object({
+        accept: z.boolean(),
+        scope: z.string(),
+        oauth_query: z.string(),
+      }),
+      response: {
+        200: z.object({ redirectTo: z.string() }),
+      },
+    },
+    async handler(request, reply) {
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const headers = new Headers();
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (value) headers.append(key, value.toString());
+      });
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+        body: JSON.stringify(request.body),
+      });
+
+      const response = await betterAuth.handler(req);
+
+      // Forward any set-cookie headers from better-auth
+      response.headers.forEach((value: string, key: string) => {
+        if (key.toLowerCase() === "set-cookie") {
+          reply.header(key, value);
+        }
+      });
+
+      // Convert HTTP redirect to JSON so the consent form can navigate
+      if (response.status === 302 || response.status === 301) {
+        const location = response.headers.get("location");
+        if (location) {
+          return reply.send({ redirectTo: location });
+        }
+      }
+
+      // better-auth may return 200 JSON with { redirect: true, uri } instead
+      // of an HTTP redirect. Normalize to { redirectTo } for the frontend.
+      if (response.ok && response.body) {
+        const body = await response.json().catch(() => null);
+        if (body?.uri) {
+          return reply.send({ redirectTo: body.uri });
+        }
+      }
+
+      reply.status(response.status);
+      reply.send(response.body ? await response.text() : undefined);
+    },
+  });
+
+  // OAuth 2.1 Dynamic Client Registration (RFC 7591)
+  //
+  // IMPORTANT: All dynamically registered clients are forced to public
+  // (token_endpoint_auth_method = "none"), regardless of what the client
+  // sends. This is intentional:
+  //   - MCP OAuth spec requires PKCE, not client_secret
+  //   - better-auth only allows unauthenticated DCR for public clients
+  //   - Some clients (e.g. Open WebUI) send client_secret_post which would
+  //     cause registration to fail without this override
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/oauth2/register",
+    schema: {
+      tags: ["auth"],
+      body: z.record(z.string(), z.unknown()),
+    },
+    async handler(request, reply) {
+      const body = request.body;
+      // Override any client-provided value — see route comment above
+      body.token_endpoint_auth_method = "none";
+
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const headers = new Headers();
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (value) headers.append(key, value.toString());
+      });
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      const response = await betterAuth.handler(req);
+
+      reply.status(response.status);
+      response.headers.forEach((value: string, key: string) => {
+        reply.header(key, value);
+      });
+      reply.send(response.body ? await response.text() : null);
+    },
+  });
+
   // Existing auth handler for all other auth routes
   fastify.route({
     method: ["GET", "POST"],
@@ -205,6 +396,39 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
+
+      // Check for "Invalid origin" errors and enhance with helpful guidance
+      if (response.status === 403 && response.body) {
+        const responseText = await response.text();
+        if (responseText.includes("Invalid origin")) {
+          const requestOrigin = request.headers.origin || "unknown";
+          logger.warn(
+            {
+              origin: requestOrigin,
+              trustedOrigins: config.auth.trustedOrigins,
+            },
+            `Origin "${requestOrigin}" is not trusted. Set ARCHESTRA_FRONTEND_URL or ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS to allow it.`,
+          );
+
+          reply.status(403);
+          response.headers.forEach((value: string, key: string) => {
+            reply.header(key, value);
+          });
+          return reply.send(
+            JSON.stringify({
+              message: `Invalid origin: ${requestOrigin} is not in the list of trusted origins. Set ARCHESTRA_FRONTEND_URL=${requestOrigin} or add it to ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS.`,
+              trustedOrigins: config.auth.trustedOrigins,
+            }),
+          );
+        }
+
+        // Not an origin error — forward the already-consumed body
+        reply.status(response.status);
+        response.headers.forEach((value: string, key: string) => {
+          reply.header(key, value);
+        });
+        return reply.send(responseText);
+      }
 
       reply.status(response.status);
 

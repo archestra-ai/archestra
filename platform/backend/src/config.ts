@@ -110,81 +110,100 @@ const getPortFromUrl = (): number => {
   }
 };
 
-const parseAllowedOrigins = (): string[] => {
-  // Development: use empty array to signal "use defaults" (localhost regex)
-  if (isDevelopment) {
-    return [];
-  }
-
-  // ARCHESTRA_FRONTEND_URL if set
-  const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
-  if (frontendUrl && frontendUrl !== "") {
-    return [frontendUrl];
-  }
-
-  return [];
-};
+/**
+ * Networking & Origin Validation Strategy
+ * ========================================
+ *
+ * Development mode:
+ *   - Backend and frontend bind to 127.0.0.1 (loopback only).
+ *   - Only local processes can reach the server, so CORS and origin
+ *     checks are unnecessary. All origins are accepted.
+ *
+ * Quickstart mode (Docker):
+ *   - Inside the container the app binds to 0.0.0.0.
+ *   - On the host, Docker's `-p 3000:3000` maps to 0.0.0.0 by default,
+ *     making the app accessible from LAN IPs.
+ *   - Quickstart is designed for quick evaluation, so all origins are
+ *     accepted without checks. It's ok if someone will decide to
+ *     access Archestra from the mobile phone.
+ *
+ * Production mode:
+ *   - Origin validation is OFF by default. All origins are accepted.
+ *   - Origin checks are only enforced when explicitly configured via:
+ *       ARCHESTRA_FRONTEND_URL              — primary frontend origin
+ *       ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS — comma-separated extra origins
+ *   - Setting either variable signals that origin validation should be
+ *     performed. Only the configured origins will be allowed.
+ */
 
 /**
- * Get CORS origin configuration for Fastify.
- * Returns RegExp for localhost (development) or string[] for specific origins.
+ * Collect all explicitly configured origins from environment variables.
  */
-const getCorsOrigins = (): RegExp | boolean | string[] => {
-  const origins = parseAllowedOrigins();
+const getConfiguredOrigins = (): string[] => {
+  const origins: string[] = [];
 
-  // Default: allow localhost on any port for development
-  if (origins.length === 0) {
-    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+  const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
+  if (frontendUrl) {
+    origins.push(frontendUrl);
+  }
+
+  const additional =
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS?.trim();
+  if (additional) {
+    origins.push(
+      ...additional
+        .split(",")
+        .map((o) => o.trim())
+        .filter((o) => o.length > 0),
+    );
   }
 
   return origins;
 };
 
 /**
- * Parse additional trusted origins from environment variable.
- * Used to add extra trusted origins beyond the frontend URL (e.g., external IdPs for SSO).
- *
- * Format: Comma-separated list of origins (e.g., "http://idp.example.com:8080,https://auth.example.com")
- * Whitespace around each origin is trimmed.
- *
- * @returns Array of additional trusted origins
+ * For each origin containing "localhost", add the equivalent "127.0.0.1" origin (and vice versa).
  */
-export const getAdditionalTrustedOrigins = (): string[] => {
-  const envValue =
-    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS?.trim();
+const addLoopbackEquivalents = (origins: string[]): string[] => {
+  const result = new Set(origins);
+  for (const origin of origins) {
+    if (origin.includes("localhost")) {
+      result.add(origin.replace("localhost", "127.0.0.1"));
+    } else if (origin.includes("127.0.0.1")) {
+      result.add(origin.replace("127.0.0.1", "localhost"));
+    }
+  }
+  return [...result];
+};
 
-  if (!envValue) {
-    return [];
+/**
+ * Get CORS origin configuration for Fastify.
+ * When no origin env vars are set, accepts all origins.
+ * When configured, only allows the specified origins.
+ */
+export const getCorsOrigins = (): (string | RegExp)[] => {
+  const origins = getConfiguredOrigins();
+
+  if (origins.length === 0) {
+    return [/.*/];
   }
 
-  return envValue
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
+  return addLoopbackEquivalents(origins);
 };
 
 /**
  * Get trusted origins for better-auth.
- * Returns wildcard patterns for localhost (development) or specific origins for production.
- * Also includes any additional trusted origins from ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS.
+ * When no origin env vars are set, accepts all origins.
+ * When configured, only allows the specified origins.
  */
 export const getTrustedOrigins = (): string[] => {
-  const origins = parseAllowedOrigins();
-  const additionalOrigins = getAdditionalTrustedOrigins();
+  const origins = getConfiguredOrigins();
 
-  // Default: allow localhost wildcards for development
   if (origins.length === 0) {
-    return [
-      "http://localhost:*",
-      "https://localhost:*",
-      "http://127.0.0.1:*",
-      "https://127.0.0.1:*",
-      ...additionalOrigins,
-    ];
+    return ["http://*:*", "https://*:*", "http://*", "https://*"];
   }
 
-  // Production: use configured origins plus additional origins
-  return [...origins, ...additionalOrigins];
+  return addLoopbackEquivalents(origins);
 };
 
 /**
@@ -319,7 +338,7 @@ export const getOtelExporterOtlpEndpoint = (
 export default {
   frontendBaseUrl,
   api: {
-    host: "0.0.0.0",
+    host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
     name: "Archestra Platform API",
     version: process.env.ARCHESTRA_VERSION || packageJson.version,
@@ -456,8 +475,11 @@ export default {
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
     },
     ollama: {
-      enabled: Boolean(process.env.ARCHESTRA_OLLAMA_BASE_URL),
-      baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
+      enabled: Boolean(
+        process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
+      ),
+      baseUrl:
+        process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
     },
     zhipuai: {
       baseUrl:
@@ -503,12 +525,6 @@ export default {
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
     },
-    mcp: {
-      remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
-      remoteServerHeaders: process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS
-        ? JSON.parse(process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS)
-        : undefined,
-    },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
     defaultProvider: ((): SupportedProvider => {
@@ -527,8 +543,7 @@ export default {
      * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
      */
-    browserStreamingEnabled:
-      process.env.FEATURES_BROWSER_STREAMING_ENABLED === "true",
+    browserStreamingEnabled: true,
   },
   enterpriseLicenseActivated:
     process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
@@ -543,7 +558,7 @@ export default {
     // See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.37", // x-release-please-version
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.42", // x-release-please-version
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -551,6 +566,8 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
+      k8sNodeHost:
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST || undefined,
     },
   },
   vault: {

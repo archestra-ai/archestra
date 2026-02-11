@@ -1,8 +1,7 @@
 import logger from "@/logging";
-import { ConversationModel } from "@/models";
+import { BrowserTabStateModel } from "@/models";
 import {
   Err,
-  type LegacyPersistedBrowserState,
   Ok,
   type Result,
   type SimpleBrowserState,
@@ -13,54 +12,60 @@ export type ConversationStateKey = `${string}:${string}:${string}`;
 export const toConversationStateKey = (
   agentId: string,
   userId: string,
-  conversationId: string,
-): ConversationStateKey => `${agentId}:${userId}:${conversationId}`;
+  isolationKey: string,
+): ConversationStateKey => `${agentId}:${userId}:${isolationKey}`;
 
 type StateManagerError = { kind: "DatabaseError"; message: string };
 
 /**
  * Manages browser tab state with database persistence.
- * Simplified to store one tab per conversation with lazy migration from legacy format.
+ * Each agent+user+isolationKey combination gets its own tab state,
+ * enabling per-agent isolation for sub-agents and A2A execution.
  */
 class BrowserStateManager {
   /**
-   * Get browser state for a conversation from the database.
-   * Returns null if no state exists for the conversation.
-   * Automatically migrates legacy multi-tab format to simple format.
+   * Get browser state for an agent/user/isolationKey from the database.
+   * Returns null if no state exists.
    */
-  async get(conversationId: string): Promise<SimpleBrowserState | null> {
-    const persisted = await ConversationModel.getBrowserState(conversationId);
-    if (!persisted) {
+  async get(
+    agentId: string,
+    userId: string,
+    isolationKey: string,
+  ): Promise<SimpleBrowserState | null> {
+    const row = await BrowserTabStateModel.get(agentId, userId, isolationKey);
+    if (!row) {
       return null;
     }
-
-    // Check if this is legacy format and migrate
-    if (this.isLegacyFormat(persisted)) {
-      const migrated = this.migrateLegacyFormat(persisted);
-      logger.info(
-        { conversationId, migratedUrl: migrated.url },
-        "[BrowserStateManager] Migrated legacy state format",
-      );
-      return migrated;
-    }
-
-    // Already in new format
-    return persisted as SimpleBrowserState;
+    return {
+      url: row.url ?? "",
+      tabIndex: row.tabIndex ?? undefined,
+    };
   }
 
   /**
    * Set browser state directly.
-   * Persists the state to database.
+   * Persists the state to database via upsert.
    */
   async set(
-    conversationId: string,
+    agentId: string,
+    userId: string,
+    isolationKey: string,
     state: SimpleBrowserState,
   ): Promise<Result<StateManagerError, void>> {
     try {
-      await ConversationModel.updateBrowserState(conversationId, state);
+      await BrowserTabStateModel.upsert(agentId, userId, isolationKey, {
+        url: state.url,
+        tabIndex: state.tabIndex,
+      });
 
       logger.debug(
-        { conversationId, url: state.url, tabIndex: state.tabIndex },
+        {
+          agentId,
+          userId,
+          isolationKey,
+          url: state.url,
+          tabIndex: state.tabIndex,
+        },
         "[BrowserStateManager] State set and persisted",
       );
 
@@ -68,7 +73,7 @@ class BrowserStateManager {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(
-        { conversationId, error: message },
+        { agentId, userId, isolationKey, error: message },
         "[BrowserStateManager] Failed to persist state to database",
       );
       return Err({ kind: "DatabaseError", message });
@@ -79,25 +84,28 @@ class BrowserStateManager {
    * Update just the URL in browser state.
    * Creates state if it doesn't exist.
    */
-  async updateUrl(conversationId: string, url: string): Promise<void> {
-    const existing = await this.get(conversationId);
-    await this.set(conversationId, {
-      url,
-      tabIndex: existing?.tabIndex,
-    });
+  async updateUrl(
+    agentId: string,
+    userId: string,
+    isolationKey: string,
+    url: string,
+  ): Promise<void> {
+    await BrowserTabStateModel.updateUrl(agentId, userId, isolationKey, url);
   }
 
   /**
    * Clear browser state from database.
    */
   async clear(
-    conversationId: string,
+    agentId: string,
+    userId: string,
+    isolationKey: string,
   ): Promise<Result<StateManagerError, void>> {
     try {
-      await ConversationModel.updateBrowserState(conversationId, null);
+      await BrowserTabStateModel.delete(agentId, userId, isolationKey);
 
       logger.debug(
-        { conversationId },
+        { agentId, userId, isolationKey },
         "[BrowserStateManager] Cleared state from database",
       );
 
@@ -105,42 +113,11 @@ class BrowserStateManager {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(
-        { conversationId, error: message },
+        { agentId, userId, isolationKey, error: message },
         "[BrowserStateManager] Failed to clear state from database",
       );
       return Err({ kind: "DatabaseError", message });
     }
-  }
-
-  /**
-   * Detect if state is in legacy multi-tab format.
-   */
-  private isLegacyFormat(state: unknown): state is LegacyPersistedBrowserState {
-    if (typeof state !== "object" || state === null) {
-      return false;
-    }
-    const candidate = state as Record<string, unknown>;
-    return (
-      typeof candidate.activeTabId === "string" &&
-      Array.isArray(candidate.tabOrder) &&
-      typeof candidate.tabs === "object" &&
-      candidate.tabs !== null
-    );
-  }
-
-  /**
-   * Migrate legacy multi-tab format to simple single-tab format.
-   * Extracts URL from the active tab.
-   */
-  private migrateLegacyFormat(
-    legacy: LegacyPersistedBrowserState,
-  ): SimpleBrowserState {
-    const activeTab = legacy.tabs[legacy.activeTabId];
-    const url = activeTab?.current ?? "about:blank";
-
-    // tabIndex will be undefined since we don't know the current browser state
-    // This will trigger new tab creation on next access
-    return { url };
   }
 }
 

@@ -165,7 +165,7 @@ const CommunitySideBarSection = ({ starCount }: { starCount: string }) => (
         <SidebarMenuItem>
           <SidebarMenuButton asChild>
             <a
-              href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg"
+              href="https://archestra.ai/join-slack"
               target="_blank"
               rel="noopener noreferrer"
             >

@@ -154,7 +154,6 @@ export function DataTable<TData, TValue>({
                       style={{
                         width: header.getSize(),
                       }}
-                      className="px-2"
                     >
                       {header.isPlaceholder
                         ? null
@@ -186,7 +185,6 @@ export function DataTable<TData, TValue>({
                       style={{
                         width: cell.column.getSize(),
                       }}
-                      className="px-2"
                     >
                       {flexRender(
                         cell.column.columnDef.cell,

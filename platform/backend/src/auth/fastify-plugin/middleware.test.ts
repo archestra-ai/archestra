@@ -341,6 +341,57 @@ describe("Authnz", () => {
       );
     });
 
+    test("should skip auth for OAuth well-known discovery endpoints", async () => {
+      const oauthWellKnownUrls = [
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/oauth-protected-resource/v1/mcp/some-profile-id",
+        "/.well-known/oauth-protected-resource/v1/mcp/another-id",
+      ];
+
+      for (const url of oauthWellKnownUrls) {
+        const mockRequest = {
+          url,
+          method: "GET",
+          headers: {},
+        } as FastifyRequest;
+
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+
+        await authnz.handle(mockRequest, mockReply);
+
+        expect(mockReply.status).not.toHaveBeenCalled();
+        expect(mockReply.send).not.toHaveBeenCalled();
+      }
+    });
+
+    test("should skip auth for OAuth consent page paths", async () => {
+      const oauthConsentUrls = [
+        "/oauth/consent",
+        "/oauth/consent?client_id=abc&scope=mcp",
+      ];
+
+      for (const url of oauthConsentUrls) {
+        const mockRequest = {
+          url,
+          method: "GET",
+          headers: {},
+        } as FastifyRequest;
+
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+
+        await authnz.handle(mockRequest, mockReply);
+
+        expect(mockReply.status).not.toHaveBeenCalled();
+        expect(mockReply.send).not.toHaveBeenCalled();
+      }
+    });
+
     test("should NOT skip auth for similar but different paths", async () => {
       const protectedPaths = [
         "/.well-known/something-else",

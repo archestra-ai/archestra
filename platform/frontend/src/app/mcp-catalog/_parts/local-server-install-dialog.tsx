@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
 import {
   lazy,
   Suspense,
@@ -290,12 +290,14 @@ export function LocalServerInstallDialog({
         </DialogHeader>
 
         <SelectMcpServerCredentialTypeAndTeams
-          selectedTeamId={selectedTeamId}
           onTeamChange={setSelectedTeamId}
           catalogId={isReinstall ? undefined : catalogItem?.id}
           onCredentialTypeChange={setCredentialType}
           isReinstall={isReinstall}
           existingTeamId={existingTeamId}
+          personalOnly={
+            catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false
+          }
         />
 
         {catalogItem?.localConfig?.serviceAccount !== undefined && (

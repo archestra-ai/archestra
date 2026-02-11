@@ -29,9 +29,13 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
-import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import {
+  parseAuthRequired,
+  parsePolicyDenied,
+} from "@/lib/llmProviders/common";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
+import { AuthRequiredTool } from "./auth-required-tool";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -44,7 +48,6 @@ interface ChatMessagesProps {
   conversationId: string | undefined;
   agentId?: string;
   messages: UIMessage[];
-  hideToolCalls?: boolean;
   status: ChatStatus;
   isLoadingConversation?: boolean;
   onMessagesUpdate?: (messages: UIMessage[]) => void;
@@ -87,7 +90,6 @@ export function ChatMessages({
   suggestedPrompt,
   onSuggestedPromptClick,
   messages,
-  hideToolCalls = false,
   status,
   isLoadingConversation = false,
   onMessagesUpdate,
@@ -458,16 +460,6 @@ export function ChatMessages({
                     ) {
                       return null;
                     }
-                  }
-
-                  // Hide tool calls if hideToolCalls is true
-                  if (
-                    hideToolCalls &&
-                    isToolPart(part) &&
-                    (part.type?.startsWith("tool-") ||
-                      part.type === "dynamic-tool")
-                  ) {
-                    return null;
                   }
 
                   switch (part.type) {
@@ -896,6 +888,17 @@ function MessageTool({
           {...(agentId
             ? { editable: true, profileId: agentId }
             : { editable: false })}
+        />
+      );
+    }
+
+    const authRequired = parseAuthRequired(errorText);
+    if (authRequired) {
+      return (
+        <AuthRequiredTool
+          toolName={toolName}
+          catalogName={authRequired.catalogName}
+          installUrl={authRequired.installUrl}
         />
       );
     }

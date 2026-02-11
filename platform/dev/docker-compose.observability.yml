@@ -3,7 +3,7 @@ version: "3.8"
 services:
   # Grafana Tempo for distributed tracing storage
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.6.1
     container_name: archestra-tempo
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:

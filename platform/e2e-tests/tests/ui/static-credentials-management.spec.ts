@@ -79,18 +79,10 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
         .click({ timeout: CONNECT_BUTTON_TIMEOUT });
       await page.waitForLoadState("networkidle");
-      // Personal credential type should be selected by default if vault is disabled
-      // Otherwise team credential type should be selected
-      const personalCredentialType = page.getByTestId(
-        E2eTestId.SelectCredentialTypePersonal,
-      );
-      if (await personalCredentialType.isDisabled()) {
-        await expect(
-          page.getByTestId(E2eTestId.SelectCredentialTypeTeam),
-        ).toBeChecked();
-      } else {
-        await expect(personalCredentialType).toBeChecked();
-      }
+      // Installation type dropdown should show "Myself" by default when vault is disabled
+      await expect(
+        page.getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown),
+      ).toContainText("Myself");
 
       // Install using personal credential
       await clickButton({ page, options: { name: "Install" } });
@@ -129,11 +121,11 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         timeout: CONNECT_BUTTON_TIMEOUT,
       });
       await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
-      // And this time team credential type should be selected by default for everyone
+      // And this time a team should be auto-selected (since personal installation already exists)
       await expect(
-        page.getByTestId(E2eTestId.SelectCredentialTypeTeam),
-      ).toBeChecked();
-      // open teams dropdown
+        page.getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown),
+      ).not.toContainText("Myself");
+      // open installation type dropdown to verify teams
       await page.getByRole("combobox").click();
       // Validate Admin sees all teams in dropdown, Editor and Member see only their own teams
       const expectedTeams = {
@@ -142,17 +134,10 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         Member: [MARKETING_TEAM_NAME],
       };
       for (const team of expectedTeams[user]) {
-        await expect(
-          page
-            .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
-            .getByText(team),
-        ).toBeVisible();
+        await expect(page.getByRole("option", { name: team })).toBeVisible();
       }
       // select first team from dropdown
-      await page
-        .getByTestId(E2eTestId.SelectCredentialTypeTeamDropdown)
-        .getByText(expectedTeams[user][0])
-        .click();
+      await page.getByRole("option", { name: expectedTeams[user][0] }).click();
 
       // Install credential for team
       await clickButton({ page, options: { name: "Install" } });

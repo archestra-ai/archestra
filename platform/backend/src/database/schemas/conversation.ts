@@ -6,10 +6,6 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type {
-  LegacyPersistedBrowserState,
-  SimpleBrowserState,
-} from "@/features/browser-stream/services/browser-stream.state.types";
 import type { SupportedChatProvider } from "@/types";
 import agentsTable from "./agent";
 import chatApiKeysTable from "./chat-api-key";
@@ -40,9 +36,6 @@ const conversationsTable = pgTable("conversations", {
         status: "pending" | "in_progress" | "completed";
       }>
     >(),
-  browserState: jsonb("browser_state").$type<
-    SimpleBrowserState | LegacyPersistedBrowserState | null
-  >(),
   artifact: text("artifact"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })

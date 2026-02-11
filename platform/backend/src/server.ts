@@ -13,7 +13,7 @@ const isMainModule =
  */
 if (isMainModule) {
   await import("./sentry");
-  await import("./tracing");
+  await import("./observability/tracing");
 }
 
 import fastifyCors from "@fastify/cors";
@@ -50,12 +50,12 @@ import {
   cleanupKnowledgeGraphProvider,
   initializeKnowledgeGraphProvider,
 } from "@/knowledge-graph";
-import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";
+import { metrics } from "@/observability";
 import { systemKeyManager } from "@/services/system-key-manager";
 import {
   Anthropic,
@@ -573,7 +573,8 @@ const start = async () => {
 
     // Initialize metrics with keys of custom agent labels
     const labelKeys = await AgentLabelModel.getAllKeys();
-    initializeMetrics(labelKeys);
+    metrics.llm.initializeMetrics(labelKeys);
+    metrics.mcp.initializeMcpMetrics(labelKeys);
 
     // Start metrics server
     await startMetricsServer();
@@ -636,6 +637,16 @@ const start = async () => {
       credentials: true,
     });
 
+    logger.info(
+      {
+        corsOrigins: corsOrigins.map((o) =>
+          o instanceof RegExp ? o.toString() : o,
+        ),
+        trustedOrigins: config.auth.trustedOrigins,
+      },
+      "CORS and trusted origins configured",
+    );
+
     // Register formbody plugin to parse application/x-www-form-urlencoded bodies
     // This is required for SAML callbacks which use form POST binding
     await fastify.register(fastifyFormbody);
@@ -653,6 +664,12 @@ const start = async () => {
     fastify.get("/openapi.json", async () => fastify.swagger());
     registerHealthEndpoint(fastify);
     registerReadinessEndpoint(fastify);
+
+    if (process.env.ENABLE_E2E_TEST_ENDPOINTS === "true") {
+      fastify.get("/test", async () => ({
+        value: process.env.TEST_VALUE ?? null,
+      }));
+    }
 
     // Register all API routes (eeRoutes already loaded at module level)
     await registerApiRoutes(fastify);

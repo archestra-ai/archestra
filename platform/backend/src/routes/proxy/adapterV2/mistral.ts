@@ -16,7 +16,7 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
-import { getObservableFetch } from "@/llm-metrics";
+import { metrics } from "@/observability";
 import type {
   CreateClientOptions,
   LLMProvider,
@@ -232,7 +232,11 @@ export const mistralAdapterFactory: LLMProvider<
     }
 
     const customFetch = options?.agent
-      ? getObservableFetch("mistral", options.agent, options.externalAgentId)
+      ? metrics.llm.getObservableFetch(
+          "mistral",
+          options.agent,
+          options.externalAgentId,
+        )
       : undefined;
 
     return new OpenAIProvider({

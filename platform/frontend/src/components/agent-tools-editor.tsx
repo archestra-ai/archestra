@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@shared";
 import { useQueries } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Search, X } from "lucide-react";
 import {
@@ -466,7 +463,7 @@ function McpServerPill({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[420px] max-h-[min(500px,70vh)] p-0 flex flex-col overflow-hidden"
+        className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
         side="bottom"
         align="start"
         sideOffset={8}
@@ -520,7 +517,7 @@ function McpServerPill({
             <ToolChecklist
               tools={allTools}
               selectedToolIds={selectedToolIds}
-              setSelectedToolIds={setSelectedToolIds}
+              onSelectionChange={setSelectedToolIds}
             />
           </div>
         )}
@@ -532,11 +529,11 @@ function McpServerPill({
 export interface ToolChecklistProps {
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
-  setSelectedToolIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onSelectionChange: (selectedIds: Set<string>) => void;
 }
 
 function formatToolName(toolName: string) {
-  return toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() ?? toolName;
+  return parseFullToolName(toolName).toolName || toolName;
 }
 
 function ExpandableDescription({ description }: { description: string }) {
@@ -595,7 +592,7 @@ function ExpandableDescription({ description }: { description: string }) {
 export function ToolChecklist({
   tools,
   selectedToolIds,
-  setSelectedToolIds,
+  onSelectionChange,
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -618,15 +615,13 @@ export function ToolChecklist({
   const selectedCount = tools.filter((t) => selectedToolIds.has(t.id)).length;
 
   const handleToggle = (toolId: string) => {
-    setSelectedToolIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(toolId)) {
-        newSet.delete(toolId);
-      } else {
-        newSet.add(toolId);
-      }
-      return newSet;
-    });
+    const newSet = new Set(selectedToolIds);
+    if (newSet.has(toolId)) {
+      newSet.delete(toolId);
+    } else {
+      newSet.add(toolId);
+    }
+    onSelectionChange(newSet);
   };
 
   const handleSelectAll = () => {
@@ -634,7 +629,7 @@ export function ToolChecklist({
     for (const tool of filteredTools) {
       newSet.add(tool.id);
     }
-    setSelectedToolIds(newSet);
+    onSelectionChange(newSet);
   };
 
   const handleDeselectAll = () => {
@@ -642,7 +637,7 @@ export function ToolChecklist({
     for (const tool of filteredTools) {
       newSet.delete(tool.id);
     }
-    setSelectedToolIds(newSet);
+    onSelectionChange(newSet);
   };
 
   return (

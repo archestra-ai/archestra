@@ -1692,6 +1692,22 @@ describe("TrustedDataPolicyModel", () => {
       expect(result.reason).toBe("Archestra MCP server tool");
     });
 
+    test("trusts Archestra tools regardless of __ in tool name", async () => {
+      const result = await TrustedDataPolicyModel.evaluate(
+        agentId,
+        "archestra__get_mcp_servers",
+        {
+          value: { servers: ["upstash__context7"] },
+        },
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.isTrusted).toBe(true);
+      expect(result.isBlocked).toBe(false);
+      expect(result.reason).toBe("Archestra MCP server tool");
+    });
+
     test("does not affect evaluation of non-Archestra tools", async ({
       makeTrustedDataPolicy,
     }) => {
@@ -1729,6 +1745,154 @@ describe("TrustedDataPolicyModel", () => {
 
       expect(untrustedResult.isTrusted).toBe(false);
       expect(untrustedResult.reason).toContain("untrusted");
+    });
+  });
+
+  describe("tools with __ in server name", () => {
+    test("evaluates trusted data for tools whose server name contains __", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeTrustedDataPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "upstash__context7__resolve-library-id",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await TrustedDataPolicyModel.deleteByToolId(tool.id);
+
+      await makeTrustedDataPolicy(tool.id, {
+        conditions: [
+          { key: "source", operator: "equal", value: "official-docs" },
+        ],
+        action: "mark_as_trusted",
+        description: "Official docs are trusted",
+      });
+
+      const trustedResult = await TrustedDataPolicyModel.evaluate(
+        agent.id,
+        "upstash__context7__resolve-library-id",
+        { value: { source: "official-docs", content: "data" } },
+        "restrictive",
+        { teamIds: [] },
+      );
+      expect(trustedResult.isTrusted).toBe(true);
+      expect(trustedResult.reason).toContain("Official docs are trusted");
+
+      const untrustedResult = await TrustedDataPolicyModel.evaluate(
+        agent.id,
+        "upstash__context7__resolve-library-id",
+        { value: { source: "unknown", content: "data" } },
+        "restrictive",
+        { teamIds: [] },
+      );
+      expect(untrustedResult.isTrusted).toBe(false);
+    });
+
+    test("blocks data for tools whose server name contains __", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeTrustedDataPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "huggingface__remote-mcp__generate_text",
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      await makeTrustedDataPolicy(tool.id, {
+        conditions: [
+          { key: "content", operator: "contains", value: "harmful" },
+        ],
+        action: "block_always",
+        description: "Block harmful content",
+      });
+
+      const result = await TrustedDataPolicyModel.evaluate(
+        agent.id,
+        "huggingface__remote-mcp__generate_text",
+        { value: { content: "This is harmful text" } },
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.isBlocked).toBe(true);
+      expect(result.reason).toContain("Block harmful content");
+    });
+
+    test("evaluates bulk with mix of standard and __ server name tools", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeTrustedDataPolicy,
+    }) => {
+      const agent = await makeAgent();
+
+      // Standard tool
+      const standardTool = await makeTool({
+        agentId: agent.id,
+        name: "github__search_repos",
+      });
+      await makeAgentTool(agent.id, standardTool.id);
+      await TrustedDataPolicyModel.deleteByToolId(standardTool.id);
+      await makeTrustedDataPolicy(standardTool.id, {
+        conditions: [],
+        action: "mark_as_trusted",
+      });
+
+      // Tool with __ in server name
+      const doubleUnderscoreTool = await makeTool({
+        agentId: agent.id,
+        name: "upstash__context7__resolve-library-id",
+      });
+      await makeAgentTool(agent.id, doubleUnderscoreTool.id);
+      await TrustedDataPolicyModel.deleteByToolId(doubleUnderscoreTool.id);
+      await makeTrustedDataPolicy(doubleUnderscoreTool.id, {
+        conditions: [],
+        action: "mark_as_trusted",
+      });
+
+      const results = await TrustedDataPolicyModel.evaluateBulk(
+        agent.id,
+        [
+          { toolName: "github__search_repos", toolOutput: { repos: [] } },
+          {
+            toolName: "upstash__context7__resolve-library-id",
+            toolOutput: { libraryId: "react" },
+          },
+        ],
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(results.size).toBe(2);
+
+      const standardResult = results.get("0");
+      expect(standardResult?.isTrusted).toBe(true);
+
+      const doubleUnderscoreResult = results.get("1");
+      expect(doubleUnderscoreResult?.isTrusted).toBe(true);
+    });
+
+    test("marks tool with __ in server name as untrusted when not registered", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+
+      const result = await TrustedDataPolicyModel.evaluate(
+        agent.id,
+        "unregistered__server__some_tool",
+        { value: { data: "test" } },
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.isTrusted).toBe(false);
+      expect(result.reason).toContain("not registered");
     });
   });
 });

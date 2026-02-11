@@ -1177,7 +1177,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toContain("Team restricted");
       });
 
-      test("allows when context.teamIds does not match any teamIds", async ({
+      test("allows when context.teamIds does not match with equal operator", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -1210,6 +1210,185 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(true);
+      });
+    });
+
+    describe("tools with __ in server name", () => {
+      test("evaluates policies for tools whose server name contains __", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        // Tool name like upstash__context7__resolve-library-id (server name contains __)
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "upstash__context7__resolve-library-id",
+        });
+        await makeAgentTool(agent.id, tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "libraryId", operator: "equal", value: "blocked-lib" },
+          ],
+          action: "block_always",
+          reason: "Library is blocked",
+        });
+
+        const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "upstash__context7__resolve-library-id",
+              toolInput: { libraryId: "blocked-lib" },
+            },
+          ],
+          mockContext,
+          true,
+          "restrictive",
+        );
+        expect(blockedResult.isAllowed).toBe(false);
+        expect(blockedResult.reason).toContain("Library is blocked");
+
+        const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "upstash__context7__resolve-library-id",
+              toolInput: { libraryId: "safe-lib" },
+            },
+          ],
+          mockContext,
+          true,
+          "restrictive",
+        );
+        expect(allowedResult.isAllowed).toBe(true);
+      });
+
+      test("blocks tool with __ in server name when context is untrusted and default policy applies", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "huggingface__remote-mcp__generate_text",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        // Delete auto-created default policies to test global policy fallback
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "huggingface__remote-mcp__generate_text",
+              toolInput: { prompt: "test" },
+            },
+          ],
+          mockContext,
+          false, // untrusted context
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.reason).toContain(
+          "forbidden in untrusted context by default",
+        );
+      });
+
+      test("allows tool with __ in server name when context is untrusted and explicit allow policy exists", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({
+          agentId: agent.id,
+          name: "upstash__context7__query-docs",
+        });
+        await makeAgentTool(agent.id, tool.id);
+        // Delete auto-created default policies to set up our own
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+        await makeToolPolicy(tool.id, {
+          conditions: [],
+          action: "allow_when_context_is_untrusted",
+          reason: "Read-only tool allowed in untrusted context",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "upstash__context7__query-docs",
+              toolInput: { query: "test" },
+            },
+          ],
+          mockContext,
+          false, // untrusted context
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(true);
+      });
+
+      test("evaluates batch with mix of standard and __ server name tools", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+
+        // Standard tool (no __ in server name)
+        const standardTool = await makeTool({
+          agentId: agent.id,
+          name: "github__create-pull-request",
+        });
+        await makeAgentTool(agent.id, standardTool.id);
+
+        // Tool with __ in server name
+        const doubleUnderscoreTool = await makeTool({
+          agentId: agent.id,
+          name: "upstash__context7__resolve-library-id",
+        });
+        await makeAgentTool(agent.id, doubleUnderscoreTool.id);
+
+        // Block the double-underscore tool
+        await makeToolPolicy(doubleUnderscoreTool.id, {
+          conditions: [
+            { key: "libraryId", operator: "equal", value: "dangerous" },
+          ],
+          action: "block_always",
+          reason: "Dangerous library blocked",
+        });
+
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "github__create-pull-request",
+              toolInput: { title: "test PR" },
+            },
+            {
+              toolCallName: "upstash__context7__resolve-library-id",
+              toolInput: { libraryId: "dangerous" },
+            },
+          ],
+          mockContext,
+          true,
+          "restrictive",
+        );
+
+        expect(result.isAllowed).toBe(false);
+        expect(result.toolCallName).toBe(
+          "upstash__context7__resolve-library-id",
+        );
+        expect(result.reason).toContain("Dangerous library blocked");
       });
     });
   });

@@ -95,7 +95,6 @@ export function OAuthConfirmationDialog({
 
         <div className="py-4">
           <SelectMcpServerCredentialTypeAndTeams
-            selectedTeamId={selectedTeamId}
             onTeamChange={setSelectedTeamId}
             catalogId={catalogId}
           />

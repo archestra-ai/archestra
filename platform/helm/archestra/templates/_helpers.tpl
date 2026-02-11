@@ -68,7 +68,9 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
   "ARCHESTRA_METRICS_SECRET"
   "ARCHESTRA_HASHICORP_VAULT_TOKEN"
 }}
-{{- if .Values.postgresql.external_database_url }}
+{{- if eq (toString .Values.postgresql.external_database_url) "from_vault" }}
+{{/* Database URL provided by vault-secrets init container — no env var generated */}}
+{{- else if .Values.postgresql.external_database_url }}
 - name: ARCHESTRA_DATABASE_URL
   valueFrom:
     secretKeyRef:
@@ -143,28 +145,6 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   valueFrom:
     {{- toYaml .valueFrom | nindent 4 }}
 {{- end }}
-{{- end }}
-
-{{/*
-PostgreSQL host for database connectivity checks
-*/}}
-{{- define "archestra-platform.postgresql.host" -}}
-{{- if .Values.postgresql.external_database_url -}}
-{{- regexReplaceAll "^postgres(ql)?://[^@]+@([^:/]+).*$" .Values.postgresql.external_database_url "${2}" -}}
-{{- else -}}
-{{- include "archestra-platform.fullname" . }}-postgresql
-{{- end -}}
-{{- end }}
-
-{{/*
-PostgreSQL port for database connectivity checks
-*/}}
-{{- define "archestra-platform.postgresql.port" -}}
-{{- if .Values.postgresql.external_database_url -}}
-{{- regexReplaceAll "^postgres(ql)?://[^@]+@[^:]+:([0-9]+).*$" .Values.postgresql.external_database_url "${2}" -}}
-{{- else -}}
-5432
-{{- end -}}
 {{- end }}
 
 {{/*

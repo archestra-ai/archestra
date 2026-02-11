@@ -1,17 +1,23 @@
-import { stepCountIs, streamText } from "ai";
-import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import crypto from "node:crypto";
+import { PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
+import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
+import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
+import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import {
   createLLMModelForAgent,
   detectProviderFromModel,
 } from "@/clients/llm-client";
+import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
   ApiKeyModelModel,
   ChatApiKeyModel,
+  McpServerModel,
   TeamModel,
 } from "@/models";
+import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import type { SupportedChatProvider } from "@/types";
 
 export interface A2AExecuteParams {
@@ -29,6 +35,14 @@ export interface A2AExecuteParams {
    * The current agentId will be appended to form the new chain.
    */
   parentDelegationChain?: string;
+  /**
+   * Conversation ID for browser tab isolation.
+   * When provided (e.g., from chat delegation), sub-agents get their own tab
+   * keyed by (agentId, userId, conversationId).
+   * When not provided (direct A2A call), a unique execution ID is generated
+   * and cleaned up after execution.
+   */
+  conversationId?: string;
 }
 
 export interface A2AExecuteResult {
@@ -57,6 +71,12 @@ export async function executeA2AMessage(
     sessionId,
     parentDelegationChain,
   } = params;
+
+  // Generate isolation key for browser tab isolation.
+  // When called from chat delegation, conversationId is provided.
+  // When called directly (A2A route), generate a unique execution ID.
+  const isDirectExecutionOutsideConversation = !params.conversationId;
+  const isolationKey = params.conversationId ?? crypto.randomUUID();
 
   // Build delegation chain: append current agentId to parent chain
   const delegationChain = parentDelegationChain
@@ -100,91 +120,219 @@ export async function executeA2AMessage(
     systemPrompt = allParts.join("\n\n");
   }
 
-  // Fetch MCP tools for the agent (including delegation tools)
-  // Pass sessionId and delegationChain so nested agent calls are grouped together
-  const mcpTools = await getChatMcpTools({
-    agentName: agent.name,
-    agentId: agent.id,
-    userId,
-    userIsProfileAdmin: true, // A2A agents have full access
-    organizationId,
-    sessionId,
-    delegationChain,
-  });
+  // Track subagent execution so the browser preview can skip screenshots
+  // while subagents are active (prevents flickering from tab switching).
+  // Only track delegated calls — direct A2A calls have no browser preview.
+  if (!isDirectExecutionOutsideConversation) {
+    subagentExecutionTracker.increment(isolationKey);
+  }
 
-  logger.info(
-    {
+  try {
+    // Fetch MCP tools for the agent (including delegation tools)
+    // Pass sessionId, delegationChain, and conversationId for browser tab isolation
+    const mcpTools = await getChatMcpTools({
+      agentName: agent.name,
       agentId: agent.id,
       userId,
-      orgId: organizationId,
-      toolCount: Object.keys(mcpTools).length,
-      model: selectedModel,
-      hasSystemPrompt: !!systemPrompt,
-    },
-    "Starting A2A execution",
-  );
+      userIsProfileAdmin: true, // A2A agents have full access
+      organizationId,
+      sessionId,
+      delegationChain,
+      conversationId: isolationKey,
+    });
 
-  // Create LLM model using shared service
-  // Pass sessionId to group A2A requests with the calling session
-  // Pass delegationChain as externalAgentId so agent names appear in logs
-  // Pass agent's llmApiKeyId so it can be used without user access check
-  const { model } = await createLLMModelForAgent({
-    organizationId,
-    userId,
-    agentId: agent.id,
-    model: selectedModel,
-    provider,
-    sessionId,
-    externalAgentId: delegationChain,
-    agentLlmApiKeyId: agent.llmApiKeyId,
-  });
+    logger.info(
+      {
+        agentId: agent.id,
+        userId,
+        orgId: organizationId,
+        toolCount: Object.keys(mcpTools).length,
+        model: selectedModel,
+        hasSystemPrompt: !!systemPrompt,
+        isolationKey,
+        isDirectExecutionOutsideConversation,
+      },
+      "Starting A2A execution",
+    );
 
-  // Execute with AI SDK using streamText (required for long-running requests)
-  // We stream internally but collect the full result
-  const stream = streamText({
-    model,
-    system: systemPrompt,
-    prompt: message,
-    tools: mcpTools,
-    stopWhen: stepCountIs(500),
-  });
-
-  // Wait for the stream to complete and get the final text
-  const finalText = await stream.text;
-  const usage = await stream.usage;
-  const finishReason = await stream.finishReason;
-
-  // Generate message ID
-  const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-  logger.info(
-    {
+    // Create LLM model using shared service
+    // Pass sessionId to group A2A requests with the calling session
+    // Pass delegationChain as externalAgentId so agent names appear in logs
+    // Pass agent's llmApiKeyId so it can be used without user access check
+    const { model } = await createLLMModelForAgent({
+      organizationId,
+      userId,
       agentId: agent.id,
+      model: selectedModel,
       provider,
-      finishReason,
-      usage,
-      messageId,
-    },
-    "A2A execution finished",
-  );
+      sessionId,
+      externalAgentId: delegationChain,
+      agentLlmApiKeyId: agent.llmApiKeyId,
+    });
 
-  return {
-    messageId,
-    text: finalText,
-    finishReason: finishReason ?? "unknown",
-    usage: usage
-      ? {
-          promptTokens: usage.inputTokens ?? 0,
-          completionTokens: usage.outputTokens ?? 0,
-          totalTokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-        }
-      : undefined,
-  };
+    // Execute with AI SDK using streamText (required for long-running requests)
+    // We stream internally but collect the full result.
+    // Capture stream-level errors (e.g. API billing errors) via onError so we
+    // can surface the real cause instead of a generic NoOutputGeneratedError.
+    let capturedStreamError: unknown;
+    const stream = streamText({
+      model,
+      system: systemPrompt,
+      prompt: message,
+      tools: mcpTools,
+      stopWhen: stepCountIs(500),
+      onError: ({ error }) => {
+        capturedStreamError = error;
+      },
+    });
+
+    // Wait for the stream to complete and get the final text.
+    // When the underlying provider returns an error (e.g. 400 insufficient
+    // credits), the stream produces zero steps and the AI SDK throws
+    // NoOutputGeneratedError.  Re-throw with the real error message so callers
+    // (and ultimately end-users) see what actually went wrong.
+    let finalText: string;
+    let usage: Awaited<typeof stream.usage>;
+    let finishReason: Awaited<typeof stream.finishReason>;
+    try {
+      finalText = await stream.text;
+      usage = await stream.usage;
+      finishReason = await stream.finishReason;
+    } catch (streamError) {
+      if (
+        NoOutputGeneratedError.isInstance(streamError) &&
+        capturedStreamError
+      ) {
+        throw new ProviderError(
+          mapProviderError(capturedStreamError, provider),
+        );
+      }
+      throw new ProviderError(mapProviderError(streamError, provider));
+    }
+
+    // Generate message ID
+    const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    logger.info(
+      {
+        agentId: agent.id,
+        provider,
+        finishReason,
+        usage,
+        messageId,
+      },
+      "A2A execution finished",
+    );
+
+    return {
+      messageId,
+      text: finalText,
+      finishReason: finishReason ?? "unknown",
+      usage: usage
+        ? {
+            promptTokens: usage.inputTokens ?? 0,
+            completionTokens: usage.outputTokens ?? 0,
+            totalTokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
+          }
+        : undefined,
+    };
+  } finally {
+    // Clean up browser tab BEFORE decrementing the tracker.
+    // This ensures screenshots remain paused while the subagent's tab is
+    // being closed, preventing the preview from capturing the wrong tab.
+    await cleanupBrowserTab({
+      agentId,
+      userId,
+      organizationId,
+      isolationKey,
+      isDirectExecutionOutsideConversation,
+    });
+
+    if (!isDirectExecutionOutsideConversation) {
+      subagentExecutionTracker.decrement(isolationKey);
+    }
+  }
 }
 
 // ============================================================================
 // Helper functions
 // ============================================================================
+
+/**
+ * Clean up browser tab state after A2A execution.
+ * Closes the browser tab and optionally the MCP client.
+ */
+async function cleanupBrowserTab(params: {
+  agentId: string;
+  userId: string;
+  organizationId: string;
+  isolationKey: string;
+  isDirectExecutionOutsideConversation: boolean;
+}): Promise<void> {
+  const {
+    agentId,
+    userId,
+    organizationId,
+    isolationKey,
+    isDirectExecutionOutsideConversation,
+  } = params;
+
+  try {
+    // Close the browser tab via the feature service
+    const { browserStreamFeature } = await import(
+      "@/features/browser-stream/services/browser-stream.feature"
+    );
+
+    if (browserStreamFeature.isEnabled()) {
+      await browserStreamFeature.closeTab(agentId, isolationKey, {
+        userId,
+        organizationId,
+        userIsProfileAdmin: true,
+      });
+    }
+  } catch (error) {
+    logger.warn(
+      { agentId, userId, isolationKey, error },
+      "Failed to close browser tab during A2A cleanup (non-fatal)",
+    );
+  }
+
+  // Close the subagent's cached MCP session so the Playwright pod cleans up
+  // the browser context. This is needed for both direct and delegated calls
+  // since each (agentId, conversationId) gets its own session.
+  try {
+    const userServer = await McpServerModel.getUserPersonalServerForCatalog(
+      userId,
+      PLAYWRIGHT_MCP_CATALOG_ID,
+    );
+    if (userServer) {
+      mcpClient.closeSession(
+        PLAYWRIGHT_MCP_CATALOG_ID,
+        userServer.id,
+        agentId,
+        isolationKey,
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      { agentId, userId, isolationKey, error },
+      "Failed to close MCP session during A2A cleanup (non-fatal)",
+    );
+  }
+
+  // For direct A2A calls (not delegated from chat), also close MCP client
+  // to free the cache slot. For delegated calls, keep client alive for reuse.
+  if (isDirectExecutionOutsideConversation) {
+    try {
+      closeChatMcpClient(agentId, userId, isolationKey);
+    } catch (error) {
+      logger.warn(
+        { agentId, userId, isolationKey, error },
+        "Failed to close MCP client during A2A cleanup (non-fatal)",
+      );
+    }
+  }
+}
 
 /**
  * Resolve the model and provider to use for an agent.

@@ -3,6 +3,7 @@
 import {
   E2eTestId,
   formatSecretStorageType,
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
   type SupportedProvider,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -227,7 +228,8 @@ function ChatSettingsContent() {
     (createFormValues.scope !== "team" || createFormValues.teamId) &&
     (byosEnabled
       ? createFormValues.vaultSecretPath && createFormValues.vaultSecretKey
-      : createFormValues.apiKey);
+      : PROVIDERS_WITH_OPTIONAL_API_KEY.has(createFormValues.provider) ||
+        createFormValues.apiKey);
 
   // Validation for edit form
   const editFormValues = editForm.watch();

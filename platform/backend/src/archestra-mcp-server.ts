@@ -25,6 +25,7 @@ import {
   TrustedDataPolicyModel,
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
+import { ProviderError } from "@/routes/chat/errors";
 import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
@@ -246,6 +247,8 @@ export async function executeArchestraTool(
         sessionId,
         // Pass the current delegation chain so the child can extend it
         parentDelegationChain: context.delegationChain || context.agentId,
+        // Propagate conversationId for browser tab isolation
+        conversationId: context.conversationId,
       });
 
       return {
@@ -257,6 +260,11 @@ export async function executeArchestraTool(
         { error, agentId, targetAgentId: delegation.targetAgent.id },
         "Agent delegation tool execution failed",
       );
+      // Re-throw ProviderError so it propagates to the parent stream's onError
+      // with the correct provider info (the subagent can't produce output)
+      if (error instanceof ProviderError) {
+        throw error;
+      }
       return {
         content: [
           {

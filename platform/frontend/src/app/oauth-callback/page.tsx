@@ -15,12 +15,14 @@ import {
   useInstallMcpServer,
   useReauthenticateMcpServer,
 } from "@/lib/mcp-server.query";
+import { useHandleOAuthCallback } from "@/lib/oauth.query";
 
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const installMutation = useInstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();
+  const callbackMutation = useHandleOAuthCallback();
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
@@ -63,26 +65,8 @@ function OAuthCallbackContent() {
 
       try {
         // Exchange authorization code for access token
-        const response = await fetch("/api/oauth/callback", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            code,
-            state,
-          }),
-        });
-
-        if (!response.ok) {
-          sessionStorage.removeItem(processKey);
-          const errorData = await response.json();
-          throw new Error(
-            errorData.error?.message || "Failed to complete OAuth",
-          );
-        }
-
-        const { catalogId, name, secretId } = await response.json();
+        const { catalogId, name, secretId } =
+          await callbackMutation.mutateAsync({ code, state });
 
         // Check if this is a re-authentication flow
         const mcpServerId = sessionStorage.getItem("oauth_mcp_server_id");
@@ -145,6 +129,7 @@ function OAuthCallbackContent() {
     // and we intentionally run this effect only once per callback (guarded by sessionStorage)
   }, [
     searchParams,
+    callbackMutation.mutateAsync,
     installMutation.mutateAsync,
     reauthMutation.mutateAsync,
     router.push,

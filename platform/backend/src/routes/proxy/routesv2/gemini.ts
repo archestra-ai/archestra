@@ -111,7 +111,7 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject model and streaming flag into body for adapter
       const requestWithModel: GeminiRequestWithModel = {
@@ -163,7 +163,7 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject model and streaming flag into body for adapter
       const requestWithModel: GeminiRequestWithModel = {
@@ -221,7 +221,7 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject model and streaming flag into body for adapter
       const requestWithModel: GeminiRequestWithModel = {
@@ -279,7 +279,7 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = await utils.userId.getUserId(request.headers);
+      const userId = (await utils.user.getUser(request.headers))?.userId;
 
       // Inject model and streaming flag into body for adapter
       const requestWithModel: GeminiRequestWithModel = {

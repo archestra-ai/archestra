@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SupportedProvider } from "./model-constants";
 
 export const E2eTestId = {
   AgentsTable: "agents-table",
@@ -36,7 +37,6 @@ export const E2eTestId = {
   ConnectAgentButton: "connect-agent-button",
   ConnectCatalogItemButton: "connect-catalog-item-button",
   SelectCredentialTypePersonal: "select-credential-type-personal",
-  SelectCredentialTypeTeam: "select-credential-type-team",
   CredentialsCount: "credentials-count",
   StaticCredentialToUse: "static-credential-to-use",
   SelectCredentialTypeTeamDropdown: "select-credential-type-team-dropdown",
@@ -250,7 +250,24 @@ export const MAX_DOMAIN_LENGTH = 253;
  * Must be a valid UUID format (version 4, variant 8/9/a/b) for Zod validation.
  */
 export const PLAYWRIGHT_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000002";
-export const PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
+export const PLAYWRIGHT_MCP_SERVER_NAME = "microsoft__playwright-mcp";
+
+/**
+ * Set of all built-in MCP catalog item IDs that are system-managed
+ * and should not be modified or deleted by users.
+ */
+export const BUILT_IN_CATALOG_IDS = new Set([
+  ARCHESTRA_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+]);
+
+export function isBuiltInCatalogId(id: string): boolean {
+  return BUILT_IN_CATALOG_IDS.has(id);
+}
+
+export function isPlaywrightCatalogItem(id: string): boolean {
+  return id === PLAYWRIGHT_MCP_CATALOG_ID;
+}
 
 /**
  * Default browser viewport dimensions used by Playwright MCP in browser preview feature.
@@ -269,3 +286,75 @@ export const BROWSER_PREVIEW_HEADER_HEIGHT = 77;
  * Using about:blank ensures no automatic navigation happens until user requests it.
  */
 export const DEFAULT_BROWSER_PREVIEW_URL = "about:blank";
+
+// =============================================================================
+// OAuth 2.1 Authorization Server
+// =============================================================================
+
+/**
+ * Scopes supported by the OAuth 2.1 authorization server.
+ * Used by better-auth oauthProvider config, well-known endpoints, and consent UI.
+ */
+export const OAUTH_SCOPES = [
+  "mcp",
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+] as const;
+export type OAuthScope = (typeof OAUTH_SCOPES)[number];
+
+/**
+ * Human-readable descriptions for each OAuth scope.
+ * Used by the consent page to explain what each scope grants.
+ */
+export const OAUTH_SCOPE_DESCRIPTIONS: Record<OAuthScope, string> = {
+  mcp: "Access MCP tools and resources",
+  openid: "Verify your identity",
+  profile: "Access your profile information",
+  email: "Access your email address",
+  offline_access: "Maintain access when you're not present",
+};
+
+/**
+ * OAuth 2.1 endpoint paths (relative to base URL).
+ * These are served by better-auth and proxied through the frontend catch-all.
+ */
+export const OAUTH_ENDPOINTS = {
+  authorize: "/api/auth/oauth2/authorize",
+  token: "/api/auth/oauth2/token",
+  register: "/api/auth/oauth2/register",
+  jwks: "/api/auth/jwks",
+  consent: "/api/auth/oauth2/consent",
+} as const;
+
+/**
+ * OAuth 2.1 page paths (frontend routes).
+ */
+export const OAUTH_PAGES = {
+  login: "/auth/sign-in",
+  consent: "/oauth/consent",
+} as const;
+
+/**
+ * Prefix for OAuth-derived token IDs in TokenAuthResult.
+ * Used when constructing tokenId from OAuth access tokens (e.g. `oauth-${accessToken.id}`)
+ * and when detecting OAuth auth method from tokenId.
+ */
+export const OAUTH_TOKEN_ID_PREFIX = "oauth-";
+
+/**
+ * Path for deep-linking to MCP catalog install dialogs.
+ * Used by backend error messages and frontend routing.
+ * Append `?install={catalogId}` to auto-open the install dialog.
+ */
+export const MCP_CATALOG_INSTALL_PATH = "/mcp-catalog/registry";
+export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
+
+/**
+ * Providers where an API key is optional (self-hosted providers that typically don't require auth).
+ */
+export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
+  "ollama",
+  "vllm",
+]);

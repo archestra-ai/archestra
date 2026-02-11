@@ -2,7 +2,7 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 
-import { Bot, Edit, FileText, Globe, Plus, Wrench } from "lucide-react";
+import { Bot, Edit, FileText, Globe, Plus } from "lucide-react";
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -72,7 +72,6 @@ import ArchestraPromptInput from "./prompt-input";
 const CONVERSATION_QUERY_PARAM = "conversation";
 
 const LocalStorageKeys = {
-  hideToolCalls: "archestra-chat-hide-tool-calls",
   artifactOpen: "archestra-chat-artifact-open",
   browserOpen: "archestra-chat-browser-open",
   selectedChatModel: "archestra-chat-selected-chat-model",
@@ -92,20 +91,12 @@ export default function ChatPage() {
     document.body.classList.add("hide-version");
     return () => document.body.classList.remove("hide-version");
   }, []);
-  const [hideToolCalls, setHideToolCalls] = useState(() => {
-    // Initialize from localStorage
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(LocalStorageKeys.hideToolCalls) === "true";
-    }
-    return false;
-  });
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
-  const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
@@ -434,57 +425,26 @@ export default function ChatPage() {
 
   // Check if Playwright MCP is available for browser panel and get install function
   const {
-    hasPlaywrightMcp,
+    hasPlaywrightMcpTools,
+    isPlaywrightInstalled,
+    reinstallRequired,
+    installationFailed,
+    playwrightServerId,
     isInstalling: isInstallingBrowser,
+    isAssigningTools,
     installBrowser,
-  } = useHasPlaywrightMcpTools(browserToolsAgentId);
+    reinstallBrowser,
+    assignToolsToAgent,
+  } = useHasPlaywrightMcpTools(browserToolsAgentId, conversationId);
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
-
-  // Clear MCP Gateway sessions when opening a NEW conversation
-  useEffect(() => {
-    // Only clear sessions if this is a newly created conversation
-    if (
-      currentProfileId &&
-      conversationId &&
-      newlyCreatedConversationRef.current === conversationId
-    ) {
-      // Clear sessions for this agent to ensure fresh MCP state
-      fetch("/v1/mcp/sessions", {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${currentProfileId}`,
-        },
-      })
-        .then(async () => {
-          // Clear the ref after clearing sessions
-          newlyCreatedConversationRef.current = undefined;
-        })
-        .catch((error) => {
-          console.error("[Chat] Failed to clear MCP sessions:", {
-            conversationId,
-            agentId: currentProfileId,
-            error,
-          });
-          // Clear the ref even on error to avoid retry loops
-          newlyCreatedConversationRef.current = undefined;
-        });
-    }
-  }, [conversationId, currentProfileId]);
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
 
   // Update enabled tools mutation (for applying pending actions)
   const updateEnabledToolsMutation = useUpdateConversationEnabledTools();
-
-  // Persist hide tool calls preference
-  const toggleHideToolCalls = useCallback(() => {
-    const newValue = !hideToolCalls;
-    setHideToolCalls(newValue);
-    localStorage.setItem(LocalStorageKeys.hideToolCalls, String(newValue));
-  }, [hideToolCalls]);
 
   // Persist artifact panel state
   const toggleArtifactPanel = useCallback(() => {
@@ -818,7 +778,6 @@ export default function ChatPage() {
         {
           onSuccess: (newConversation) => {
             if (newConversation) {
-              newlyCreatedConversationRef.current = newConversation.id;
               selectConversation(newConversation.id);
               // URL navigation will happen via useBrowserStream after conversation connects
             }
@@ -933,7 +892,6 @@ export default function ChatPage() {
                 clearPendingActions();
               }
 
-              newlyCreatedConversationRef.current = newConversation.id;
               selectConversation(newConversation.id);
             }
           },
@@ -988,7 +946,6 @@ export default function ChatPage() {
       {
         onSuccess: (newConversation) => {
           if (newConversation) {
-            newlyCreatedConversationRef.current = newConversation.id;
             selectConversation(newConversation.id);
           }
         },
@@ -1135,17 +1092,6 @@ export default function ChatPage() {
               </div>
               {/* Right side - show/hide controls */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs text-muted-foreground">Show:</span>
-                <Button
-                  variant={!hideToolCalls ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={toggleHideToolCalls}
-                  className="text-xs"
-                >
-                  <Wrench className="h-3 w-3 mr-1" />
-                  Tool calls
-                </Button>
-                <div className="w-px h-4 bg-border" />
                 <Button
                   variant={isArtifactOpen ? "secondary" : "ghost"}
                   size="sm"
@@ -1206,7 +1152,6 @@ export default function ChatPage() {
                     }
               }
               messages={messages}
-              hideToolCalls={hideToolCalls}
               status={status}
               isLoadingConversation={isLoadingConversation}
               onMessagesUpdate={setMessages}
@@ -1367,8 +1312,30 @@ export default function ChatPage() {
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
         isInstallingBrowser={isInstallingBrowser}
-        hasPlaywrightMcp={hasPlaywrightMcp}
-        onInstallBrowser={installBrowser}
+        hasPlaywrightMcpTools={hasPlaywrightMcpTools}
+        isPlaywrightInstalled={isPlaywrightInstalled}
+        isAssigningTools={isAssigningTools}
+        onInstallBrowser={
+          browserToolsAgentId
+            ? () => installBrowser(browserToolsAgentId)
+            : undefined
+        }
+        onAssignToolsToAgent={
+          browserToolsAgentId
+            ? () =>
+                assignToolsToAgent({
+                  agentId: browserToolsAgentId,
+                  conversationId,
+                })
+            : undefined
+        }
+        reinstallRequired={reinstallRequired}
+        installationFailed={installationFailed}
+        onReinstallBrowser={
+          playwrightServerId
+            ? () => reinstallBrowser(playwrightServerId)
+            : undefined
+        }
         onCreateConversationWithUrl={handleCreateConversationWithUrl}
         isCreatingConversation={createConversationMutation.isPending}
         initialNavigateUrl={pendingBrowserUrl}

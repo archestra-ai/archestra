@@ -2,6 +2,8 @@
 # Checks for low-quality PRs, ensures they reference an issue, and applies labels.
 # Uses an API key (not user-scoped OAuth token) since bot-initiated workflows
 # with OAuth tokens risk account bans per Anthropic's policy.
+#
+# Comments appear as "Archestra Triage Sheriff" bot via the GitHub App token.
 name: Claude PR Triage
 
 on:
@@ -22,6 +24,13 @@ jobs:
       id-token: write
 
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        with:
+          app-id: ${{ secrets.TRIAGE_SHERIFF_APP_ID }}
+          private-key: ${{ secrets.TRIAGE_SHERIFF_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -40,6 +49,9 @@ jobs:
           # Anthropic recommends API keys for multi-user repos:
           # https://github.com/anthropics/claude-code-action/issues/4#issuecomment-3046770474
           anthropic_api_key: ${{ secrets.CLAUDE_ISSUE_TRIAGE_ANTHROPIC_API_KEY }}
+
+          # Use the GitHub App token so comments appear as "Archestra Triage Sheriff"
+          github_token: ${{ steps.app-token.outputs.token }}
 
           # Allow triage for PRs from any user
           allowed_non_write_users: "*"

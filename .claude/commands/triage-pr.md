@@ -5,7 +5,8 @@ $ARGUMENTS
 ## Steps
 
 1. Use `mcp__github__get_pull_request` to get the PR details (extract the PR number from PR_NUMBER above).
-2. Evaluate the PR quality:
+2. Use `mcp__github__get_pull_request_files` to see what files are changed.
+3. Evaluate the PR against the rules below.
 
 ### Auto-close as low-quality if ANY of these apply:
 - Empty or boilerplate PR description (no explanation of what/why)
@@ -13,16 +14,23 @@ $ARGUMENTS
 - Trivial changes that add no value (whitespace-only, random comment additions)
 - PR modifies only CI/workflow files without prior discussion
 
+### Bounty claim PRs:
+If the PR title or description contains "bounty" or the PR has a bounty-related label (e.g. "Bounty claim"), it MUST include a demo video (a link to a video, gif, or screen recording) showcasing the feature or fix. If no demo video is present, close the PR with:
+"This PR is a bounty claim but doesn't include a demo video. All bounty claims must include a video/gif/screen recording demonstrating the feature or fix. Please reopen with a demo attached."
+
+### LLM provider PRs:
+If the PR adds or modifies an LLM provider (e.g. changes files under `backend/src/routes/proxy/`, `backend/src/types/llm-providers/`, `backend/src/routes/proxy/adapterV2/`, or `backend/src/clients/`), leave a review comment noting that the PR should be reviewed against the standards defined in `docs/pages/platform-adding-llm-providers.md`. Include a link: https://github.com/archestra-ai/archestra/blob/main/docs/pages/platform-adding-llm-providers.md
+
 ### Check for related issues:
-3. If the PR doesn't reference an issue, comment asking the contributor to link one.
+4. If the PR doesn't reference an issue, comment asking the contributor to link one.
 
 ### Valid PRs:
-4. If the PR is valid, apply appropriate labels:
+5. If the PR is valid, apply appropriate labels:
    - `bug` - Bug fixes
    - `enhancement` - New features or improvements
    - `documentation` - Documentation changes
 
-5. If the PR is valid and high-quality, leave a brief welcoming comment.
+6. If the PR is valid and high-quality, leave a brief welcoming comment.
 
 ## Response format
 

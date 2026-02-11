@@ -1,6 +1,7 @@
 # Automatically triage new PRs from external contributors using Claude.
 # Checks for low-quality PRs, ensures they reference an issue, and applies labels.
-# Uses a shared OAuth token (not user-scoped) since this is bot-initiated.
+# Uses an API key (not user-scoped OAuth token) since bot-initiated workflows
+# with OAuth tokens risk account bans per Anthropic's policy.
 name: Claude PR Triage
 
 on:
@@ -67,8 +68,7 @@ jobs:
             ### If valid but missing issue reference:
             "Thanks for the PR! Could you please link this to a related issue? If there isn't one, please create an issue first describing the problem or feature."
 
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
           # Allow triage for PRs from any user
           allowed_non_write_users: "*"

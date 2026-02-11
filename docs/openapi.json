@@ -28765,7 +28765,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Automatically configure security policies for tools using Anthropic LLM analysis",
+        "description": "Automatically configure security policies for tools using LLM analysis",
         "requestBody": {
           "content": {
             "application/json": {
@@ -28817,12 +28817,21 @@
                           "config": {
                             "type": "object",
                             "properties": {
-                              "toolResultTreatment": {
+                              "toolInvocationAction": {
                                 "type": "string",
                                 "enum": [
-                                  "trusted",
+                                  "allow_when_context_is_untrusted",
+                                  "block_when_context_is_untrusted",
+                                  "block_always"
+                                ]
+                              },
+                              "trustedDataAction": {
+                                "type": "string",
+                                "enum": [
+                                  "mark_as_trusted",
+                                  "mark_as_untrusted",
                                   "sanitize_with_dual_llm",
-                                  "untrusted"
+                                  "block_always"
                                 ]
                               },
                               "reasoning": {
@@ -28830,7 +28839,8 @@
                               }
                             },
                             "required": [
-                              "toolResultTreatment",
+                              "toolInvocationAction",
+                              "trustedDataAction",
                               "reasoning"
                             ],
                             "additionalProperties": false

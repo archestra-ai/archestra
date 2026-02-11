@@ -360,8 +360,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
-        KIND_OUTPUT_FILE=$(mktemp)
-        if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s 2>&1 | tee "${KIND_OUTPUT_FILE}"; then
+        if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
             echo ""
             echo "=== KinD cluster creation failed ==="
             echo ""
@@ -387,7 +386,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             if [ "${IS_DOCKER_DESKTOP}" = "true" ]; then
                 echo "  1. Increase Docker Desktop memory to at least 4 GB"
                 echo "     (Settings > Resources > Memory)"
-                if echo "${DOCKER_SERVER_PLATFORM}" | grep -qi "windows\|amd64"; then
+                if echo "${DOCKER_SERVER_OS}" | grep -qi "windows"; then
                     echo "  2. Ensure Docker Desktop is using the WSL 2 backend"
                     echo "     (Settings > General > Use the WSL 2 based engine)"
                 fi
@@ -406,10 +405,8 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             echo ""
             echo "For help: https://github.com/archestra-ai/archestra/issues"
 
-            rm -f "${KIND_OUTPUT_FILE}"
             exit 1
         fi
-        rm -f "${KIND_OUTPUT_FILE}"
         echo "KinD cluster created successfully"
         # Mark for cleanup on shutdown
         KIND_CLUSTER="${CLUSTER_NAME}"

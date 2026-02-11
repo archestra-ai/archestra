@@ -402,6 +402,7 @@ async function makeInternalMcpCatalog(
   overrides: Partial<
     Pick<
       InsertInternalMcpCatalog,
+      | "id"
       | "name"
       | "serverType"
       | "serverUrl"
@@ -415,7 +416,6 @@ async function makeInternalMcpCatalog(
       | "localConfig"
       | "userConfig"
       | "oauthConfig"
-      | "isGloballyAvailable"
     >
   > = {},
 ) {

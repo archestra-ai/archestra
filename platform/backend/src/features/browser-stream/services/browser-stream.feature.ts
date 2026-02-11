@@ -52,8 +52,8 @@ class BrowserStreamFeature {
 
   // Delegate all service methods
 
-  checkAvailability(agentId: string, userId?: string) {
-    return this.getService().checkAvailability(agentId, userId);
+  checkAvailability(agentId: string) {
+    return this.getService().checkAvailability(agentId);
   }
 
   selectOrCreateTab(

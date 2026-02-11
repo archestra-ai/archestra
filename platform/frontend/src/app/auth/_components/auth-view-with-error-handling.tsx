@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import config from "@/lib/config";
+import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
 const { SsoProviderSelector } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
@@ -235,10 +236,14 @@ export function AuthViewWithErrorHandling({
     };
   }, []);
 
+  if (path === "sign-out") {
+    return <SignOutWithIdpLogout />;
+  }
+
   const isSignInPage = path === "sign-in";
 
   // These paths should always render AuthView regardless of basic auth setting
-  // (sign-out, callback, error, etc. are handled by better-auth-ui)
+  // (callback, error, etc. are handled by better-auth-ui)
   const alwaysShowAuthView = !isSignInPage && path !== "sign-up";
 
   // When basic auth is disabled and SSO providers are still loading, wait (only for sign-in)

@@ -30,6 +30,8 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   isReinstall?: boolean;
   /** The team ID of the existing server being reinstalled (null/undefined = personal) */
   existingTeamId?: string | null;
+  /** When true, only personal installation is allowed (teams are disabled) */
+  personalOnly?: boolean;
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
@@ -38,6 +40,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
   onCredentialTypeChange,
   isReinstall = false,
   existingTeamId,
+  personalOnly = false,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
   const byosEnabled = useFeatureFlag("byosEnabled");
@@ -87,21 +90,29 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   // WHY: During reinstall, lock credential type to existing value (can't change ownership)
   // Personal is disabled if: reinstalling a team server, or (for new install) already has personal or BYOS enabled
-  const isPersonalDisabled = isReinstall
-    ? !!existingTeamId // Reinstalling team server - can't switch to personal
-    : hasPersonalInstallation || byosEnabled;
+  const isPersonalDisabled = personalOnly
+    ? false
+    : isReinstall
+      ? !!existingTeamId // Reinstalling team server - can't switch to personal
+      : hasPersonalInstallation || byosEnabled;
 
   // WHY: Team options are disabled if:
-  // 1. Reinstalling a personal server (can't switch to team)
-  // 2. User lacks mcpServer:update permission AND personal is still available.
+  // 1. personalOnly mode (e.g. Playwright - only personal installs allowed)
+  // 2. Reinstalling a personal server (can't switch to team)
+  // 3. User lacks mcpServer:update permission AND personal is still available.
   //    When personal is unavailable (already installed or BYOS), teams must stay
   //    enabled since they are the only option
-  const areTeamsDisabled = isReinstall
-    ? !existingTeamId // Reinstalling personal server - can't switch to team
-    : !hasMcpServerUpdate && !isPersonalDisabled;
+  const areTeamsDisabled = personalOnly
+    ? true
+    : isReinstall
+      ? !existingTeamId // Reinstalling personal server - can't switch to team
+      : !hasMcpServerUpdate && !isPersonalDisabled;
 
   // Compute the initial dropdown value
   const initialValue = useMemo(() => {
+    if (personalOnly) {
+      return PERSONAL_VALUE;
+    }
     if (isReinstall) {
       return existingTeamId || PERSONAL_VALUE;
     }
@@ -111,6 +122,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
     }
     return PERSONAL_VALUE;
   }, [
+    personalOnly,
     byosEnabled,
     hasPersonalInstallation,
     availableTeams,

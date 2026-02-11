@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/cimd/missing-redirect-uris.json"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "transformers": ["response-template"],
+    "body": "{\"client_id\": \"{{request.baseUrl}}/cimd/missing-redirect-uris.json\", \"client_name\": \"Missing Redirect URIs Client\"}"
+  }
+}

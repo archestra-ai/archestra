@@ -19,9 +19,15 @@ interface RightSidePanelProps {
   /** When true, shows "Installing browser" message in browser panel */
   isInstallingBrowser?: boolean;
   /** Whether Playwright MCP tools are available */
-  hasPlaywrightMcp?: boolean;
+  hasPlaywrightMcpTools?: boolean;
+  /** Whether Playwright MCP server is installed (but tools may not be assigned) */
+  isPlaywrightInstalled?: boolean;
+  /** Whether tools are being assigned to the agent */
+  isAssigningTools?: boolean;
   /** Called to install browser (Playwright MCP) */
   onInstallBrowser?: () => Promise<unknown>;
+  /** Called to assign Playwright tools to the current agent */
+  onAssignToolsToAgent?: () => Promise<unknown>;
   /** Whether the browser requires reinstallation due to config change */
   reinstallRequired?: boolean;
   /** Whether the browser installation failed */
@@ -46,8 +52,11 @@ export function RightSidePanel({
   onBrowserClose,
   conversationId,
   isInstallingBrowser = false,
-  hasPlaywrightMcp = false,
+  hasPlaywrightMcpTools = false,
+  isPlaywrightInstalled = false,
+  isAssigningTools = false,
   onInstallBrowser,
+  onAssignToolsToAgent,
   reinstallRequired = false,
   installationFailed = false,
   onReinstallBrowser,
@@ -195,8 +204,11 @@ export function RightSidePanel({
             onClose={onBrowserClose}
             conversationId={conversationId}
             isInstallingBrowser={isInstallingBrowser}
-            hasPlaywrightMcp={hasPlaywrightMcp}
+            hasPlaywrightMcpTools={hasPlaywrightMcpTools}
+            isPlaywrightInstalled={isPlaywrightInstalled}
+            isAssigningTools={isAssigningTools}
             onInstallBrowser={onInstallBrowser}
+            onAssignToolsToAgent={onAssignToolsToAgent}
             reinstallRequired={reinstallRequired}
             installationFailed={installationFailed}
             onReinstallBrowser={onReinstallBrowser}

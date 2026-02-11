@@ -34,7 +34,11 @@ async function performSignOut() {
   }
 
   // Clear local session
-  await authClient.signOut();
+  try {
+    await authClient.signOut();
+  } catch {
+    // Proceed with redirect even if session cleanup fails
+  }
 
   // Redirect to IdP logout or sign-in page
   if (idpLogoutUrl) {

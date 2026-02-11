@@ -102,6 +102,7 @@ describe("getIdpLogoutUrl", () => {
       "https://idp.example.com/protocol/openid-connect/logout",
     );
     expect(parsed.searchParams.get("id_token_hint")).toBe(testIdToken);
+    expect(parsed.searchParams.get("client_id")).toBe("test-client");
     expect(parsed.searchParams.get("post_logout_redirect_uri")).toContain(
       "/auth/sign-in",
     );
@@ -134,6 +135,41 @@ describe("getIdpLogoutUrl", () => {
 
     // Mock fetch to throw a network error
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+
+    const url = await getIdpLogoutUrl(user.id);
+    expect(url).toBeNull();
+  });
+
+  test("returns null when discovery fetch returns non-2xx status", async ({
+    makeUser,
+    makeAccount,
+    makeOrganization,
+    makeSsoProvider,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+
+    await makeSsoProvider(org.id, {
+      providerId: "oidc-500",
+      oidcConfig: {
+        clientId: "test-client",
+        clientSecret: "test-secret",
+        issuer: "https://idp.example.com",
+        pkce: false,
+        discoveryEndpoint:
+          "https://idp.example.com/.well-known/openid-configuration",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "oidc-500",
+    });
+
+    // Mock fetch to return a 500 server error
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+    });
 
     const url = await getIdpLogoutUrl(user.id);
     expect(url).toBeNull();

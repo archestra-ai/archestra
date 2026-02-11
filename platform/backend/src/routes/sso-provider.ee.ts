@@ -230,10 +230,13 @@ export async function getIdpLogoutUrl(userId: string): Promise<string | null> {
     return null;
   }
 
-  // Construct the logout URL with optional id_token_hint and post_logout_redirect_uri
+  // Construct the logout URL with id_token_hint, client_id, and post_logout_redirect_uri
   const logoutUrl = new URL(endSessionEndpoint);
   if (ssoAccount.idToken) {
     logoutUrl.searchParams.set("id_token_hint", ssoAccount.idToken);
+  }
+  if (ssoProvider.oidcConfig.clientId) {
+    logoutUrl.searchParams.set("client_id", ssoProvider.oidcConfig.clientId);
   }
   logoutUrl.searchParams.set(
     "post_logout_redirect_uri",

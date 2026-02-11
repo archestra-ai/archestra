@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -148,29 +149,30 @@ const AgentToolsEditorContent = forwardRef<
     return map;
   }, [assignedToolsData]);
 
-  // Sort catalog items: assigned tools first (by count desc), then servers with tools, then 0 tools
-  // Globally available servers (e.g., playwright-browser) are hidden
+  // Sort catalog items: globally available first, then assigned tools (by count desc), then servers with tools, then 0 tools
   const sortedCatalogItems = useMemo(() => {
-    return [...catalogItems]
-      .filter((c) => !c.isGloballyAvailable)
-      .sort((a, b) => {
-        const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
-        const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
+    return [...catalogItems].sort((a, b) => {
+      // Globally available items (e.g., Playwright) always come first
+      if (a.isGloballyAvailable && !b.isGloballyAvailable) return -1;
+      if (!a.isGloballyAvailable && b.isGloballyAvailable) return 1;
 
-        // Items with assigned tools come first, sorted by assigned count descending
-        if (aAssigned > 0 && bAssigned === 0) return -1;
-        if (aAssigned === 0 && bAssigned > 0) return 1;
-        if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+      const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
+      const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
 
-        // Among items with same assigned count, sort by total tools available
-        const aCount = toolCountByCatalog.get(a.id) ?? 0;
-        const bCount = toolCountByCatalog.get(b.id) ?? 0;
-        if (aCount > 0 && bCount === 0) return -1;
-        if (aCount === 0 && bCount > 0) return 1;
+      // Items with assigned tools come first, sorted by assigned count descending
+      if (aAssigned > 0 && bAssigned === 0) return -1;
+      if (aAssigned === 0 && bAssigned > 0) return 1;
+      if (aAssigned !== bAssigned) return bAssigned - aAssigned;
 
-        // Finally, sort alphabetically by name
-        return a.name.localeCompare(b.name);
-      });
+      // Among items with same assigned count, sort by total tools available
+      const aCount = toolCountByCatalog.get(a.id) ?? 0;
+      const bCount = toolCountByCatalog.get(b.id) ?? 0;
+      if (aCount > 0 && bCount === 0) return -1;
+      if (aCount === 0 && bCount > 0) return 1;
+
+      // Finally, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
   }, [catalogItems, assignedToolsByCatalog, toolCountByCatalog]);
 
   // Filter by search query
@@ -310,15 +312,19 @@ const AgentToolsEditorContent = forwardRef<
 
   return (
     <div className="flex flex-wrap gap-2">
-      {visibleItems.map((catalog) => (
-        <McpServerPill
-          key={catalog.id}
-          catalogItem={catalog}
-          assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
-          onPendingChanges={registerPendingChanges}
-          onClearPendingChanges={clearPendingChanges}
-        />
-      ))}
+      {visibleItems.map((catalog) =>
+        catalog.isGloballyAvailable ? (
+          <GloballyAvailablePill key={catalog.id} catalogItem={catalog} />
+        ) : (
+          <McpServerPill
+            key={catalog.id}
+            catalogItem={catalog}
+            assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
+            onPendingChanges={registerPendingChanges}
+            onClearPendingChanges={clearPendingChanges}
+          />
+        ),
+      )}
       {!shouldShowAll && hiddenCount > 0 && onShowMore && (
         <Button
           variant="outline"
@@ -346,6 +352,28 @@ const AgentToolsEditorContent = forwardRef<
     </div>
   );
 });
+
+function GloballyAvailablePill({
+  catalogItem,
+}: {
+  catalogItem: InternalMcpCatalogItem;
+}) {
+  const { data: allTools = [] } = useCatalogTools(catalogItem.id);
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-8 px-3 gap-1.5 text-xs cursor-default pointer-events-none"
+    >
+      <span className="font-medium">{catalogItem.name}</span>
+      <span>({allTools.length})</span>
+      <Badge className="text-[10px] px-1.5 py-0 h-4 bg-purple-600 text-white">
+        Built-in
+      </Badge>
+    </Button>
+  );
+}
 
 interface McpServerPillProps {
   catalogItem: InternalMcpCatalogItem;

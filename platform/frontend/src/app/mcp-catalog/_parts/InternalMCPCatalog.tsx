@@ -2,6 +2,7 @@
 
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  isPlaywrightCatalogItem,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -289,6 +290,29 @@ export function InternalMCPCatalog({
   const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
     setLocalServerCatalogItem(catalogItem);
     openDialog("local-install");
+  };
+
+  const handleInstallPlaywright = async (catalogItem: CatalogItem) => {
+    setInstallingItemId(catalogItem.id);
+    const result = await installMutation.mutateAsync({
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      dontShowToast: true,
+    });
+
+    const installedServerId = result?.installedServer?.id;
+    if (installedServerId) {
+      setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
+      const isFirstInstallation = !installedServers?.some(
+        (s) => s.catalogId === catalogItem.id,
+      );
+      if (isFirstInstallation) {
+        setFirstInstallationServerIds((prev) =>
+          new Set(prev).add(installedServerId),
+        );
+      }
+    }
+    setInstallingItemId(null);
   };
 
   const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
@@ -637,14 +661,14 @@ export function InternalMCPCatalog({
   const sortInstalledFirst = (items: CatalogItem[]) =>
     [...items].sort((a, b) => {
       // Sort priority: builtin > remote > local
-      const getPriority = (serverType: string) => {
-        if (serverType === "builtin") return 0;
-        if (serverType === "remote") return 1;
+      const getPriority = (item: CatalogItem) => {
+        if (item.serverType === "builtin" || isPlaywrightCatalogItem(item.id))
+          return 0;
+        if (item.serverType === "remote") return 1;
         return 2; // local
       };
 
-      const priorityDiff =
-        getPriority(a.serverType) - getPriority(b.serverType);
+      const priorityDiff = getPriority(a) - getPriority(b);
       if (priorityDiff !== 0) return priorityDiff;
 
       // Secondary sort by createdAt (newest first)
@@ -758,7 +782,11 @@ export function InternalMCPCatalog({
                   onInstallRemoteServer={() =>
                     handleInstallRemoteServer(item, false)
                   }
-                  onInstallLocalServer={() => handleInstallLocalServer(item)}
+                  onInstallLocalServer={() =>
+                    isPlaywrightCatalogItem(item.id)
+                      ? handleInstallPlaywright(item)
+                      : handleInstallLocalServer(item)
+                  }
                   onReinstall={() => handleReinstall(item)}
                   onEdit={() => setEditingItem(item)}
                   onDetails={() => {
@@ -772,6 +800,7 @@ export function InternalMCPCatalog({
                   onAssignmentsDialogClose={() =>
                     setAutoOpenAssignmentsCatalogId(null)
                   }
+                  isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
                 />
               );
             })}

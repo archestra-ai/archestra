@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -134,6 +134,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (!catalogItem) {
           throw new ApiError(400, "Catalog item not found");
+        }
+
+        // Playwright browser preview can only be installed as a personal server
+        if (
+          isPlaywrightCatalogItem(serverData.catalogId) &&
+          serverData.teamId
+        ) {
+          throw new ApiError(
+            400,
+            "Playwright browser preview can only be installed as a personal server",
+          );
         }
 
         // Set serverType from catalog item

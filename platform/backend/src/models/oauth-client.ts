@@ -1,23 +1,6 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-
-interface CimdUpsertData {
-  id: string;
-  clientId: string;
-  name: string;
-  redirectUris: string[];
-  grantTypes: string[];
-  responseTypes: string[];
-  tokenEndpointAuthMethod: string;
-  isPublic: boolean;
-  metadata: Record<string, unknown>;
-  contacts?: string[];
-  uri?: string;
-  policy?: string;
-  tos?: string;
-  softwareId?: string;
-  softwareVersion?: string;
-}
+import type { CimdUpsertData } from "@/types";
 
 class OAuthClientModel {
   /**

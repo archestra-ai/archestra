@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import config from "@/config";
 import logger from "@/logging";
 import { OAuthClientModel } from "@/models";
+import type { CimdMetadata } from "@/types";
 
 /**
  * Client ID Metadata Documents (CIMD) support for MCP OAuth 2.1.
@@ -12,23 +13,6 @@ import { OAuthClientModel } from "@/models";
  *
  * See: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
  */
-
-interface CimdMetadata {
-  client_id: string;
-  client_name: string;
-  redirect_uris: string[];
-  grant_types?: string[];
-  response_types?: string[];
-  token_endpoint_auth_method?: string;
-  scope?: string;
-  contacts?: string[];
-  logo_uri?: string;
-  client_uri?: string;
-  policy_uri?: string;
-  tos_uri?: string;
-  software_id?: string;
-  software_version?: string;
-}
 
 /**
  * Detect whether a client_id is a CIMD URL (has scheme + path component).
@@ -147,7 +131,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 /** In-memory cache to avoid re-fetching on every request */
 const cimdCache = new Map<string, { fetchedAt: number }>();
 
-function validateCimdDocument(
+export function validateCimdDocument(
   clientIdUrl: string,
   document: unknown,
 ): CimdMetadata {

@@ -238,9 +238,14 @@ function isPrivateHost(hostname: string): boolean {
 
   if (lower === "localhost") return true;
 
+  // Strip brackets from IPv6 addresses (URLs use [::1] format, but isIP expects ::1)
+  const normalizedHost = hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1)
+    : hostname;
+
   // Check raw IP addresses
-  if (isIP(hostname) === 4) {
-    const parts = hostname.split(".").map(Number);
+  if (isIP(normalizedHost) === 4) {
+    const parts = normalizedHost.split(".").map(Number);
     return (
       parts[0] === 127 || // loopback
       parts[0] === 10 || // Class A private
@@ -251,8 +256,8 @@ function isPrivateHost(hostname: string): boolean {
     );
   }
 
-  if (isIP(hostname) === 6) {
-    return hostname === "::1" || hostname === "::";
+  if (isIP(normalizedHost) === 6) {
+    return normalizedHost === "::1" || normalizedHost === "::";
   }
 
   return false;

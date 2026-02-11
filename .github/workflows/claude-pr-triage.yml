@@ -5,7 +5,7 @@
 name: Claude PR Triage
 
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] safe: checks out base repo (not PR code), Claude restricted to GitHub MCP tools only (no bash/file editing)
     types: [opened]
 
 jobs:

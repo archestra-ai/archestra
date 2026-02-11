@@ -3,7 +3,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
-  PLAYWRIGHT_MCP_CATALOG_ID,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, Plus, Search } from "lucide-react";
@@ -668,11 +667,7 @@ export function InternalMCPCatalog({
 
   const filteredCatalogItems = sortInstalledFirst(
     filterCatalogItems(catalogItems || [], searchQueryFromUrl),
-  ).filter(
-    (item) =>
-      item.id !== ARCHESTRA_MCP_CATALOG_ID &&
-      item.id !== PLAYWRIGHT_MCP_CATALOG_ID,
-  );
+  ).filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID);
 
   const getInstalledServerInfo = (item: CatalogItem) => {
     const installedServer = getAggregatedInstallation(item.id);

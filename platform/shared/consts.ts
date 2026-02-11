@@ -250,7 +250,7 @@ export const MAX_DOMAIN_LENGTH = 253;
  * Must be a valid UUID format (version 4, variant 8/9/a/b) for Zod validation.
  */
 export const PLAYWRIGHT_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000002";
-export const PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
+export const PLAYWRIGHT_MCP_SERVER_NAME = "microsoft__playwright-mcp";
 
 /**
  * Default browser viewport dimensions used by Playwright MCP in browser preview feature.

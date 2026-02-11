@@ -89,6 +89,15 @@ Authorization: Bearer <access_token>
 | `GET /.well-known/oauth-protected-resource/v1/mcp/<profile_id>` | Resource metadata (RFC 9728) |
 | `GET /.well-known/oauth-authorization-server` | Authorization server metadata (RFC 8414) |
 
+**Client registration methods:**
+
+The gateway supports two ways for OAuth clients to register:
+
+- **Dynamic Client Registration (DCR)** — Clients register by sending a POST to the `registration_endpoint`. This is the traditional OAuth 2.0 approach.
+- **Client ID Metadata Documents (CIMD)** — Clients use an HTTPS URL as their `client_id`. The gateway fetches client metadata (name, redirect URIs, grant types) from that URL automatically. No separate registration step is needed. This is the recommended approach in the [MCP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization#2-2-1-client-id-metadata-document).
+
+Both methods are supported simultaneously. The `/.well-known/oauth-authorization-server` endpoint advertises `client_id_metadata_document_supported: true`.
+
 ### Bearer Token
 
 For direct API integrations, use Archestra-issued tokens in the `Authorization` header. Tokens can be scoped to an individual user, a team, or the entire organization — controlling which MCP Gateways and credentials are accessible.

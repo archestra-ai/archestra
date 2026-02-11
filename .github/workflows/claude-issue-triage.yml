@@ -21,7 +21,6 @@ jobs:
     permissions:
       contents: read
       issues: write
-      id-token: write
 
     steps:
       - name: Generate GitHub App token

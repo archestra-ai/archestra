@@ -25,10 +25,6 @@ overrides:
 importers:
 
   .:
-    dependencies:
-      ipaddr.js:
-        specifier: ^2.3.0
-        version: 2.3.0
     devDependencies:
       '@biomejs/biome':
         specifier: 2.3.13

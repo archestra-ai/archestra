@@ -6378,6 +6378,7 @@ export type GetAgentsResponses = {
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
+            enablePlaywrightTools: boolean;
             llmApiKeyId: string | null;
             llmModel: string | null;
             createdAt: string;
@@ -6452,6 +6453,7 @@ export type CreateAgentData = {
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
+        enablePlaywrightTools?: boolean;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         teams: Array<string>;
@@ -6551,6 +6553,7 @@ export type CreateAgentResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        enablePlaywrightTools: boolean;
         llmApiKeyId: string | null;
         llmModel: string | null;
         createdAt: string;
@@ -6699,6 +6702,7 @@ export type GetAllAgentsResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        enablePlaywrightTools: boolean;
         llmApiKeyId: string | null;
         llmModel: string | null;
         createdAt: string;
@@ -6838,6 +6842,7 @@ export type GetDefaultMcpGatewayResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        enablePlaywrightTools: boolean;
         llmApiKeyId: string | null;
         llmModel: string | null;
         createdAt: string;
@@ -6977,6 +6982,7 @@ export type GetDefaultLlmProxyResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        enablePlaywrightTools: boolean;
         llmApiKeyId: string | null;
         llmModel: string | null;
         createdAt: string;
@@ -7197,6 +7203,7 @@ export type GetAgentResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        enablePlaywrightTools: boolean;
         llmApiKeyId: string | null;
         llmModel: string | null;
         createdAt: string;
@@ -7262,6 +7269,7 @@ export type UpdateAgentData = {
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
+        enablePlaywrightTools?: boolean;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         teams?: Array<string>;
@@ -7363,6 +7371,7 @@ export type UpdateAgentResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        enablePlaywrightTools: boolean;
         llmApiKeyId: string | null;
         llmModel: string | null;
         createdAt: string;
@@ -7505,6 +7514,7 @@ export type GetAgentVersionsResponses = {
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
+            enablePlaywrightTools: boolean;
             llmApiKeyId: string | null;
             llmModel: string | null;
             createdAt: string;
@@ -7658,6 +7668,7 @@ export type RollbackAgentResponses = {
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
+        enablePlaywrightTools: boolean;
         llmApiKeyId: string | null;
         llmModel: string | null;
         createdAt: string;

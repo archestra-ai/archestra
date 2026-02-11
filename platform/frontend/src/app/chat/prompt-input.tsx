@@ -5,6 +5,7 @@ import {
   getAcceptedFileTypes,
   getSupportedFileTypesDescription,
   type ModelInputModality,
+  PLAYWRIGHT_MCP_CATALOG_ID,
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";
@@ -40,6 +41,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProfile } from "@/lib/agent.query";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useGlobalChatTools, useProfileToolsWithIds } from "@/lib/chat.query";
@@ -126,8 +128,15 @@ const PromptInputContent = ({
 
   // Check if agent has tools or delegations
   const { data: tools = [] } = useProfileToolsWithIds(agentId);
-  const { data: globalTools = [] } = useGlobalChatTools();
+  const { data: rawGlobalTools = [] } = useGlobalChatTools();
   const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
+  const { data: agent } = useProfile(agentId);
+
+  // Filter out Playwright tools if the agent has them disabled
+  const globalTools =
+    agent?.enablePlaywrightTools === false
+      ? rawGlobalTools.filter((t) => t.catalogId !== PLAYWRIGHT_MCP_CATALOG_ID)
+      : rawGlobalTools;
 
   // Check if user can update organization settings (to show settings link in tooltip)
   const { data: canUpdateOrganization } = useHasPermissions({

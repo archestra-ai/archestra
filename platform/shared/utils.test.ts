@@ -10,21 +10,19 @@ describe("parseFullToolName", () => {
   });
 
   test("server name containing __ (e.g., upstash__context7)", () => {
-    expect(
-      parseFullToolName("upstash__context7__resolve-library-id"),
-    ).toEqual({
+    expect(parseFullToolName("upstash__context7__resolve-library-id")).toEqual({
       serverName: "upstash__context7",
       toolName: "resolve-library-id",
     });
   });
 
   test("server name with multiple __ segments", () => {
-    expect(
-      parseFullToolName("huggingface__remote-mcp__generate_text"),
-    ).toEqual({
-      serverName: "huggingface__remote-mcp",
-      toolName: "generate_text",
-    });
+    expect(parseFullToolName("huggingface__remote-mcp__generate_text")).toEqual(
+      {
+        serverName: "huggingface__remote-mcp",
+        toolName: "generate_text",
+      },
+    );
   });
 
   test("no separator returns null serverName", () => {

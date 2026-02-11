@@ -968,6 +968,20 @@ class AgentModel {
       .where(eq(schema.agentsTable.id, id));
     return result.rowCount !== null && result.rowCount > 0;
   }
+
+  /** Lightweight check: returns the enablePlaywrightTools flag for an agent. */
+  static async getEnablePlaywrightTools(
+    agentId: string,
+  ): Promise<boolean | null> {
+    const rows = await db
+      .select({
+        enablePlaywrightTools: schema.agentsTable.enablePlaywrightTools,
+      })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, agentId))
+      .limit(1);
+    return rows[0]?.enablePlaywrightTools ?? null;
+  }
 }
 
 export default AgentModel;

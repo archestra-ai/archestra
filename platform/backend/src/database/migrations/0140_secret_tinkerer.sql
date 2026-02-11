@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "enable_playwright_tools" boolean DEFAULT true NOT NULL;

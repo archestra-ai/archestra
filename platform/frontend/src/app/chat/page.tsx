@@ -426,6 +426,7 @@ export default function ChatPage() {
   // Check if Playwright MCP is available for browser panel and get install function
   const {
     hasPlaywrightMcp,
+    isPlaywrightEnabledForAgent,
     reinstallRequired,
     installationFailed,
     playwrightServerId,
@@ -1099,7 +1100,7 @@ export default function ChatPage() {
                   <FileText className="h-3 w-3 mr-1" />
                   Artifact
                 </Button>
-                {isBrowserStreamingEnabled && (
+                {isBrowserStreamingEnabled && isPlaywrightEnabledForAgent && (
                   <>
                     <div className="w-px h-4 bg-border" />
                     <Button
@@ -1306,7 +1307,11 @@ export default function ChatPage() {
         artifact={conversation?.artifact}
         isArtifactOpen={isArtifactOpen}
         onArtifactToggle={toggleArtifactPanel}
-        isBrowserOpen={isBrowserPanelOpen && isBrowserStreamingEnabled}
+        isBrowserOpen={
+          isBrowserPanelOpen &&
+          isBrowserStreamingEnabled &&
+          isPlaywrightEnabledForAgent
+        }
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
         isInstallingBrowser={isInstallingBrowser}

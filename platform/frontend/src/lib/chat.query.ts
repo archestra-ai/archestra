@@ -7,6 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useProfile } from "./agent.query";
 import { authClient } from "./clients/auth/auth-client";
 import { useMcpServers } from "./mcp-server.query";
 import { handleApiError } from "./utils";
@@ -513,6 +514,7 @@ export function useHasPlaywrightMcpTools(agentId: string | undefined) {
   const toolsQuery = useChatProfileMcpTools(agentId);
   const globalToolsQuery = useGlobalChatTools();
   const browserInstall = useBrowserInstallation();
+  const { data: agent } = useProfile(agentId);
 
   // Fetch user's Playwright server to check reinstallRequired
   const playwrightServersQuery = useMcpServers({
@@ -528,13 +530,19 @@ export function useHasPlaywrightMcpTools(agentId: string | undefined) {
   // Only check global tools with PLAYWRIGHT_MCP_CATALOG_ID
   // Profile tools (e.g., microsoft__playwright-mcp) should NOT enable browser preview
   // Those tools work as regular MCP tools but without the integrated preview feature
+  // Also check agent's enablePlaywrightTools flag
   const hasPlaywrightMcp =
-    globalToolsQuery.data?.some(
+    agent?.enablePlaywrightTools !== false &&
+    (globalToolsQuery.data?.some(
       (tool) => tool.catalogId === PLAYWRIGHT_MCP_CATALOG_ID,
-    ) ?? false;
+    ) ??
+      false);
 
   return {
     hasPlaywrightMcp,
+    /** True when the agent has Playwright tools enabled. False while agent data is loading to prevent premature browser stream subscriptions. */
+    isPlaywrightEnabledForAgent:
+      agent != null && agent.enablePlaywrightTools !== false,
     reinstallRequired: playwrightServer?.reinstallRequired ?? false,
     installationFailed: playwrightServer?.localInstallationStatus === "error",
     playwrightServerId: playwrightServer?.id,

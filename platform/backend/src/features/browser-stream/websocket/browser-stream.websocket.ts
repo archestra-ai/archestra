@@ -6,7 +6,7 @@ import { browserStreamFeature } from "@/features/browser-stream/services/browser
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
 import { browserStateManager } from "@/features/browser-stream/services/browser-stream.state-manager";
 import logger from "@/logging";
-import { ConversationModel } from "@/models";
+import { AgentModel, ConversationModel } from "@/models";
 
 const SCREENSHOT_INTERVAL_MS = 2_000; // Stream at ~0.5 FPS (every 2 seconds)
 
@@ -240,6 +240,20 @@ export class BrowserStreamSocketClientContext {
         payload: {
           conversationId,
           error: "Conversation not found",
+        },
+      });
+      return;
+    }
+
+    // Check if Playwright tools are enabled for this agent
+    const enablePlaywrightTools =
+      await AgentModel.getEnablePlaywrightTools(agentId);
+    if (enablePlaywrightTools === false) {
+      this.sendToClient(ws, {
+        type: "browser_stream_error",
+        payload: {
+          conversationId,
+          error: "Browser tools are disabled for this agent",
         },
       });
       return;

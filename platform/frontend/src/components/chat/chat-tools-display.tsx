@@ -4,6 +4,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   isAgentTool,
+  PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
 } from "@shared";
 import { Loader2, Plus, X } from "lucide-react";
@@ -16,6 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProfile } from "@/lib/agent.query";
 import {
   useConversationEnabledTools,
   useGlobalChatTools,
@@ -57,8 +59,20 @@ export function ChatToolsDisplay({
     useProfileToolsWithIds(agentId);
 
   // Get globally available tools (e.g., Playwright browser tools)
-  const { data: globalTools = [], isLoading: isLoadingGlobalTools } =
+  const { data: rawGlobalTools = [], isLoading: isLoadingGlobalTools } =
     useGlobalChatTools();
+  const { data: agent } = useProfile(agentId);
+
+  // Filter out Playwright tools if the agent has them disabled
+  const globalTools = useMemo(
+    () =>
+      agent?.enablePlaywrightTools === false
+        ? rawGlobalTools.filter(
+            (t) => t.catalogId !== PLAYWRIGHT_MCP_CATALOG_ID,
+          )
+        : rawGlobalTools,
+    [rawGlobalTools, agent?.enablePlaywrightTools],
+  );
 
   const isLoading = isLoadingProfileTools || isLoadingGlobalTools;
 

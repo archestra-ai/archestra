@@ -5,6 +5,7 @@ import {
   isAgentTool,
   isArchestraMcpServerTool,
   isBrowserMcpTool,
+  PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   TimeInMs,
 } from "@shared";
@@ -18,6 +19,7 @@ import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
+  AgentModel,
   AgentTeamModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -1159,6 +1161,14 @@ async function addGlobalCatalogTools({
     );
 
     for (const catalog of globalCatalogs) {
+      // Skip Playwright catalog if the agent has it disabled
+      if (catalog.id === PLAYWRIGHT_MCP_CATALOG_ID) {
+        const enabled = await AgentModel.getEnablePlaywrightTools(agentId);
+        if (enabled === false) {
+          continue;
+        }
+      }
+
       // Check if user has a personal server installed for this catalog
       const userServer = await McpServerModel.getUserPersonalServerForCatalog(
         userId,

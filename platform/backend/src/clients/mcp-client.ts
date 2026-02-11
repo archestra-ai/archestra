@@ -11,11 +11,13 @@ import {
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   OAUTH_TOKEN_ID_PREFIX,
+  PLAYWRIGHT_MCP_CATALOG_ID,
 } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
+  AgentModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
@@ -641,6 +643,7 @@ class McpClient {
         const globalToolResult = await this.findGlobalCatalogTool(
           toolCall,
           tokenAuth.userId,
+          agentId,
         );
         if (globalToolResult) {
           return globalToolResult;
@@ -691,6 +694,7 @@ class McpClient {
   private async findGlobalCatalogTool(
     toolCall: CommonToolCall,
     userId: string,
+    agentId: string,
   ): Promise<{
     tool: McpToolWithServerMetadata;
     catalogItem: InternalMcpCatalog;
@@ -706,6 +710,13 @@ class McpClient {
     // Check each global catalog to see if the user has a personal server
     // and if that server has the requested tool
     for (const catalog of globalCatalogs) {
+      // Skip Playwright catalog if the agent has it disabled
+      if (catalog.id === PLAYWRIGHT_MCP_CATALOG_ID) {
+        const enabled = await AgentModel.getEnablePlaywrightTools(agentId);
+        if (enabled === false) {
+          continue;
+        }
+      }
       // Check if tool name matches this catalog's prefix (e.g., "playwright-browser__browser_navigate")
       const catalogPrefix = `${catalog.name}__`;
       if (!toolCall.name.startsWith(catalogPrefix)) {

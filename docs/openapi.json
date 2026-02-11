@@ -21403,6 +21403,9 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "enablePlaywrightTools": {
+                            "type": "boolean"
+                          },
                           "llmApiKeyId": {
                             "nullable": true,
                             "type": "string",
@@ -21577,6 +21580,7 @@
                           "incomingEmailEnabled",
                           "incomingEmailSecurityMode",
                           "incomingEmailAllowedDomain",
+                          "enablePlaywrightTools",
                           "llmApiKeyId",
                           "llmModel",
                           "createdAt",
@@ -21946,6 +21950,9 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "enablePlaywrightTools": {
+                    "type": "boolean"
+                  },
                   "llmApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -22136,6 +22143,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "enablePlaywrightTools": {
+                      "type": "boolean"
+                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -22310,6 +22320,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "enablePlaywrightTools",
                     "llmApiKeyId",
                     "llmModel",
                     "createdAt",
@@ -22716,6 +22727,9 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "enablePlaywrightTools": {
+                        "type": "boolean"
+                      },
                       "llmApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -22890,6 +22904,7 @@
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
                       "incomingEmailAllowedDomain",
+                      "enablePlaywrightTools",
                       "llmApiKeyId",
                       "llmModel",
                       "createdAt",
@@ -23260,6 +23275,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "enablePlaywrightTools": {
+                      "type": "boolean"
+                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -23434,6 +23452,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "enablePlaywrightTools",
                     "llmApiKeyId",
                     "llmModel",
                     "createdAt",
@@ -23803,6 +23822,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "enablePlaywrightTools": {
+                      "type": "boolean"
+                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -23977,6 +23999,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "enablePlaywrightTools",
                     "llmApiKeyId",
                     "llmModel",
                     "createdAt",
@@ -24358,6 +24381,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "enablePlaywrightTools": {
+                      "type": "boolean"
+                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -24532,6 +24558,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "enablePlaywrightTools",
                     "llmApiKeyId",
                     "llmModel",
                     "createdAt",
@@ -24853,6 +24880,9 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "enablePlaywrightTools": {
+                    "type": "boolean"
+                  },
                   "llmApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -25050,6 +25080,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "enablePlaywrightTools": {
+                      "type": "boolean"
+                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -25224,6 +25257,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "enablePlaywrightTools",
                     "llmApiKeyId",
                     "llmModel",
                     "createdAt",
@@ -25858,6 +25892,9 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "enablePlaywrightTools": {
+                          "type": "boolean"
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string",
@@ -26032,6 +26069,7 @@
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
                         "incomingEmailAllowedDomain",
+                        "enablePlaywrightTools",
                         "llmApiKeyId",
                         "llmModel",
                         "createdAt",
@@ -26470,6 +26508,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "enablePlaywrightTools": {
+                      "type": "boolean"
+                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -26644,6 +26685,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "enablePlaywrightTools",
                     "llmApiKeyId",
                     "llmModel",
                     "createdAt",

@@ -68,7 +68,7 @@ jobs:
             ### If valid but missing issue reference:
             "Thanks for the PR! Could you please link this to a related issue? If there isn't one, please create an issue first describing the problem or feature."
 
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_api_key: ${{ secrets.CLAUDE_ISSUE_TRIAGE_ANTHROPIC_API_KEY }}
 
           # Allow triage for PRs from any user
           allowed_non_write_users: "*"

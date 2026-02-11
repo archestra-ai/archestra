@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@shared";
+import {
+  type archestraApiTypes,
+  isPlaywrightCatalogItem,
+  parseFullToolName,
+} from "@shared";
 import { useQueries } from "@tanstack/react-query";
 import { ExternalLink, Info, Loader2, Search, X } from "lucide-react";
 import {
@@ -333,8 +337,8 @@ const AgentToolsEditorContent = forwardRef<
   return (
     <div className="flex flex-wrap gap-2">
       {visibleItems.map((catalog) =>
-        catalog.isGloballyAvailable ? (
-          <GloballyAvailablePill
+        isPlaywrightCatalogItem(catalog.id) ? (
+          <PlaywrightToolsPill
             key={catalog.id}
             catalogItem={catalog}
             agentId={agentId}
@@ -382,7 +386,7 @@ const AgentToolsEditorContent = forwardRef<
   );
 });
 
-function GloballyAvailablePill({
+function PlaywrightToolsPill({
   catalogItem,
   agentId,
   pendingToggle,

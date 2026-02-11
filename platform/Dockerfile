@@ -1,15 +1,23 @@
-# Build KinD from source with latest Go 1.25.x to fix CVE-2025-61726
-# (KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability)
-FROM alpine:3.23 AS kind-builder
+# Build KinD and Docker CLI from source with Go 1.25.7 to fix CVE-2025-61726, CVE-2025-68121
+# Alpine 3.23 only has Go 1.25.6, so we use the official golang image for 1.25.7+
+# KinD v0.31.0 pre-built binaries use Go 1.25.5 which has the vulnerability
+# Alpine 3.23's docker-cli (29.1.3) is compiled with Go 1.25.6 (vulnerable to CVE-2025-68121)
+FROM golang:1.25.7-alpine AS go-builder
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi
-RUN apk add --no-cache 'go~=1.25' git
+RUN apk add --no-cache git
 RUN git clone --depth 1 --branch v0.31.0 https://github.com/kubernetes-sigs/kind.git /kind && \
     cd /kind && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
+RUN git clone --depth 1 --branch v29.1.3 https://github.com/docker/cli.git /docker-cli && \
+    cd /docker-cli && \
+    cp vendor.mod go.mod && cp vendor.sum go.sum && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
+    -ldflags '-X github.com/docker/cli/cli/version.Version=29.1.3' \
+    -o /docker-binary ./cmd/docker
 
 FROM node:24-alpine3.23 AS base
 
@@ -139,11 +147,11 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# KinD binary is built from source in kind-builder to address CVE-2025-61726
-RUN apk add --no-cache docker-cli
-COPY --from=kind-builder /kind-binary /usr/local/bin/kind
-RUN chmod +x /usr/local/bin/kind
-# TODO: Once KinD releases a version compiled with Go >= 1.25.6, remove the kind-builder stage
+# Both binaries are built from source in go-builder with Go 1.25.7 to fix CVE-2025-68121
+COPY --from=go-builder /docker-binary /usr/local/bin/docker
+COPY --from=go-builder /kind-binary /usr/local/bin/kind
+RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
+# TODO: Once KinD releases a version compiled with Go >= 1.25.7, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
 # RUN ARCH=$(uname -m) && \

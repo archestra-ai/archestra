@@ -425,15 +425,17 @@ export default function ChatPage() {
 
   // Check if Playwright MCP is available for browser panel and get install function
   const {
-    hasPlaywrightMcp,
-    isPlaywrightEnabledForAgent,
+    hasPlaywrightMcpTools,
+    isPlaywrightInstalled,
     reinstallRequired,
     installationFailed,
     playwrightServerId,
     isInstalling: isInstallingBrowser,
+    isAssigningTools,
     installBrowser,
     reinstallBrowser,
-  } = useHasPlaywrightMcpTools(browserToolsAgentId);
+    assignToolsToAgent,
+  } = useHasPlaywrightMcpTools(browserToolsAgentId, conversationId);
 
   // Check if browser streaming feature is enabled
   const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
@@ -1090,7 +1092,6 @@ export default function ChatPage() {
               </div>
               {/* Right side - show/hide controls */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs text-muted-foreground">Show:</span>
                 <Button
                   variant={isArtifactOpen ? "secondary" : "ghost"}
                   size="sm"
@@ -1100,7 +1101,7 @@ export default function ChatPage() {
                   <FileText className="h-3 w-3 mr-1" />
                   Artifact
                 </Button>
-                {isBrowserStreamingEnabled && isPlaywrightEnabledForAgent && (
+                {isBrowserStreamingEnabled && (
                   <>
                     <div className="w-px h-4 bg-border" />
                     <Button
@@ -1307,18 +1308,25 @@ export default function ChatPage() {
         artifact={conversation?.artifact}
         isArtifactOpen={isArtifactOpen}
         onArtifactToggle={toggleArtifactPanel}
-        isBrowserOpen={
-          isBrowserPanelOpen &&
-          isBrowserStreamingEnabled &&
-          isPlaywrightEnabledForAgent
-        }
+        isBrowserOpen={isBrowserPanelOpen && isBrowserStreamingEnabled}
         onBrowserClose={closeBrowserPanel}
         conversationId={conversationId}
         isInstallingBrowser={isInstallingBrowser}
-        hasPlaywrightMcp={hasPlaywrightMcp}
+        hasPlaywrightMcpTools={hasPlaywrightMcpTools}
+        isPlaywrightInstalled={isPlaywrightInstalled}
+        isAssigningTools={isAssigningTools}
         onInstallBrowser={
           browserToolsAgentId
             ? () => installBrowser(browserToolsAgentId)
+            : undefined
+        }
+        onAssignToolsToAgent={
+          browserToolsAgentId
+            ? () =>
+                assignToolsToAgent({
+                  agentId: browserToolsAgentId,
+                  conversationId,
+                })
             : undefined
         }
         reinstallRequired={reinstallRequired}

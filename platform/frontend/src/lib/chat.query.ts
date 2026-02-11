@@ -5,8 +5,9 @@ import {
   type SupportedProvider,
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import { authClient } from "./clients/auth/auth-client";
 import { useMcpServers } from "./mcp-server.query";
 import { handleApiError } from "./utils";
@@ -26,6 +27,8 @@ const {
   installMcpServer,
   reinstallMcpServer,
   getMcpServer,
+  getInternalMcpCatalogTools,
+  bulkAssignTools,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -394,11 +397,16 @@ export function useAgentDelegationTools(agentId: string | undefined) {
  * Creates a personal Playwright server if one doesn't exist.
  * Polls for installation status since local servers are deployed asynchronously to K8s.
  */
-export function useBrowserInstallation() {
+function useBrowserInstallation(onInstallComplete?: (agentId: string) => void) {
   const [installingServerId, setInstallingServerId] = useState<string | null>(
     null,
   );
+  const [installingAgentId, setInstallingAgentId] = useState<string | null>(
+    null,
+  );
   const queryClient = useQueryClient();
+  const onInstallCompleteRef = useRef(onInstallComplete);
+  onInstallCompleteRef.current = onInstallComplete;
 
   const installMutation = useMutation({
     mutationFn: async (agentId: string) => {
@@ -415,9 +423,10 @@ export function useBrowserInstallation() {
       }
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, agentId) => {
       if (data?.id) {
         setInstallingServerId(data.id);
+        setInstallingAgentId(agentId);
       }
     },
   });
@@ -460,20 +469,26 @@ export function useBrowserInstallation() {
     enabled: !!installingServerId,
   });
 
-  // When installation completes, invalidate queries
+  // When installation completes, invalidate queries and assign tools
   useEffect(() => {
     if (statusQuery.data === "success") {
+      const agentId = installingAgentId;
       setInstallingServerId(null);
+      setInstallingAgentId(null);
       queryClient.invalidateQueries({ queryKey: ["profile-tools"] });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       toast.success("Browser installed successfully");
+      if (agentId) {
+        onInstallCompleteRef.current?.(agentId);
+      }
     }
     if (statusQuery.data === "error") {
       setInstallingServerId(null);
+      setInstallingAgentId(null);
       toast.error("Failed to install browser");
     }
-  }, [statusQuery.data, queryClient]);
+  }, [statusQuery.data, queryClient, installingAgentId]);
 
   return {
     isInstalling:
@@ -488,9 +503,75 @@ export function useBrowserInstallation() {
   };
 }
 
-export function useHasPlaywrightMcpTools(agentId: string | undefined) {
+export function useHasPlaywrightMcpTools(
+  agentId: string | undefined,
+  conversationId?: string,
+) {
   const toolsQuery = useProfileToolsWithIds(agentId);
-  const browserInstall = useBrowserInstallation();
+  const queryClient = useQueryClient();
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+
+  // Mutation to assign all Playwright tools to the current agent
+  const assignToolsMutation = useMutation({
+    mutationFn: async ({
+      agentId: targetAgentId,
+      conversationId,
+    }: {
+      agentId: string;
+      conversationId?: string;
+    }) => {
+      const { data: catalogTools } = await getInternalMcpCatalogTools({
+        path: { id: PLAYWRIGHT_MCP_CATALOG_ID },
+      });
+      if (!catalogTools?.length) {
+        throw new Error("No Playwright tools found");
+      }
+      const assignments = catalogTools.map((tool) => ({
+        agentId: targetAgentId,
+        toolId: tool.id,
+        useDynamicTeamCredential: true,
+      }));
+      const { data } = await bulkAssignTools({ body: { assignments } });
+      if (data?.failed?.length) {
+        throw new Error(data.failed[0].error);
+      }
+      // If conversation has custom tool selection, add new tools to enabled list
+      if (conversationId) {
+        const enabledData = await fetchConversationEnabledTools(conversationId);
+        if (enabledData?.hasCustomSelection) {
+          const newToolIds = catalogTools.map((t) => t.id);
+          const merged = [
+            ...new Set([...enabledData.enabledToolIds, ...newToolIds]),
+          ];
+          await updateConversationEnabledTools({
+            path: { id: conversationId },
+            body: { toolIds: merged },
+          });
+        }
+      }
+    },
+    onSuccess: (_data, { agentId: targetAgentId, conversationId }) => {
+      invalidateToolAssignmentQueries(queryClient, targetAgentId);
+      if (conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId, "enabled-tools"],
+        });
+      }
+      toast.success("Playwright tools assigned to agent");
+    },
+    onError: (error: Error) => {
+      handleApiError({ error });
+    },
+  });
+
+  // After browser install completes, automatically assign tools to the agent
+  const browserInstall = useBrowserInstallation((installedAgentId) => {
+    assignToolsMutation.mutate({
+      agentId: installedAgentId,
+      conversationId: conversationIdRef.current,
+    });
+  });
 
   // Fetch user's Playwright server to check reinstallRequired
   const playwrightServersQuery = useMcpServers({
@@ -504,21 +585,24 @@ export function useHasPlaywrightMcpTools(agentId: string | undefined) {
   );
 
   // Check if agent has Playwright tools assigned via agent_tools
-  const hasPlaywrightMcp =
+  const hasPlaywrightMcpTools =
     toolsQuery.data?.some(
       (tool) => tool.catalogId === PLAYWRIGHT_MCP_CATALOG_ID,
     ) ?? false;
 
+  const isPlaywrightInstalled = !!playwrightServer;
+
   return {
-    hasPlaywrightMcp,
-    /** True when the agent has Playwright tools assigned. False while tool data is loading to prevent premature browser stream subscriptions. */
-    isPlaywrightEnabledForAgent: hasPlaywrightMcp,
+    hasPlaywrightMcpTools,
+    isPlaywrightInstalled,
     reinstallRequired: playwrightServer?.reinstallRequired ?? false,
     installationFailed: playwrightServer?.localInstallationStatus === "error",
     playwrightServerId: playwrightServer?.id,
     isLoading: toolsQuery.isLoading,
     isInstalling: browserInstall.isInstalling,
+    isAssigningTools: assignToolsMutation.isPending,
     installBrowser: browserInstall.installBrowser,
     reinstallBrowser: browserInstall.reinstallBrowser,
+    assignToolsToAgent: assignToolsMutation.mutateAsync,
   };
 }

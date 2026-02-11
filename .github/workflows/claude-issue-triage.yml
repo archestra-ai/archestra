@@ -34,6 +34,11 @@ jobs:
           # Uses the /triage-issue custom command defined in .claude/commands/triage-issue.md
           prompt: "/triage-issue ${{ github.repository }} ISSUE_NUMBER: ${{ github.event.issue.number }}"
 
+          # Use an API key, NOT an OAuth token, for bot-initiated workflows.
+          # Max subscriptions are single-user and OAuth tokens in automated workflows
+          # risk account bans (https://github.com/anthropics/claude-code-action/issues/641).
+          # Anthropic recommends API keys for multi-user repos:
+          # https://github.com/anthropics/claude-code-action/issues/4#issuecomment-3046770474
           anthropic_api_key: ${{ secrets.CLAUDE_ISSUE_TRIAGE_ANTHROPIC_API_KEY }}
 
           # Allow triage for issues from any user (including non-collaborators)

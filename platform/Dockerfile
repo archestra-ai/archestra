@@ -369,7 +369,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             DOCKER_SERVER_OS=$(docker info --format '{{.OperatingSystem}}' 2>/dev/null || echo "unknown")
             DOCKER_SERVER_PLATFORM=$(docker info --format '{{.OSType}}/{{.Architecture}}' 2>/dev/null || echo "unknown")
             DOCKER_MEMORY_BYTES=$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo "0")
-            DOCKER_MEMORY_GB=$(awk "BEGIN {printf \"%.1f\", ${DOCKER_MEMORY_BYTES} / 1073741824}")
+            DOCKER_MEMORY_GB=$(awk "BEGIN {printf \"%.1f\", ${DOCKER_MEMORY_BYTES:-0} / 1073741824}")
 
             echo "Docker environment:"
             echo "  Server OS: ${DOCKER_SERVER_OS}"
@@ -386,7 +386,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             if [ "${IS_DOCKER_DESKTOP}" = "true" ]; then
                 echo "  1. Increase Docker Desktop memory to at least 4 GB"
                 echo "     (Settings > Resources > Memory)"
-                if echo "${DOCKER_SERVER_OS}" | grep -qi "windows"; then
+                if echo "${DOCKER_SERVER_PLATFORM}" | grep -qi "amd64"; then
                     echo "  2. Ensure Docker Desktop is using the WSL 2 backend"
                     echo "     (Settings > General > Use the WSL 2 based engine)"
                 fi

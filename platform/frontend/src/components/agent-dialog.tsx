@@ -399,8 +399,7 @@ export function AgentDialog({
   const { data: chatopsProviders = [] } = useChatOpsStatus();
   const { data: features } = useFeatures();
   const { data: identityProviders = [] } = useIdentityProviders();
-  const agentLlmApiKeyId = (agent as Record<string, unknown> | undefined)
-    ?.llmApiKeyId as string | null | undefined;
+  const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
     includeKeyId: agentLlmApiKeyId,
   });
@@ -476,16 +475,8 @@ export function AgentDialog({
         setDescription(agentData.description || "");
         setUserPrompt(agentData.userPrompt || "");
         setSystemPrompt(agentData.systemPrompt || "");
-        // LLM config fields (may not exist in generated types until codegen)
-        setLlmApiKeyId(
-          ((agentData as Record<string, unknown>).llmApiKeyId as
-            | string
-            | null) ?? null,
-        );
-        setLlmModel(
-          ((agentData as Record<string, unknown>).llmModel as string | null) ??
-            null,
-        );
+        setLlmApiKeyId(agentData.llmApiKeyId ?? null);
+        setLlmModel(agentData.llmModel ?? null);
         // Reset delegation targets - will be populated by the next useEffect when data loads
         setSelectedDelegationTargetIds([]);
         // Parse allowedChatops from agent
@@ -504,12 +495,8 @@ export function AgentDialog({
         setConsiderContextUntrusted(
           agentData.considerContextUntrusted || false,
         );
-        // SSO provider ID (for MCP Gateway JWKS auth)
-        setIdentityProviderId(
-          ((agentData as Record<string, unknown>).identityProviderId as
-            | string
-            | null) ?? null,
-        );
+        // Identity provider ID (for MCP Gateway JWKS auth)
+        setIdentityProviderId(agentData.identityProviderId ?? null);
         // Email invocation settings
         setIncomingEmailEnabled(agentData.incomingEmailEnabled || false);
         setIncomingEmailSecurityMode(

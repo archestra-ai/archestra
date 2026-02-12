@@ -139,7 +139,7 @@ export async function createAgentServer(
         "✅ Saved tools/list request",
       );
     } catch (dbError) {
-      logger.info({ err: dbError }, "Failed to persist tools/list request:");
+      logger.warn({ err: dbError }, "Failed to persist tools/list request:");
     }
 
     return { tools: toolsList };
@@ -813,19 +813,34 @@ function parseJsonField<T>(value: unknown): T | null {
  * Cache for OIDC discovery results (issuer → jwks_uri).
  * Bounded to MAX_OIDC_DISCOVERY_CACHE_SIZE entries with LRU-style eviction
  * (oldest entry removed when full). In practice this cache is very small —
- * entries correspond to configured SSO providers, not user-controlled input.
+ * entries correspond to configured identity providers, not user-controlled input.
  */
 const MAX_OIDC_DISCOVERY_CACHE_SIZE = 100;
 const oidcDiscoveryCache = new Map<string, string>();
+const oidcDiscoveryInflight = new Map<string, Promise<string | null>>();
 
 /**
  * Discover the JWKS URL from an OIDC issuer's well-known configuration.
- * Results are cached in memory.
+ * Results are cached in memory. Concurrent requests for the same issuer
+ * are deduplicated to avoid redundant network calls.
  */
 async function discoverJwksUrl(issuerUrl: string): Promise<string | null> {
   const cached = oidcDiscoveryCache.get(issuerUrl);
   if (cached) return cached;
 
+  const inflight = oidcDiscoveryInflight.get(issuerUrl);
+  if (inflight) return inflight;
+
+  const promise = fetchOidcJwksUrl(issuerUrl);
+  oidcDiscoveryInflight.set(issuerUrl, promise);
+  try {
+    return await promise;
+  } finally {
+    oidcDiscoveryInflight.delete(issuerUrl);
+  }
+}
+
+async function fetchOidcJwksUrl(issuerUrl: string): Promise<string | null> {
   try {
     // Normalize issuer URL (remove trailing slash for consistent well-known URL construction)
     const normalizedIssuer = issuerUrl.replace(/\/$/, "");

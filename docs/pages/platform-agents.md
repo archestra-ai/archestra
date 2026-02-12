@@ -1,7 +1,6 @@
 ---
-title: Agents
-category: Archestra Platform
-subcategory: Concepts
+title: Overview
+category: Agents
 order: 1
 description: Agent invocation methods including A2A, incoming email, and MS Teams
 lastUpdated: 2026-01-25

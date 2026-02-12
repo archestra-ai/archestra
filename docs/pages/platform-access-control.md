@@ -1,5 +1,5 @@
 ---
-title: "Platform Access Control"
+title: "Access Control"
 category: Archestra Platform
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 4

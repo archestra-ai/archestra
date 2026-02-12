@@ -2,6 +2,7 @@ import {
   type ChatErrorResponse,
   RouteId,
   SupportedProviders,
+  TimeInMs,
   type TokenUsage,
 } from "@shared";
 import {
@@ -550,7 +551,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the connection-close handler on the pod running the stream will find this flag
       // and abort the stream.
       const cacheKey = `${CacheKey.ChatStop}-${id}` as const;
-      await cacheManager.set(cacheKey, true);
+      await cacheManager.set(cacheKey, true, TimeInMs.Minute);
       return reply.send({ stopped: true });
     },
   );
